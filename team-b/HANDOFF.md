@@ -114,7 +114,130 @@
 ### viewer's --auto-answer-hud-prompts not yet using the new consume API.
 ### BIG: the "_DynamicGlobalsLoadComplete nil" blocker (~35 missions) was OUR DRIVER - system_lib.lua lives
 ### in interface.vpp_pc, never passed. With it m05 reaches m05.lua:1153 (m05_parachute_in); m05_jump_local
-### "no such global". Full sweep re-running -> results/mission_sweep_49_20261012_iface.
+### "no such global". Full sweep DONE -> results/mission_sweep_49_20261012_iface (driver must pass
+### interface.vpp_pc): 48/49 exit 0, zero DynamicGlobals errors. New per-mission blockers in
+### open_blockers.tsv there (27 missions, all OPEN host engine-state facts). Top: weapon-def name
+### resolution x5 (m01,m13,m18,m19,m24), tutorial dispatcher byte x4, #CLOSEST_PLAYER# x3,
+### release_to_world kind x3, char vtable+0x68 x2. Relayed to orchestrator purrsian-85 (NOT purrsian-9a = user usage-pacer session, never send there).
+### Weapon-def name resolution from weapons.xtbl MERGED ef78dfd (fix 68cd415; 188/188 Release ctest,
+### 4 bink skips, w23 PASSED in Release). Also committed 0b33e6e = viewer cache-dir scan includes
+### interface.vpp_pc (was the long-standing uncommitted primary edit). Combined merge not rebuilt (clean
+### auto-merge, disjoint hunks). New blockers: m01 door +0xc8 anchor (§1.10) OPEN, m13 release_to_world
+### kind['group_pr_static'], m19 suspended m19.lua:890 m19_go_to_entrance (no OPEN - drive gap).
+### BINK 0x10019d10 528/528 + 9236 bits MATCH, MERGED 57f0189 (b2866ad) - right tree = per-row table-build
+### call idx 19. Pixels unchanged 50%. Remaining SPECIFIED work (5.3af/ag): BIKi colour decoder 0x10019850
+### (no +128 bias), primary1 16-col advance + 16x16 for sec2/3/5/6, odd stripes primary-byte-only,
+### primary 5 unhandled (frame0 stops at block 6), primary 8 reads 8 bytes of 19d10 array.
+### BINK grid/colour MERGED 7c397a0 (4122177), 189/189. frame0 60.0% px, 3/5 blocks; mismatches (0,6) ours 32 vs 24, (0,8) 226 vs 24. Test retune 153->25 is spec-backed (5.3ag corrected word-0 fill byte 0x19). OLD NOTE:
+### agent-flatfill-perplane): frame0 50%->60% px, 3/5 blocks. ctest 3 FAIL (flat_fill_prestage gives 25 not
+### raw 153; real_playtest_mission + archive_scan). Fix requested, NOT merged. Open: AC-tree length (83 vs
+### ~54 bits), primary 8 layout, primary 5 DC literal reader, which table is 0x10019850's "desc" (guessed
+### tables[0]) - relay to Team A.
+### 9c70c61 DONE: BINK merged b2761b8 (ab67c12) - frame0 row0 10/10 blocks 640/640 px 100%; stops at first
+###   primary=6 (cell col 18, unspecced). AC tree = one persistent multi-level worklist (agent derived shape from
+###   prior Bink-format knowledge, then verified vs spec bits - PROVENANCE FLAG for Team A). primary8 unexercised.
+### SWEEP BLOCKERS merged 0d37076 (481f686). Combined main 0d37076: Release build 0, ctest 190/190. New OPENs: tutorial default param +0x20 [12,193,204] (dlc2_m03,
+###   m02,m12,m17), alive predicate 0x0096f4f0 (m20), mover +0xc4 (m01), on_vehicle_enter kind
+###   ['veh_daedalus_vtol 001'] (m23), m22 battle_zone error WAS OURS (callbacks got 1 arg not 2) FIXED on main, m22 now OPEN trigger_get_radius per-shape radius (§21.13), mm_m1_5
+###   hangs polling customization_screen_is_ready=false. dlc3_m02/dlc2_m02 now drive gaps.
+### SWEEP post8e93330 (results/mission_sweep_49_20261013_post8e93330): 49/49 exit 0, 12 clean finishes, 9 OPEN
+### (same as the ce4556f new-OPEN list), rest suspended on callback-dispatch waits. All need Team A.
+### ce4556f: BINK sec5 literals from colour cursor MERGED 519bd3b (87d5c84): frame0 ROW 0 FULLY EXACT (120 cols),
+###   77.6% px overall; first mismatch row1 col10 primary5 IntraIdct5 -> Q Team A: nibble-0 dequant row + p5 AC index
+###   mapping (live vector for row1 col10 ideal). MISSION answers MERGED 8e93330 (7e96ea0), combined 193/193: all 11 old
+###   OPENs cleared. New OPENs: m09 obj-type desc bit 0x8 +0xc (§14.8); dlc3_m01+m12 character_has_specific_human_
+###   shield gate (§13.14); m01 named-object 'gat_captive_nav'; m07 anim-controller active synced (§18.5); m10 vehicle
+###   class enum (+0xbf4)+0x4c4 (§33.1); m16 HUD screen 'msn_text_adventure' (§24.24); m20 player_is_rc_driver
+###   (§18.10); sh02 gamepad flag 0x0141250d (§28.9). m19, sh03 now just time out. Callback dispatch (death,
+###   vehicle_enter, cellphone end, already-inside) STILL not in spec - biggest blocker.
+### ROUTE-TABLE harness (40feafc spec) MERGED (see git log), branch feature/route-table-driving ba1623c (+71224af tools/mission_routes.tsv
+###   via tools/gen_mission_routes.ps1), merging: route-ordered trigger choice, hazard-trigger avoidance, hold-in-
+###   trigger, m22 pulse, auto vehicle_enter_do after 80 missed in-vehicle polls. Only m04 moved (507->598).
+###   ENGINE FACTS NEEDED (Team A) - these are now THE blockers for ~20 missions: (1) on_death/on_vehicle_destroyed/
+###   on_human_killed dispatch after character_kill/damage; (2) on_vehicle_enter dispatch (m11,m17,m23,dlc2_m01);
+###   (3) group-spawned vehicle naming ('start_truck' dlc3_m02); (4) cellphone cb2 on call end (§12.2; m03,m13,
+###   m14,mm_p_07); (5) trigger "already inside" enter rule (m22); (6) kill by damage kind (m18 sonic).
+### SWEEP postf4a9fa1 (+--auto-skip-cutscenes; results/mission_sweep_49_20261013_postf4a9fa1, driver
+### .claude/sweep_post_f4a9fa1.sh): 49/49 exit 0, 0 bad_alloc. 12 missions FINISH CLEANLY (dlc1_mm_01..06,
+### mm_m16_5, mm_p_01/02/04/05/06). 11 OPEN (unchanged list, all Team A). 27 suspended with wait sites now
+### printed - mostly kill/death waits (m02,m06,m08,m21,sh01,sh04,dlc2_m03), vehicle-enter waits (m03,m04,m11,
+### m17,m23,dlc2_m01,dlc3_m02), cellphone (m13,m14,mm_p_07) -> need the engine facts listed below.
+### BINK sec6 colour-cursor MERGED da3ee8f (70e1bce): frame0 row0 exact cols 0..49 (x<400), primary8 now matches.
+###   Next: col 50 primary1 sub5 TwoLiteralPattern - Q for Team A: do sec5's 2 literal bytes come from the colour
+###   pre-stage cursor (no bias) like p6/p8? (§5.3a l.1879 only says "shared descriptor-L literal-byte source").
+### HARNESS driving-2 MERGED f4a9fa1 (55c60f0), combined 192/192: timeout now prints wait site; new opt-in --auto-skip-cutscenes (sets real
+###   skip_all_cutscenes) fixes mm_p_01/mm_p_06; get_dist NPC placement moves dlc2_m02 on. Engine facts needed:
+###   health/death + on_death/on_vehicle_destroyed/on_mover_destroyed dispatch (m02,sh01,sh04,dlc2_m03);
+###   on_vehicle_enter callback dispatch + arg convention (m11,m23); cellphone audio end callback slot (mm_p_07);
+###   zscene promotion OPEN read (why zscene_is_loaded never true). m22: teleport likely exits zone -> harness issue.
+###   NOTE: sweeps should add --auto-skip-cutscenes. damage_model.h (5ce550d) exists but unwired - relevant to death.
+### DISK 2026-10-14: D: 28GB -> 116GB free. MOVED (not deleted) to G:\AI\Claude Projects\recomp\TEAM-B-worktree-builds\:
+### build/ of agent-actree-phase2, agent-savewrite, agent-a657decaedc84612d (as <name>-build), and 138 merged+clean
+### worktrees into retired-worktrees-20261013\ ; `git worktree prune` run (branches kept). Still on D: (kept on
+### purpose): bink-primary6 (active bink wt, has build), agent-flatfill-perplane (wedged: foreign 1-line spec-lua
+### diff + 2 stashes - decision needed), unmerged agent-binkidct/binklencorrection/tileorigin, dirty-on-main
+### agent-a10c596b/a9a6a54c/ab1bcb6c/ad6cff90 + wt-unifiedregistry, agent-a657decaedc84612d (1 dirty file).
+### SWEEP postaa1e85e (results/mission_sweep_49_20261013_postaa1e85e): 49/49 exit 0, 0 bad_alloc, 11 OPEN
+### (m15, mm_p_03 cleared). Need Team A: character_is_ready AND-chain values x4 (m01,m07,m12,m20);
+### named-object PAK3_Interrogation (dlc3_m01), chem_02_brute (m19); heli +0x2c (m09); +0xbd0 (m10);
+### 0x009634f0 (m16); persona line (sh02); +0x4aa (sh03). Bink: primary1 sub6 16x16 at col 28 wrong.
+### f752324: BINK primary6 SolidFill MERGED 437a1f9 (b483ffd): frame0 row0 cols 0..27 pixel-exact; first
+###   mismatch col 28 (x=224) primary1 sub6 (ours 48 vs ffmpeg 25) -> desync; primary8 still unverified.
+###   Work in new worktree .claude/worktrees/bink-primary6. agent-flatfill-perplane is wedged (uncommitted
+###   foreign 1-line spec-lua diff conflicts with main) and has 2 new stashes (autostash + "lua spec 1-line
+###   diff") - orchestrator/user decide; do not pop/drop blindly.
+### MISSION answers merged aa1e85e (a319a2f), combined main 192/192: character_is_ready = ragdoll pose +0xcd2; cylinder radius = +0x94
+###   (param2) everywhere; mission_store_purchased query (no shop records -> true); vehicle_is_destroyed;
+###   items_3d.xtbl prop names. STILL OPEN: character_is_ready rest of AND-chain (m01,m07,m12,m20),
+###   named-object chem_02/03_brute (m19), + dlc3_m01/m09/m10/m16/sh02/sh03 unanswered. f752324 had NO
+###   trigger-callback text despite commit msg - ask orchestrator if dropped.
+### SWEEP post-6e2b6ef (first sweep with full 180s sim; results/mission_sweep_49_20261013_post6e2b6ef, driver
+### .claude/sweep_post_6e2b6ef.sh): 49/49 exit 0, 0 bad_alloc, 12 OPEN, ALL need Team A:
+### character_is_ready 0x009a1dc0 x4 (m01 Gat_bobble, m07 Kinzie, m12 npc_josh, m20 NPC Mascot<001>);
+### dlc3_m01 named-object ['PAK3_Interrogation']; m09 heli AI +0x2c in{3,4} 0x00ad31a0 ['Girls_heli'];
+### m10 vehicle body-active +0xbd0; m15 vehicle +0x16c8 bit0 destroyed; m16 character_playing_combat_move
+### 0x009634f0; m19 prop item def ['gasmask'] §17.13; sh02 audio persona line playing 0x0094c9e0;
+### sh03 +0x4aa action-id registry 0x004f2880. Plus: cylinder radius param1 vs +0x94, bink primary=6,
+### mission_store_purchased (mm_p_03).
+### AUTO-OBJECTIVE harness fix MERGED 6e2b6ef (4416abc): per-trigger visited set, targets the polled/awaited
+### trigger, and headless --mission runs now get timeout*30+30 frames (BEFORE: capped at 300 frames = ~10s sim,
+### so ALL earlier sweeps only simulated ~10s/mission!). New OPENs for Team A: character_is_ready['npc_josh']
+### (m12, same §7.27 as m01/m07/m20), vehicle +0x16c8 bit0 destroyed (m15, §4.9/9.7), prop/customization item
+### def['gasmask'] (m19, §17.13), mission_store_purchased fact (mm_p_03 polls it). dlc2_m02 19 teleports, timed out.
+### 974bd21 weapon damage model MERGED 5ce550d (6d80d73): include/sr3weapons/damage_model.h pure functions
+### (§4.5 chain + §4.5.5a sink), 37-check test. NOT yet called by EngineState/viewer (lethal-only path still
+### live; character_damage variable-amount branch OPEN). Uncommitted 1-line spec-lua-api-behaviour.md diff
+### sits in agent-flatfill-perplane worktree - origin unknown, left alone.
+### e6691f1 mission values MERGED 788cf66 (c950192), 191 ctest pass. New OPEN: character_is_ready AI predicate
+### 0x009a1dc0 (§7.27) for m01['Gat_bobble'], m07['Kinzie'], m20['NPC Mascot<001>']. Spec Q for Team A:
+### cylinder radius - zone loader/containment use param1, trigger_get_radius now uses +0x94=param2; which is it?
+### Others now drive-gap suspended (dlc2_m03,m02,m11,m12,m17,m22,m23). Bink 9c70c61 was already done (b2761b8);
+### only primary=6 unspecced remains.
+### SWEEP post-7b3e110 (results/mission_sweep_49_20261013_post7b3e110, driver .claude/sweep_post_7b3e110.sh):
+### 49/49 exit 0, 0 bad_alloc. 10 OPEN, all need Team A: tutorial default param +0x20 [193,12,204]
+### (dlc2_m03,m02,m12,m17), alive predicate 0x0096f4f0 (m07 NEW deeper, m20), mover +0xc4 (m01),
+### conversation channel active slot['mission_conv'] (m11 NEW deeper), trigger_get_radius per-shape (m22),
+### on_vehicle_enter kind ['veh_daedalus_vtol 001'] (m23).
+### SWEEP post-1cd6b1a (results/mission_sweep_49_20261013_post1cd6b1a, driver .claude/sweep_post_1cd6b1a.sh):
+### 48/49 exit 0 (mm_m1_5=1), 0 bad_alloc, OPEN 12->10 (dlc3_m03 cleared; mm_m1_5 exits before grep).
+### All 10 + bink Qs relayed to Team A by orchestrator. Orchestrator reads status lines every 30 min.
+### items_inventory.xtbl resolver (spec §17.25) MERGED 1cd6b1a (2d581f2). dlc3_m03 now suspended at
+### game_lib.lua:1399 fade_in_block (drive gap, cf. earlier fade timeout artifacts). real_bink_flat_fill_prestage
+### test flaked once under -j8, passes alone - watch it. Still undelivered to Team A (no orchestrator reachable):
+### 12 sweep blockers + bink AC-tree length / primary 5,8 / 0x10019850 desc table.
+### MEMORY RE-CHECK 2026-10-12 23:xx (orchestrator saw 6.7-7.8GB): that is EXACTLY the pre-d5c9f13 curve
+### (whole-archive readFile = 5.4GB of vpp_pc in RAM + texture search cache decompressing every pixel pack).
+### Any exe built before d5c9f13 (e.g. playtest\sr3_viewer.exe v0.12, old worktree builds) still does it.
+### Current build re-measured on m05, 10s samples: max 2.63GB (1.5-2.6 sawtooth = cell load/evict, ~1GB/cell),
+### under the 6GB rule. Use only post-d5c9f13 exes for sweeps; v0.12 playtest exe needs a rebuild to benefit.
+### MEMORY (PC crashed 19:04 low VM): viewer fix MERGED d5c9f13 (dff5cae): archives memory-mapped +
+### texture search cache stores locations only w/ 192MB LRU. m05 peak 10.2GB -> 2.65GB, 189/189.
+### ~1GB step per cell load remains (unchased). Sweeps already 1 process/mission. 13GB python.exe was
+### NOT Team B (no python in this env) - Team A's.
+### 897a7d5 sweep blockers MERGED 9e167f8/24f950d (189/189). Sweep results/mission_sweep_49_20261013_post897:
+### OPEN 27->12 (list NOT delivered: purrsian-85 unreachable, purrsian-2e likely = pacer session; orchestrator please read open_blockers.tsv there). 27 missions "still suspended" = our drive gaps (listed in
+### that open_blockers.tsv). NEXT: bink 0x10019d10 per 897a7d5 spec-bink-codec answers; then
+### items_inventory.xtbl names (dlc3_m03 'DLC_fireball'). Stray driver .claude/sweep_897.sh left in place.
 ### 0x10019d10 byte-diff DONE (3f490ef): 528/528 differ from offset 0 - ours `56 86 55 15 11 65..`
 ### (looks like packed 4-bit symbol pairs), real `0f 01 00 00 00 00 80 ff..` (bitmask-like); bits 2995
 ### vs 2981. Whole algorithm shape differs, not an off-by-one. Relayed to Team A as spec-sync Q: is the

@@ -230,7 +230,7 @@ int main() {
         // until the dispatcher's own OPEN globals are supplied.
         Host host(batchFixtureNames());
         lua_State* gp = host.gameplayState();
-        fails(host, gp, "tutorial_start('save')", "0x0151d5a6");
+        ok(host, gp, "tutorial_start('save')"); // flags/gate known at construction (Team A sync 9c70c61): no OPEN refusal remains
     }
     {
         // Full success path - simple-prompt branch (steps 1-11 "else"),
@@ -296,7 +296,9 @@ int main() {
         ts.noMissionLive006d2910.set(true);
         ts.flagsByte24.set(EngineState::tutorialStateKey(1), 0u);
 
-        fails(host, gp, "tutorial_start('autosave', 0, true, false, false)", "descriptor default parameter");
+        ok(host, gp, "tutorial_start('autosave', 0, true, false, false)"); // e6691f1: table default 2 (index 1)
+        CHECK(ts.entries.at(1).argument5GatedValue == 2);
+        ts.entries.clear(); es.tutorialState().set(EngineState::tutorialStateKey(1), 0);
         ts.defaultParam20.set(EngineState::tutorialStateKey(1), 42);
         ok(host, gp, "tutorial_start('autosave', 0, true, false, false)");
         CHECK(ts.entries.at(1).argument5GatedValue == 42);

@@ -242,6 +242,15 @@ literal rounds-in-clip decrement at weapon-instance `this+0x1ac` (`add [esi+0x1a
 sourced from a per-character, per-ammo-type pool array (resolved via `0x00b6e9d0`, keyed by
 `weapon_def+0x110` — a confirmed third consumer/firmer identity for that field) and consumed via
 `0x00b6e300`'s clamp/subtract/floor primitive.
+**[2026-10-14 RESOLVED: this reading was wrong. `+0x1ac` is the RESERVE, not the clip. The `add [esi+0x1ac],eax` at
+`0x00b860e9` runs only for owners with a per-ammo-type pool (character-class flag `+0xa` bit 2 and `+0x1e48` set). It
+withdraws the pool's whole current count (`0x00b6e300(pool[+4])` subtracts it from the pool) and adds it to the
+weapon's reserve, then clamps the reserve at 0. The live rounds-in-clip counter is `+0x1a4`: the per-shot commit
+`0x009bb380` does `+0x1a4 −= +0x1f8` (rounds consumed this shot, then zeroed), also `−= +0x1fc` when `+0x1a1` bit 4 is
+set, and clamps at 0. Reload `0x009c0a50` does `take = min(maxClip − clip, reserve)`, `+0x1ac −= take`, `+0x1a4 += take`,
+with `maxClip = 0x00b81c30(weapon, owner)`. Total ammo `0x009c00f7` = `+0x1a4 + +0x1ac`, and the reserve getter
+`0x009bff20` returns `+0x1ac` (or `+0x1b4` for the secondary), or the owner's pool count when there is one. The HUD
+(`0x007f7c80`) reads the clip at `+0x1a4`, which is consistent.]**
 
 **`item::+0x8c` (`0x00902760`, ~370 instructions, CONFIRMED):** generic listener-notify broadcasts
 (`0x008ccb90`, a linked-list walk); equip-status bitwork (`+0xa8`/`+0xa9`/`+0x1a1` family, already
@@ -640,8 +649,9 @@ calling the sink: bullet `0x009699be`; explosion `0x0096b9ef`; vehicle-hit `0x00
 sink, the "kind" of damage is expressed only through F bits (CONFIRMED meanings: `0x800` nutshot override,
 `0x2000` forced lethal, `0x100` bypass scripted invulnerability, `0x200` skip the local-notify block,
 `0x40` local-only (no network forward), `0x8000` no burning scale, `0x1c00` "may not instakill", bits
-`0`/`1`/`3`/`9` exempt-from-group-scale = mask `0x9`; bit 0 marks a ranged/bullet-class hit — HIGH,
-from its pairing with the bullet-only riot-shield gate). Script `-1.0` damage = "lethal" (see step 13).
+`0`/`1`/`3`/`9` exempt-from-group-scale = mask `0x9`; ~~bit 0 marks a ranged/bullet-class hit — HIGH,
+from its pairing with the bullet-only riot-shield gate~~). Script `-1.0` damage = "lethal" (see step 13).
+**[2026-10-14 RESOLVED: F bit `0x1` = MELEE, not bullet-class; the m18 name `from_melee` is right. F is built by `0x0096f3b0` (17 byte arguments → bits 0..16, first argument = bit 0). The weapon-hit wrapper `0x00968380` maps its incoming request word into F as: request `0x40` → F `0x1`, `0x8` → F `0x2`, `0x4` → F `0x4`, `0x2` → F `0x8`, `0x100` → F `0x4000`, and F `0x40` is always set (call `0x00968705`). Only the melee-move hit `0x00969090` sets request `0x40` (`or ecx, 0x40` at `0x0096911f`). Its record word `+4` indexes the `melee.xtbl` move array `0x0262BA38` (stride `0x11c`), and its call `0x00969174` is the census row "190, likely melee" in §4.5.5a. The other producers do not set bit 0. The bullet path `0x00969a55` builds its request only from `0x4`/`0x8`/`0x10` (hit-zone result bits). The burn tick `0x0096b709` uses `0x80`. The explosion producer `0x0096ba8c` uses `0x2` (→ F `0x8`). The impact producer writes F = `0x40`, plus `0x80` conditionally, directly (`0x00784347`–`0x00784373`). The vehicle-hit producer (resistance type 2 at `0x009626aa`, sink call `0x00962801`) writes F = `0xc0`. Inside `0x00968380`, request `0x40` also enables a per-move instant kill: move record `+0xf8` bit `0x100` (`0x009822f0`) forces −1.0. Knock-on corrections: step 9's gate checks the **attacker's** held weapon (`[esp+0x14]` at `0x0096feed` → `0x00941f40`), and `0x00b817d0` is `Weapon_Class` (`W+0x4c`) == 19. So a melee hit from a riot-shield wielder does no damage to a victim whose descriptor `+0x48` has `0x200`; it is not "a shield blocks bullets". Step 15's `A+0x1c9b` bit 0 test is a melee instakill. Mask `0x9` = melee or explosion. F `0x4000` (`from_sonic`) is set only by the explosion producer, when the explosion record has `Flags` → `Causes Vomit` (`+0xDB`) or `Panic_Reaction` id (`+0x24`) == 5 (`0x0096ba02`–`0x0096ba4f`, request `0x100`). HIGH that the Special-SonicGun explosion row carries `Causes Vomit`; the base `explosions.xtbl` was not extracted to check.]**
 
 #### 4.5.2 Resistance lookup `0x009dd8f0(player, type)` (c)
 
@@ -701,7 +711,7 @@ multiplies its own computed damage by the result **before** calling the sink.
    `…_pistol` (**6**); if `n > m`: `dmg ×= m / n`.
 9. Bail if global state `0x0153B520 ≥ 2` with `0x0153B528` set (OPEN meaning: a cutscene/transition
    state), or (F bit 0 and V descriptor `+0x48` bit `0x200` and V's held weapon passes `0x00b817d0`) —
-   the "shield blocks bullets" gate (HIGH).
+   the "shield blocks bullets" gate (HIGH). **[2026-10-14 CORRECTED, see the §4.5.1 note: the held weapon tested is the ATTACKER's, F bit 0 is melee, so this is "a riot-shield (Weapon_Class 19) melee hit does nothing to a victim with descriptor `+0x48` bit `0x200`".]**
 10. **Player-only block (when V is a player):**
     a. If V is in the co-op/party roster `0x0060b530` and A is not → `dmg = 0` (OPEN which roster).
     b. `dmg ×= M16_player_avatar_damage_received_mult` (**0.4**, `0x0149fa24`) when `0x005e6ce0(V)`
@@ -749,6 +759,19 @@ regen-wait timer `+0x19c0` has elapsed, tick `0x009998c0`: skip if `+0x1c98` bit
 human shield); for players `rate ×= R.Health_Regen_Speed_Mult (+0x08)` (SP 1.3/1.0/1.0, co-op 1.1/1.0/1.0)
 `× player+0x2770` (`Health` unlockable); `HP += rate × (1/30)` (`0x0132a0ac`, fixed 30 Hz step).
 The `_mp` / `vehicle_mp` variants (`0x014A13D8…13E8`) have no reader in this exe beyond the loader.
+
+#### 4.5.5a Live call-site census of the damage sink (2026-10-13, FINAL for the call sites)
+
+**Source:** a user-approved read-only Frida capture, free roam, about 316 s (`tools/live_capture/capture_freeroam_20261013_101932.jsonl`). The player shot and punched pedestrians, threw a grenade near a car, and killed an armed gang member. Every call to the sink `0x0096fa20` had the argument shape **a0 = victim, a1 = attacker or 0, a2 = damage (float)**. Exactly four call sites reached it (CONFIRMED):
+
+| Call site (return address) | Stack above | Amounts seen | Attacker | Reading |
+|---|---|---|---|---|
+| `0x00968740` | `0x00969a5a` → `0x0096b4a9` → `0x009be2f8` → `0x009cb1f6` → `0x009cdc6c` | 2400, 160 ×4 | yes | fixed per-hit amounts: the **weapon-hit path** (hitscan/melee). HIGH CONFIDENCE. |
+| `0x00968740` | `0x00969179` → `0x00884792` → `0x00434f51` | 190 | yes | the same producer reached from a second chain (likely melee). HYPOTHESIS. |
+| `0x007844a2` / `0x0078446e` | `0x00769ae1` → `0x0075addd` → `0x00703f09` | 2.7–187, continuous | `0x0078446e`: always 0; `0x007844a2`: set | **impact/physics damage** (collisions, falls, blast impulse). `0x0078446e` is the attacker-less variant. HIGH CONFIDENCE. |
+| `0x00962806` | `0x0079e97f` → `0x007a58c1` → `0x009d18bd` or `0x009c3e72` | 263, 106, 59 | set or 0 | **area/explosion damage**: it fires in the same frame as bursts of impact damage. HIGH CONFIDENCE that this is the blast path. **[2026-10-14 CORRECTED: static read says vehicle-hit, not blast. The producer applies resistance type 2 (`vehicle`) at `0x009626aa` and passes F = `0xc0` with no explosion bit `0x8`. The blast producer is `0x0096ba8c` (via `0x00968380`, F `0x8`).]** |
+
+**Port rule:** route all four producers into the one sink with `(victim, attacker-or-null, float amount)`. Weapon hits pass the table damage unscaled (the sink's §4.5.4 chain does the scaling). Impact damage passes a continuous amount derived from the collision. Explosions pass a falloff amount per victim. Which weapon produced 2400 versus 160 was not tied to individual actions (OPEN, LOW).
 
 #### 4.5.6 Port checklist / OPEN
 
@@ -801,7 +824,7 @@ the actual slot CREATE/BIND call: it returns a pointer to the
 newly-activated slot record, and `0x00B84330` then writes that slot's full runtime state directly:
 flag bits at `+0x1a0`/`+0x1a1`, primary ammo at `+0x1a4` (scaled via `0x00B81C30`), rounds-in-clip at
 `+0x1ac` (the SAME field §6's own closed item already names as the live clip counter), secondary
-ammo at `+0x1b0`/`+0x1b4` when the weapon definition's own `+0x10` bit `0x200000` is set (a
+ammo at `+0x1b0`/`+0x1b4` **[2026-10-14 RESOLVED: `+0x1a4` = rounds-in-clip (live counter), `+0x1ac` = reserve; `+0x1b0`/`+0x1b4` = secondary clip/reserve. See §2.2c's resolved note.]** when the weapon definition's own `+0x10` bit `0x200000` is set (a
 DIFFERENT bit from `0x005ee630`'s ownership bit `0x80000000`, §26.7 cross-file — both live on the
 same weapon-definition `+0x10` dword but mean different things), and a vehicle-mount ammo cap at
 `+0x2c4` (either the scaled value or `0x7fffffff` for "unlimited," gated on a small cluster of
@@ -950,6 +973,12 @@ callers, character weapon-equip core), `0x006e58c0`, `0x006e7280` (vtable `0x011
 `0x00735bf0`, `0x0066ae70`, `0x00636320`, `0x006265b0`, `0x006603a0`. Remaining hypothesis: the
 walk-over pickup may not grant via `0x00B84330` at all but transfer the dropped item object
 directly into the inventory via `0x009d7480`'s equip path; the radius constant is still unknown.
+**[LIVE 2026-10-14 (m04 session, read-only): `0x00B84330` DID fire, exactly once in 17 minutes. It was called
+from `0x0060e2b4`, which was called from `0x0095af64`. So `0x00B84330` is a live grant path after all, and the
+earlier "never fired" result only means no pickup happened in that run. **CORRECTED, same day (static):**
+the calling function pushes the string `"QTE"` (`0x01128f3c`) just before the call at `0x0060e2af`. So this
+one grant was a QTE/scripted-sequence weapon grant, **not** a walk-over pickup. The walk-over pickup grant is
+still OPEN. Confirming it needs one capture with a Num4 checkpoint right before walking over a dropped gun.]**
 `+0x1b78`'s own internal sub-object layout past the two locator calls; `0x00601380`'s
   own full body (only its role as called from here was traced, not its own internals).
 
@@ -993,7 +1022,7 @@ shot is fired was not found**, nor was the exact byte offset of that live counte
 ammo-inventory-slot record pinned down.~~ **CLOSED, 2026-10-08 (§2.2c): the decrement is
 `add dword ptr [esi+0x1ac],eax` at `0x00b860e9`, inside `weapon::+0x8c` (`0x00b86030`) — `this+0x1ac`
 on the weapon INSTANCE is the live rounds-in-clip counter, clamped at zero, set to `0x7fffffff` for
-"infinite ammo."** **The exact call site that reads `Time_Management.Refire_Delay`
+"infinite ammo."** **[2026-10-14 RESOLVED, corrects this CLOSED note: the live clip is `+0x1a4`. It is decremented per shot by `0x009bb380` and refilled by reload `0x009c0a50`. `+0x1ac` is the reserve, and `0x00b860e9` moves the owner's ammo pool into it. See §2.2c.]** **The exact call site that reads `Time_Management.Refire_Delay`
 (`+0x130`) and gates the next shot on it was not found** — only the generic timer primitive it almost
 certainly reuses (§3.1) and a sibling gate (`0x0050c930`, §3.2) confirmed to be a *different* use of the
 same primitive. **Narrowed, 2026-10-08 (§2.2c): a third base object for this same timer primitive was
@@ -1235,7 +1264,7 @@ No leaked Volition/Havok/Audiokinetic/RAD material.
   sites): both confirm `+0x1b78` on the CHARACTER record, reached only via locator-method calls
   (no flat array/stride to cite). The real slot create/bind call is `0x00601380`, which
   `0x00B84330` uses to get a writable slot record and then populates flags, primary/secondary
-  ammo, rounds-in-clip (`+0x1ac`, cross-referencing §6's already-closed item), and a vehicle-mount
+  ammo, rounds-in-clip (`+0x1ac`, cross-referencing §6's already-closed item **[2026-10-14 RESOLVED: `+0x1ac` is the reserve; the clip is `+0x1a4`]**), and a vehicle-mount
   ammo cap. Closes the write side for every `0x00B84330` caller at once, though the specific
   world-pickup trigger among its dozen+ callers was not individually identified. Cleanroom
   self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
@@ -1276,7 +1305,7 @@ No leaked Volition/Havok/Audiokinetic/RAD material.
   constructors); the real route was direct MSVC RTTI recovery of the compiled `weapon`/`item`/
   `projectile` vtables — this engine uses exactly one concrete `weapon` class for every category,
   confirmed by a zero-hit RTTI keyword sweep for derived classes. Closes §6's rounds-in-clip-decrement
-  gap (`this+0x1ac`, weapon instance); narrows §6's refire-delay-gate gap (a third timer-primitive base
+  gap (`this+0x1ac`, weapon instance **[2026-10-14 RESOLVED: that is the pool-to-reserve transfer; the per-shot clip decrement is `+0x1a4` in `0x009bb380`]**); narrows §6's refire-delay-gate gap (a third timer-primitive base
   object found on the weapon instance, `this+0xfc`=1000ms, HIGH CONFIDENCE the real gate); extends
   §2.2a's ray-wrapper caller census with 5 new, previously-unattributed sightings
   (`0x0075df80`/`0x0075dfa0`/`0x0075dfc0`/`0x0075dfe0`/`0x0075e170`, role HIGH-confidence aim-assist,

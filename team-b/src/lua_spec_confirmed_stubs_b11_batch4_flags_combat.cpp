@@ -227,11 +227,15 @@ int stub_ai_scripted_action_is_processing(lua_State* L) {
         return 1;
     }
     CharacterState& c = st->getOrCreateCharacter(resolvedName);
-    if (c.scriptedActionDispatchGatePasses.get()) { // OPEN until set
-        throw OpenStateError("ai_scripted_action_is_processing's own gate-true byte-field/lookup-table comparison (0x012e1c64)",
-                             "spec-lua-api-behaviour.md Sec13.7");
+    // Sec13.7 "Gate polarity, 2026-10-12, FINAL": 0x008addb0 is "this machine has authority over the object" -
+    // TRUE in single player. Gate true -> the action-tag match against 0x012e1c64; a host without scripted-
+    // action tags returns false ("no scripted action processing"), never an error. An explicit set(false)
+    // (tests) still selects the queue-lookup branch.
+    if (c.scriptedActionDispatchGatePasses.known() ? c.scriptedActionDispatchGatePasses.get() : true) {
+        lua_pushboolean(L, 0);
+        return 1;
     }
-    bool result = !c.scriptedActionLookupNonNull.get(); // OPEN until set
+    bool result = !(c.scriptedActionLookupNonNull.known() ? c.scriptedActionLookupNonNull.get() : true); // ce4556f Sec7.28: no pending ticket -> non-null
     lua_pushboolean(L, result ? 1 : 0);
     return 1;
 }
@@ -573,7 +577,7 @@ int stub_set_max_hit_points(lua_State* L) {
     } else {
         CharacterState& c = st->getOrCreateCharacter(name);
         int32_t oldMax = st->drawOrGetMaxHitPoints(name); // closes OPEN for an ordinary character, Sec60.4
-        int32_t oldCurrent = c.currentHitPoints.get();    // OPEN until set
+        int32_t oldCurrent = st->drawOrGetCurrentHitPoints(name); // Sec34.2: starts at the table/max value
         double ratio = (oldMax != 0) ? (static_cast<double>(oldCurrent) / static_cast<double>(oldMax)) : 0.0;
         c.maxHitPoints.set(newValue); // +0x1cac = +0x1cb0 (always 0 in this project) + arg -> plain overwrite, see doc comment
         if (resetCurrent) {
@@ -1316,7 +1320,10 @@ int stub_persona_override_persona_start(lua_State* L) {
     std::string persona = argString(L, 2);
     EngineState* st = upState(L);
     std::string resolvedCharacter;
-    bool resolved = resolveFollowerAwareObject(st, character, resolvedCharacter) && st->objectResolves().get(persona); // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
+    // ce4556f Sec17.9 FINAL: arg 2 is an audio persona NAME (Wwise FNV-1 id via
+    // 0x0046fd00), never a named object - it must not go through the object
+    // resolver. Only arg 1 resolves.
+    bool resolved = resolveFollowerAwareObject(st, character, resolvedCharacter); // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
     if (resolved) {
         st->getOrCreateCharacter(resolvedCharacter).personaOverrideName = persona;
     }
@@ -1501,7 +1508,7 @@ int stub_audio_conversation_playing(lua_State* L) {
             }
         }
     } else {
-        result = st->conversationSlotPlaying().get(std::to_string(slot)); // OPEN until set for a specific slot
+        result = st->conversationSlotActive(std::to_string(slot)); // Sec14.22 port rule: no voice playback modelled -> false unless a host marked it playing
     }
     lua_pushboolean(L, result ? 1 : 0);
     return 1;

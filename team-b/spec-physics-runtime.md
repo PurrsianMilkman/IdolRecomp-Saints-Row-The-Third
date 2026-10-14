@@ -2272,6 +2272,424 @@ whoever documents chassis rotational dynamics next.
 destination to known consumer.]** Full instruction-level detail and the construction-cluster scan
 method: `scratchpad/vehicle_handling_data_to_drivemodel_2026-10-09.md`.
 
+### 10.11 Vehicle component values from data (2026-10-14)
+
+Closes `FREE-ROAM-GAPS.md` deliverable #2 (group A: A-1 suspension, A-2 wheel geometry + inertia + steering
+rates, A-3 tyre friction curve) and §11 item 9 (component-slot mapping). Method: read-only `capstone` linear
+disassembly of `SaintsRowTheThird.exe` (image base `0x400000`) plus the real shipped data
+(`vehicle_defaults.xtbl`, `vehicle_groups.xtbl`, `<name>_veh.xtbl`, `<name>.xtbl` variants from
+`misc_tables.vpp_pc`; `car_4dr_genki` from `dlc1.vpp_pc`; `.ccar_pc` part records; the shared rim catalogue
+`externalized_components.cvcomp_pc` in `vehicles_preload.vpp_pc`). No game run, no live capture. Scripts:
+`tools/scratchpad/vehphys_*.py` (resolver: `vehphys_resolve.py`). Labels: **FINAL** = every value has an exe
+address and a data source; **PARTIAL** = the open part is named. "Entry" = the vehicle-info-table record
+(`spec-vehicle-data.md` §7.3, reached as `vehicle+0xbf4`); "axle k" = entry `+0x4F8 + 0x40*k`; "data" = the
+vehicle-data object at instance `+0x1c`; "instance" = `vehicle+0x808`.
+
+#### 10.11.0 Build order and the component-slot map — FINAL (closes §11 item 9)
+
+Bring-up `0x00abf020`: chassis body `0x00abc160` → `0x00abe2b0` → data `0x00abc590` → per-class factory
+`0x00abde60` (instance + components) → `0x00abeec0` (adds the instance and the `+0xd4` action to the world
+with `0x00c19f60`). Inside `0x00abde60`, after the Havok instance base constructor (`0x00c55f60`, chassis =
+`(vehicle+0x688)+0x194`) and `instance+0x1c` = data, the components are built in this order; each slot is read
+off the constructor's own store instruction:
+
+| Slot | Component | Builder → class ctor (vtable) | Game override? |
+|---|---|---|---|
+| `+0x1c` | vehicle data (`hkpVehicleData`) | `0x00abc590` → `0x00c599d0` (`0x11a072c`) | no (Havok) |
+| `+0x20` | driver input | `0x00aba420` → base `0x00c55b00`, vtable `0x1182760` | yes |
+| `+0x24` | steering | `0x00abc900` → `0x00aeb480` (vtable `0x118548c`, base `0x00c5a940`) | yes |
+| `+0x28` | engine | `0x00aba4c0` (vtable `0x1182784`, base `0x00c59300`) | yes |
+| `+0x2c` | transmission | `0x00abd400` (vtable `0x11827ec`, base `0x00c59e00`) | yes |
+| `+0x30` | brakes | `0x00abd7f0` (vtable `0x1182818`, base `0x00c5a010`) — upgrades §10.7's HIGH to CONFIRMED | yes |
+| `+0x34` | suspension | `0x00abdb00` → `0x00abc040` (vtable `0x11827d8`) | yes |
+| `+0x38` | aerodynamics | `0x00aba9f0` → `0x00c59390` (vtable `0x11a04bc`) | **no — Havok default** |
+| `+0x3c` | wheel collide (ray cast) | `0x00abdd50` → `0x00abd000` (vtable `0x118282c`, base `0x00c5a720`) | yes |
+| `+0x40` | tyre marks | **never built** (no store anywhere in the build sequence) | — |
+| `+0x44` | velocity damper | `0x00abaab0` → `0x00c59530` (vtable `0x11a0510`) | **no — Havok default** |
+| `+0x9c` | game object, 0x14 bytes, vtable `0x11826f4` | `0x00abde60` tail | (role OPEN) |
+| `+0xd4` | game "extra gravity" action (§10.11.8) | `0x00abab50` → `0x00ae37b0` (vtable `0x1185368`) | game |
+
+So the 7 game override classes are exactly slots `+0x20 +0x24 +0x28 +0x2c +0x30 +0x34 +0x3c`. The order is
+Havok's public `hkpVehicleInstance` member order (driver input, steering, engine, transmission, brake,
+suspension, aerodynamics, wheel collide, tyre marks, velocity damper), now confirmed slot by slot from the
+exe. **Correction:** Team B's guess from sub-step order (`vehicle_substeps.h:92-101`: `+0x24` wheel collide,
+`+0x28` steering, `+0x30` suspension, `+0x34` brakes, `+0x38` transmission) is wrong for every slot except
+`+0x20`.
+
+Per class, `0x00abde60` then calls an instance virtual: class 0 Automobile → slot `+0x40` (`0x00ae1170`, args
+axle0/axle1 `Wheel_Drift_Friction_Modifier` (entry `+0x510`/`+0x550`), `+0x870` bits 6/7 =
+`Drifting_Possible`/`Burnout_Possible`, the `Vehicle_Type` block pointers), which runs Havok's instance init
+(`0x00c58120`, reached through `0x00ae84b0`); classes 3/4 → slot `+0x20`; class 2 → slot `+0x50`.
+
+**AI/player re-tune** `0x00ab9ea0` (selector bit = "AI driven"): rewrites steering `+0x8`/`+0xc` (§10.10),
+brakes `+0x14`, every wheel's friction (`Wheel_Friction` or `AI_Wheel_Friction`), and data `+0x68 +0x74 +0x78
++0x7c +0x80` from (`Yaw_Torque_Factor`, `Yaw_/Roll_/Pitch_Unit_Inertia`, `Static_Load_Friction`) or their
+`AI_` twins (entry `+0x740 +0x760 +0x764 +0x768 +0x730`), then tail-calls instance virtual `+0x44`
+(`0x00ae5c80`), which clears data `+0x190` (already-initialised) and re-runs data init `0x00c59700` (so the
+friction table of §10.11.6 is rebuilt). The chassis rigid-body inertia is **not** changed by this switch.
+
+#### 10.11.1 Where a field's value comes from — FINAL
+
+Three layers (`spec-vehicle-data.md` §7.2), confirmed for the aero block at `0x00ac8380`: in group-defaults
+mode a field starts from the global block (`vehicle_defaults.xtbl` `<Defaults>`, e.g. `Air_Density` →
+`0x0282cc88`); in vehicle mode it starts from the vehicle's group row; then the `_veh.xtbl` element, if
+present, overwrites. Fields that none of the three test rows nor their groups set, and that therefore come
+from the global block: `Wheel_Mass` 30, `Air_Density` 1.3, `Frontal_Area` 1.0, `Min_Pedal_To_Block` 0.9,
+`Min_Time_To_Block` 1000, `Ramp_Damping_Comp` 5, `Wheel_Min_Limit` 0, `Wheel_Max_Limit` 100. (The global
+block spells the axle spring fields `Spring_Length`/`Spring_Strength`/`Spring_Damp_Comp`/`Spring_Damp_Exp`.)
+Units after load: angles rad, `Max_Speed_Steering` m/s (`AI_Max_Speed_Steering` stays unconverted, §7.3),
+`Collision_Spin_Threshold` rad/s; everything else SI as authored (mass kg; torques N·m).
+
+#### 10.11.2 Chassis rigid body (`0x00abc160`) — PARTIAL (base centre of mass source HIGH)
+
+Stack rigid-body construction info built by `0x00c2b0d0`, body created by `0x00757c00`, added by
+`0x00757cc0`, stored at `(vehicle+0x688)+0x194`:
+
+| Field (info offset) | Value | Status |
+|---|---|---|
+| mass (`+0x90`) | entry `+0x498` `Mass` | FINAL |
+| inertia tensor (`+0x50`) | `Mass ×` diag(`Pitch_Unit_Inertia`, `Yaw_Unit_Inertia`, `Roll_Unit_Inertia`) on (x, y, z); built at `0x00abc38f`–`0x00abc41f`, scaled by mass with `0x00bea3a0` | FINAL |
+| centre of mass (`+0x80`) | x = 0 (forced); y = base.y + `Center_Of_Mass_Y_Offset` (`+0x61C`); z = base.z + `Center_Of_Mass_Z_Offset` (`+0x620`). Entry `+0x618` is added to x and then overwritten by 0 | FINAL formula |
+| base | vec3 at `+0x44` of the vehicle's model descriptor (`[(vehicle+0x1e00)+0x10]`, the object whose `+0x80` supplies the collision shape); its values match `.ccar_pc` header `+0x44`–`+0x4C` (genki 0.0052/0.3873/0.2355) | HIGH |
+| linear / angular damping (`+0x94`/`+0x98`) | 0.01 / 0.05 (literals `0x12a2dd0`, `0x1115d6c`) | HIGH (field names from Havok's public info layout) |
+| `+0xa4` | 0.1 (`0x127e354`) | OPEN name (restitution-like) |
+| collision filter | layer `0x5e`, system group = running counter | FINAL |
+
+Chassis axes: x = right-hand lateral (pitch axis), y = up (yaw), z = forward (roll). Yaw inertia (Team B's
+"2200") is `Mass × Yaw_Unit_Inertia` (genki 1500 × 2.18906 = 3283.6 kg·m²).
+
+#### 10.11.3 Vehicle data object (`0x00abc590`, defaults `0x00c599d0`) — FINAL
+
+| Data offset (Havok public name) | Source | Default if unset |
+|---|---|---|
+| `+0x10` gravity | (0, −9.8, 0) literal `0x11173f8` | — |
+| `+0x20` wheel count | wheel setup `+0x20` (§10.11.4) | 0 |
+| `+0x30/+0x40/+0x50` chassis orientation columns up/forward/right | (0,1,0) / (0,0,1) / (−1,0,0) | — |
+| `+0x60/+0x64/+0x68` torque roll/pitch/yaw factor | `Roll_/Pitch_/Yaw_Torque_Factor` | 0/0/1 |
+| `+0x6c` extra torque factor | `Extra_Steering_Torque` | 0 |
+| `+0x70` max velocity for positional friction | not written | **10.0** |
+| `+0x74/+0x78/+0x7c` chassis unit inertia yaw/roll/pitch | `Yaw_/Roll_/Pitch_Unit_Inertia` | 1/1/1 |
+| `+0x80` friction equalizer | **`Static_Load_Friction`** | 0 |
+| `+0x84` normal clipping angle cosine | not written | **0.1** |
+| `+0x88` max friction-solver mass ratio | not written | **30.0** |
+| `+0x8c` wheel params array (stride `0x28`) | §10.11.6 | — |
+| `+0x98` wheels per axle (bytes) | written from setup `+0xe8`, then **recomputed** by data init from the wheel axle indices | — |
+| `+0xa4` friction description | built by data init (§10.11.6) | — |
+| `+0x180` chassis friction inverse inertia | data init: `(1/Mass) ×` (`Pitch_TF/Pitch_UI`, `Yaw_TF/Yaw_UI`, `Roll_TF/Roll_UI`) on (x, y, z) | — |
+
+The torque factors and unit inertias here act **only** on the friction solver (`+0x180`), not on the rigid
+body: a `Yaw_Torque_Factor` of 0.27 makes tyre impulses 0.27× as effective in yaw as the real inertia
+would allow.
+
+#### 10.11.4 Wheel geometry (`0x00ad8090`, `0x00ad5d10`/`0x00ad5990`, `0x00ad7320`) — PARTIAL
+
+- **Which parts are wheels:** vehicle parts whose `.ccar_pc` part type (`+0x44`) is 2 or 3 (`0x00a88770`);
+  type 2 → axle 0, type 3 → axle 1 (`0x00a88880`). Child dummies (types 18/23, `PD_wheel_*01`) are not wheels.
+  Wheel index = part order (genki: FL, FR, BL, BR). Max 2 axles, wheels per axle counted (setup `+0xe8`).
+  Setup object = `vehicle+0x7fc` (= `(vehicle+0x688)+0x174`; 0x100-byte pool at `0x2829ad0`): `+0x20` count,
+  `+0x24` part pointers, `+0x64` per-wheel suspension direction (vec3, stride 12), `+0xc4` wheel→axle,
+  `+0xe8` wheels per axle, `+0xf0` radius per axle, `+0xf8` width per axle, `+0x00`/`+0x10` per-axle
+  hardpoint offset (§10.11.5). **Correction:** `spec-vehicle-data.md` §7.3's note that `vehicle+0x7fc` is "a
+  likely explosion-definition pointer" is wrong; it is this wheel setup.
+- **Position:** the wheel part's transform translation (row 3) in the `.ccar_pc` (`0x00a8b380`). FINAL.
+- **Radius and width** (first wheel of each axle): `radius = 0.5 × bboxHeight × scale.y`,
+  `width = bboxWidth × scale.x`, where the bbox is that of the wheel's equipped rim descriptor (the `.ccar_pc`
+  wheel parts' own bbox is empty, ±FLT_MAX) and `scale = (Tw[width] × Ts[size], Tp[profile] × Ts[size])`:
+  `Tp` (`0x1184f60`) = {0.6923, 0.8462, 1, 1.1538, 1.3077}, `Tw` (`0x1184f74`) = {0.45, 0.7, 1, 1.3, 1.55},
+  `Ts` (`0x1184f88`, 27 entries, index clamped to 26) = {0.4, 0.5, 0.63, 0.75, 0.8, 0.9, 0.95, **1.0** (index 7),
+  1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5, 1.55, 1.6, 1.7, 1.75, 1.85, 1.9,
+  2.2, 2.4, 2.8}. For the primary wheels (types 2/3) profile = 2 (→1.0); size/width are bytes `+0x40/+0x41` and
+  `+0x42/+0x43` (front/rear) of the customisation record `vehicle+0xa88`; with no record the scale is 1.
+  Every common rim in the shared catalogue has bbox half-height **0.2048 m** and width 0.2167 m (R129 0.2078,
+  R231 0.2069 are the exceptions). So **radius = 0.2048 × Ts[size]**.
+  HIGH: that the record bytes equal the variant's `Wheel_Group` `Front_/Rear_Size` and `_Width` (not traced
+  to the writer); OPEN: which rim a given variant equips (only matters for the two odd rims and for the
+  lateral hardpoint term below).
+- **Runtime radius changes** (`0x00ad6c60`): flat tyre ×0.8 (part flag `0x1000000`) or ×0.7 (also sign bit).
+- **Suspension direction:** (0, −1, 0) for every wheel (`0x00ad7320`), except that each `suspension_anchor`
+  marker (string `0x1185078`) in the vehicle's rig sets the direction of the wheel nearest to it.
+
+#### 10.11.5 Suspension (`0x00abdb00`; ride height `0x00aba740`/`0x00aba5a0`; hardpoint `0x00ad76b0`) — PARTIAL
+
+Per wheel `i` on axle `k` (Havok `SuspensionWheelParameters`, stride `0x30`, at component `+0x8`; spring
+parameters stride `0xC` at `+0x14`):
+
+| Field | Value |
+|---|---|
+| strength (`+0x0` of the 0xC record) | `Wheel_Spring_Strength` (axle `+0x24`) |
+| damping compression (`+0x4`) | `Wheel_Damp_Comp` (axle `+0x2C`) |
+| damping relaxation (`+0x8`) | `Wheel_Damp_Exp` (axle `+0x30`) |
+| length (`+0x20`) | `Wheel_Spring_Length` (axle `+0x20`) |
+| direction (`+0x10`) | setup `+0x64 + 12*i` (§10.11.4) |
+| hardpoint (`+0x00`) | `wheelPos + rimCentreX × wheelAxisX + (L_k − sag_k) × (−dir) [+ hydraulics]` |
+
+**Units:** strength and both damping values are per unit chassis mass. §10.4's `(1/X)` is
+`1/(chassis+0xcc)` = `1/invMass` = **Mass**, so per-wheel spring rate `k = Strength × Mass` (N/m) and damper
+`c = Damp × Mass` (N·s/m). Team B's `X = 1.0` is wrong by a factor of Mass.
+
+**Ride-height formula** (game code, `0x00aba5a0`): with `zF`/`zR` = mean z of the axle's wheels, `zC` =
+chassis centre-of-mass z (live body `+0x170`), `L = zF − zR`, `n_k` = wheels on axle k, and
+`g_eff = world gravity y + Extra_Gravity` (world `0x161d378+0x10`, −9.8; `Extra_Gravity` from the `+0xd4`
+action's `+0x1c`):
+
+`sag_F = −g_eff × (zC − zR)/L / (n_F × Strength_F)`, `sag_R = −g_eff × (zF − zC)/L / (n_R × Strength_R)`
+
+That is exactly "mass share × g / spring rate" with g = |g_eff|. The game then raises each hardpoint by
+`L_k − sag_k` along −direction, so **at static rest on flat ground the wheel centre sits exactly at its
+modelled position**. If the front axle is not ahead of the centre of mass (`zF ≤ zC`), the fallback
+`0x00aba640` uses offset = radius/2 along −direction instead. Only 2 axles are handled.
+`rimCentreX` = x-centre of the rim descriptor's bbox along the wheel part's x row; hydraulics add
+`(vehicle+0xa88)+0x24 × direction`, where `+0x24 = input × Suspension_Raise_Max/Suspension_Lower_Min`
+(`0x00ad8370`).
+
+**Load factor** (§10.4) is Havok's contact-normal clipping term fed by wheel collide (normal clipping
+cosine 0.1, §10.11.3), not an anti-roll term. **Other axle fields:**
+- `Ramp_Damping_Comp` (axle `+0x34`) overwrites every wheel's damping compression when a "ramp" state is on
+  (`0x00ae8150`–`0x00ae81c8`; trigger = the attached-object/liveness check of §10.2). PARTIAL: trigger
+  meaning OPEN.
+- `Wheel_Min_Limit`/`Wheel_Max_Limit` (axle `+0x38`/`+0x3C`) clamp only the **rendered** wheel travel
+  (`0x00ae8ca0`; default 0/100), not physics. FINAL.
+- `Wheel_Spring_Max_Force` (axle `+0x28`): no reader found — OPEN.
+
+#### 10.11.6 Tyres and friction — PARTIAL
+
+**Per-wheel parameters** (data `+0x8c`, stride `0x28`, written by `0x00abc590`'s loop `0x00abc790`–`0x00abc839`):
+
+| `+` | Havok name | Value |
+|---|---|---|
+| `0x00` | radius | setup radius of the wheel's axle |
+| `0x04` | mass | `Wheel_Mass` (axle `+0x08`) |
+| `0x08` | width | setup width of the axle |
+| `0x0C` | friction | `Wheel_Friction` (axle `+0x0C`), or `AI_Wheel_Friction` after an AI re-tune |
+| `0x10` | viscosity friction | `Viscosity_Friction` (entry `+0x76C`, vehicle-wide) |
+| `0x14` | max friction | `Wheel_Max_Friction` (axle `+0x14`) |
+| `0x18` | slip angle | 0 |
+| `0x1C` | force-feedback multiplier | 1.0 |
+| `0x20` | max contact-body acceleration | 9.8 |
+| `0x24` | axle (byte) | wheel→axle index |
+
+**Friction table (A-3), data init `0x00c59700` → `0x00c63620`.** Per axle k the init takes the axle point
+`P_k` = hardpoint + direction × length of the **last** wheel of that axle (= its wheel centre lowered by
+`sag_k`), the contact point `c_k = P_k − COM − r_k × up`, and the effective inverse mass of the chassis for a
+lateral (right-axis) impulse there:
+
+`m_eff⁻¹ = invMass + d^T · I_f · d`, with `d = c_k × right` and `I_f` = the friction inverse inertia
+(data `+0x180`) rotated by the chassis rotation **at init time** (`0x00bead00`). With an unrotated chassis
+this is `invMass + c_z² × (Yaw_TF/Yaw_UI)/Mass + c_y² × (Roll_TF/Roll_UI)/Mass`.
+
+Then `x_k = (Σ wheel mass on axle k) × m_eff⁻¹` and the axle description (`data+0xac+0x64*k`) is:
+
+| Axle `+` | Value |
+|---|---|
+| `0x00`–`0x3C` table[0..15] | `table[i] = 1 − (1 − s_i)^(1/x_k)` for i = 0..14, with `s_0 = x_k/16`, `s_{i+1} = s_i × q`; `table[15] = 1.0` |
+| `0x40` step `q` | `(16/x_k)^(1/15)` (pow via `0x00ea4300`) |
+| `0x44` start | `x_k/16` |
+| `0x48` wheel surface inertia | `Σ(m·r)/r_k` (= Σ wheel mass) |
+| `0x4C` its inverse | |
+| `0x50` wheel/chassis mass ratio | `x_k` |
+| `0x54`/`0x58` | `r_k` / `1/r_k` |
+| `0x5C` down-force factor | `1 − Static_Load_Friction` |
+| `0x60` down-force sum factor | `Static_Load_Friction × |z_other| / L`, z in chassis coordinates (from the origin, not the centre of mass) |
+
+Description `+0x0` = `L` (|zF − zR| along forward), `+0x4` = invMass. **Correction to §10.8:** in §10.8's own
+`a1`-relative terms, `a1+0x48` is the per-entry **multiplier** `q` and `a1+0x4C` is the pre-loop **start**
+`x/16`. The consumer `0x00c63930` reads `+0x44` (start) before its loop and multiplies by `+0x40` (q) inside
+it; §10.8's labels have the two swapped. Because `x_k` is small, `table[0] ≈ 1 − e^(−1/16) ≈ 0.0607` for every
+car. The curve is a pure function of mass, inertia factors, wheel mass and geometry; there is no authored
+curve.
+
+**Other tyre modifiers.** Handbrake: brakes `isConnectedToHandbrake` (§10.11.8). `Wheel_Drift_Friction_Modifier`
+(axle `+0x18`): passed to instance virtual `+0x40` at build (§10.11.0); its consumer is OPEN.
+`Static_Load_Friction` = Havok friction equalizer (above). Ground-material friction = §10.5 body property.
+No wheel-spin traction modifier was found in the build path (OPEN).
+
+#### 10.11.7 Steering (`0x00abc900`, rate limit `0x00aeb110` → `0x00dae970`) — PARTIAL
+
+| Component `+` | Source |
+|---|---|
+| `0x08` max steering angle | `Max_Steering_Angle` (rad); AI: `AI_Maximum_Steering_Angle` (`0x00ab9ea0`) |
+| `0x0C` full-angle speed threshold | `Max_Speed_Steering` (m/s); AI: `AI_Max_Speed_Steering` (raw, unconverted) |
+| `0x10` does-wheel-steer bytes | axle `+0x00` `Wheel_Does_Steer` |
+| `0x1C` / `0x24` turn-in speed / damp angle | `Steering_Wheel_Max_Speed` / `_Damp_Angle` (rad/s, rad) |
+| `0x20` / `0x28` return speed / damp angle | `Steering_Wheel_Max_Return_Speed` / `_Return_Damp_Angle` |
+| `0x2C` reverse-steer bytes | axle `+0x01` `Wheel_Reverse_Steer` |
+
+Target angle = `input × (+0x08)`, multiplied by `(threshold/speed)²` when speed exceeds `+0x0C` (§10.1). The
+limiter drives the applied angle toward the target with a minimum-time profile (`0x00dae970`, ≤ 8 segments
+per call, time tolerance 1e-6): maximum angular speed `V` = turn-in speed and acceleration/deceleration
+`A = V²/(2 × damp angle)`, so stopping from `V` uses exactly the damp angle. When the target input is 0
+(centring), the return pair is used. On a direction reversal it passes a seed of `V_ret²/(2 × damp_ret)`
+(§10.1). Velocity state is instance `+0xd8`, applied angle `+0xdc`; instance `+0x164` bit 1 bypasses the
+limiter. A full-lock step from rest takes `2√(θ/A)` if `θ ≤ V²/A`, otherwise `2V/A + (θ − V²/A)/V`. There is
+no Ackermann split (§10.1). PARTIAL: the reversal seed's exact role inside `0x00dae970` and the speed-vector
+projection (§10.1) were not re-derived.
+
+#### 10.11.8 Brakes, aerodynamics, velocity damper, extra gravity — FINAL
+
+- **Brakes** (`0x00abd7f0`): `+0x14` min time to block = `Min_Time_To_Block` (`AI_` when `0x00ae40c0`
+  is true). Per wheel (stride `0xC` at `+0x8`): max braking torque = axle `+0x1C` `Wheel_Braking_Torque`;
+  min pedal input to block = `Min_Pedal_To_Block` (entry `+0x5DC`, vehicle-wide); connected-to-handbrake =
+  axle `+0x02` `Wheel_Does_Handbrake`. The torque law is §10.6's override.
+- **Aerodynamics** (Havok default, `0x00c593f0`): `+0x8` density = `Air_Density`, `+0xC` area =
+  `Frontal_Area`, `+0x10` drag = `Drag_Coefficient`, `+0x14` lift = `Lift_Coefficient`, `+0x20` extra-gravity
+  vector = **0** (the game zeroes it; `Extra_Gravity` goes to the action below). With
+  `v = linear velocity · forward`: drag force `= −0.5ρ·Cd·A·|v|·v` along forward (`0x00c593c0`); lift force
+  `= 0.5ρ·Cl·A·v²` along chassis up (`0x00c59360`); no torque. Negative `Cl` = downforce.
+- **Velocity damper** (Havok default, `0x00c59550`): `+0x8` normal = `Normal_Spin_Damping`, `+0xC`
+  collision = `Collision_Spin_Damping`, `+0x10` threshold = `Collision_Spin_Threshold` (rad/s). Each step
+  `ω ← ω × max(0, 1 − D·dt)`, where `D` = collision damping if `|ω|² > threshold²`, else normal damping.
+- **Extra-gravity action** (`0x00ae3850`, on the chassis): acts only if `Extra_Gravity ≠ 0` and the enable byte
+  `+0x2c` is set (constructor sets it to "not" `0x00ad31a0(...)`, a predicate whose meaning is OPEN).
+  - All wheels in contact: force = `Mass × Extra_Gravity ×` normalised mean contact normal, zeroed if that
+    normal's y < 0.5.
+  - No wheel in contact: force = (0, −10 × Mass, 0), i.e. a constant extra 10 m/s² downward while airborne.
+  - Mixed contact: nothing.
+  - An extra speed-dependent term (byte `+0x2d`, cleared for vehicles towing a trailer) uses 0.89408 m/s
+    (= 2 mph) and 9.8; its formula is OPEN.
+
+#### 10.11.9 Test vectors (static; resolved from shipped data by the formulas above)
+
+Rows: `car_4dr_genki` (DLC1, group "Car - standard", Team B's test car); `car_2dr_exoticsports01` (ATTRAZIONE,
+"Car - sports"); `truck_2dr_pickup03` (THOROGOOD, "Truck - small (pickups)"). Wheel sizes come from each
+variant's `Wheel_Group` (genki 11/11 width 2/2; exotic front 9 width 2, rear 10 width 4; truck 14/14 width 2/2).
+Base centre of mass = `.ccar_pc` header `+0x44` (HIGH, §10.11.2). Chassis coordinates: x right, y up, z forward.
+
+| Quantity | genki | exoticsports01 | pickup03 |
+|---|---|---|---|
+| Mass (kg) | 1500 | 1000 | 2000 |
+| Inertia diag x/y/z = pitch/yaw/roll (kg·m²) | 2917.6 / 3283.6 / 681.3 | 1591.8 / 1968.8 / 487.3 | 4509.2 / 4999.7 / 912.3 |
+| Centre of mass (x, y, z) | (0, −0.3127, 0.2355) | (0, −0.3012, −0.2531) | (0, −0.4875, 0.45) |
+| Wheel FL / FR / BL / BR (x, y, z) | (−0.7701,−0.2185,1.8841) (0.7675,−0.2185,1.8841) (−0.7204,−0.2197,−1.4923) (0.7201,−0.2197,−1.4963) | (−0.8584,−0.2920,1.3417) (0.8586,−0.2920,1.3331) (−0.8957,−0.2697,−1.5947) (0.8960,−0.2697,−1.5925) | (−0.7270,−0.6319,1.6598) (0.7270,−0.6314,1.6587) (−0.7280,−0.6420,−1.3966) (0.7280,−0.6420,−1.3966) |
+| Wheelbase / track F / track R (m) | 3.3784 / 1.5376 / 1.4405 | 2.9310 / 1.7170 / 1.7917 | 3.0559 / 1.4540 / 1.4560 |
+| Wheels / per axle | 4 / 2+2 | 4 / 2+2 | 4 / 2+2 |
+| Radius F / R (m) | 0.2458 / 0.2458 | 0.2253 / 0.2355 | 0.2765 / 0.2765 |
+| Width F / R (m) | 0.2600 / 0.2600 | 0.2384 / 0.3863 | 0.2925 / 0.2925 |
+| Static mass share F / R | 0.5120 / 0.4880 | 0.4574 / 0.5426 | 0.6043 / 0.3957 |
+| Strength F / R (1/s²) | 40 / 30 | 70 / 70 | 50 / 30 |
+| Spring rate per wheel F / R (N/m) | 60000 / 45000 | 70000 / 70000 | 100000 / 60000 |
+| Damp comp = relax F / R (per mass; N·s/m) | 5 / 5 (7500 / 7500) | 5 / 5 (5000 / 5000) | 2 / 1.5 (4000 / 3000) |
+| Rest length F / R (m) | 0.37 / 0.35 | 0.235 / 0.25 | 0.43 / 0.40 |
+| `g_eff` (m/s²) | −19.8 | −19.8 | −19.8 |
+| **Static sag F / R (m)**, game formula | **0.12672 / 0.16103** | **0.06468 / 0.07675** | **0.11965 / 0.13059** |
+| Sag with world g only (no extra gravity) | 0.06272 / 0.07970 | 0.03201 / 0.03799 | 0.05922 / 0.06463 |
+| Hardpoint above wheel centre `L − sag` F / R | 0.24328 / 0.18897 | 0.17032 / 0.17325 | 0.31035 / 0.26941 |
+| Natural frequency F / R (Hz) | 1.989 / 1.765 | 2.785 / 2.556 | 2.047 / 1.960 |
+| Damping ratio F / R | 0.781 / 0.924 | 0.625 / 0.574 | 0.257 / 0.308 |
+| Wheel friction / max friction F; R | 1.25 / 2.5; 1.25 / 2.5 | 2.0 / 4.0; 2.0 / 4.0 | 0.6 / 1.2; 0.75 / 1.3 |
+| Viscosity friction; wheel mass | 0.03; 30 | 0.01; 30 | 0.05; 30 |
+| Torque factors roll / pitch / yaw | 0.4 / 0.4 / 0.27 | 0.05 / 0.07 / 0.4 | 0.5 / 0.5 / 0.45 |
+| Data `+0x180` (x, y, z) | (1.371e−4, 8.223e−5, 5.871e−4) | (4.397e−5, 2.032e−4, 1.026e−4) | (1.109e−4, 9.001e−5, 5.480e−4) |
+| Friction equalizer (`Static_Load_Friction`) | 0 | 0 | 0 |
+| Friction ratio `x` F / R | 0.056137 / 0.058265 | 0.091156 / 0.082354 | 0.047479 / 0.058785 |
+| Table step `q` F / R | 1.45767 / 1.45405 | 1.41131 / 1.42090 | 1.47403 / 1.45319 |
+| Max steer angle (rad) | 0.61087 (35°) | 0.87266 (50°) | 0.61087 (35°) |
+| `Max_Speed_Steering` (m/s) | 18.999 | 22.352 | 17.882 |
+| Turn-in V (rad/s), damp (rad), A (rad/s²) | 18.850, 0.4363, 407.15 | 9.425, 0.1745, 254.47 | 18.850, 0.5236, 339.29 |
+| Return V, damp, A | 18.850, 0.4363, 407.15 | 18.850, 0.1745, 1017.88 | 18.850, 0.5236, 339.29 |
+| Full lock, step from rest at 0 m/s | 35.000° in 77.5 ms | 50.000° in 129.6 ms | 35.000° in 84.9 ms |
+| Full lock, step from rest at 20 m/s | 31.585° in 73.6 ms | 50.000° in 129.6 ms | 27.978° in 75.9 ms |
+| Brake torque F / R (N·m); handbrake | 4000 / 3500; rear | 2500 / 2500; rear | 3500 / 2500; rear |
+| Drag force; lift force (N, v in m/s) | −0.455·v\|v\|; −3.25·v² | −0.065·v\|v\|; −6.5·v² | −0.455·v\|v\|; −3.25·v² |
+| Spin damping normal / collision | 2 / 6 | 2 / 10 | 2 / 5 |
+| Gears; diff | 3.38/2.25/1.5/1.1; 4.2 | 3.5/2.2/1.5/1.02; 4.2 | 3.4/2.3/1.6/1.05; 5.0 |
+
+All three: min pedal to block 0.9; min time to block 1000; spin threshold 4.0143 rad/s; data defaults 10 / 0.1 / 30.
+
+Friction tables (`table[0..15]`; F = axle 0, R = axle 1):
+- genki F: 0.060690, 0.087291, 0.124795, 0.176866, 0.247557, 0.340408, 0.456582, 0.591848, 0.733338, 0.859289,
+  0.946923, 0.988440, 0.999037, 0.999988, 1.000000, 1.0
+- genki R: 0.060694, 0.087092, 0.124231, 0.175704, 0.245488, 0.337096, 0.451792, 0.585690, 0.726558, 0.853304,
+  0.943142, 0.987042, 0.998832, 0.999983, 1.000000, 1.0
+- exotic F: 0.060755, 0.084755, 0.117679, 0.162314, 0.221821, 0.299276, 0.396696, 0.513313, 0.643215, 0.773347,
+  0.884487, 0.958670, 0.991958, 0.999524, 0.999999, 1.0
+- exotic R: 0.060739, 0.085275, 0.119129, 0.165257, 0.226995, 0.307530, 0.408773, 0.529400, 0.662281, 0.792609,
+  0.899891, 0.967217, 0.994508, 0.999752, 1.000000, 1.0
+- pickup F: 0.060674, 0.088195, 0.127365, 0.182193, 0.257065, 0.355630, 0.478508, 0.619725, 0.763350, 0.884720,
+  0.961897, 0.993351, 0.999623, 0.999998, 1.000000, 1.0
+- pickup R: 0.060695, 0.087044, 0.124098, 0.175428, 0.244997, 0.336310, 0.450654, 0.584224, 0.724936, 0.851860,
+  0.942216, 0.986690, 0.998779, 0.999982, 1.000000, 1.0
+
+These assume the chassis is unrotated at data init. Under yaw the roll/pitch terms mix (§10.11.6).
+
+#### 10.11.10 Driving predictions — what is static, what needs a live capture
+
+- **Turning circle (static, kinematic):** no-slip radius at the rear-axle centre = `L / tan(δ)` with δ the
+  speed-reduced lock. At 10 m/s every test car is below its `Max_Speed_Steering`, so δ = full lock:
+  - genki 4.83 m (circle ≈ 9.65 m; COM path 5.13 m)
+  - exotic 2.46 m (COM path 2.80 m)
+  - pickup 4.36 m (COM path 4.74 m)
+
+  Lateral demand v²/R at 10 m/s is 20.7 / 40.7 / 22.9 m/s². With friction 1.25 / 2.0 / 0.6–0.75 under
+  `g_eff` 19.8 m/s², the pickup (and probably the exotic) will slide wider than this. Kinematic lower bound
+  only.
+- **Top speed (static bound):**
+  - Cap (`Maximum_Speed`, read by the speed logic at `0x00a86740`, blended toward
+    `Maximum_Speed_With_Nitrous` while nitrous is active): genki 37.998 m/s, exotic 44.704 m/s,
+    pickup 33.528 m/s.
+  - Top-gear redline speed `Max_RPM·2π/60·r/(gear·diff)`: genki 36.21 m/s, exotic 38.86 m/s, pickup 34.19 m/s.
+  - Predicted top speed ≤ min of the two: genki 36.2, exotic 38.9, pickup 33.5 m/s.
+
+  PARTIAL: whether the cap is a hard clamp or a throttle cut was not traced, and whether the engine reaches
+  redline against drag depends on the torque scale below. **[2026-10-14 RESOLVED: it is a hard clamp on the chassis linear velocity, run every frame for every vehicle, AI and player alike. It is not a throttle cut, not a torque taper, and not AI-only. `0x00a86620(vehicle, dt)` is called for each vehicle by the update loop `0x00ac1950` (call `0x00ac19dd`). It skips dead or wrecked vehicles (`0x00853b10`, `+0x16c8` bit 0, `0x00ad3c00`). Steps: (1) cap = descriptor `+0x878` (`Maximum_Speed`, m/s), replaced by vehicle `+0x1d84` when that is ≥ 0. `+0x1d84` is the script override `vehicle_max_speed` writes through `0x00a7ded0`. (2) Except for classes 3/4/5 (Helicopter, Vtol, Watercraft), cap blends toward `+0x87c` (`Maximum_Speed_With_Nitrous`): blend `+0x1a34` is 1 while the ground controller's nitrous byte `+0x10c` (`0x00ae4100`) is set, otherwise it decays by 0.5/30 per call (to 0 in 2 s); cap += (nitro − cap) × blend. (3) limit = cap + a bonus term. The bonus is the ground controller's `+0x120` when its `+0x164` bit `0x2` is set (class 0/1), or `+0x7c` of the `+0x190` object when its `+0xcc` bit `0x2` is set (class 5). It is forced to 100.0 when `(vehicle+0x688)+0x178` bit `0x2` is set. The meanings of these bonus inputs are OPEN. (4) If the 3-D rigid-body speed (`0x00abae00`) exceeds the limit, the velocity is rescaled to exactly the limit and written back (`0x00ab9370`, `0x00a8689f`–`0x00a868de`). Drive torque never sees the cap, so a car accelerates normally right up to it. Top speed is min(limit, redline speed), with the cap exact. The only other reader, `0x00ade3e0`, uses `Maximum_Speed` to normalise a per-wheel speed fraction that is averaged into ground-controller `+0x8a0` (consumer not traced).]**
+- **0–60 mph and 50–0 braking distance: not derivable statically.**
+  - Engine torque is scaled by the runtime global `0x02845af4`, which is zero on disk (§10.2, writer OPEN).
+  - The brake override's torque is velocity-proportional and clamped (§10.6), not a constant torque.
+  - Grip goes through the friction-circle solve (§10.8) with the table above.
+
+  All four acceptance numbers need the live capture of `FREE-ROAM-GAPS.md` A-3 (log chassis velocity per frame
+  for these three rows). Not approved yet and not run.
+
+#### 10.11.11 OPEN after this pass
+
+1. Which rim each variant equips (affects R129/R231 radius and the lateral hardpoint term), and the writer
+   of customisation-record bytes `+0x40..+0x43`.
+2. Base centre-of-mass source: HIGH, not CONFIRMED, as the `.ccar_pc` header `+0x44`.
+3. `Wheel_Spring_Max_Force` reader.
+4. `Wheel_Drift_Friction_Modifier` consumer.
+5. The ramp-damping trigger.
+6. The extra-gravity enable predicate `0x00ad31a0` and the `+0x2d` speed term.
+7. Rigid-body info `+0xa4` (0.1) name.
+8. The `+0x9c` object.
+9. The reversal-seed role in `0x00dae970`.
+10. ~~Speed-limiter mechanism behind `Maximum_Speed`.~~ **[2026-10-14 RESOLVED: a per-frame hard clamp of the chassis velocity to cap + bonus in `0x00a86620`, applied to all vehicles; see §10.11.10.]**
+11. Live-capture confirmation of everything in §10.11.9–10.
+
+#### 10.11.12 Team B wiring (CHOSEN constant → spec value)
+
+| Team B file:line | CHOSEN | Replace with |
+|---|---|---|
+| `include/sr3physics/vehicle_driving_slice.h:296` | `spring = 30000` | `Wheel_Spring_Strength × Mass` per wheel (genki 60000 F / 45000 R), or keep strength and multiply the whole force by Mass (§10.11.5) |
+| `vehicle_driving_slice.h:297` | `damperRelaxation = 2500` | `Wheel_Damp_Exp × Mass` (genki 7500) |
+| `vehicle_driving_slice.h:298` | `damperCompression = 3500` | `Wheel_Damp_Comp × Mass` (genki 7500); `Ramp_Damping_Comp` in ramp state |
+| `vehicle_driving_slice.h:299` | `restLength = 0.3` | `Wheel_Spring_Length` (genki 0.37 F / 0.35 R), with hardpoint = wheel + (L − sag)·up (§10.11.5) |
+| `vehicle_driving_slice.h:300` | `loadFactor = 1.0` | Havok contact-normal clipping factor (cosine floor 0.1), not anti-roll; 1.0 on flat ground is correct |
+| `vehicle_driving_slice.h:309`, `src/physics_vehicle_driving_slice.cpp:189` | `X = 1.0` | `X = invMass`, so `·(1/X)` = `·Mass` |
+| `vehicle_driving_slice.h:129` | `fastPathNoSpeedTerm` caller bool | instance `+0x19c` (still OPEN); default false is fine |
+| `vehicle_driving_slice.h:620` | 16 × 1.0 | `table[i] = 1 − (1 − s_i)^(1/x)` (§10.11.6), genki values in §10.11.9 |
+| `vehicle_driving_slice.h:621` | `boundary = 0.0` (labelled `+0x48`) | start `x/16` lives at `a1+0x4C` (genki F 0.0035086, R 0.0036416); field labels swapped vs the exe |
+| `vehicle_driving_slice.h:622` | `entryMultiplier = 1.0` (labelled `+0x4C`) | step `q = (16/x)^(1/15)` lives at `a1+0x48` (genki F 1.45767, R 1.45405) |
+| `include/sr3physics/vehicle_substeps.h:92-101` | slot map `+0x24` collide … `+0x38` transmission | `+0x20` input, `+0x24` steering, `+0x28` engine, `+0x2c` transmission, `+0x30` brakes, `+0x34` suspension, `+0x38` aero, `+0x3c` wheel collide, `+0x40` none, `+0x44` damper (§10.11.0) |
+| `vehicle_substeps.h:175` | mass 1500 "treated as kg" | `Mass`, kg (Havok SI) — confirmed by spring/gravity consistency |
+| `vehicle_substeps.h:176` | `wheelBase = 2.6` | mean front z − mean rear z of type-2/3 parts (genki 3.3784) |
+| `vehicle_substeps.h:177` | `trackWidth = 1.6` | x(FR) − x(FL) per axle (genki 1.5376 F / 1.4405 R) |
+| `vehicle_substeps.h:178` | `cgHeight = 0.5` | COM y = base.y + `Center_Of_Mass_Y_Offset` (genki −0.3127, chassis coords; wheel centres at −0.219) |
+| `vehicle_substeps.h:179` | `yawInertia = 2200` | `Mass × Yaw_Unit_Inertia` (genki 3283.6); friction solver also uses `Yaw_Torque_Factor/Yaw_Unit_Inertia/Mass` |
+| `vehicle_substeps.h:180` | `wheelRadius = 0.32` | `0.2048 × Ts[size]` (genki 0.2458) |
+| `vehicle_substeps.h:182` | `maxSteeringAngleRad = 0.6109` | `Max_Steering_Angle` (genki 35° — the CHOSEN value happens to match) |
+| `vehicle_substeps.h:183` | `steeringRateRadPerSec = 3.0` | `Steering_Wheel_Max_Speed` as a max rate, with accel `V²/(2·Steering_Wheel_Damp_Angle)` (genki 18.85 rad/s, 407 rad/s²) |
+| `vehicle_substeps.h:184` | `steeringCenteringRateRadPerSec = 6.0` | `Steering_Wheel_Max_Return_Speed` + `_Return_Damp_Angle` profile (genki 18.85 rad/s, 407 rad/s²) |
+| `vehicle_substeps.h:185` | `steeringSpeedThresholdMPerSec = 8.0` | `Max_Speed_Steering` in m/s (genki 18.999) |
+| `vehicle_substeps.h:253` | `gearDownshiftMarginRpm = 2000` | per-gear `Downshift_RPMs[]` (§10.3/§10.10) |
+| `vehicle_substeps.h:274-275` | `minTimeToBlockSec = 0` | `Min_Time_To_Block` (global default 1000) |
+| `vehicle_substeps.h:277` | `corneringStiffness = 9000` linear tyre | no linear tyre exists: Havok friction-circle solve (§10.8) with table §10.11.6, `Wheel_Friction`/`Wheel_Max_Friction`, `Viscosity_Friction` |
+| `vehicle_substeps.h:279-281` | `Cd 0.33, A 2.2, ρ 1.2` | `Drag_Coefficient`/`Frontal_Area`/`Air_Density` resolved (genki 0.7 / 1.0 / 1.3); add lift `0.5ρ·Cl·A·v²` (genki Cl −5) and the extra-gravity action |
+| `src/physics_vehicle_substeps.cpp:359` | speedTerm = forward speed | §10.1 projection (OPEN detail); forward speed is a fair stand-in |
+| `physics_vehicle_substeps.cpp:948-956` | brake bias 1.0 / tyre force | per-wheel `Wheel_Braking_Torque`, `Min_Pedal_To_Block`, handbrake per axle (§10.11.8); tyre force per §10.8 |
+| `physics_vehicle_driving_slice.cpp:364` | ground friction scales limits | per-wheel friction (data `+0x8c` stride `0x28` `+0xC`) × ground body property (§10.5) — splice still OPEN (§10.8) |
+
+**Clean-room check (this subsection):** no decompiler tokens; every reference is an exe address, an entry/axle
+offset, a public Havok member name, or shipped data.
+
 ## 10a. Contact-listener collision detection and response — vehicle and generic (2026-10-08)
 
 **Scope.** What a vehicle (or any body) actually collides with via Havok's own in-tick contact
@@ -2473,9 +2891,12 @@ offset mechanism, `0x00762ab0`'s zero-callee pure-arithmetic body, vtable `+0x60
    (header-inline/folded); only two of them (§3.1) were identified individually.
 7. **`0x00769c30`** (22,979 instructions, collision-material/layer tables) — not opened by this unit.
 8. **The unattributed range `0x00d1d570`–`0x00d4c800`** (§1) — still unidentified, out of scope here.
-9. **Which of the 7-slot component-pointer array's offsets (`+0x20`-`+0x38`, §6.3) corresponds to
+9. ~~**Which of the 7-slot component-pointer array's offsets (`+0x20`-`+0x38`, §6.3) corresponds to
    which of the 7 named override classes** (§2.1 rows 30-36: engine, steering, transmission, brakes,
-   suspension, driver input, raycast wheel collide) was not determined (D-U0).
+   suspension, driver input, raycast wheel collide) was not determined (D-U0).~~ **RESOLVED 2026-10-14
+   (§10.11.0):** `+0x20` driver input, `+0x24` steering, `+0x28` engine, `+0x2c` transmission, `+0x30`
+   brakes, `+0x34` suspension, `+0x3c` wheel collide (the 7 game overrides); `+0x38` aerodynamics and
+   `+0x44` velocity damper are Havok defaults; `+0x40` tyre marks is never built.
 10. **Six named-but-unopened Havok-internal sibling functions** found while confirming §6.2's
     structural finding: `0x00c56b60`, `0x00c55fc0` (phase-1, called by `0x00c58890`, skipped by the
     game override); `0x00c571f0`, `0x00c56e20`, `0x00c56550`, `0x00c56680` (phase-2, called by
@@ -2638,6 +3059,15 @@ offset mechanism, `0x00762ab0`'s zero-callee pure-arithmetic body, vtable `+0x60
 ---
 
 ## Changelog
+
+- **2026-10-14 — new §10.11: vehicle component values from data** (SPEC TEAM; FREE-ROAM-GAPS group A
+  deliverable). All component slots mapped by constructor store (closes §11 item 9); suspension
+  strength/damping are per unit mass (`1/X` = Mass), ride-height formula `0x00aba5a0`; wheel radius =
+  0.2048 × size-table scale from the shared rim catalogue; chassis inertia = Mass × unit inertias;
+  friction-circle table formula from `0x00c63620` (§10.8 `+0x48`/`+0x4C` labels corrected); steering
+  minimum-time profile; Havok-default aero/damper; game extra-gravity action. Test vectors for
+  `car_4dr_genki`, `car_2dr_exoticsports01`, `truck_2dr_pickup03`; Team B wiring table. Read-only
+  capstone + shipped data; no game run. Cleanroom self-check: strict regex 0 hits.
 
 - **2026-10-11 — §11's own "most valuable remaining link" RESOLVED: vehicle collision damage is
   NOT driven by the Havok contact listener's closing-speed scalar** (SPEC TEAM, agent

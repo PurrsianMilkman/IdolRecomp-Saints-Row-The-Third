@@ -4103,7 +4103,30 @@ The per-class *descriptor* vtable's slot `+0x04` was previously labelled "(tail-
 
 ### 15.6 Open items
 
-~~The real `cover_node` selection algorithm (who picks which cover a human uses) was not located.~~ **RESOLVED 2026-10-08, §15.7 — direct follow-up.** `cover_orient`'s 6-way jump table, the `navpoint_type`/`cover_type` enum tables' actual named values, `navpoint_sync`'s effect, and the raw-disk `navpoint_flags` bit `0x10`'s meaning remain OPEN, with concrete addresses/offsets in `scratchpad/navpoint_covernode_realformat_2026-10-08.md` for a future unit. The `0x00b428d0` mode-dispatcher cluster is **no longer a dead end for cover specifically** — §15.7 confirms it's where the real cover claim/search path starts (reason bytes 8/9/10), though it is a separate call graph from §15.3's own Navpoint destination search.
+~~The real `cover_node` selection algorithm (who picks which cover a human uses) was not located.~~ **RESOLVED 2026-10-08, §15.7 — direct follow-up.** ~~`cover_orient`'s 6-way jump table~~ **[RESOLVED 2026-10-12, capstone disassembly of `0x008cf000`–`0x008cf0c0`:** the 6-way switch at `0x008cf037` (table `0x008cf2d8`) is **not on `cover_orient`**. It switches on the byte at `+0x8e` that was just parsed as **`cover_type`** (registry `0x024fa768`, values 0–5 below). `ebp` is the loader's "from editor/zone data" flag.
+
+| `cover_type` | Load behaviour |
+|---|---|
+| `editor` (0) | rewritten to **`misc_obj`** (4) when the flag is set |
+| `veh_top` (1), `veh_side` (2) | read property **`cover_index`** into `+0x8f` (via `0x008cd650`) |
+| `veh_door` (3), `human` (5) | **reject the cover** (return false) when the flag is clear; otherwise read `cover_index` into `+0x8f` |
+| `misc_obj` (4) | nothing extra |
+
+Every cover then resets `+0x84` to −1 and reads `cover_angle_left`/`cover_angle_right`. So `cover_index` is the attachment slot on a vehicle or human host, and `cover_orient` (`+0x48`) is only the orientation passed to `0x008ccd80`.]** ~~the `navpoint_type`/`cover_type` enum tables' actual named values~~ **[enum values RESOLVED 2026-10-12 from the static initializers, which push (name, value) pairs into the shared enum registrar `0x005963b0` (bit-flag variant `0x008ce790`):**
+
+| Enum | Values | Initializer / registry |
+|---|---|---|
+| **`cover_type`** | `editor`=0, `veh_top`=1, `veh_side`=2, `veh_door`=3, `misc_obj`=4, `human`=5 | `0x01001000`, registry `0x024fa768` |
+| **`cover_flags_str` bits** | `cover_crouch`=`0x2`, `cover_stand`=`0x4`, `cover_edge_left`=`0x8`, `cover_edge_right`=`0x10`, `cover_edge_over`=`0x20` | `0x01001050`, registry `0x024facb0`. These stance/edge names are **flags, not `cover_orient` values** |
+| **`navpoint_type`** | `ground`=0, `floating`=1, `bookmark`=2 | `0x01002590`, registry `0x025e7ba0` |
+| second registry, `0x025e8198` | `ground`=0, `floating`=1 only | `0x01002650`; HIGH CONFIDENCE the navpoint-path variant, since paths cannot be bookmarks |
+
+]** ~~`navpoint_sync`'s effect~~ **[RESOLVED 2026-10-12, capstone disassembly of `0x008ade90`:** `navpoint_sync` set means the loader calls `0x008ade90(4, navpoint)`.
+1. If the navpoint already has a network record (`+0x3c`), nothing happens.
+2. Otherwise, for kinds other than 3 and `0xe` (navpoints are 4), it stops when `0x00889d10()` is true.
+3. If not, it allocates a **co-op replication record** through `0x00887120(id pair +0x08/+0x0c, kind)` and registers it with `0x00894280(8, record)`.
+
+So the property makes the navpoint **network-synchronised in co-op**. Reading `0x00889d10` as "no session" is HIGH CONFIDENCE (it gates every kind except 3/`0xe`). **Port rule (single player): ignore the flag.** It is the same `+0x3c` record that the authority gate `0x008addb0` (spec-lua-api-behaviour §8.x gate-polarity note) tests.]**, and ~~the raw-disk `navpoint_flags` bit `0x10`'s meaning remains OPEN~~ **[bit `0x10` RESOLVED 2026-10-12.** The only navpoint-module reader in a whole-binary raw scan for `test byte [reg+0x80], 0x10` (27 hits, the rest are other classes) is the navpoint teardown `0x008eaef0`. When the bit is set, it calls `0x005610e0(id pair +0x08/+0x0c)` before the base teardown `0x00754410`. `0x005610e0` swap-removes that ID from a 32-byte-entry list at `0x013c7db0` (count `0x013c7dac`) in the **camera module** (`0x0056xxxx` code, `0x013c7xxx`/`0x013c8xxx` camera globals). So bit `0x10` = **"registered as a camera point"**: the navpoint is in the camera system's point list and must be removed when it is destroyed. The structure is CONFIRMED. That it is a look-at/camera-target list is HIGH CONFIDENCE; the list's adder and consumer were not traced. **Port rule:** a navpoint with bit `0x10` is available to the camera point list. Bits `0x20`/`0x40` still have no reader and are inert as far as found.]**, with concrete addresses/offsets in `scratchpad/navpoint_covernode_realformat_2026-10-08.md` for a future unit. The `0x00b428d0` mode-dispatcher cluster is **no longer a dead end for cover specifically** — §15.7 confirms it's where the real cover claim/search path starts (reason bytes 8/9/10), though it is a separate call graph from §15.3's own Navpoint destination search.
 
 ### 15.7 The real `cover_node` selection algorithm, traced end to end (2026-10-08)
 
@@ -5701,8 +5724,7 @@ exists~~ **CLOSED §19.8: there is no distance formula; escape means the AI "see
 the first-decay timer stops.** Also corrected in §19.8: `Check_Detection` quarters the award (minimum 1)
 rather than suppressing it (correcting §19.2).
 New OPEN items from §19.7: the upstream notoriety-level→slot-table scheduling link (narrowed per above,
-and further narrowed 2026-10-09 — the allocation primitive itself is now named, `0x00930950`, only its
-caller remains unfound); `0x0092c280`/`0x0092d300`/`0x0092c580`'s own interiors; a slot's real authored
+and further narrowed 2026-10-09 — ~~the allocation primitive itself is now named, `0x00930950`, only its~~ **[CORRECTED 2026-10-12, raw bytes: `0x00930950` is not an allocator. It is **slot 0 (the destructor) of vtable `0x01170108`**: its only reference is that vtable slot, and it reinstalls the vtable at `0x00930998`. The class's constructor is `0x009306f0` (it installs the vtable at `0x0093076d`). Its **only caller is the static initializer `0x01004010`, which builds one global instance at `0x026171d0`** at startup (atexit `0x010196d0`). So the roadblock manager is a **startup singleton**, not allocated per notoriety change. **Refined the same day:** vtable `0x01170108` has 9 slots (0 `0x00930950` destructor, 1 `0x00930850`, 2 `0x008d8df0`, 3 `0x005a4e60`, 4 `0x009307b0`, 5 `0x006948c0`, 6 `0x00930830`, 7 `0x00754410` the shared base teardown, 8 `0x009309d0`). It is followed directly by the class-name literal **`"roadblock_layout"`** (`0x0117012c`). So this is the **`roadblock_layout` world-object class**, a placed zone-data object type, and the startup instance at `0x026171d0` is its class prototype or descriptor, not a manager. Slot 8 (`0x009309d0`) calls `0x0092b070`/`0x0092fe20` and the liveness helpers `0x00853b10`/`0x00853ea0`: HIGH CONFIDENCE the per-instance spawn-or-activate method. **Port consequence:** roadblocks spawn at authored `roadblock_layout` objects from the zone data, chosen by the §19.7 tick, not at computed positions alone. The level→slot scheduling link must be found among that object's other virtual slots or its per-frame tick (§19.7) instead. The original wording is kept struck for history: ~~"only its caller remains unfound"~~.]**); `0x0092c280`/`0x0092d300`/`0x0092c580`'s own interiors; a slot's real authored
 forward-offset distance; case 4's real-world identity (§19.7 §3.7, still blocked 2026-10-09 on a
 zero-filled-at-rest class-table entry — needs a live capture or a broader static sweep); the innermost
 allocation/placement-constructor instruction inside `0x0096eb30`/`0x00456e30` (substantially advanced
@@ -6368,9 +6390,969 @@ sub-investigation's own full report (part a) was delivered directly as this unit
 not separately filed under `scratchpad/`, per the task's own file-count instruction; its content is
 fully absorbed into §20.1 above.
 
+### 20.6 Free-roam population constants (2026-10-14)
+
+**Scope.** The numbers a port needs to populate streets the way the game does: the near-field
+(fully simulated) ambient vehicle and pedestrian spawners and despawners, and the traffic lane
+follower's speed and stop logic. Every constant below was read from the executable with `capstone`
+(no Ghidra), or from the shipped tables in `misc_tables.vpp_pc`. The road and sidewalk graph is the
+one in `spec-zone-data-format.md` §13.2a. Status tags: **FINAL** = read end to end; **PARTIAL** = the
+named part is OPEN.
+
+**Corrections to earlier text in this file:**
+- §20.1 says peds are rejected "within ~90 units of the camera". **Wrong direction.** 90 m is the
+  *far* limit. The near limit is 10 m, and a visible point closer than 70 m is also rejected (§20.6.2).
+- §17.4c's "3-candidate-slot buffer" is really **3 pick attempts** over a list of up to **32** road
+  candidates.
+- §17.4c's "spawn rate formula" at `0x00910940` does not compute a rate. It computes the
+  **target live count** (§20.6.1(a)). The rate is fixed: at most one vehicle per maintenance pass.
+- The `Spline_Type` index → segment-flag table (`0x01308ad4`) settles the meaning of several §13.2a
+  flag bits: bit 4 = `Highway Only`, bit 16 = `Offroad`, bit 17 = `Baggage`, bit 18 = `Boat`,
+  bit 21 = `Taxi`, bit 22 = `Indoor`. Bit 10 = the ambient class (`All Roads`/`Surface Roads`, which
+  store −1).
+
+#### 20.6.0 Shared inputs
+
+**(a) Time-of-day density index — FINAL.**
+- `0x005a18d0` returns the active TOD segment index (`0x014032e0`).
+- The segment start times come from `default_global.xtbl` `tod_segments`: 500, 930, 1430, 2100
+  (HHMM). The loader is `0x00bb65cb`, the array is at `0x029152fc` and the count is at `0x02915304`.
+- `0x005a1d10` finds the previous and next segment and the blend t between their starts (the day
+  wraps). `0x005a2440` then selects **prev when t < 0.5, otherwise next**.
+- So the index switches at the midpoints between starts:
+
+  | Clock time | Index |
+  |---|---|
+  | 01:00–07:15 | 0 |
+  | 07:15–12:00 | 1 |
+  | 12:00–17:45 | 2 |
+  | 17:45–01:00 | 3 |
+
+- The density functions map the index to the category's day and night values as
+  {0: Night, 1: (Day + Night)/2, 2: Day, 3: Day}. The pair is CarDay/CarNight `+0x20/+0x24` or
+  PedDay/PedNight `+0x28/+0x2c`. The element→offset order was checked in the loader at
+  `0x00be56e0`–`0x00be5712`.
+- The byte `0x026099c6` (setter `0x009108a0`) forces index 2.
+- Note: the evening segment uses the Day value. That is what the code does.
+
+**(b) Day/night index for chances and caps — HIGH.**
+- `0x00ba2d20` returns 0 for day and 1 for night (it is the negation of `0x00ba2840`).
+- `0x00ba2840` compares the clock with `default_global` `day_begin` 630 / `day_end` 2200. The
+  comparison body was not read to its last instruction.
+- This index selects DayChance/NightChance, DayCap/NightCap and VehicleDayCap/VehicleNightCap.
+
+**(c) Notoriety scale — FINAL.**
+- `0x00605540` returns the highest current level over the 4 notoriety tracks (§19.1).
+- Vehicle table `0x01308b10` and ped table `0x01308af8` are identical: levels 0..5 →
+  **1.0, 1.0, 0.75, 0.5, 0.25, 0.1**.
+
+**(d) Weather — FINAL (peds only).**
+- The ped density is multiplied by the current weather stage's `PedDensity`. That is `weather.xtbl`
+  `+0x14`, reached through `0x005a6920` (`spec-tables-environment.md` §2).
+- Shipped values: Clear Skies 1.0, Overcast 1.0, Post-Storm 0.75, Light Rain 0.5, Heavy Rain 0.1.
+
+**(e) Category = district — PARTIAL.**
+- `0x00911770` (player) returns the category used everywhere below (current category `0x026099cc`).
+- Cheat modes 1/2/3 select the Ho/Mascot/Zombie categories.
+- Otherwise it takes the hood under the player (`0x0084bb20`), then that hood's spawn category
+  (`0x0084aed0`). It falls back to `Default Spawn` (`0x00be47f0`).
+- **OPEN:** the hood → `sp_cat_*` mapping data (the hood definition table, §18.4). The test vectors
+  below therefore name categories directly.
+
+**(f) Spawn-distance scale — FINAL.**
+- For the local player: `0x0130af7c` = tan(default FOV/2) ÷ tan(current FOV/2), clamped to [1, 11]
+  (`0x009d9fe0`). It is 1.0 at normal FOV and grows when zoomed.
+- For other players: player `+0x1fac`.
+- Every radius marked "×scale" below uses this value.
+
+**(g) Viewer distance — FINAL.** `0x009dd9b0` measures from the *camera* position
+(`0x013c8740`; a remote player's `+0x1f74`). With its last flag set it measures horizontal (x-z)
+distance.
+
+#### 20.6.1 Ambient vehicles (near-field)
+
+**(a) Target live count `0x00910940` — FINAL.**
+```
+base   = 0x00907530():
+           activity mode (0x00614d00) == 5         -> 0
+           else trunc(Nbase * S)                    Nbase = 0x013089a8, S = 0x013089ac (default 1.0)
+           player in a vehicle (0x009e82f0)         -> 18 if 0x026093b8 else 12
+           co-op                                    -> 0x00906290(base, 130 m) split (below)
+d      = category CarNight/avg/CarDay by the TOD index (§20.6.0(a))
+s      = min(d * notorietyScale[maxLevel], capV)     capV = 0x01308ab0, default 1.0
+s      = capV if activity mode is 2 or 5
+s      = 0x01308af4 if that value > 0                (default −1, no writer: dead debug override)
+target = max(1, trunc(base * s))                     (x87 truncate)
+```
+- Nbase is 12. It becomes 18 while the local-player hook 0x13 state is set; the enter/leave callbacks
+  are `0x009073e0`/`0x00907440`, registered at `0x00908f8b`. HIGH: that state is "player driving".
+- S is set in [0, 1] by `0x00905d30`. Callers are mission/reset code `0x0063f67f` and a script
+  native at `0x00a5ffd3`.
+- `0x00910a80` sets capV.
+- **The hard ceiling stays 48** (`0x0090ee10`, §17.4c). It is never reached by the formula's maximum
+  of 18.
+- Co-op split (`0x00906290`, R = 130 m for vehicles, 70 m for peds): if the two players are closer
+  than R, each gets base/2; if farther than 2R, the full base; in between, interpolated. **PARTIAL:**
+  the interpolation tail was not read.
+
+**(b) Maintenance pass `0x0090f2c0` — FINAL.**
+
+Gates:
+- the `os_vehicle` array is on;
+- the 200–300 ms random timer `0x013089ec` has expired;
+- the road graph is loaded (`0x00a69720`);
+- `0x0092b2c0`/`0x0092b2d0` are false.
+
+It sets the heavy-pass latch `0x026093b0` and runs:
+1. `0x00905b40`, re-arming the timer.
+2. `0x0090eaf0`, the `vehicle_despawn.xtbl` schedule (§17.4c).
+3. `0x0090f060`, the distance despawn, (d) below.
+4. `0x0090ef90`, the per-vehicle visibility bits.
+
+Then it spawns, **only when** target − live ≥ 1 (live = `0x02609120`) and the human headroom
+`0x009086d0` (150 − humans) is > 0:
+- The camera speed is |camera displacement this frame| ÷ (1/30 s) (`0x0132a0ac` = 0.0333).
+  "Moving" means the speed is above **2.2352 m/s** (5 mph, `0x0111f730`).
+- A candidate list of up to 32 entries is built by `0x0090e1e0` (c).
+- Up to **3 attempts**: each picks a uniform index (`0x00dab660`) and tries `0x0090dd40` →
+  `0x0090d4c0`. The first success ends the pass. A failed candidate is removed (swapped with the last).
+- Net: **at most one vehicle per pass, one pass every 200–300 ms**, i.e. at most 3.3–5 spawns/s.
+- While a player chase is active (`0x00b2db20`, kind 4), the pass also needs the 4000–6000 ms timer
+  `0x013089f4`.
+
+**(c) Candidate generation `0x0090e1e0` — FINAL except where marked.**
+- **Centre** = camera position (`0x013c8740`, filled by `0x00908df0`).
+- **Ring radius R = 130 m × scale** (`0x0116ef70`; scale from §20.6.0(f), normally 1.0).
+- Road segments are gathered with the spatial query `0x00a69cd0` (max 128) and filtered with
+  `0x00a6d550`/`0x00a6d050`:
+  - include mask = `0x400` | the flag bits of every streamed vehicle slot's `Spline_Type` (built by
+    `0x00917190` from table `0x01308ad4` = {0x10, 0x40000, 0x10000, 0x400000, 0x20000, 0x200000}) |
+    `0x10000`;
+  - exclude mask = `0x0080010c` (bits 2, 3, 8, 23).
+- **Highway rule.** If the player's current segment (player `+0x20dc`) has flag bit 4, and fewer than
+  trunc(0.75 × target) near-field vehicles are on bit-4 segments (count `0x0090e120`, 0.75 at `0x01308998`),
+  then only bit-4 segments are accepted.
+- **Segment full.** A segment is skipped when its occupancy list (§13.2a(j)) already holds **3** live
+  vehicles, or **5** on a bit-4 segment (`0x0090e050`). This is the only car-to-car spacing rule at
+  spawn time.
+- **Spawn points** are where the segment's chord (node A → node B) crosses the circle of radius R
+  around the centre (`0x00dbd630`).
+- **Inner ring.** If no crossing exists at R, the code retries at **R/2 = 65 m**. Points found at
+  65 m are kept only if a ±1.5 m box (`0x012a2d30`) around them is **not visible** to the local camera
+  (`0x005dcb20` → frustum `0x00a0e720` + occlusion `0x005dcad0`).
+- **Zone loaded.** The zone at the point must be streamed in (`0x00861aa0`/`0x00861ec0`).
+- **Moving cone.** While moving, a point is kept only if
+  dot(direction from camera, camera velocity direction) ≥ minDot.
+  - minDot = 0.5 × min(s, 13.4112)/13.4112. Here 13.4112 m/s = 30 mph (`0x0116ef68`), and the second
+    term uses 0.0 (`0x012a2d28`).
+  - Stationary: minDot = −1 (all directions).
+- **Closing test.** Reject if dot(segment tangent × lane speed − camera velocity, direction from camera)
+  > 0. A car is only spawned if it moves toward, or not away from, the camera.
+  - The lane speed is `0x00a6baa0`, (§20.6.3(a)).
+- **Obstruction points.** Reject if a registered obstruction point (list `0x02898240`, count
+  `0x0289821c`, 32-byte records) lies on the same segment or its single successor/predecessor, within
+  **40 m** (`0x0130899c`/`0x013089a0`, test `0x00b2d760`). **PARTIAL:** the identity of these points
+  is OPEN (HIGH: roadblocks/blockages).
+- **Co-op partner.** In co-op, reject if the partner's camera sees the box and is within 130 m, or
+  does not see it and is within 80 m (`0x00907a90` vehicle box (−4, −1, −4)…(4, 2, 4)).
+
+**(d) Distance despawn `0x00907160` (applied by `0x0090f060`) — FINAL.**
+
+A vehicle passes the eligibility predicate `0x00906b00` (§17.4c) and is then removed when it is
+farther than D from every player.
+
+| Case | D |
+|---|---|
+| Default | **140 m** (`0x01117b6c`) |
+| Not visible, camera moving, vehicle behind the camera (dot < 0) | **65 m** (`0x012a2f78`) |
+| Activity mode 2, camera still | **90 m** |
+| Currently visible | at least 140 m |
+| Special classes (`0x00ad3160`/`0x00ad31a0` + `0x00ad4040`), or mode 6 when visible | **250 m** (`0x011175d0`) |
+
+- Check `0x009ea700`: D × scale for a player on foot (3-D distance). For a player in a vehicle it is
+  **(D + 60 m)** × scale, horizontal distance (60.0 at `0x0111e478`).
+- A visible vehicle fades over 500 ms (`0x00a846f0`); an unseen one is deleted at once (`0x0090ccd0`).
+  A towed trailer goes with it.
+
+**(e) Model choice — PARTIAL.**
+1. *Streamed set.* For each streamed character slot (lists `0x01308b8c`/`0x01308b3c`), for each of its
+   groups that has vehicles and whose `Spline_Type` road class exists, one vehicle is drawn uniformly
+   from the group's `Vehicles` list (`0x00911a60`). Duplicate rows therefore weigh double.
+2. *Per spawn* (`0x009177c0`):
+   - Candidates are the streamed vehicle slots (`0x01308bdc`) that pass `0x00916af0`. The model must be
+     streamed, its live count must be below the group's **VehicleDayCap/VehicleNightCap** (slot
+     `+0x10 + 4·dayNight`), and a driver character must be available (`0x009160a0`).
+   - `0x00917470` picks among them. A candidate whose group record has flag bit 0 set is taken at once.
+     Otherwise it keeps the models with the fewest duplicates among nearby live vehicles (`0x00913f20`;
+     a model with ≥ 4 nearby, or ≥ 7 when the caller flag is set, is excluded). It breaks ties by the
+     fewest live near-field copies, then picks uniformly.
+   - There is **no probability weight** at spawn time.
+3. Occupants: 1..4, clamped. Vehicle-info `+0x4c4` == 10 forces 1.
+
+**OPEN:** the re-roll cadence of the streamed set (the 20 s timer `0x01308c1c` is the HIGH
+candidate) and the slot-count budget.
+
+#### 20.6.2 Ambient pedestrians (near-field)
+
+**(a) Target live count `0x009106c0` — FINAL.**
+```
+base   = 0x009074b0(): 40 (0x28); +21 (0x008f12d0) when player +0x1d9a bit 1 is set;
+         co-op -> 0x00906290(base, 70 m)
+d      = category PedNight/avg/PedDay by the TOD index (§20.6.0(a))
+d      = d * weather PedDensity (§20.6.0(d))
+s      = min(notorietyScale[maxLevel] * d, capP)      capP = 0x01308ab4, default 1.0
+s      = 0x01308af0 if that value >= 0                (setter 0x009108b0, reset 0x009108d0 to −1)
+target = min(base, max(1, trunc(base * s)))
+```
+**PARTIAL:** the meaning of player `+0x1d9a` bit 1 is OPEN.
+
+**(b) Two spawn paths — FINAL for the dispatch, PARTIAL for the placement strategies.**
+
+*Bulk fill* `0x0090c6d0`:
+- It runs only on a pending populate request. `0x0090fa60` with flag 0 stores the request
+  (`0x026093b1`); the next frame runs it once streaming is ready (`0x009149a0`).
+- It spawns n = trunc(**0.33** × min(target − live, headroom)) peds (0.33 at `0x012a2e00`).
+- Each ped gets up to **3** attempts: a **length-weighted** pick of a candidate sidewalk edge
+  (`0x00dab5e0` over the cumulative lengths), then `0x0090b840`.
+- It is skipped while mission `m03` is active (`0x006d7240("m03")`).
+
+*Regular maintenance* `0x0090c910`, every frame when no populate request is pending:
+1. It culls first (d).
+2. It counts the visible ambient peds.
+3. It spawns at most one ped through a strategy picked from the camera-motion mode `0x01308994`
+   (`0x00908a70`). The mode is a turning sign over ±0.02 rad/frame, moving forward/back (cos > 0.707),
+   or **4 = default**; mode 3 or 4 randomises among the strategies.
+   - Strategies: `0x0090bae0(1, 0/1)` and `0x0090c3f0(1, …)`. They search a 90 m × scale ring
+     (`0x0116a3e8`) and end in the same creation routine `0x0090b0a0`.
+   - The strategy itself checks live < target (`0x0090c349`/`0x0090c354`).
+   - In modes other than 4, it also needs visible-count ≤ (target + 1)/2.
+   - It also needs the resource gate `0x00916680` (`0x008f1220`) and headroom > 0.
+4. **PARTIAL:** the placement geometry inside the strategy functions is OPEN.
+
+**(c) Candidates, placement and rejects — FINAL.**
+- **Candidate edges** (`0x009085f0` → `0x00bc0520`): up to **100** sidewalk edges within
+  **70 m × scale** of the camera (`0x0116ef78`). The list is rebuilt when the 500 ms timer
+  `0x013089b8` expires or the camera has moved more than **30 m** (900 = 30², `0x01117780`) since the
+  last build.
+- **Point** (`0x0090b840`):
+  - uniform along the edge;
+  - a lateral offset uniform in **±width/2** perpendicular to the edge (width = edge `+0x04` ÷ 256 ×
+    rand[−0.5, 0.5], rotation π/2 at `0x01115234`), i.e. ±1.5 / 2 / 3 m on the shipped 3/4/6 m
+    walkways;
+  - a 50 % choice of which end node the ped heads for.
+- **Rejects in the creation routine `0x0090b0a0`**, in order:
+  1. Farther than **90 m** from every viewer (8100 = 90², `0x0116a368`).
+  2. Closer than **10 m** (100, `0x0111645c`). The bulk path's flag skips this and step 3.
+  3. Visibility (`0x00907a90`, ped box ±0.425 m): rejected if the local camera, or a co-op partner's,
+     sees the point and it is within **70 m** (4900, `0x01117788`), or does not see it and it is
+     within **10 m**.
+  4. Resource gate `0x008f1220`. Its third argument is 10 in activity mode 5. This is the "difficulty
+     gate" of §20.1, but it is a creation-budget check.
+  5. Local crowd: more than **0.005 peds/m²**, i.e. at least 7 near-field ambient peds within
+     **20 m** (`0x009079f0`: count within 400 = 20² ÷ 1256.64 = π·20²; threshold `0x01153b04`).
+  6. The point's zone is not loaded.
+  7. Ground: a ray from +0.5 m to **−20 m** must hit (`0x0075df80`). The hit becomes the spawn point.
+  8. Clearance: a box ±**0.425 m** in x-z and **1.85 m** high (`0x013089b4`) must be empty
+     (`0x0075d4b0`).
+  9. The navigation query `0x00a12180` (radii 0.5 / 2.0) must succeed.
+
+  The character is then created through `0x00bb9070`.
+
+**(d) Despawn `0x00908930` + `0x00908740` — FINAL.**
+
+A ped is eligible only if all of these hold:
+- the generic gate `0x008addb0` passes;
+- it is not important (`0x0097e280`), not `0x009b9160`;
+- `+0x1da8` == 0, and `+0x1da5` bit 3, `+0x1da4` bits 5 and 7 are clear;
+- it is team 7, or its team's notoriety level is ≤ 0.
+
+It is removed when, for every player, its horizontal distance from the camera is more than **90 m**.
+- In spawn mode 2, a ped behind the local player uses **50 m** (2500, `0x011173a4`).
+- When player `+0x1d9a` bit 1 is set and the height difference is more than **8 m** (`0x01117a54`),
+  the ped is removed as long as it is not visible.
+
+A visible ped fades over 1000 ms (`0x0094fb60`); an unseen one is deleted (`0x00853ea0`).
+
+**(e) Character choice — FINAL for the rolls, PARTIAL for the streaming budget.**
+- *Slot kind* (`0x009158f0`): for each kind (General ped / Special ped / Special vehicle) the
+  category's normalised slot weight (`+0x30/+0x38/+0x40` + 4·dayNight, §10.6 normalisation) is
+  compared with that kind's current share of streamed slots. Kinds below their share are eligible,
+  and one is drawn in proportion to its weight (`0x00dab6a0`).
+- *Group* (`0x00913640`): among the category's groups with that `Group_Category` and at least one
+  character still available (`0x009134c0`), a roulette pick weighted by **DayChance/NightChance**
+  (entry `+0x04` + 4·dayNight; draw r = rand × Σw). Then a uniform pick of one available character in
+  the group (`0x00dab660`).
+- Activity mode 0x11 bans `spawn_Civ_Genki`.
+- *Per spawn*, `0x009160a0` filters the streamed characters (team, sex and the request flags).
+  **PARTIAL:** its final tie-break was not read.
+- **OPEN:** how many slots of each kind are streamed (`0x00916ef0`/`0x00911e40`), and walk/flee
+  speeds. The speeds are not set by the spawner; they are animation-driven and untraced.
+
+#### 20.6.3 Lane follower (ambient traffic)
+
+**(a) Cruise speed source — FINAL.**
+`0x00a6baa0(seg)` returns the segment's speed limit:
+- flag bit 19 set → **1000**;
+- else class = segment byte `+0x30` **>> 4**: class ≥ 3 → **10.0**; else `traffic_lanes.xtbl`
+  `Speed[class]` (`0x02705420`).
+- Shipped rows: 0 "Default" 10, 1 "Highway" 20, 2 "Regular Traffic" 10 (m/s per the editor schema).
+- Every shipped segment has `+0x30` ∈ {1, 3}, so class 0. All signal writers (`0x00a69ed3`,
+  `0x00a69ffd`, `0x00a6aa5f`) keep the high nibble. **Every road's cruise limit is therefore 10 m/s**
+  (bit 19 is never set on disk).
+- The route builder stores this per route entry (`0x00a1f10f`/`0x00a1f127`).
+
+Mode-specific desired speed (`0x00b1e840`, by directive mode byte `+0xc68`):
+- mode 6 (rejoin ambient): the route entry's speed, else 10, **+10** when directive `+9` bit 0x40;
+- mode 15: lane speed **+5**, or 20, or the directive cap `+0x9c`, or 1000;
+- mode 5: 15;
+- mode 13: 40;
+- mode 3: 0 (planning stop);
+- modes 8–12 and 14: the route value computed by `0x00b2aa70`/`0x00b28150` below.
+
+**(b) Speed planner `0x00b28150` and controller — FINAL except where marked.**
+- Braking capability a_b = 0.8 × directive `+0x530` × vehicle `+0xc58`.
+- Lateral capability a_lat = 0.8 × directive `+0x52c` × vehicle `+0xc5c` (0.8 at `0x01116448`).
+- Vehicle `+0xc58`/`+0xc5c` = `AI_Max_Braking_Decel`/`AI_Max_Radial_Accel` (vehicle info
+  `+0x770/+0x774`), set at `0x00b21533`. They are scaled by {1.0, 0.8, 0.7, 0.6, 0.5}
+  (`0x0130ebe0`/`0x0130ec08`) by the vehicle condition level `0x00ad3dc0` (0..4).
+- **PARTIAL:** the directive scale fields `+0x52c`/`+0x530` are OPEN.
+- Above 5 m/s (`0x01187ecc`), the planner looks ahead over the stopping distance v²/(2·a_b) at the
+  route pieces (`0x00b1e220`, lengths from segment `+0x20`/`+0x22`, §13.2a(c)). Its output is the
+  largest deceleration required to reach any slower piece. **PARTIAL:** the per-piece formula's exact
+  terms are OPEN.
+- Curve limit: v_curve = sqrt(a_lat / κ) when the curvature κ at the route position (`0x00a1e880`) is
+  > 0.001. Otherwise 1000. It is clamped to [**7**, 1000] m/s (`0x0113e6d0`, `0x012a2d90`).
+- If the current speed exceeds 1.2 × target, brake demand = (v/target − 1.2) × vehicle `+0xc58`
+  (`0x00b2ab96`, factor 1.2 at `0x01117ae0`).
+- Throttle law `0x00b207d0(directive, vt, v, flag)`:
+  - vt < 1 → throttle 0.001;
+  - otherwise k = max(2, (vt/5)²), vt clamped to [1, 100], and throttle = k·(1 − v²/vt²), clamped to
+    [0.001, cap];
+  - cap = 1.0 when the flag is set; otherwise `0x00b1f980`(v) = 0.7 + 0.3·clamp((v − 5)/5, 0, 1)
+    (`0x00dadd90`, 0.7 at `0x011175a0`, 0.3 at `0x012a2db8`). The cap is 1.0 in modes 2/4/7 and for
+    3 s after a stuck event.
+- When deceleration is required: brake = min(1, a_req / vehicle `+0xc58`) and throttle 0.001
+  (`0x00b28614`).
+- The §18.6 "close/aligned" branch (cos 30°, 5.0 m) uses the same law with **vt = 3.5 m/s** and the
+  flag set, so it arrives at a crawl.
+
+**(c) Signals — FINAL.**
+- Lights are obeyed only in directive modes 0, 7, 8 and 15 (§18.7.1).
+- `0x00b52bc0`: if the next route segment's `+0x30 & 0xf` is **2 (amber) or 3 (red)**:
+  - d = distance to the stop (vehicle `+0x11dc`, floored at 0.001);
+  - **stop when v²/(2d) ≤ vehicle `+0xc58`**, otherwise drive through;
+  - while stopped (speed ≤ 0) or within **3.0 m** (`0x01116444`), set `+0xc70` bit 2 (waiting). That
+    bit feeds the honk/wait responses of §18.7.2.
+- The stop target comes from `0x00b51950`. **PARTIAL:** its stop-line geometry is OPEN.
+- Signal state 1 (green) never stops a car.
+
+**(d) Re-query and re-plan — FINAL.**
+- The cached-target re-query threshold `0x01117a60` is a **double 15.0 m**, linear (not squared)
+  (`0x00b4cb65`). A re-plan is also forced when the drift exceeds (… + 20 m) (`0x01116998`).
+- The ambient route search box is 200 m (`0x012a30d4`) with 1500 (`0x011327e4`), up to 20 candidates
+  and flags 0x100. The walk lookahead is **5000 m** (`0x0111d490`, the param block `+0x1c` of §18.1).
+- Re-plan timer `+0x450`: **2000–2500 ms** when speed² < 0.25, otherwise **300–450 ms**
+  (`0x00b4ce41`–`0x00b4ce8b`).
+
+**(e) Following gap and lane change — PARTIAL.**
+- No time-headway or gap constant was found. Car-following comes from two sources: the occupancy and
+  conflict lists (§13.2a(e)/(j), consumer `0x00b5e6c0`) and the §18.7.2 lead-handle path (15 m).
+- Lane changes exist only as path-search edges to the `+0x3a`/`+0x3c` neighbours. Flag bit 0 forbids
+  `+0x3c`, the oncoming lane. The §18.6b overtake gate sits on top.
+- **OPEN:** the yield/following distance law inside `0x00b5e6c0`, and when the planner chooses a
+  neighbour edge.
+
+#### 20.6.4 Test vectors
+
+All assume: single player, on foot unless stated, notoriety 0, Clear Skies, activity mode none,
+scale 1.0. TOD index from §20.6.0(a) (checked: 03:00 → 0, 08:00 → 1, 14:00 → 2, 23:00 → 3). Values are
+computed in f32 with truncation.
+
+| Category | Time | Vehicles (on foot / driving) | Peds |
+|---|---|---|---|
+| `Default Spawn` (Car .8/.5, Ped .8/.4) | 03:00 | 6 / 9 | 16 |
+| `Default Spawn` | 08:00 | 7 / 11 | 24 |
+| `Default Spawn` | 14:00 | **9 / 14** | **32** |
+| `Default Spawn` | 23:00 | 9 / 14 | 32 |
+| `sp_cat_Yearwood` (.8/.6, .8/.4) | 03:00 / 08:00 / 14:00 | 7 / 8 / 9 (driving 10 / 12 / 14) | 16 / 24 / 32 |
+| `sp_cat_CutterAirport` (1/.5, 1/.3) | 14:00 | 12 / 18 | 40 |
+| `sp_cat_RosenOaks` (.5/.3, .5/.3) | 03:00 | 3 / 5 | 12 |
+
+- `Default Spawn` at 14:00 with notoriety level 3: vehicles 4, peds 16. At level 5: 1 and 3.
+- `Default Spawn` at 14:00 in Heavy Rain: peds 3.
+- Fill rate: a still camera on a road-rich tile reaches the vehicle target at one spawn per 200–300 ms
+  pass, i.e. about 9 vehicles in ≈ 2–3 s. The 48 cap is never the binding limit.
+
+**Spawn and despawn radii (scale 1.0):**
+
+| What | Distance |
+|---|---|
+| Vehicle spawn ring | 130 m (65 m fallback, out of view only) |
+| Vehicle despawn | 140 m; 200 m when the player drives; 65 m behind a moving camera; 250 m for special classes |
+| Ped candidates | edges within 70 m |
+| Ped accept band | 10–90 m; visible points < 70 m rejected |
+| Ped despawn | 90 m horizontal |
+
+**Moving cone (minDot / half-angle):**
+
+| Camera speed | minDot | Half-angle |
+|---|---|---|
+| ≤ 2.2352 m/s | none | — |
+| 5 m/s | 0.1864 | 79.3° |
+| 10 m/s | 0.3728 | 68.1° |
+| ≥ 13.4112 m/s | 0.5 | 60.0° |
+
+**Throttle, vt = 10 m/s (every shipped road):**
+
+| v (m/s) | 0 | 5 | 8 | 9 | 9.5 | 10 |
+|---|---|---|---|---|---|---|
+| Throttle | 0.70 | 0.70 | 0.88 | 0.76 | 0.39 | 0.001 |
+
+- Arrival law, vt = 3.5, flag set: v = 0 → 1.0; v = 3 → 0.5306.
+
+**Minimum gap:** OPEN (see §20.6.3(e)).
+
+**Model weights, `Default Spawn`, General Ped groups** (DayChance, Σ = 70.0):
+
+| Group | Day weight | p (day) | p (night) |
+|---|---|---|---|
+| `spawn_Civ_Normal_MW` | 5.25 | 0.075 | 0.175 |
+| `_FW` | 12.25 | 0.175 | 0.075 |
+| `_MB` | 5.25 | 0.075 | 0.175 |
+| `_FB` | 12.25 | 0.175 | 0.075 |
+| `_MH` | 2.1 | 0.030 | 0.070 |
+| `_FH` | 4.9 | 0.070 | 0.030 |
+| `_MA` | 8.4 | 0.120 | 0.280 |
+| `_FA` | 19.6 | 0.280 | 0.120 |
+
+The night column is computed from NightChance, which also sums to 70.
+
+- Slot-kind weights for `Default Spawn`: 70/15/15 → **0.70 / 0.15 / 0.15**, day and night.
+- Special Vehicle day weights (Σ = 15.1): Luxury 0.2318, Taxi 0.1987, Trucker 0.1325; Bus, ExSport,
+  Motorcycles and Moving 0.0662 each; Moped and Offroad 0.0331; Rescue 0.0265; Limo 0.0199; Armored,
+  CityMaint, Hearse and News 0.0132; Gatmobile 0.0066.
+
+**Streamed-vehicle draw from `spawn_Civ_Normal_MW`** (31 `Vehicle` rows, uniform per row):
+- 2/31 = **0.0645** each: `car_2dr_standard03`, `car_2dr_standard06`, `car_4dr_compact01`,
+  `car_4dr_sports03`, `car_4dr_standard03`, `car_4dr_standard07`, `suv_4dr_04`;
+- 1/31 = 0.0323 each: the other 17 models.
+
+#### 20.6.5 Status summary
+
+| Item | Status |
+|---|---|
+| Vehicle target formula, TOD/notoriety inputs, pass cadence, 1 spawn per pass, 3 attempts | FINAL |
+| Ring 130/65 m, cone, closing test, segment capacity 3/5, masks | FINAL |
+| Obstruction-point identity | PARTIAL |
+| Vehicle despawn radii | FINAL |
+| Vehicle model rules | PARTIAL (streamed-set cadence and budget OPEN) |
+| Ped target formula, weather, bulk 0.33, candidate edges, all `0x0090b0a0` rejects, despawn | FINAL |
+| Regular-path placement strategies, `+0x1d9a` bit 1 | PARTIAL |
+| Ped slot-kind and group rolls | FINAL; streaming budget OPEN; per-spawn tie-break PARTIAL |
+| Hood → category mapping | OPEN |
+| Cruise source 10 m/s, throttle law, curve floor 7 m/s, signal stop rule, re-query 15 m, re-plan timers | FINAL |
+| Look-ahead decel formula, directive `+0x52c/+0x530`, stop-line geometry | PARTIAL |
+| Following gap, lane-change choice, walk/flee speeds | OPEN |
+
+Scratch scripts (read-only, deletable): `tools/scratchpad/spawn_lib.py`, `spawn_dis.py`,
+`spawn_scan.py`, `spawn_scan2.py`, `spawn_jt.py`, `spawn_extract.py`, `spawn_cats.py`,
+`spawn_vectors.py`. The extracted tables are in `tools/scratchpad/spawn_xtbl/`.
+
+#### 20.6.6 Team B wiring
+
+| Team B CHOSEN constant (file:line) | Replace with |
+|---|---|
+| `tools/sr3_viewer.cpp:18170-18172` near-field spawn annulus 25–90 m, ±70° heading | Road crossings of the 130 m × scale circle around the camera (65 m fallback, hidden only) and the speed-dependent cone of §20.6.1(c) |
+| `tools/sr3_viewer.cpp:18241-18243` ped ring 90.5–160 m, 6 m stand-in segments | Real sidewalk edges within 70 m (§13.2a(l)); accept 10–90 m; reject visible < 70 m |
+| `near_field_vehicle_population.h:125` one attempt per tick | Keep one spawn per pass, but add up to 3 picks, the 200–300 ms pass timer, and the target formula §20.6.1(a) |
+| `near_field_vehicle_population.h:174` cap 48 | Keep as the ceiling. Fill toward target = max(1, trunc(12 or 18 × min(1, density × notorietyScale))) |
+| `near_field_vehicle_population.h:176` 3 candidate slots | 3 attempts over ≤ 32 road candidates |
+| `near_field_vehicle_population.h:242` "gate does not apply outside the cell" | Distance despawn of §20.6.1(d): 140 / 65 / 90 / 250 m, +60 m when driving |
+| `near_field_ped_population.h:186` near reject 90 | Near 10 m; 90 m is the FAR reject |
+| `near_field_ped_population.h:190` difficulty gate passes | Resource gate `0x008f1220` plus the crowd cap of 7 peds within 20 m |
+| `near_field_ped_population.h:197` far reject 0 (off) | 90 m, horizontal, from every viewer |
+| `near_field_ped_population.h:216` ground always valid | Ray +0.5 → −20 m must hit; clear box ±0.425 m × 1.85 m |
+| `near_field_ped_population.h:221` sideways offset 0.0 | Uniform ±width/2 (±1.5 m on 3 m walks) |
+| `near_field_ped_population.h:250` half-FOV 50° | Real frustum + occlusion; reject when visible and < 70 m, or hidden and < 10 m |
+| `near_field_ped_population.h:787/797/811` flee 5.0, walk 1.4, advance 0.3 | No constant exists to copy: walk and flee requests pass the speed sentinel −1, so the speed is the locomotion clip's root motion × human `+0xa64` (§20.6.9(a)). Keep 1.4 / 5.0 as CHOSEN until a clip root-speed is measured **[2026-10-14: measured, §20.6.9(a). Walk is 1.386 m/s (M) / 1.368 m/s (F); run is 6.373 / 4.433; cower run is 4.554 / 5.745]**; replace the 0.3 "advance" model with the sidewalk path of §20.6.9(b) |
+| `near_field_ped_population.h:732` flee destination | Still CHOSEN (not traced) |
+| `traffic_lane_follower.h:743` arrivalRadius 1.5 | The §18.6 close gate 5.0 m with cos 30°; arrival law vt = 3.5 m/s |
+| `traffic_lane_follower.h:744` lookahead 15 | Route walk lookahead 5000 m; re-plan every 300–450 ms. The obstacle probe is separate: L = v²/(2·k·`+0xc58`) + 2.5 m, k = 0.75 (1.0 above 20 m/s), §20.6.7(a) |
+| `traffic_lane_follower.h:750` re-query 3.0 | 15.0 m, linear (`0x01117a60`) |
+| `traffic_lane_follower.h:756` throttle 0.5 | Throttle law §20.6.3(b) with vt = 10 m/s and the 0.7–1.0 cap |
+| `traffic_lane_follower.h:121` geometric lane adjacency | Use the on-disk `+0x3a`/`+0x3c` neighbours; a lane change is a route-search edge costing 6 m, never two in a row, `+0x3c` forbidden when flag bit 0 (§20.6.7(d)) |
+| `traffic_lane_follower.h` following gap (none) | Car-following law of §20.6.7(b): 5 m standstill gap, comfortable decel 0.75·min(`+0xc58`, 10), 300 ms brake latch at 0.5 |
+| `ambient_population.h` (distant tier, items 1–8) | Not changed by this pass (§17) |
+| `police_roadblock_spawn.h:308` forward offset 50 m | Sites are where a road's shape polyline crosses the **135 m** circle (`Notoriety_roadblock_spawn_dist`) around the player, in his front half-plane (§20.6.10(b)); objects then sit at their layout `X_offset`/`Z_offset` |
+| `police_roadblock_spawn.h:100` direction along heading | Road direction at the crossing site, facing the player (§20.6.10(b)) |
+| `police_roadblock_spawn.h:331-333` generic vehicle / spike strip / case-4 prop | Composition comes from the `roadblock_layouts.xtbl` row (§20.6.10(c)); `spike_strip` is an `Item` row; dispatch cases 0–4 follow the layout `Type` enum (HIGH) |
+| `police_roadblock_spawn.h:352` lifetime 45 s | No lifetime: removed when no player is within 270 m (2 × 135, squared 72 900) and the instance reports itself idle (§20.6.10(d)) |
+| `police_roadblock_spawn.h:553` arm hook "not tied to notoriety" | Tie it: track level 1–5, `roadblock_notoriety.xtbl` row, timer rand[`Min_time`, `Max_time`], `Max_active_roadblocks`, global cap 3, player driving on a non-water road (§20.6.10(a)) |
+
+Clean-room check: addresses are plain hex. Table, element and string names are shipped data. No
+decompiler tokens are used.
+
+#### 20.6.7 Car following, junction yield and lane changes (2026-10-14, tail pass)
+
+**Correction first.** `0x00b5e6c0` is **not** the car-following law. It is the cross-traffic
+**junction yield** test (b). Car following is a separate obstacle probe, `0x00b54cb0` →
+`0x00b54450`, whose per-obstacle law is `0x00b51950` (a). All of them feed the same per-frame
+combiner (function at `0x00b57ab0`, calls at `0x00b57c21`–`0x00b57d79`). The combiner takes the
+**largest** braking demand and the **smallest** speed cap of all sources (signal, junction yield,
+obstacle probe, destination stop) and hands the pair to the speed controller `0x00b283d0`, which
+applies §20.6.3(b) (brake = min(1, demand ÷ `+0xc58`)).
+
+Notation: v = own speed along own heading (vehicle `+0x64`), u = the obstacle's velocity projected on
+**own** heading, d = gap (below), a_b = vehicle `+0xc58` (`AI_Max_Braking_Decel` × condition scale,
+§20.6.3(b)), a_lim = min(a_b, 10) (20 for `Vehicle_Type` 2 Airplane, test `0x00ad3160`).
+
+**(a) Obstacle probe `0x00b54cb0` — FINAL except where marked.**
+- Re-run timer vehicle `+0x1118`: re-armed with trunc(max(0, (15 − v)/15 × 140)) + 60 ms (15.0 at
+  `0x01117a60`, 140.0 at `0x01187b08`). So every 200 ms when stopped, 106 ms at 10 m/s, 60 ms at
+  15 m/s and above. Between runs the previous result is reused.
+- Probe length L = v² / (2·k·a_b) + 2.5 m, k = 1.0 when v > 20 m/s, else 0.75 (2.5 at `0x01117590`).
+  **+6 m** while the remembered lead (vehicle `+0x1128` or `+0x1130`) still has a live 300 ms memory
+  entry (6.0 at `0x012a2f7c`).
+- The probe starts ahead of the vehicle at (box front extent − 0.3 + 3.75) m along the heading
+  (`0x00b21b90`, 0.3 at `0x012a2db8`, 3.75 at `0x01186f98`; HIGH that the box value is the front
+  extent), and is swept in ⌈L/8⌉ pieces (32 m pieces for Airplane), at most 10 (`0x00b53810`).
+- Hits (up to 32, physics query `0x00b25c50`) are sorted by class in `0x00b54450`:
+  - vehicles (class descriptor byte `+6` bit 7) → `0x00b52690`: gap d = the smallest distance along
+    own heading from own front point to the four footprint corners of the other vehicle
+    (`0x00b51db0`); then the law (b) with kind 0;
+  - humans and other movers (class `+0xa` bit 0, not the player in activity mode 2 under flag 0x21)
+    → `0x00b52880`, same law with d from the centre-to-centre projection;
+  - two special object kinds (`0x00853b30` with 5 and with 10) set a flat result: brake 0, cap
+    **50 m/s** and latch flags `+0xc70` 0x41/0x21. **OPEN:** which world objects those kinds are.
+- The probe also records the nearest blocking vehicle in `+0x1128` and sets `+0xc70` bits 0, 3 and
+  bit 1 ("lead is a human-driven vehicle") for the honk/wait logic of §18.7.2.
+
+**(b) Following law `0x00b51950(vehicle, kind, target, d, targetVelocity, &brake, &cap)` — FINAL.**
+```
+a_c   = 0.75 * a_lim                       (0.75 at 0x012a2ed8)
+dEff  = d - 5        (d - 3 when kind == 4)  (5.0 at 0x012a2f20, 3.0 at 0x012a2e18)
+if dEff < 0.5 and u < 2:   dEff = 0
+if dEff >= 0.01:
+    vs  = u + sqrt(2 * a_c * dEff)
+    req = (u >= v) ? 0 : (u - v)^2 / (2 * dEff)
+else if kind == 1 and u > v:  req = 0, vs = u
+else:                         req = a_b, vs = 0          (full braking, stop)
+f = 0.5 if this target braked us within the last 300 ms, else 0.75     (memory list +0xee8)
+if req > f * a_lim:          brake = req, cap = vs, remember target for 300 ms   (0x00b51860)
+else if dEff < 6:            brake = 0, cap = max(u - 0.5, 2)
+else if d - 4 > 0.01 and u + sqrt(a_b * (d - 4)) > v:   brake = 0, cap = u + sqrt(a_b * (d - 4))
+else:                        brake = 0, cap = max(v, 2)                    (hold, do not accelerate)
+```
+The memory list (`+0xee8`, 24-byte entries, count `+0xfa8`, at most 8) gives the hysteresis: the
+brake decision is taken at 0.75·a_lim and released only below 0.5·a_lim.
+
+Kinds: 0 = obstacle from the probe; 1 = destination stop (`0x00b57c21`); 2 = traffic signal
+(`0x00b52bc0`); 3 = junction yield (`0x00b5dec0`); 4 = mode-8 stop point (`0x00b52740`, 3 m
+stand-off).
+
+Consequences a port must reproduce:
+- **Stop distance behind a stopped car: 5 m** from own front point to the other car's nearest corner.
+- **Steady following gap ≈ 11 m** (dEff = 6) at any speed: below it the cap is u − 0.5, above it the
+  cap rises above u + 9 m/s and the lane speed governs. There is no time headway.
+- The probe only sees ≈ 3.45 + L m ahead, so at low speed the law only reacts to close obstacles.
+
+**(c) Junction yield `0x00b5ed50` → `0x00b5e6c0` — FINAL for the gates, HIGH for the time windows.**
+- Runs only when its timer `+0xfc0` expires; re-armed 150–300 ms. Skipped when the vehicle has a live
+  memory entry of kind 4 or kind 2. Result bit: `+0xee0` bit 3 ("must yield").
+- Look-ahead D = v² / (2·f·a_lim) + 5 m, f as in (b). The route entries ahead (route object
+  vehicle `+0x11a4`) are walked, adding chord lengths, until a segment with a non-empty conflict list
+  (§13.2a(e) `+0x38`) is found within D.
+- No yield if the vehicle could not stop before it anyway: v²/(2·a_b) > distance to that segment.
+- For every vehicle on each conflicting segment's occupancy list (§13.2a(j)), and on that segment's
+  single-predecessor chain, `0x00b5dad0` predicts the entry and exit times of both cars with a
+  constant **3 m/s²** acceleration (constants 6 = 2·3 and 3 at `0x01115250`/`0x012a2e18`) up to the
+  target speed, then constant speed. The car yields when the two occupancy windows are **not**
+  separated by more than **2 s** (±2.0 at `0x01116458`/`0x01187ebc`).
+- The yield is applied as kind 3 of (b) at the start of the conflict segment (`0x00b5dec0`), so the
+  car stops 5 m before it.
+
+**(d) Lane changes — FINAL for the search, OPEN for any occupancy check.** **[2026-10-14: occupancy check RESOLVED, see the note at the end of (d).]**
+- The planner never decides a lane change on its own. Lane changes come only from the route search
+  (`0x00b1c380`–`0x00b1cc20`):
+  - at the start, every lateral lane reached through the `+0x3c` (left) and `+0x3a` (right) chains
+    is seeded with cost + **6 m per lane step** (6.0 at `0x01115250`);
+  - during expansion a `+0x3c`/`+0x3a` edge costs **6 m** (**3 m** in search mode 1 when the target
+    is a flag-bit-4 highway segment), and is **not** allowed from a node that was itself reached by a
+    lane change (record `+0x16` bit 2), so two lane changes are never consecutive;
+  - the `+0x3c` edge is skipped when flag bit 0 is set (oncoming lane), and `+0x3a` when bit 1 is set,
+    unless the search mode allows it;
+  - successor edges cost the chord length `+0x20`, halved in mode 1 on bit-4 segments, 0 on bit-31
+    segments.
+- So the car changes lane exactly when the cheapest route to its target turns from another lane:
+  the change is worth it when it saves more than 6 m.
+- Ambient branch choice at a fork, `0x00b28ac0`: one successor → take it. Otherwise, with probability
+  0.8, drop the candidates `0x00b1d490` rejects. Then candidates are grouped by the number of live
+  vehicles queued on them (`0x00a6df90`: occupancy lists along up to 10 single-link segments ahead),
+  the least-queued group first, uniform inside a group, each pick confirmed by `0x00b27270`. In
+  directive mode 8 with `+0x278` bit 0 the candidate pointing most toward the local player wins
+  (queues of 3 or fewer preferred).
+- **OPEN:** no check of the target lane's occupancy list was found on the lane-change edge; the
+  physical merge is the ordinary lane follow of the next route entry. The §18.6b pass-side gate is a
+  lateral offset, not a lane change.
+  **[2026-10-14 RESOLVED: there is a target-lane occupancy check, and there is a runtime lane change
+  outside the route search. The sentence above, "the planner never decides a lane change on its own",
+  is wrong for highway segments.]**
+  - **Trigger `0x00b55c50`** (vehicle as `this`), called from the per-vehicle tick at `0x00b58629`.
+    It runs every 400–600 ms (directive timer `+0x34c`, armed with `0x00d9e180(0x190, 0x258)`). It
+    only acts when the current route entry's segment has flag `+0x1c` bit `0x10` (the search's
+    "bit-4 highway" flag) and the speed is at least 10 m/s (`0x00b55d7c`, HIGH). Lane pick:
+    - if a right neighbour exists (`+0x3a`, `0x00677800`), try the right side, `0x00b55b90`
+      (vetoed by lane flag bit 1);
+    - else, if there is a left neighbour (`+0x3c`, `0x00677830`) and lane flag bit 0 is clear, try
+      the left side, `0x00b55a00`;
+    - on failure, fall through to `0x00b52e60`.
+  - **Right side.** It first runs a presence sweep of the right lane beside the car, `0x00b557c0`. The
+    probe record is built with flags 3 (count only), and `0x00b54450` sets record `+0x25` when the
+    swept boxes hit anything. A hit sets `+0xee0` bit `0x40`, and the next pass does the full check
+    below. HYPOTHESIS: why a hit, rather than a clear lane, arms the attempt was not decoded.
+  - **Left side (overtake).** It needs all four of:
+    - the probe holds a blocking lead (`+0xc70` bit 3, lead handle `+0x1128`/`+0x112c`);
+    - `0x00ad2030(self)` is false;
+    - the lead resolves to nothing, or to a vehicle in directive mode 8 whose `+0xfac` is lower
+      than ours;
+    - the gap (centre distance − `0x00a78d30(self)` − `0x00a78ca0(lead)`) is ≤ **20 m**
+      (`0x01116990`).
+  - **Occupancy check `0x00b555d0(vehicle, targetLane)`.** Both sides use it. A third caller sits in
+    the combiner `0x00b57ab0` (`0x00b58264`), which moves right at once, with no delay, when the
+    current segment lacks flag bit `0x4` and directive `+0x278` bit `0x20` is clear. The check:
+    - is refused unless the directive mode is 8;
+    - is refused when less than **30 m** (`0x012a2d58`) of route remains within a 50 m look
+      (`0x00b1efb0` + `0x00b51490`);
+    - then builds the path the car would take in the target lane (`0x00b53da0`) and runs the **full
+      obstacle probe `0x00b54450` along it**, saving and restoring the `+0x1100…` lead block and
+      `+0xc70`, followed by the following law (`0x00b510f0`);
+    - refuses the change when that law would brake harder than **0.5 × `+0xc58`**
+      (`0x00b55785`–`0x00b557a5`), or when a distance test with a 5 m margin fails
+      (`0x00b55758`–`0x00b55783`; operands not fully decoded).
+  - **Execution.** On the first pass that clears the check, `0x00ad5460(handle, side, 1)` is called
+    once (side 1 = left, 0 = right; HYPOTHESIS: turn indicator). `+0xee0` bit `0x10` is set and timer
+    `+0xfb0` is armed for **1200–1800 ms** (`0x00d9e180(0x4b0, 0x708)`). The occupancy check runs again
+    on every later pass. When the timer expires, `0x00b53270(lane)` re-plans from the target lane
+    (`0x00b1b200` clears the route, `0x00b50ea0` plans it again).
+
+#### 20.6.8 Hood → spawn category (2026-10-14, tail pass) — FINAL
+
+**Data.** The hoods are **`Hood` objects in the city's always-loaded zone** `sr3_city~fawld.czn_pc`
+(objects section `0x2234`), not a separate table. `hoods.xtbl` only lists the names. 33 objects: 14
+`Water_nn`, `cyberspace roads`, and 18 `HOOD_*`. Their properties (names are shipped strings,
+descriptor list at `0x01301adc`):
+
+| Property | Kind | Use |
+|---|---|---|
+| `hood_spawn_category` | string | category name → hood `+0x68` |
+| `hood_alt_spawn_category` | string | alternative category → hood `+0x6c` |
+| `hood_bsp_tree` | blob | the hood volume, below |
+| `hood_island_type` | string | `mainland` / `ocean` |
+| `hood_flags`, `hood_display_tag`, `hood_income`, `hood_takeover_areas` | | not used by spawning |
+
+**Lookup.** `0x00911770` → `0x0084bb20(lastHood, position)`: test the cached hood first, then every hood
+in the world object list (global `0x03171a64`, index list `+0x10c`, count `+0x114`, objects `+0x58`)
+in list order; the first hood whose volume contains the point wins. `0x0084aed0` then returns the
+global override category `0x0242ddd8` if set; else `+0x70` when hood `+0x64` bit 2 (per-hood override,
+script `spawn_override_set_override_category_for_hood`); else `+0x6c` when bit 1 (alternate spawning,
+`spawn_override_change_hood_alternate_spawning`, HIGH for the bit ↔ native pairing); else `+0x68`.
+No hood → `Default Spawn`.
+
+**Volume test `0x00dcda30` (FINAL).** The `hood_bsp_tree` blob is the tree object itself:
+`u32 planeCount, u32 nodeCount, 8 runtime bytes (plane and node pointers), planes[planeCount]
+{float nx, ny, nz, d}, nodes[nodeCount] {u16 plane, u16 childIfBehind, u16 childIfFront}`, padded to
+4 bytes. Walk from node 0: s = n·p + d; if s < −0.0001 go to `childIfBehind` (0 → **outside**), else
+`childIfFront` (0 → **inside**). y is up; coordinates are the absolute world metres of §13.2a(a).
+Script: `tools/scratchpad/poptail_hoods.py` (extract) and `poptail_hoodtest.py` (test).
+
+**Shipped mapping:**
+
+| Hood | Category | Alternate |
+|---|---|---|
+| `HOOD_DT_01` | `sp_cat_HenryMills` | `sp_cat_HenryMills_Ball` |
+| `HOOD_DT_02` | `sp_cat_LorenSquare` | `sp_cat_Loren_STAG` |
+| `HOOD_DT_03` | `sp_cat_SunsetPark` | `sp_cat_Sunset_STAG` |
+| `HOOD_NE_01` / `_02` / `_03` / `_04` | `sp_cat_CutterAirport` / `sp_cat_CamanoPlace` / `sp_cat_RosenOaks` / `sp_cat_Espina` | — |
+| `HOOD_NW_01` / `_02` / `_03` / `_04` | `sp_cat_BurnsHill` / `sp_cat_Ashwood` / `sp_cat_Salander` / `sp_cat_Brickston` | — |
+| `HOOD_ZOMBIE` | `sp_cat_DownersGrove` | `sp_cat_Arapice_Zombies` |
+| `HOOD_DOWNERS_GROVE`, `HOOD_BRIDGEPORT`, `HOOD_NEW_BARANEC`, `HOOD_YEARWOOD`, `HOOD_POINT_PRYOR` | `sp_cat_DownersGrove`, `sp_cat_Bridgeport`, `sp_cat_NewBaranec`, `sp_cat_Yearwood`, `sp_cat_PointPryor` | — |
+| `HOOD_SE_01` | `sp_cat_SierraPoint` | — |
+| `Water_01`…`Water_14` | `Water` | `Water` |
+| `cyberspace roads` | `CyberSpace_Ambient` | `CyberSpace_Ambient` |
+
+**Test vectors (§13.2a(n) tiles):**
+
+| Point | Hood | Category |
+|---|---|---|
+| tile 1215, node 36 (−203.5, 16.33, −511.5); tile centre (−320, 16, −560) | `HOOD_DT_01` | `sp_cat_HenryMills` (Car 1/.7, Ped 1/.5) |
+| tile 1517, node 6286 (745.326, 2.975, −980.073); tile centre (640, 5, −1120) | `HOOD_NW_02` | `sp_cat_Ashwood` (Car .8/.5, Ped .8/.5) |
+| (0, 0, 0) | `HOOD_DT_02` | `sp_cat_LorenSquare` |
+| (−1500, 0, 2000) | `Water_03` | `Water` |
+
+Targets with §20.6.4's assumptions (vehicles on foot / driving, peds):
+- `sp_cat_HenryMills`: 03:00 → 8 / 12, 20; 08:00 → 10 / 15, 30; 14:00 → **12 / 18, 40**.
+- `sp_cat_Ashwood`: 03:00 → 6 / 9, 20; 08:00 → 7 / 11, 26; 14:00 → **9 / 14, 32**.
+
+#### 20.6.9 Ambient ped walking (2026-10-14, tail pass)
+
+**(a) Speeds — FINAL for the mechanism; numbers FINAL per clip (2026-10-14, below).** The sidewalk walk request
+(`0x0051bac0` → `0x00a1bc90(…, 1, −1)`) and the flee/cower requests pass the locomotion speed **−1**,
+the "use the animation's speed" sentinel (`spec-player-runtime.md` §5.4.3 step 4). The velocity is
+therefore the root motion of the playing locomotion clip, scaled by the human's speed multiplier
+`+0xa64` and the stride-match rate `+0x1a90` (clamped [0.1, 1.5]). A scan of all calls of the
+locomotion setter `0x00942110` finds literal speeds only outside the ambient ped paths (2.5 at
+`0x009acd63`). **There is no walk, run or flee speed constant to copy.** The numbers need the root
+translation per second of the civilian walk/run clips (`spec-anim-format.md`), not traced.
+**[2026-10-14 numbers: FINAL for the clip speeds and for `+0xa64` = 1.0 on ambient peds; PARTIAL for which state
+flee selects.]**
+
+- **Formula.** The −1 branch gives s = (\|T\|/Δt) / `+0x1a90` × `+0xa64` (`spec-player-runtime.md` §5.4.3 step 4,
+  code at `0x0099d4f8`). T is the per-frame root translation of the synchronised locomotion layer, which plays at
+  rate `+0x1a90`, so the rate cancels. Averaged over a cycle, s = (clip root speed) × `+0xa64`. The clip root speed
+  is the same quantity `0x004b49e0` reports for a plain clip: \|header `+0x1C` translation\| / (header word `+0x06` / 30)
+  (`spec-anim-runtime.md` §9; `0x004bd8c0` duration = word `+0x06` / 30 s). Within one cycle the speed can vary with
+  the root track; only the cycle average below is decoded.
+- **`+0xa64` on ambient peds = 1.0.** The human constructor stores float `0x01117a4c` = 1.0 at `0x009544c5`. The
+  other writes do not reach ambient population peds: the area spawn-group setup `0x006e7280` copies its
+  group entry's float `+0x28` (`0x006e7469`); case 10 of the command dispatcher at `0x006ed9aa` (`0x006edb8f`) writes
+  the command's float `+8` into the **local player**; and case 10 of `0x006ebc00` (`0x006ebdc1`) resets it to 1.0.
+  There is no random range.
+- **Clips.** The skeleton sets are from `anim_set_filenames.xtbl`. `PEDM` (parent `Life_Default` → `anim_Default`) is
+  the male civilian. `PEDF` (parent `Life_Female`, whose parent is `PEDM`) is the female civilian. All clips are in
+  `preload_anim.vpp_pc`; every one has Y = 0 and no root rotation, so the speed is all horizontal, along +Z.
+
+| Set | State | Clip | Frames (word `+0x06`) | \|T\| m | Speed m/s (×1.0) |
+|---|---|---|---|---|---|
+| PEDM | `walk` | `ped_bs_walk` | 33 | 1.5250 | **1.386** |
+| PEDM | `walk variant 1..12` | `ped_bs_walk_b` / `_c` / `_d` / `_e` / `_f` (and `ped_bs_walk` for variant 6) | 31 / 26 / 29 / 151 / 66 | 1.911 / 1.959 / 1.956 / 5.431 / 3.314 | 1.849 / 2.260 / 2.023 / 1.079 / 1.506 |
+| PEDM | `run` | `ped_bs_run` | 33 | 7.0100 | **6.373** |
+| PEDM | `run variant 1..4` | `ped_bs_run_b` (v1) / `ped_bs_run_e` (v2, v4) / `ped_bs_run_d` (v3) | 28 / 33 / 15 | 5.682 / 6.320 / 3.205 | 6.088 / 5.745 / 6.410 |
+| PEDM | `cower run` (+ variants 1–5) | `ped_cwr_rn`, `ped_cwr_rn_d`, `ped_cwr_rn_e` | 45 / 47 / 45 | 6.830 / 8.160 / 8.717 | **4.554** / 5.208 / 5.812 |
+| PEDF | `walk` | `ped_f_bs_walk` | 33 | 1.5050 | **1.368** |
+| PEDF | `walk variant 1..12` | `ped_f_bs_walk_b` / `_c` / `_d` / `_e` / `_f`, `pfl1_bs_walk` (variant 10) | 33 / 31 / 53 / 119 / 120 / 33 | 1.589 / 1.602 / 3.614 / 2.764 / 6.546 / 1.650 | 1.445 / 1.550 / 2.046 / 0.697 / 1.637 / 1.500 |
+| PEDF | `run` | `ped_f_bs_run` | 41 | 6.0590 | **4.433** |
+| PEDF | `run variant 1..4` | `ped_f_bs_run_b` / `_c` / `_d` / `_e` | 80 / 20 / 51 / 30 | 10.180 / 2.554 / 4.928 / 6.374 | 3.818 / 3.831 / 2.899 / 6.374 |
+| PEDF | `cower run` (+ variants 1–5) | `ped_bs_run_e`; variants `ped_f_bs_run_e`, `ped_bs_run_b`, `ped_bs_run_e`, `ped_bs_run_d` ×2 | — | — | **5.745**; 6.374 / 6.088 / 5.745 / 6.410 / 6.410 |
+| both | `head cover walk` / `head cover run` | `ped_rn_hd_cvr_rn` | 20 | 2.3361 | 3.504 |
+
+- **Test vectors** (ambient ped, `+0xa64` = 1.0, cycle average): male walk 1.525 m / 1.1 s = **1.3864 m/s**; male run
+  7.010 / 1.1 = **6.3727 m/s**; male cower run 6.8304 / 1.5 = **4.5536 m/s**; female walk 1.505 / 1.1 = **1.3682 m/s**;
+  female run 6.059 / (41/30) = **4.4334 m/s**; female cower run 6.320 / 1.1 = **5.7455 m/s**. Cross-check: two clips
+  give round numbers exactly, `pfl1_bs_walk` 1.65 m / 1.1 s = 1.5000 and `hs_wlk_a` 8.25 m / 5.5 s = 1.5000.
+- **Still OPEN.** (1) Which state the flee mode asks for: `run` (gait 2) or `cower run`. Both are tabled above;
+  `panic_reactions.xtbl` names only `run on fire` (2.802 m/s, `ped_bs_run_onfre`) and none of its rows is a plain flee.
+  (2) How a ped picks among `walk variant N` / `run variant N`. The names are literal strings in the exe and were not
+  traced. A port can use the base `walk` / `run` row and treat the variant columns as the spread. There is no sprint
+  state in `PEDM`/`PEDF` (only gang, `streaking` and weapon sets have one).
+  **[2026-10-14 RESOLVED (both).**
+  **State ids.** The exe's state-name table at `0x011507F8` (index 0 `custom state`, 2 `stand`) gives:
+  - `walk` 26 (`0x1A`) and `walk variant 1..9` 27–35;
+  - `run` 44 (`0x2C`) and `run variant 1..3` 45–47;
+  - `cower run` 54 (`0x36`) and `cower run variant 1..5` 55–59;
+  - `cower stand` 13 and its variants 14–17;
+  - `stand ready` 60.
+
+  The exe names only 9 walk variants and 3 run variants, so the higher variant columns of the anim-set table are not reachable through these names.
+  **Per-ped slots, set when the human is initialised (`0x00956E50`).**
+  - Gait `+0x1CC8` = 2.
+  - Walk state `+0x1CCC`: 26, or with the flag argument clear `0x00956D50` picks it **uniformly at random among the states 26–35 that the ped's anim set actually has** (`0x004B1630(set, state) ≠ −1`, then `0x00DAB660(0, n−1)`). The pick is skipped (stays 26) for objects with flag `+0x48` bit `0x2000`, `0x00853B30(human, 0x21)`, `0x00921060`, `+0x2BC` bit 7, or `0x00720640()`.
+  - Run state `+0x1CE0` = 44.
+  - Cower-run state `+0x1CD4` = 54.
+  - Cower-stand `+0x1CD8` = 13 + random(0..4), falling back to 13.
+  - Stand-ready `+0x1CE4` = 60.
+
+  **Run variant.** `0x00992219`: when a movement request with `+0xB35` ≥ 2 (HIGH: run gait) starts and the run slot is still −1 or 44, the ped takes `run variant 1 + ((handle low dword mod 3 + k) mod 3)` for the first k = 0, 1, 2 that its anim set has, written through `0x0094B750` into `+0x1CE0`. This choice is **deterministic per ped handle, not random**. If none exists the slot stays `run`.
+  **Flee: run, and cower run only for a civilian close to the threat.** The run-state selector at `0x0095C495` returns the cower-run slot `+0x1CD4` only when all three hold: the AI mode `+0x501` = 13 (`Flee`), the team `+0x1CA8` = 7 (civilian), and the flee block's `+0x8D0` bit 0 is set. In every other case it returns the run slot `+0x1CE0`. A second site (`0x0095C99A`) does the same for sub-state `+0x500` = `0x72` with `+0xCCC` = 2.
+  Bit 0 is managed every Flee update by `0x004D8100` (called from `0x004DA965`):
+  - **Cleared** when the ped is not a civilian (`0x00943EA0`: team 7 and `0x0097E280` false), or when it is more than **30 m** (squared distance > 900, `0x01115340`) from the flee point `+0x8E8` (when block bit 5 is set) or from the threat (handle `+0x8D8`, via `0x004D4C70`).
+  - **Set** on first entry within 30 m. At that moment the cower-run state is chosen: `run` (44) if human `+0x2BB` bit 7 is set; otherwise 54 + random(0..5) (`cower run` or one of its 5 variants), falling back to 54 when the set lacks it. It is stored in `+0x1CD4` through `0x0094B330` (skipped when `+0x317` bit 6), and only if that state's clip is resident (`0x004BF5E0`/`0x004BEBB0`).
+
+  **Net effect.** A fleeing civilian runs with its `cower run` clip (4.554 m/s male base) while within 30 m of the threat, and with its run-variant clip beyond 30 m. Non-civilians always use run.]**
+
+**(b) Path on the sidewalk graph — HIGH.**
+- A ped on the sidewalk follows a **path to a destination**, not a node-by-node random walk. The path
+  is a best-first search over sidewalk **nodes** (`0x00a1d410`): both ends of the start edge are
+  seeded with their straight-line distance; edges cost their Euclidean length; the open list caps
+  costs at 50 000 m (`0x0117835c`).
+- The destination is the wander target chosen in sub-state 33 (§20.2). Event 81 is posted on commit.
+- On every frame the navigator (`0x00a1bcd0`) checks the current edge's crossing.
+
+**(c) Crossings and lights — FINAL for the test, HIGH for the state machine.**
+- An edge is closed (`0x00bbf0e0`) when its crossing record has a light and that light's vehicle
+  state is 2, 3 or 5, or its pedestrian state is 2 (§13.2a(i)). An edge without a light is never
+  closed.
+- Navigator state bits in human `+0xb68`: bit 2 = on a sidewalk route, bit 3 = waiting at the curb,
+  bit 4 = committed to the crossing, bit 5 = past the far side.
+- Closed crossing: if bit 4 is set the ped keeps crossing; if bit 3 is set it keeps waiting.
+  Otherwise the ped is tested against the near and the far edge of the crosswalk quad
+  (`0x00dbbaa0`): before the near edge → set bit 3 and **stop**; past the far edge → set bit 5 and
+  carry on; between the two → set bit 4 and **finish crossing**.
+- Open crossing: bits 3–5 are cleared and the ped walks on.
+- Within 0.425 m of the crossing (0.180625 = 0.425², `0x01117f10`) `0x0051b960` reports arrival, and
+  the sidewalk tick posts event 8 with a 1000 ms delay.
+
+#### 20.6.10 Police and gang roadblocks driven by notoriety (2026-10-14, tail pass)
+
+This closes the notoriety path of §19.7 (`0x0060a8d0`). Tables: `misc_tables.vpp_pc`
+`roadblock_notoriety.xtbl` and `roadblock_layouts.xtbl` (schemas: `spec-tables-traffic-ai.md` §5, §6).
+
+**(a) When — FINAL.** Every frame `0x0060a8d0`:
+1. Gates: roadblocks enabled (`0x0092b2b0`, cvar §19.7), byte `0x012ed170` (default 1), live
+   roadblock count `0x012ed180` < **3** (`0x012ed17c`), and `0x0060a490`: the target player is
+   **driving** (`0x009e82f0` and `0x009b9160`) on a road segment (player `+0x20dc`) without flag bit 18
+   (water). In co-op `0x0060a700` picks the target player: the partner when the two are within
+   2·135 + 40 = 310 m and headings agree (dot > 0) and `0x0092c6d0` passes; otherwise the player with
+   more qualifying world objects nearby, ties broken 50/50 (HIGH for the meaning of the count).
+2. For each grid slot 0–4 (slot 3 = Police, slot 4 = STAG; `0x00702a10` picks which one of the two
+   runs): track level L from `0x00605200`; skip unless 1 ≤ L ≤ 5; skip when the team's suppression
+   object says so (`0x008ed220` → `0x008ecdc0`).
+3. Record `0x014a50b8 + 0x44·(5·slot + L − 1)`. Skip when it has no layouts, or when the slot's live
+   count (`0x014a5768 + 40·slot`) ≥ `Max_active_roadblocks`.
+4. Slot timer (record `+0x0c`): not armed → arm with a uniform `Min_time`…`Max_time` ms and stop.
+   Armed and expired → candidates = the layouts whose own `Cooldown` timer is unarmed or expired.
+5. Place (b). On success: arm the chosen layout's cooldown with its `Cooldown` ms, re-arm the slot
+   timer, add the instance to the slot's live list. On failure retry in **2000 ms**.
+
+Shipped data has rows only for levels **2–5**, so **level 1 never spawns a roadblock** although the
+code accepts it.
+
+**(b) Where — FINAL for the rule, HIGH for the lane match.**
+- Distance: tweak `Notoriety_roadblock_spawn_dist` = **135.0 m** (`0x014a50a0`, registered at
+  `0x00ff38d0`).
+- `0x0092e150` builds up to **8** sites: road segments from the spatial query, filtered like
+  §20.6.1(c), at the points where a segment's shape polyline crosses the 135 m circle around the
+  player (`0x00dbd630`). The highway bit (`0x00a6bb00`: flag bit 4 of the player's segment) selects
+  highway sites.
+- `0x0092e780` tries every (site, layout) pair from a random start of each: the layout must fit the
+  site (`0x0092b130`, HIGH: lane count against `Num_lanes`) and the object budget (`0x0092ade0`), and
+  the site must be in the player's front half-plane, dot(site − player, player heading) > 0. The
+  first fit creates a class-`0x2c` roadblock instance at the site, oriented toward the player.
+- Each layout object is then placed at its `X_offset`/`Z_offset` relative to the site and lane
+  (`Lane_index`); this is the "forward offset" of §19.7 (HIGH).
+
+**(c) What — FINAL (table rows).** The §19.7 dispatch cases 0–4 follow the layout object `Type`
+enum: 0 `Vehicle`, 1 `Vehicle Group`, 2 `NPC`, 3 `Item` (the `spike_strip` and `construct_sawhorse01`
+rows are Items, hence the `"Spike_strip"` name check), 4 `Action Node` (HIGH by enum match). Shipped
+schedule:
+
+| Team | Level | Max active | Interval (s) | Layouts (cooldown s) |
+|---|---|---|---|---|
+| Police | 2 | 1 | 15–40 | `police_lvl2_2lane` (10), `police_lvl2_2lane_2` (25), `police_lvl2_4lane` (0) |
+| Police | 3 | 2 | 10–30 | `police_lvl3_2lane`, `police_lvl3_4lane` |
+| Police | 4 | 2 | 5–20 | `police_lvl4_2lane`, `police_lvl4_4lane` |
+| Police | 5 | 3 | 0–10 | `police_lvl5_2lane`, `police_lvl5_4lane` |
+| Deckers / Morningstar / Luchadores | 2 / 3 / 4 / 5 | 1 / 2 / 2 / 3 | 20–40 / 15–30 / 10–20 (Morningstar, Luchadores 5–20) / 0–10 | `<gang>_lvl<L>_2lane`, `_4lane` |
+| STAG | 2–5 | 1 / 2 / 2 / 3 | as Police | Police layouts at 2–3; `stag_lvl4_*` + `police_lvl4_*` at 4; `stag_lvl5_*` at 5 |
+
+Script: `tools/scratchpad/poptail_rb.py`.
+
+**(d) Despawn — FINAL for the distance, HIGH for the second test.** `0x0060a410` keeps an instance
+while any player is within **270 m** (the squared value 72 900 = (2·135)² at `0x014a50a4`, test
+`0x009ea700`). Outside that it is removed when `0x0092ec60` reports the instance idle (HIGH: no
+member engaged). Removal is through `0x00853ea0`.
+
+**Test vector — Police, level 3, player driving on a 2-lane road:** at most 2 roadblocks of this
+track (3 in total), one every 10–30 s, 135 m ahead. `police_lvl3_2lane` holds 2 vehicles
+(`van_2dr_riot02` lane 1, `car_4dr_police02` lane 2, about 9.5 m behind the site line), 2
+`npc_cop_swat_riot`, 2 `construct_sawhorse01` each with 2 child `npc_cop` (4 cops), and 3
+`spike_strip`. On a 4-lane road `police_lvl3_4lane`: 2 `van_2dr_riot02`, 2 `car_4dr_police02`, 6
+`npc_cop_swat_riot`, 6 `npc_cop`, 8 `spike_strip`.
+
+#### 20.6.11 Earlier PARTIALs resolved (2026-10-14, tail pass)
+
+**(a) Obstruction points (§20.6.1(c), 40 m) — HIGH.** The list `0x02898228` (32-byte records, count
+`0x0289821c`, pool of 0x4000 bytes) is rebuilt every **700–1300 ms** (timer `0x0130ec34`,
+`0x00b2da80`) from every vehicle's own chain (vehicle `+0xc74`). A record holds the vehicle position,
+its handle, the route segment and two flags; flag bit 1 also sets segment flag bit 20 and counts in
+`0x02898220`. The chains are written by `0x00b2dd90`, called from the vehicle update (`0x00a86cf0`,
+`0x00a87eeb`) every 700–1300 ms for AI-driven vehicles that are **slow** (velocity test against
+4 m/s) in directive modes 0, 1 or 3. So the points are **stopped or crawling AI vehicles**, and the
+40 m rule keeps new traffic from spawning right behind a jam.
+
+**Correction to §20.6.1(b):** `0x00b2db20` is not a "player chase" test. It counts AI vehicles, other
+than the local player's current and last vehicle, within **35 m** (1225 = 35², `0x01115208`) of the
+camera whose velocity components are all below 2 m/s and whose directive mode is not 0. With the
+argument 4 it is true for **4 or more stopped cars**. The extra 4000–6000 ms timer therefore gates
+spawning next to a traffic jam (HIGH for the wording, FINAL for the test).
+
+**(b) Player `+0x1d9a` bit 1 — PARTIAL.** Written only at `0x009ea4df`: set when the point 2 m above
+the player (`+0x40`, y + 2.0) lies in a zone whose handle kind (bits 13–15) is 1 or 2 (`0x005812d0`
+→ `0x00861aa0` → `0x0085be00`), and a second point from `0x009e2d00` does too. Kind 3 is the world
+tile lattice (`0x6000`); kinds 1 and 2 come from the two volume-zone registries `0x02444fa4` and
+`0x02444fa8`. HIGH: "player inside an interior-type zone". Effects already documented: +21 ped budget,
+and an 8 m height rule for ped despawn (§20.6.2). **OPEN:** the name of zone kinds 1 and 2.
+
+**(c) Stop-line geometry (§20.6.3(c)) — FINAL.** The distance `0x00b52bc0` passes is vehicle `+0x11dc`
+= route object (`+0x11a4`) `+0x38`, the distance to the **end of the current route piece**. The
+signal state is read from the current piece's own segment (`+0x30 & 0xf`), i.e. the signalised
+approach lane. The car is stopped by law (b) with kind 2, so it stops **5 m before the end node of
+the approach lane**. Correction: the waiting bit `+0xc70` bit 2 is set when the law returns a brake
+demand > 0 **or a speed cap below 3 m/s**, not "within 3.0 m".
+
+#### 20.6.12 Test vectors and status (tail pass)
+
+**Car following, car_4dr_standard03** (`AI_Max_Braking_Decel` 12.06, condition 0 → a_b = 12.06,
+a_lim = 10, a_c = 7.5):
+
+| Case | Result |
+|---|---|
+| v = 10, lead stopped | brake onset at d < 11.667 m (100 / 15 + 5) |
+| v = 10, lead stopped, d = 10 | demand 10.0 m/s² → brake 0.829; cap 8.660 m/s |
+| v = 10, lead stopped, d = 8 | demand 16.67 → brake 1.0; cap 6.708 |
+| any v, d ≤ 5.01 | full braking (12.06), cap 0: **stop 5 m behind** |
+| v = 10, u = 8, d = 10 | no brake (0.4 < 7.5); cap 7.5 |
+| v = u = 10, d = 15 | cap 21.5 (lane speed governs) |
+| v = u = 10, d = 10 | cap 9.5 → steady gap ≈ 11 m |
+| Probe length at v = 0 / 10 / 25 | 2.5 / 8.03 / 28.4 m (k = 0.75 / 0.75 / 1.0) |
+| Probe period at v = 0 / 10 / ≥ 15 | 200 / 106 / 60 ms |
+| Junction look-ahead at v = 10 | 11.67 m; re-check every 150–300 ms |
+
+Other vectors: hood categories §20.6.8; roadblock composition §20.6.10.
+
+| Item | Status |
+|---|---|
+| Following law, probe length and cadence, stop gap 5 m, hysteresis | FINAL |
+| Junction yield gates and look-ahead | FINAL; time-window detail HIGH |
+| Lane-change cost and rules in the route search; fork choice by queue length | FINAL |
+| Occupancy check before a lane change | OPEN (none found) |
+| Hood → category data, volume test, both test tiles | FINAL |
+| Ped walk/run/flee speed numbers | OPEN (animation-driven, mechanism FINAL) **[2026-10-14: numbers FINAL per clip (§20.6.9(a)); PARTIAL only for which state flee picks, and for variant choice]** **[2026-10-14: both RESOLVED, §20.6.9(a). Flee uses cower run for a civilian within 30 m of the threat, otherwise run. The walk variant is uniform random at init; the run variant is handle mod 3]** |
+| Ped sidewalk path search and crossing gate | HIGH / FINAL |
+| Roadblock trigger, timers, caps, distance 135 m, despawn 270 m, composition | FINAL; lane-fit and object offsets HIGH |
+| Special probe object kinds 5 and 10 | OPEN |
+| Obstruction points | HIGH |
+| `+0x1d9a` bit 1 | PARTIAL (zone-kind names OPEN) |
+| Stop-line geometry | FINAL |
+
+Scratch scripts (read-only, deletable): `tools/scratchpad/poptail_dis.py`, `poptail_run.ps1`,
+`poptail_fstart.py`, `poptail_str.py`, `poptail_disp.py`, `poptail_locoargs.py`, `poptail_hoods.py`,
+`poptail_bsp.py`, `poptail_hoodtest.py`, `poptail_rb.py`; outputs in `tools/scratchpad/poptail_out/`.
+
+Clean-room check: addresses are plain hex; property, table and string names are shipped data; no
+decompiler tokens.
+
 ---
 
 ## Changelog
+
+- **2026-10-14 — §20.6.7–20.6.12: population tails** (SPEC TEAM). Car-following law (`0x00b51950`,
+  5 m stop gap, ≈ 11 m steady gap, 0.75/0.5 hysteresis) and obstacle probe; `0x00b5e6c0` re-identified
+  as the junction yield; lane changes as 6 m route-search edges; hood → `sp_cat_*` from the `Hood`
+  objects of `sr3_city~fawld.czn_pc` with their BSP volumes (tile 1215 → `sp_cat_HenryMills`, 1517 →
+  `sp_cat_Ashwood`); ped speeds shown to be animation-driven; sidewalk crossing gate; notoriety
+  roadblocks (135 m sites, 270 m despawn, level-1 never, shipped composition); obstruction points;
+  stop-line geometry. Corrects §20.6.1(b) (`0x00b2db20` is a stopped-traffic count) and §20.6.3(c)
+  (waiting bit). Team B wiring rows updated in §20.6.6.
+
+- **2026-10-14 — new §20.6: free-roam population constants** (SPEC TEAM). Read from the executable:
+  - the near-field vehicle and ped target formulas (TOD segment index, notoriety and weather scales);
+  - spawn rings, cones and rejects, and the despawn radii;
+  - the vehicle and ped model and group rolls;
+  - the lane follower's cruise source (every shipped road is 10 m/s), throttle law and signal stop
+    rule.
+
+  Corrects §20.1 (90 m is the far, not the near, reject) and §17.4c (3 attempts, not a 3-slot buffer;
+  `0x00910940` is the target count). Test vectors and Team B wiring are in §20.6.4/§20.6.6.
 
 - **2026-10-11 — §19.1: "what the save stores vs. what's recomputed" for notoriety, orchestrator-
   routed, synthesis only (no new RE)** (SPEC TEAM, self). Connected this section's own live-record

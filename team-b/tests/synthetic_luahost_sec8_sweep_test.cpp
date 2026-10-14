@@ -126,7 +126,7 @@ int main() {
         es.objectResolves().set("KnownMissingPersona", false);
         ok(host, gp, "assert(audio_persona_line_playing('KnownMissingPersona') == false)");
         es.objectResolves().set("Persona1", true);
-        refuses(host, gp, "audio_persona_line_playing('Persona1')", "0x0094c9e0");
+        ok(host, gp, "assert(audio_persona_line_playing('Persona1') == false)"); // ce4556f: no voice instance attached
         es.personaLinePlaying().set("Persona1", true);
         ok(host, gp, "assert(audio_persona_line_playing('Persona1') == true)");
     }

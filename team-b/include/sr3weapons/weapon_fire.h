@@ -210,6 +210,16 @@ public:
     // re-derivable from static reading alone, src/lua_spec_confirmed_
     // stubs_b15_wave2_core_dispatchers.cpp's own stub_character_damage).
     virtual void applyLethalHit(const std::string& targetName) = 0;
+
+    // Sec4.5.5a port rule (spec sync 974bd21): every producer routes into the one
+    // sink as (victim, attacker-or-null, float amount). Default: a negative amount
+    // is the script "lethal" -1.0 shape (-> applyLethalHit); a positive amount is
+    // not applied here (the engine-state chain, damage_model.h ApplyDamageSink,
+    // needs victim state this seam does not carry).
+    virtual void applyDamage(const std::string& victim, const std::string& /*attacker*/, float amount,
+                             int /*producer: sr3weapons::DamageProducer*/) {
+        if (amount < 0.0f) applyLethalHit(victim);
+    }
 };
 
 // CHOSEN opt-in test/diagnostic stand-in: records every call, applies

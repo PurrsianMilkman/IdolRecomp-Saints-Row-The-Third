@@ -312,9 +312,16 @@ int main() {
     CHECK(es.getOrCreateNotorietySpawnGroup("Rollerz").destinationTargetName.empty());
     CHECK(es.getOrCreateNotorietySpawnGroup("Rollerz").clearDestinationCount == 1);
 
-    // Sec25.3 mission_store_purchased: CHOSEN store-and-echo.
-    ok(host, gp, "assert(mission_store_purchased(true) == true)");
-    CHECK(es.missionStorePurchased());
+    // Sec25.3 mission_store_purchased: pure query, arg = kind selector.
+    ok(host, gp, "assert(mission_store_purchased(true) == true)");  // no record -> true
+    ok(host, gp, "assert(mission_store_purchased(false) == true)");
+    es.missionStoreRecordPurchased(false) = false;
+    ok(host, gp, "assert(mission_store_purchased(false) == false)");
+    ok(host, gp, "assert(mission_store_purchased(true) == true)");  // property still no record
+    es.missionStoreRecordPurchased(false) = true;
+    ok(host, gp, "assert(mission_store_purchased(false) == true)");
+    es.missionStoreRecordPurchased(true) = false;
+    ok(host, gp, "assert(mission_store_purchased(true) == false)");
 
     // Sec25.4 mission_set_next_mission - CORRECTED by Sec60.3: genuine no-op.
     ok(host, gp, "mission_set_next_mission('m01')");
@@ -326,9 +333,9 @@ int main() {
 
     // Sec25.6 mesh_mover_update_control: both gates must be satisfied.
     es.objectResolves().set("Mover1", true);
-    fails(host, gp, "mesh_mover_update_control('Mover1', 'speed', true)", "+0xc8");
     es.getOrCreatePlacedObject("Mover1").hasInteractionAnchor.set(false);
-    fails(host, gp, "mesh_mover_update_control('Mover1', 'speed', true)", "+0xc4");
+    ok(host, gp, "mesh_mover_update_control('Mover1', 'speed', true)"); // e6691f1: link modelled present by default
+    es.getOrCreatePlacedObject("Mover1").moverControlUpdateCount = 0;
     es.getOrCreatePlacedObject("Mover1").hasMoverControlSubRecord.set(true);
     ok(host, gp, "mesh_mover_update_control('Mover1', 'enabled', true)");
     CHECK(es.getOrCreatePlacedObject("Mover1").moverBoolControls["enabled"] == true);

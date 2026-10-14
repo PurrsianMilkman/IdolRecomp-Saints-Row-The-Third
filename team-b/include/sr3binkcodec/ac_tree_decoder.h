@@ -206,30 +206,33 @@ struct AcTreeDecodeResult {
     int countResolved = 0;
 };
 
-// Decodes the AC-coefficient tree for one block, reading from `br` (the
-// SAME shared per-row bitstream every other read in this codec uses -
-// Sec5.3j confirms this function writes its bit-reader state BACK into the
-// shared context at the end, i.e. it leaves `br` positioned exactly where
-// the next read should continue, same convention this project's `br`
-// already models implicitly by being one continuous cursor).
+// REWRITTEN 2026-10-13 (fix/bink-9c70c61, spec-bink-codec.md Sec5.3ai answer 1 + Sec5.3ac's own trace):
+// the prior "Phase 1 BFS for levels A..2, then a separate Phase 2" split did NOT reproduce Sec5.3ac's own
+// published 83-bit / 136-bit totals (it stopped after 54 / 36 bits: Phase 1 matched the trace bit-for-bit up
+// to the Phase-1/Phase-2 boundary at bit 35, Phase 2 diverged). The measured fix: there is no distinct
+// Phase 2. The same worklist pass (Gate A, case 0/1/2/3 dispatch, Gate B 4-copy chain) runs once per level
+// A, A-1, ..., 1 over ONE persistent worklist; the level-L field is L bits (L-1 magnitude bits then a sign
+// bit), so level 1 is the old "mechanism 2" (magnitude always 1, 1 sign bit). Dead (tag 0) entries are
+// skipped without a Gate A bit; Gate B defers go to the FRONT of the worklist (last deferred first), where
+// the next level's pass picks them up. Case 2 advances past its (zeroed) entry before its 4-copy chain, case
+// 0 does not. Verified bit-exact on Sec5.3ac's idx3 (83 bits) and idx4 (136 bits) and on block (0,0).
+// The prior structure is retired; see git history.
+//
+// Decodes the AC-coefficient tree for one block, reading from `br` (the SAME shared per-row bitstream
+// every other read in this codec uses).
 inline AcTreeDecodeResult decodeAcCoefficientTree(BitstreamReader& br) {
     AcTreeDecodeResult result;
 
-    // Phase 0 (Sec5.3j): read the 4-bit level/max-depth nibble, seed the
-    // worklist with 6 literal bytes.
     const uint32_t A = br.readBits(4);
-    std::array<uint8_t, kAcTreeWorklistCapacity> tags{};
-    size_t front = 0;
-    size_t tail = 0;
-    tags[tail++] = 0x10;
-    tags[tail++] = 0x60;
-    tags[tail++] = 0xb0;
-    tags[tail++] = 0x07;
-    tags[tail++] = 0x0b;
-    tags[tail++] = 0x0f;
 
-    // Writes a resolved coefficient through the category->raster-k
-    // permutation (Sec5.3w).
+    // One persistent worklist: live range [start, end). Deferred entries are pushed at --start, new
+    // children at end++. 6 literal seeds (cat*4 + sel).
+    constexpr size_t kCap = 2 * kAcTreeWorklistCapacity;
+    std::array<uint8_t, kCap> tags{};
+    size_t start = kAcTreeWorklistCapacity;
+    size_t end = start;
+    for (const uint8_t seed : {0x10, 0x60, 0xb0, 0x07, 0x0b, 0x0f}) tags[end++] = seed;
+
     auto writeCoeff = [&](uint32_t category, int32_t value) {
         if (category < kCategoryToRasterK.size()) {
             const uint32_t k = kCategoryToRasterK[category];
@@ -239,313 +242,64 @@ inline AcTreeDecodeResult decodeAcCoefficientTree(BitstreamReader& br) {
             }
         }
     };
-    auto pushTag = [&](uint8_t t) {
-        if (tail < tags.size()) {
-            tags[tail++] = t;
-        }
-    };
 
-    if (A <= 1) {
-        // Sec5.3w: Phase 1's BFS is skipped entirely. Gate A + the
-        // Phase-2-style dispatch arms run directly on the 6 literal seed
-        // tags, draining the SAME front/tail worklist (which grows via
-        // case 1's children and Gate B's deferred pushes) until front
-        // catches tail.
-        while (front < tail) {
-            const uint32_t gateA = br.readBits(1);
-            if (gateA == 0) {
-                // Inert node - skip entirely, no dispatch, no further bits.
-                ++front;
-                continue;
-            }
-            const uint8_t tag = tags[front];
-            const uint32_t sel = tag & 3u;
-            const uint32_t category = static_cast<uint32_t>(tag >> 2);
-            const uint32_t base = category * 4u;
-
-            switch (sel) {
-                case 0: {
-                    // Rewrite own slot in place; do NOT advance front - the
-                    // same slot is Gate-A-checked again next iteration.
-                    tags[front] = static_cast<uint8_t>(base + 0x11);
-                    // Gate B: 4 unrolled 1-bit copies, categories
-                    // category..category+3. All 4 ALWAYS run (per the
-                    // trace: copies after an earlier resolve still defer).
-                    for (uint32_t i = 0; i < 4; ++i) {
-                        const uint32_t gateB = br.readBits(1);
-                        const uint32_t catI = category + i;
-                        if (gateB == 0) {
-                            const uint32_t signBit = br.readBits(1);
-                            writeCoeff(catI, (signBit & 1u) ? -1 : 1);
-                        } else {
-                            // Defer: a synthetic case-3-shaped entry is
-                            // conceptually pushed onto a SEPARATE, backward-
-                            // growing deferred list (Sec5.3w) - NOT this
-                            // function's own front/tail worklist. Per the
-                            // golden trace, this entry is never read again
-                            // within this call (genuinely dead work in the
-                            // traced case) and, critically, must NOT affect
-                            // this call's front/tail termination - pushing
-                            // it onto `tags`/`tail` would make the main loop
-                            // keep running past the trace's own exit point
-                            // ("front now equals tail" at bit 17). The bit
-                            // itself is still consumed above (structural
-                            // cost paid); the synthetic tag value has no
-                            // further effect modelled here.
-                            (void)catI;
-                        }
-                    }
-                    break;
+    for (uint32_t level = A; level >= 1; --level) {
+        const uint32_t biasMask = 1u << (level - 1);
+        // Level-L value: (L-1) magnitude bits | implicit top bit, then a sign bit == a single L-bit read
+        // whose top bit is the sign (LSB-first reader).
+        auto resolve = [&](uint32_t cat) {
+            const uint32_t raw = br.readBits(static_cast<int>(level));
+            const uint32_t masked = (raw & (biasMask - 1u)) | biasMask;
+            int32_t value = static_cast<int32_t>(masked);
+            if (raw & biasMask) value = -value;
+            writeCoeff(cat, value);
+        };
+        auto gateBChain = [&](uint32_t cat) {
+            for (uint32_t i = 0; i < 4; ++i) {
+                if (br.readBits(1) != 0) {
+                    if (start > 0) tags[--start] = static_cast<uint8_t>((cat + i) * 4u + 3u);
+                } else {
+                    resolve(cat + i);
                 }
-                case 1: {
-                    // 4-way split, consumes zero bits, never reaches Gate B.
-                    tags[front] = static_cast<uint8_t>(base + 2);
-                    pushTag(static_cast<uint8_t>(base + 0x12));
-                    pushTag(static_cast<uint8_t>(base + 0x22));
-                    pushTag(static_cast<uint8_t>(base + 0x32));
-                    ++front;
-                    break;
-                }
-                case 2: {
-                    // Gated arm: one bit decides re-queue vs resolve-now.
-                    tags[front] = 0;
-                    ++front;
-                    const uint32_t gateBit = br.readBits(1);
-                    if (gateBit == 0) {
-                        pushTag(static_cast<uint8_t>(base + 3));
-                    } else {
-                        const uint32_t signBit = br.readBits(1);
-                        writeCoeff(category, (signBit & 1u) ? -1 : 1);
-                    }
-                    break;
-                }
-                case 3: {
-                    // Unconditional arm: always resolves, magnitude 1.
-                    tags[front] = 0;
-                    ++front;
-                    const uint32_t signBit = br.readBits(1);
-                    writeCoeff(category, (signBit & 1u) ? -1 : 1);
-                    break;
-                }
-                default:
-                    ++front;  // unreachable (sel is a 2-bit value, 0-3 exhaustive)
-                    break;
             }
-        }
-        return result;
-    }
-
-    // A > 1: genuine Phase-1 BFS (Sec5.3j Part 2), now Gate-A-gated on every
-    // node visit per Part 2's own prose ("read the NEXT node's own 1-bit
-    // 'is-leaf' flag ... before looping back to front's successor") -
-    // previously unmodeled, judged UNIVERSAL (not Phase-2-only) per
-    // Sec5.3w's own "for EVERY node visited in the main loop" phrasing and
-    // Part 2's identical wording for this exact loop.
-    uint32_t level = A;
-    uint32_t biasMask = (level >= 1) ? (1u << (level - 1)) : 0u;
-
-    // Mechanism 1 (Sec5.3j Part 3, bit-exact-confirmed live by Sec5.3ac for
-    // case 3's own terminal leaves and Gate B's own resolve-now branch):
-    // masked-magnitude + pre-mask sign snapshot, field width = the CURRENT
-    // outer `level` (confirmed to track the live level, not a fixed
-    // constant, by idx4's 3-bit-vs-idx3's-2-bit field-width difference).
-    auto resolveMechanism1 = [&](uint32_t cat) {
-        if (level == 0) return;
-        const uint32_t raw = br.readBits(static_cast<int>(level));
-        const uint32_t masked = (raw & (biasMask - 1u)) | biasMask;
-        int32_t value = static_cast<int32_t>(masked);
-        if (raw & biasMask) value = -value;  // sign from the pre-mask raw snapshot, Sec5.3j Part 3
-        writeCoeff(cat, value);
-    };
-
-    // Gate B's defer target: a SEPARATE, backward-growing list (Sec5.3ac),
-    // NOT this loop's own front/tail worklist - see top-of-file comment for
-    // why (the trace's own "front catches tail... before Phase 2 drains the
-    // deferred entries" sequencing). Merged into `tags`/`tail` only once
-    // Phase 1's own BFS fully completes, below.
-    std::array<uint8_t, kAcTreeWorklistCapacity> deferred{};
-    size_t deferredCount = 0;
-    auto pushDeferred = [&](uint8_t t) {
-        if (deferredCount < deferred.size()) {
-            deferred[deferredCount++] = t;
-        }
-    };
-
-    // Gate B (Sec5.3ac): 4 unrolled 1-bit copies, categories cat..cat+3 -
-    // reached from BOTH case 0 and case 2 (confirmed live by the address
-    // map: "Gate B's 4 unrolled copies (Phase 1, reached from case 0/case
-    // 2)"). Each copy: bit clear -> resolve NOW via mechanism 1; bit set ->
-    // defer (push a synthetic (cat+i)*4+3 ["case 3"-shaped] tag onto the
-    // side list above). `catI = cat + i` regardless of resolve-vs-defer -
-    // independently cross-checked against Sec5.3ac's own "cat increments
-    // once per copy regardless of resolve-vs-defer" finding (see top-of-
-    // file comment).
-    auto runGateB = [&](uint32_t cat) {
-        for (uint32_t i = 0; i < 4; ++i) {
-            const uint32_t gateB = br.readBits(1);
-            const uint32_t catI = cat + i;
-            if (gateB == 0) {
-                resolveMechanism1(catI);
-            } else {
-                pushDeferred(static_cast<uint8_t>(catI * 4u + 3u));
-            }
-        }
-    };
-
-    do {
-        while (front < tail) {
-            const uint32_t gateA = br.readBits(1);
-            if (gateA == 0) {
-                ++front;
-                continue;
-            }
-            const uint8_t tag = tags[front];
-            if (tag == 0) {
-                ++front;
+        };
+        size_t pos = start;
+        while (pos < end) {
+            const uint8_t tag = tags[pos];
+            if (tag == 0 || br.readBits(1) == 0) {  // dead entries cost no Gate A bit
+                ++pos;
                 continue;
             }
             const uint32_t sel = tag & 3u;
             const uint32_t category = static_cast<uint32_t>(tag >> 2);
             const uint32_t base = category * 4u;
-
             switch (sel) {
-                case 0: {
-                    // Rewrite own slot in place; do NOT advance front - the
-                    // same slot is Gate-A-checked again next iteration
-                    // (same shape as the A<=1 branch's own case 0, now
-                    // confirmed live for A>1 too by Sec5.3ac).
-                    tags[front] = static_cast<uint8_t>(base + 0x11);
-                    runGateB(category);
+                case 0:
+                    tags[pos] = static_cast<uint8_t>(base + 0x11);  // pos not advanced
+                    gateBChain(category);
                     break;
-                }
-                case 1: {
-                    // Node resolved in place (tag' = (tag>>2)*4+2) AND
-                    // THREE new children pushed - a 4-way split, zero bits.
-                    tags[front] = static_cast<uint8_t>(base + 2);
-                    pushTag(static_cast<uint8_t>(base + 0x12));
-                    pushTag(static_cast<uint8_t>(base + 0x22));
-                    pushTag(static_cast<uint8_t>(base + 0x32));
-                    ++front;
-                    break;
-                }
-                case 2: {
-                    // Sec5.3ac (2026-10-11 live update): case 2 falls into
-                    // Gate B's shared chain via its OWN distinct entry
-                    // address (0x100250b8, confirmed different from case
-                    // 0's 0x1002523d) - CONFIRMED LIVE (idx4 trace, sel=2
-                    // dispatched at bit 33, Gate B entered at bit 34) that
-                    // case 2, unlike case 0, DOES advance front before Gate
-                    // B. No longer a judgment call.
-                    tags[front] = static_cast<uint8_t>(base + 0x11);
-                    ++front;
-                    runGateB(category);
-                    break;
-                }
-                case 3: {
-                    // Case dispatch's OWN resolve write (0x1002546c) - a
-                    // single unconditional mechanism-1 resolve, confirmed
-                    // live by the idx3 trace's "three case-3 resolutions in
-                    // a row."
-                    tags[front] = 0;
-                    ++front;
-                    resolveMechanism1(category);
-                    break;
-                }
-                default:
-                    ++front;  // unreachable (sel is a 2-bit value, 0-3 exhaustive)
-                    break;
-            }
-        }
-        if (level == 0) break;
-        biasMask >>= 1;
-        --level;
-    } while (level > 1);
-
-    // Merge Gate B's deferred list into the SAME tags/tail worklist Phase 2
-    // below walks, as fresh sel==3-tagged nodes (Sec5.3ac: "Phase 2
-    // resolves them via its own sel==3 arm").
-    for (size_t i = 0; i < deferredCount; ++i) {
-        pushTag(deferred[i]);
-    }
-
-    // Phase 2 (Sec5.3j Part 2/Part 3) - unchanged in overall mechanics from
-    // the prior version of this file (NOT given its own Gate A - no golden
-    // trace to date exercises A>1's Phase 2, so this is left as the
-    // already-confirmed Part 3 mechanics rather than speculatively
-    // extended). See top-of-file comment for the (a)-(d) CHOSEN judgment
-    // calls this section relies on. Gated on the ORIGINAL level nibble `A`.
-    if (A != 0) {
-        size_t front2 = 0;  // starts at buffer index 0 (judgment call (a))
-        while (front2 < tail) {
-            const uint8_t tag2 = tags[front2];
-            if (tag2 == 0) {
-                ++front2;
-                continue;
-            }
-            const uint32_t sel2 = tag2 & 3u;
-            // Spec-CONFIRMED (Part 3, 0x1002556a / 0x10025716): the
-            // coefficient-array index Phase 2 writes to is `tag>>2`
-            // directly, now routed through the Sec5.3w category->raster-k
-            // permutation (judgment call, see top-of-file comment).
-            const uint32_t category = static_cast<uint32_t>(tag2 >> 2);
-            const uint32_t base2 = category * 4u;
-
-            switch (sel2) {
-                case 0: {
-                    // Judgment call (c): undocumented arm, treated as a pure
-                    // pass-through.
-                    tags[front2] = 0;
-                    ++front2;
-                    break;
-                }
-                case 1: {
-                    // Spec-CONFIRMED (Part 3, 0x10025522-0x1002555f): pure
-                    // structural requeue, NO sign recovery - retag in place
-                    // to a sel==2 shape, push 3 more sel==2-tagged children.
-                    // Judgment call (d): front2 does NOT advance here - the
-                    // same slot is re-dispatched next iteration under its
-                    // freshly-written sel==2 tag.
-                    tags[front2] = static_cast<uint8_t>(base2 + 2);
-                    pushTag(static_cast<uint8_t>(base2 + 0x12));
-                    pushTag(static_cast<uint8_t>(base2 + 0x22));
-                    pushTag(static_cast<uint8_t>(base2 + 0x32));
-                    break;
-                }
-                case 2: {
-                    // Spec-CONFIRMED (Part 3, 0x1002556a-0x10025637): mark
-                    // the slot consumed immediately, THEN read one
-                    // categorization bit. Bit clear -> defer further via a
-                    // fresh sel==3-tagged ("+3") node, no value yet. Bit set
-                    // -> read one more bit as the sign and resolve now via
-                    // mechanism 2 (magnitude always exactly 1).
-                    tags[front2] = 0;
-                    ++front2;
-                    const uint32_t gateBit = br.readBits(1);
-                    if (gateBit == 0) {
-                        pushTag(static_cast<uint8_t>(base2 + 3));
-                    } else {
-                        const uint32_t signBit = br.readBits(1);
-                        writeCoeff(category, (signBit & 1u) ? -1 : 1);  // mechanism 2: "and esi,1; neg esi; or esi,1"
+                case 1:
+                    tags[pos] = static_cast<uint8_t>(base + 2);  // pos NOT advanced: re-gated as sel 2 (measured, Sec5.3ac idx4)
+                    if (end + 3 <= kCap) {
+                        tags[end++] = static_cast<uint8_t>(base + 0x12);
+                        tags[end++] = static_cast<uint8_t>(base + 0x22);
+                        tags[end++] = static_cast<uint8_t>(base + 0x32);
                     }
+                    
                     break;
-                }
-                case 3: {
-                    // Spec-CONFIRMED (Part 3, 0x10025716-0x1002575c):
-                    // unconditional mechanism 2 - no gating bit, always read
-                    // one bit as the sign, magnitude always exactly 1.
-                    tags[front2] = 0;
-                    ++front2;
-                    const uint32_t signBit = br.readBits(1);
-                    writeCoeff(category, (signBit & 1u) ? -1 : 1);
+                case 2:
+                    tags[pos] = 0;
+                    ++pos;
+                    gateBChain(category);
                     break;
-                }
-                default:
-                    ++front2;  // unreachable (sel is a 2-bit value, 0-3 exhaustive)
+                default:  // 3
+                    tags[pos] = 0;
+                    ++pos;
+                    resolve(category);
                     break;
             }
         }
     }
-
     return result;
 }
 

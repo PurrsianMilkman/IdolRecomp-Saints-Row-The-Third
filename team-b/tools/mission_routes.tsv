@@ -1,0 +1,1015 @@
+dlc2_m01	1	wait-cutscene-or-phone	cutscene_play(dlc2_gis_intro)	engine-driven (blocking helper)
+dlc2_m01	3	enter-vehicle		on_vehicle_enter->dlc2_m01_entered_courtesy_vehicle_cb
+dlc2_m01	4	drive-to	tgr_armory_parking_spot	on_trigger->dlc2_m01_armory_parking_triggered_cb; cb checks vehicle
+dlc2_m01	5	go-to-trigger	tgr_heli_pad_volume	on_trigger->dlc2_m01_heli_pad_triggered_cb
+dlc2_m01	6	go-to-trigger	tgr_rescue_kwilanna	on_trigger->dlc2_m01_resuce_kwilanna_cb
+dlc2_m01	7	wait-flag	Dlc2_m01_conversations.untie_kwilanna_take1	set by script
+dlc2_m01	8	wait-flag	Dlc2_m01_conversations.armory_take1_wrap	set by script
+dlc2_m01	10	wait-flag	Dlc2_m01_dialog_lines.armory_take2_action	set by script
+dlc2_m01	11	go-to-trigger	tgr_heli_pad_volume	on_trigger->dlc2_m01_heli_pad_triggered_cb
+dlc2_m01	12	go-to-trigger	tgr_rescue_kwilanna	on_trigger->dlc2_m01_resuce_kwilanna_cb
+dlc2_m01	13	wait-flag	Dlc2_m01_conversations.player_heli_downed	set by script
+dlc2_m01	14	wait-flag	Dlc2_m01_conversations.director_cut_good	set by script
+dlc2_m01	15	wait-thread	dlc2_m01_keep_players_in_crash_area_thread	thread started at dlc2_m01_process_armory_take2_wrap:2765
+dlc2_m01	16	timed-wait	delay(12.0)	12.0 s of game time, no player action
+dlc2_m01	17	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	18	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	19	wait-flag	(true)	set by script
+dlc2_m01	20	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	21	engine-wait	group_create_check_done()	engine/native predicate
+dlc2_m01	22	engine-wait	group_create_check_done()	engine/native predicate
+dlc2_m01	23	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	24	wait-flag	Dlc2_m01_conversations.jump_setup	set by script
+dlc2_m01	25	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	26	engine-wait	vehicle_in_water()	engine/native predicate
+dlc2_m01	27	wait-flag	Dlc2_m01_conversations.jump_fail	set by script
+dlc2_m01	29	timed-wait	delay(5.0)	5.0 s of game time, no player action
+dlc2_m01	30	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	31	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc2_m01	32	wait-flag	Dlc2_m01_dialog_lines.mission_end	set by script
+dlc2_m01	33	wait-flag	Dlc2_m01_dialog_lines.mission_end_02	set by script
+dlc2_m02	2	go-to-trigger	Dlc2_m02_backstage_data[ 1 ].enter_trigger	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	5	go-to-trigger	trg_loadout_1	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	8	go-to-trigger	trg_backstage_exit_1	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	13	go-to-trigger	nav_machine_1	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	14	go-to-navpoint	nav_machine_1	dist >15
+dlc2_m02	17	go-to-trigger	nav_machine_1	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	18	go-to-navpoint	npc_alien_homie -> nav_machine_1	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	21	go-to-trigger	nav_machine_1	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	22	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	23	go-to-trigger	nav_machine_1	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	24	go-to-navpoint	npc_alien_homie -> nav_machine_1	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	27	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	30	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	33	go-to-trigger	Dlc2_m02_triggers.machine_2	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	34	go-to-navpoint	Dlc2_m02_triggers.machine_2	dist >15
+dlc2_m02	37	go-to-trigger	Dlc2_m02_triggers.machine_2	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	38	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_2	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	41	go-to-trigger	Dlc2_m02_triggers.machine_2	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	42	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	43	go-to-trigger	Dlc2_m02_triggers.machine_2	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	44	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_2	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	47	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	50	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	53	go-to-trigger	trg_backstage_enter_2	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	56	go-to-trigger	trg_loadout_2	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	59	go-to-trigger	trg_backstage_exit_2	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	66	go-to-trigger	trg_backstage_exit_2	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	71	go-to-trigger	nav_machine_3	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	72	go-to-navpoint	nav_machine_3	dist >15
+dlc2_m02	75	go-to-trigger	nav_machine_3	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	76	go-to-navpoint	npc_alien_homie -> nav_machine_3	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	79	go-to-trigger	nav_machine_3	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	80	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	81	go-to-trigger	nav_machine_3	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	82	go-to-navpoint	npc_alien_homie -> nav_machine_3	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	85	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	88	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	91	go-to-trigger	Dlc2_m02_triggers.machine_4a	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	92	go-to-navpoint	Dlc2_m02_triggers.machine_4a	dist >15
+dlc2_m02	95	go-to-trigger	Dlc2_m02_triggers.machine_4a	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	96	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_4a	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	99	go-to-trigger	Dlc2_m02_triggers.machine_4a	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	100	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	101	go-to-trigger	Dlc2_m02_triggers.machine_4a	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	102	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_4a	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	105	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	108	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	111	go-to-trigger	Dlc2_m02_triggers.machine_4b	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	112	go-to-navpoint	Dlc2_m02_triggers.machine_4b	dist >15
+dlc2_m02	115	go-to-trigger	Dlc2_m02_triggers.machine_4b	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	116	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_4b	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	119	go-to-trigger	Dlc2_m02_triggers.machine_4b	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	120	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	121	go-to-trigger	Dlc2_m02_triggers.machine_4b	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	122	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_4b	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	125	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	128	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	131	go-to-trigger	Dlc2_m02_triggers.machine_4c	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	132	go-to-navpoint	Dlc2_m02_triggers.machine_4c	dist >15
+dlc2_m02	135	go-to-trigger	Dlc2_m02_triggers.machine_4c	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	136	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_4c	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	139	go-to-trigger	Dlc2_m02_triggers.machine_4c	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	140	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	141	go-to-trigger	Dlc2_m02_triggers.machine_4c	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	142	go-to-navpoint	npc_alien_homie -> Dlc2_m02_triggers.machine_4c	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	145	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	148	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	151	go-to-trigger	nav_machine_4	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	152	go-to-navpoint	nav_machine_4	dist >15
+dlc2_m02	155	go-to-trigger	nav_machine_4	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	156	go-to-navpoint	npc_alien_homie -> nav_machine_4	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	159	go-to-trigger	nav_machine_4	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	160	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	161	go-to-trigger	nav_machine_4	on_trigger->dlc2_m02_on_trigger_machine
+dlc2_m02	162	go-to-navpoint	npc_alien_homie -> nav_machine_4	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	165	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	168	wait-flag	Dlc2_m02_status.explosion_timer_complete	set in dlc2_m02_machine_exploding_countdown
+dlc2_m02	171	go-to-trigger	trg_room4_escape	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	174	go-to-trigger	trg_backstage_enter_3	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	177	go-to-trigger	trg_loadout_3	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	180	go-to-trigger	trg_backstage_exit_3	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	185	go-to-trigger	trg_hanger_start_saucer_camera	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	192	go-to-trigger	trg_saucer	on_trigger->dlc2_m02_saucer_approach
+dlc2_m02	195	go-to-navpoint	npc_brutina -> nav_brutina_mark_1	dist >1; mover=npc/vehicle npc_brutina
+dlc2_m02	198	kill-target	npc_brutina	kill
+dlc2_m02	201	go-to-trigger	trg_machine_approach_gen	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	202	go-to-trigger	trg_machine_approach_gen	object_is_in_trigger(LOCAL_PLAYER)
+dlc2_m02	205	go-to-navpoint	npc_alien_homie -> nav_generator	dist >3; mover=npc/vehicle npc_alien_homie
+dlc2_m02	206	timed-wait	delay(5.25)	5.25 s of game time, no player action
+dlc2_m02	211	wait-flag	current_hit_points	set in dlc2_m02_player_destroy_machine, dlc2_m02_homie_destroy_machine, dlc2_m02_obj_sh
+dlc2_m02	214	engine-wait	character_is_ragdolled()	engine/native predicate
+dlc2_m02	215	go-to-navpoint	npc_alien_homie	dist >2
+dlc2_m02	218	go-to-trigger	trg_saucer	on_trigger->dlc2_m02_saucer_approach
+dlc2_m02	219	exit-vehicle	veh_saucer	player must be ON FOOT
+dlc2_m02	220	timed-wait	delay(5)	5 s of game time, no player action
+dlc3_m01	1	wait-cutscene-or-phone	cutscene_play(dlc3_mm_in)	engine-driven (blocking helper)
+dlc3_m01	3	go-to-trigger	friendly_fire_north_trigger	trigger table DLC3_M01_trigger.friendly_fire_north cb dlc3_m01_search_location_cb
+dlc3_m01	4	go-to-trigger	friendly_fire_trigger	trigger table DLC3_M01_trigger.friendly_fire cb dlc3_m01_search_location_cb
+dlc3_m01	5	timed-wait	delay(8.0)	8.0 s of game time, no player action
+dlc3_m01	8	wait-flag	hostage_taken	set in dlc3_m01_interrogate_owner_taunt_thread, dlc3_m01_interrogate_target
+dlc3_m01	13	go-to-trigger	strip_club_trigger	trigger table DLC3_M01_trigger.strip_club
+dlc3_m01	15	wait-thread	dlc3_m01_interrogate_owner_taunt_thread	thread started at dlc3_m01_interrogate_owner:1782
+dlc3_m01	20	wait-flag	DLC3_M01_Strip_Club.players_outside[LOCAL_PLAYER] / DLC3_M01_Strip_Club.players_outside[RE	set by script
+dlc3_m01	22	wait-flag	players_in_vehicle	set in dlc3_m01_vehicle_rail_start
+dlc3_m01	23	wait-flag	num_objs_alive	set in dlc3_m01_kill_list_wait_for_complete
+dlc3_m01	24	wait-flag	path_success	set in dlc3_m01_vehicle_rail_start
+dlc3_m01	25	wait-cutscene-or-phone	thread_check_done	engine-driven
+dlc3_m02	2	enter-vehicle	start_truck	needs vehicle
+dlc3_m02	3	go-to-navpoint	car_trigger_ps02	dist >120; mover=npc/vehicle car_trigger_ps02
+dlc3_m02	4	wait-cutscene-or-phone	group_is_loaded	engine-driven
+dlc3_m02	5	go-to-trigger	car_trigger_ps02	object_is_in_trigger(LOCAL_PLAYER)
+dlc3_m02	6	wait-cutscene-or-phone	group_is_loaded	engine-driven
+dlc3_m02	7	go-to-navpoint	-> nav_pierce_sing02	dist >2; mover=npc/vehicle
+dlc3_m02	9	timed-wait	delay(8.0)	8.0 s of game time, no player action
+dlc3_m02	10	timed-wait	delay(5.0)	5.0 s of game time, no player action
+dlc3_m02	11	wait-flag	DLC3_M02_PROGRESS	set in dlc3_m02_kill_guards_at_ps_02, dlc3_m02_kill_guards_at_ps_01
+dlc3_m02	12	wait-flag	npcs_alive	set in dlc3_m02_kill_list_wait_for_complete
+dlc3_m02	13	enter-vehicle	start_truck	needs vehicle
+dlc3_m02	14	go-to-navpoint	car_trigger_ps01	dist >120; mover=npc/vehicle car_trigger_ps01
+dlc3_m02	15	wait-cutscene-or-phone	group_is_loaded	engine-driven
+dlc3_m02	16	go-to-navpoint	tagNav02	dist >80; mover=npc/vehicle tagNav02
+dlc3_m02	17	go-to-trigger	car_trigger_ps01	object_is_in_trigger(LOCAL_PLAYER)
+dlc3_m02	18	go-to-navpoint	car_trigger_ps01	dist >120; mover=npc/vehicle car_trigger_ps01
+dlc3_m02	19	wait-cutscene-or-phone	group_is_loaded	engine-driven
+dlc3_m02	20	go-to-navpoint	tagNav02	dist >80; mover=npc/vehicle tagNav02
+dlc3_m02	21	go-to-trigger	car_trigger_ps01	object_is_in_trigger(LOCAL_PLAYER)
+dlc3_m02	22	wait-cutscene-or-phone	group_is_loaded	engine-driven
+dlc3_m02	24	go-to-navpoint	-> nav_pierce_sing01	dist >2; mover=npc/vehicle
+dlc3_m02	26	timed-wait	delay(5.0)	5.0 s of game time, no player action
+dlc3_m02	27	wait-flag	DLC3_M02_PROGRESS	set in dlc3_m02_kill_guards_at_ps_02, dlc3_m02_kill_guards_at_ps_01
+dlc3_m02	29	wait-flag	dlc3_m02_tag_downed	set in dlc3_m02_initialize_checkpoint, dlc3_m02_tag_run_away
+dlc3_m02	31	kill-target	heli_table [*]	on_vehicle_destroyed->dlc3_m02_heli_dead_cb
+dlc3_m02	32	enter-vehicle	start_truck	needs vehicle
+dlc3_m02	33	wait-cutscene-or-phone	group_is_loaded	engine-driven
+dlc3_m02	34	timed-wait	delay(5.0)	5.0 s of game time, no player action
+dlc3_m02	35	go-to-trigger	car_trigger_pwdr	object_is_in_trigger(LOCAL_PLAYER)
+dlc3_m02	37	kill-target	ms_attacker01|ms_attacker02|ms_attacker03|ms_attacker04|ms_attacker05	on_death->dlc3_m02_mstar_attacker_dead_cb
+dlc3_m02	38	wait-thread	dlc3_m02_tag_run_away	thread started at dlc3_m02_kill_guards_at_ps_02:1713
+dlc3_m02	40	wait-thread	dlc3_m02_thread_powder_tag_behavior	thread started at dlc3_m02_powder_defend_tag:2051
+dlc3_m02	41	wait-flag	Dlc3_m02_tag_calmed	set in dlc3_m02_thread_powder_calm_tag
+dlc3_m02	44	go-to-navpoint	brutella_truck -> brute_veh_dest	dist >10; mover=npc/vehicle brutella_truck
+dlc3_m02	46	go-to-navpoint	brutella -> brute_dest01	dist >3; mover=npc/vehicle brutella
+dlc3_m02	47	go-to-navpoint	cte_tag -> brute_dest	dist >3; mover=npc/vehicle cte_tag
+dlc3_m02	49	engine-wait	audio_any_conversation_playing()	engine/native predicate
+dlc3_m03	2	engine-wait	ai_scripted_action_is_processing()	engine/native predicate
+dlc3_m03	4	wait-cutscene-or-phone	fade_in_block()	engine-driven (blocking helper)
+dlc3_m03	8	go-to-trigger	Shaundis_ex_battle_start	trigger table DLC3_M03_trigger.shaundis_ex_battle_start
+dlc3_m03	9	go-to-trigger	Shaundis_ex_location	trigger table DLC3_M03_trigger.goto_shaundis_ex
+dlc3_m03	11	kill-target	Apt_ng_veh_1|Apt_ng_veh_2|Apt_ng_veh_3|Apt_ng_veh_4	on_damage->dlc3_m03_shaundis_ex_vehicle_preemtive_attack_cb; damage, not necessarily kill
+dlc3_m03	12	wait-flag	npcs_alive	set in dlc3_m03_kill_list_wait_for_complete
+dlc3_m03	14	go-to-trigger	Planet_saints_location	trigger table DLC3_M03_trigger.goto_planet_saints
+dlc3_m03	16	timed-wait	delay(10.0)	10.0 s of game time, no player action
+dlc3_m03	17	kill-target	{ps_mstar_1_veh|ps_mstar_2_veh|ps_mstar_3_veh}|{ps_mstar_4_veh|ps_mstar_5_veh|ps_mst	on_damage->dlc3_m03_planet_saints_preemtive_attack_cb; damage, not necessarily kill
+dlc3_m03	18	timed-wait	delay(10.0)	10.0 s of game time, no player action
+dlc3_m03	19	wait-flag	npcs_alive	set in dlc3_m03_kill_list_wait_for_complete
+dlc3_m03	21	timed-wait	delay(20.0)	20.0 s of game time, no player action
+dlc3_m03	24	go-to-trigger	Bridge_battle_start	trigger table DLC3_M03_trigger.bridge_battle_start
+dlc3_m03	26	engine-wait	teleport_check_done()	engine/native predicate
+dlc3_m03	27	engine-wait	teleport_check_done()	engine/native predicate
+dlc3_m03	28	engine-wait	teleport_check_done()	engine/native predicate
+dlc3_m03	29	engine-wait	teleport_check_done()	engine/native predicate
+dlc3_m03	30	wait-cutscene-or-phone	character_is_ready	engine-driven
+dlc3_m03	32	timed-wait	delay(5.5)	5.5 s of game time, no player action
+dlc3_m03	35	wait-flag	npcs_alive	set in dlc3_m03_kill_list_wait_for_complete
+dlc3_m03	39	go-to-trigger	Heli_pickup_location	trigger table DLC3_M03_trigger.goto_heli_rail
+dlc3_m03	41	wait-flag	done	set in dlc3_m03_do_rail
+m03	1	wait-cutscene-or-phone	cutscene_play(nil)	engine-driven (blocking helper)
+m03	2	go-to-navpoint	Nav CP Start Local	dist <10
+m03	4	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m03	5	wait-cutscene-or-phone	phone call m03_phillipe_call	cellphone cb2 (ended)
+m03	6	enter-vehicle		needs vehicle
+m03	7	drive-to	Trigger Weapon Store2	trigger table M03_trigger.weapon_store2; follows enter-vehicle
+m03	8	engine-wait	store_interface_is_active()	engine/native predicate
+m03	9	go-to-trigger	Trigger Armory Entrance	trigger table M03_trigger.armory_entrance
+m03	10	wait-flag	completed_takeover	set in m03_go_to_armory
+m03	11	go-to-trigger	Trigger Weapons Cache	trigger table M03_trigger.weapons_cache
+m03	12	timed-wait	delay(6.0)	6.0 s of game time, no player action
+m03	13	timed-wait	delay(60.0)	60.0 s of game time, no player action
+m03	16	wait-cutscene-or-phone	cutscene_play(03_Z01)	engine-driven (blocking helper)
+m03	18	go-to-trigger	Trigger Satellite Weapon	trigger table M03_trigger.satellite_weapon
+m03	19	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m03	20	wait-cutscene-or-phone	thread_check_done	engine-driven
+m03	21	kill-target	M03_tank_attack1|M03_tank_attack2|M03_tank_attack3	kill
+m03	22	engine-wait	Veh Chopper Bomb	waits for NOT dead/destroyed (no player action)
+m03	23	engine-wait	Veh Chopper Pierce Normal	waits for NOT dead/destroyed (no player action)
+m03	24	engine-wait	Veh Chopper Backup	waits for NOT dead/destroyed (no player action)
+m03	25	go-to-navpoint	Veh Chopper Pierce Normal -> Nav Heli Landing Pos	dist <5; mover=npc/vehicle Veh Chopper Pierce Normal
+m03	26	go-to-trigger	Enter_Heli_trigger	trigger table M03_trigger.enter_heli
+m03	28	exit-vehicle		player must be ON FOOT
+m03	29	exit-vehicle		player must be ON FOOT
+m03	30	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m03	31	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m03	32	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m03	33	go-to-navpoint	Veh Chopper Bomb -> Nav Shaundi House	dist <25; mover=npc/vehicle Veh Chopper Bomb
+m03	34	go-to-navpoint	Veh Chopper Bomb -> Nav Shaundi House	dist <20; mover=npc/vehicle Veh Chopper Bomb
+m03	35	timed-wait	delay(5)	5 s of game time, no player action
+m04	1	wait-cutscene-or-phone	cutscene_play(m04_cte_01)	engine-driven (blocking helper)
+m04	6	engine-wait	store_interface_is_active()	engine/native predicate
+m04	8	enter-vehicle		needs vehicle
+m04	10	timed-wait	delay(7.0)	7.0 s of game time, no player action
+m04	11	wait-flag	Clothes_Store_Reached	set in m04_reached_clothes2
+m04	12	interact		on_purchase->m04_clothes_purchase_cb
+m04	13	engine-wait	store_interface_is_active()	engine/native predicate
+m04	14	kill-target	Morningstar Brute	on_death->m04_enemy_killed
+m04	15	go-to-trigger	Notoriety_Trigger 001	on_trigger->m04_reached_notoriety
+m04	16	wait-flag	Safehouse_Reached	set in m04_reached_safehouse2
+m05	1	wait-cutscene-or-phone	cutscene_play(05_IN)	engine-driven (blocking helper)
+m05	3	wait-flag	M05_jumped	set in m05_jump_local, m05_jump_remote
+m05	4	go-to-trigger	m05_trigger_land	on_trigger->m05_land_trigger_reached
+m05	5	wait-cutscene-or-phone	phone call M05_Landed	cellphone cb2 (ended)
+m05	6	wait-flag	hostage_taken	set in m05_interrogate
+m05	8	engine-wait	character_has_specific_human_shield()	engine/native predicate
+m05	9	go-to-trigger	m05_trigger_downstairs	on_trigger->m05_trigger_reached
+m05	10	go-to-trigger	m05_trigger_grenades	on_trigger->m05_trigger_reached
+m05	11	go-to-trigger	m05_trigger_barricade	on_trigger->m05_barricade_triggered
+m05	12	go-to-trigger	m05_trigger_saints	on_trigger->m05_trigger_reached
+m05	13	timed-wait	delay(15)	15 s of game time, no player action
+m05	16	wait-flag	num_targets	set in m05_clear_penthouse
+m05	17	wait-thread	m05_elevator_spawn_thread	thread started at m05_clear_penthouse:1410
+m05	19	go-to-trigger	m05_trigger_chase	on_trigger->m05_trigger_reached
+m05	20	go-to-navpoint	m05_heli_chase_host -> m05_nav_hover_host	dist >10; mover=npc/vehicle m05_heli_chase_host
+m05	21	timed-wait	delay(25)	25 s of game time, no player action
+m05	22	wait-thread	m05_chase_thread	thread started at m05_chase_heli:1617
+m05	23	go-to-trigger	m05_trigger_chase_end	on_trigger->m05_trigger_reached
+m05	24	wait-flag	hostage_taken	set in m05_interrogate
+m05	26	kill-target	m05_target_chase_host	kill
+m05	27	wait-cutscene-or-phone	phone call M05_Tell_Shaundi_Color	cellphone cb2 (ended)
+m05	0	hazard	m05_trigger_kill	
+m05	0	hazard	m05_trigger_left	
+m05	0	hazard	m05_trigger_lt_kill	
+m06	1	wait-cutscene-or-phone	cutscene_play(06_in)	engine-driven (blocking helper)
+m06	3	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m06	4	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m06	6	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m06	7	go-to-trigger	Dock_trigger	trigger table M06_trigger.dock
+m06	8	go-to-trigger	notice_snipers	trigger table M06_trigger.notice_snipers
+m06	9	kill-target	Dock_sniper 001|Dock_thug 007|Dock_thug 008|Dock_thug 009|Dock_thug 011|Dock_thug 00	on_death->m06_dock_goon_dead_cb
+m06	10	kill-target	Dock_sniper 001|Dock_thug 007|Dock_thug 008|Dock_thug 009|Dock_thug 011|Dock_thug 00	on_death->m06_dock_goon_dead_cb
+m06	11	kill-target	Dock_thug 002|Dock_thug 001|Dock_thug 018	on_death->m06_dock_goon_dead_cb
+m06	12	kill-target	Dock_sniper 003|Dock_thug 003|Dock_thug 004|Dock_thug 006	on_death->m06_dock_goon_dead_cb
+m06	13	kill-target	Dock_thug 013|Dock_thug 015|Dock_thug 017	on_death->m06_dock_goon_dead_cb
+m06	14	go-to-trigger	bomb_trigger	trigger table M06_trigger.arm_bomb
+m06	15	go-to-trigger	factory_breadcrumb_003	on_trigger->m06_factory_breadcrumb3_cb
+m06	16	wait-flag	M06_group.factory_brute.brute_killed	set in m06_brute_killed_cb
+m06	17	go-to-trigger	Oleg_trigger	trigger table M06_trigger.oleg_cutscene
+m06	18	wait-cutscene-or-phone	cutscene_play(06_Mid)	engine-driven (blocking helper)
+m06	19	go-to-trigger	factory_breadcrumb_003	on_trigger->m06_factory_breadcrumb3_cb
+m06	20	engine-wait	vehicle_enable_physics()	engine/native predicate
+m06	21	go-to-trigger	At_stairs_trigger 001	trigger table M06_trigger.stairs1
+m06	22	go-to-trigger	At_office_trigger	trigger table M06_trigger.office
+m06	23	go-to-trigger	Phillipe_trigger	trigger table M06_trigger.phillipe
+m06	24	wait-cutscene-or-phone	cutscene_play(06_Z01)	engine-driven (blocking helper)
+m06	25	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m06	26	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m06	27	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m06	28	timed-wait	delay(10.5)	10.5 s of game time, no player action
+m06	29	engine-wait	vehicle_enable_physics()	engine/native predicate
+m06	31	timed-wait	delay(6.0)	6.0 s of game time, no player action
+m06	32	engine-wait	vehicle_enable_physics()	engine/native predicate
+m06	34	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m06	35	terminal	(endless loop)	never exits; mission ends via failure/death callback
+m06	36	wait-cutscene-or-phone	cutscene_play(06_Z_ballsmash)	engine-driven (blocking helper)
+m06	38	go-to-trigger	bomb_disarm	on_trigger->m06_choice_disarm_cb
+m08	1	wait-cutscene-or-phone	cutscene_play(08_in)	engine-driven (blocking helper)
+m08	3	timed-wait	delay(60)	60 s of game time, no player action
+m08	6	engine-wait	human_is_downed()	engine/native predicate
+m08	7	timed-wait	delay(5)	5 s of game time, no player action
+m08	11	kill-target	sniper	on_death->m08_sniper_died_cb
+m08	12	go-to-trigger	Trigger Rooftop	on_trigger->m08_trigger_reached
+m08	13	kill-target	sniper	on_death->m08_sniper_died_cb
+m08	15	go-to-trigger	Trigger Circuit Breaker	on_trigger->m08_power_trigger_activated
+m08	16	wait-cutscene-or-phone	phone call m08_convo_5	cellphone cb2 (ended)
+m08	17	kill-target	sniper	on_death->m08_sniper_died_cb
+m08	18	kill-target	sniper	on_death->m08_sniper_died_cb
+m08	0	hazard	Trigger Massacre	
+m09	1	wait-cutscene-or-phone	cutscene_play(09_in)	engine-driven (blocking helper)
+m09	3	wait-flag	M09_local_on_boat / M09_remote_on_boat	set by script
+m09	4	wait-flag	crate_set / M09_found_girl_crates / num_girl_crates	set by script
+m09	7	go-to-trigger	North_vantage_point_trigger	trigger table M09_trigger.north_vantage cb m09_north_vantage_cb
+m09	8	wait-flag	waves_done	set by script
+m09	9	wait-flag	M09_enemies_on_the_boat	set by script
+m09	10	go-to-trigger	heli_entrance_trigger	trigger table M09_trigger.heli_entrance cb m09_heli_entrance_trigger_cb
+m09	17	go-to-trigger	to_saints_trigger	trigger table M09_trigger.to_saints_trigger cb m09_set_trigger_hit_cb
+m09	18	wait-flag	m09_player_in_truck()	script predicate
+m10	1	wait-cutscene-or-phone	cutscene_play(10_in)	engine-driven (blocking helper)
+m10	4	go-to-trigger	tgr_club_door 001	on_trigger->m10_player_reached_objective_cb
+m10	5	go-to-trigger	tgr_front_door 001	on_trigger->m10_player_reached_objective_cb
+m10	6	go-to-trigger	tgr_front_door 001	on_trigger->m10_player_reached_objective_cb
+m10	7	wait-cutscene-or-phone	cutscene_play(10_Mid)	engine-driven (blocking helper)
+m10	8	wait-cutscene-or-phone	thread_check_done	engine-driven
+m10	10	engine-wait	ai_scripted_action_is_complete()	engine/native predicate
+m10	11	wait-cutscene-or-phone	vehicle_pathfind_check_done	engine-driven
+m10	12	wait-thread	m10_vtol_transport_drop_off_thread	thread started at m10_run_rooftop_intro:1627
+m10	13	wait-thread	m10_vtol_transport_drop_off_thread	thread started at m10_run_rooftop_intro:1627
+m10	14	kill-target	Group_stag_transport 002	on_death->m10_stag_transport_soldier_killed_cb
+m10	15	kill-target	Group_stag_transpot 002b	on_death->m10_stag_transport_soldier_killed_cb
+m10	17	kill-target	Group_stag_transpot 002b	on_death->m10_stag_transport_soldier_killed_cb
+m10	18	wait-cutscene-or-phone	vehicle_pathfind_check_done	engine-driven
+m10	19	wait-thread	m10_vtol_transport_drop_off_thread	thread started at m10_run_rooftop_intro:1627
+m10	20	wait-thread	m10_vtol_transport_drop_off_thread	thread started at m10_run_rooftop_intro:1627
+m10	21	wait-flag	total_soldiers	set in m10_run_vtol_transports_01, m10_run_rooftop_attack_vtols, m10_solider_count_thre
+m10	22	wait-flag	total_soldiers	set in m10_run_vtol_transports_01, m10_run_rooftop_attack_vtols, m10_solider_count_thre
+m10	24	timed-wait	delay(7.0)	7.0 s of game time, no player action
+m10	25	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m10	26	wait-flag	M10_runtime.roof_attack_vtols_active	set in m10_setup_stag_attack_vtol
+m10	27	wait-thread	m10_solider_count_thread	thread started at m10_run_rooftop_attack_vtols:2031
+m10	29	engine-wait	ai_scripted_action_is_processing()	engine/native predicate
+m10	30	wait-flag	break_loop	set in m10_run_oleg_gets_downed
+m10	31	wait-flag	char_oleg 001	on_revived->m10_oleg_revived_cb
+m10	32	engine-wait	ai_scripted_action_is_complete()	engine/native predicate
+m10	33	engine-wait	ai_scripted_action_is_processing()	engine/native predicate
+m10	34	wait-flag	success	set in m10_run_oleg_jump_on_vtol
+m10	35	wait-flag	elapsed_time	set in m10_process_oleg_vtol_panic_thread
+m10	36	engine-wait	vehicle_anim_finished()	engine/native predicate
+m10	37	go-to-trigger	tgr_rooftop_elevator 001	on_trigger->m10_player_reached_objective_cb
+m10	40	go-to-trigger	tgr_front_door 001	on_trigger->m10_player_reached_objective_cb
+m10	41	go-to-trigger	tgr_club_exit 001	on_trigger->m10_player_reached_objective_cb
+m10	42	go-to-trigger	tgr_saints_hq 001	on_trigger->m10_player_reached_objective_cb
+m10	0	hazard	tgr_roof_kill_region 001	
+m10	0	hazard	vtol_table.rooftop_trigger	
+m13	1	wait-cutscene-or-phone	cutscene_play(13_in)	engine-driven (blocking helper)
+m13	3	go-to-trigger	trigger_pr_center_front	on_trigger->m13_trigger_cback
+m13	4	wait-cutscene-or-phone	phone call M13_Banners	cellphone cb2 (ended)
+m13	5	kill-target	mover_mission_accomplished 001|mover_mission_accomplished 002	on_take_damage->m13_banner_damaged; damage, not necessarily kill
+m13	6	kill-target	mover_mission_accomplished 001|mover_mission_accomplished 002	on_mover_destroyed->m13_banner_destroyed
+m13	7	kill-target	mover_mission_accomplished 001|mover_mission_accomplished 002	on_mover_destroyed->m13_banner_destroyed
+m13	8	wait-cutscene-or-phone	phone call {M13_Return_To_Crib}.name.name	cellphone cb2 (ended)
+m13	9	wait-cutscene-or-phone	phone call {M13_Return_To_Crib}.name	cellphone cb2 (ended)
+m13	11	go-to-trigger	trigger_saints_hq_front	on_trigger->m13_trigger_cback
+m13	12	go-to-trigger	trigger_elevator_proximity	on_trigger->m13_trigger_cback
+m13	15	wait-cutscene-or-phone	phone call M13_Wave_One_Start	cellphone cb2 (ended)
+m13	16	wait-thread	m13_wave_thread	thread started at m13_start_wave:3450
+m13	17	wait-cutscene-or-phone	phone call M13_Use_Car_Bombs_01	cellphone cb2 (ended)
+m13	18	wait-cutscene-or-phone	phone call M13_Use_Car_Bombs_02	cellphone cb2 (ended)
+m13	19	wait-flag	north_side	set in m13_scene_1
+m13	20	timed-wait	delay(30.0)	30.0 s of game time, no player action
+m13	21	wait-flag	wave.thread	set in m13_start_wave
+m13	22	wait-cutscene-or-phone	phone call M13_Focus_On_South_Side	cellphone cb2 (ended)
+m13	23	wait-thread	m13_wave_thread	thread started at m13_start_wave:3450
+m13	24	wait-cutscene-or-phone	phone call M13_Use_Car_Bombs_01	cellphone cb2 (ended)
+m13	25	wait-cutscene-or-phone	phone call M13_Use_Car_Bombs_02	cellphone cb2 (ended)
+m13	26	wait-flag	north_side	set in m13_scene_1
+m13	27	timed-wait	delay(15.0)	15.0 s of game time, no player action
+m13	28	wait-cutscene-or-phone	phone call M13_Snipers_On_South_01	cellphone cb2 (ended)
+m13	29	wait-flag	wave.thread	set in m13_start_wave
+m13	30	wait-cutscene-or-phone	phone call M13_Tank_On_North_01	cellphone cb2 (ended)
+m13	31	wait-flag	wave.thread	set in m13_start_wave
+m13	32	wait-cutscene-or-phone	vehicle_pathfind_check_done	engine-driven
+m13	33	wait-cutscene-or-phone	phone call M13_Elevator	cellphone cb2 (ended)
+m13	34	go-to-trigger	trigger_elevator_to_ground	on_trigger->m13_trigger_cback
+m13	37	wait-cutscene-or-phone	phone call M13_In_trouble_02	cellphone cb2 (ended)
+m13	38	terminal	(endless loop)	never exits; mission ends via failure/death callback
+m13	39	wait-cutscene-or-phone	phone call {M13_Thanks}.name.name	cellphone cb2 (ended)
+m13	40	wait-cutscene-or-phone	phone call {M13_Thanks}.name	cellphone cb2 (ended)
+m13	42	go-to-trigger	trigger_elevator_proximity	on_trigger->m13_trigger_cback
+m13	45	wait-cutscene-or-phone	phone call {M13_Laser_Target}.name.name	cellphone cb2 (ended)
+m13	46	wait-cutscene-or-phone	phone call {M13_Laser_Target}.name	cellphone cb2 (ended)
+m13	48	wait-flag	wave.thread	set in m13_start_wave
+m13	49	wait-cutscene-or-phone	phone call {M13_Helicopters}.name.name	cellphone cb2 (ended)
+m13	50	wait-cutscene-or-phone	phone call {M13_Helicopters}.name	cellphone cb2 (ended)
+m13	55	wait-flag	wave.thread	set in m13_start_wave
+m13	58	wait-cutscene-or-phone	phone call {M13_Retreating}.name.name	cellphone cb2 (ended)
+m13	59	wait-cutscene-or-phone	phone call {M13_Retreating}.name	cellphone cb2 (ended)
+m13	61	go-to-trigger	trigger_elevator_to_penthouse	on_trigger->m13_trigger_cback
+m13	64	go-to-trigger	trigger_penthouse_cutscene	on_trigger->m13_trigger_cback
+m13	65	wait-cutscene-or-phone	cutscene_play(13_Z01)	engine-driven (blocking helper)
+m13	66	wait-cutscene-or-phone	character_is_ready	engine-driven
+m13	67	wait-flag	M13_josh_given_to_cyrus	set in m13_josh_thrown_to_cyrus
+m13	68	engine-wait	ai_scripted_action_is_processing()	engine/native predicate
+m13	69	wait-flag	r	set in m13_cyrus_enter_vtol, m13_create_clutter
+m13	70	wait-flag	r	set in m13_cyrus_enter_vtol, m13_create_clutter
+m13	71	leave-trigger	trigger_penthouse_jumped	on_trigger_exit->m13_jumped_off_penthouse
+m14	1	wait-cutscene-or-phone	cutscene_play(14_in)	engine-driven (blocking helper)
+m14	3	wait-cutscene-or-phone	phone call M14_Mission_Start	cellphone cb2 (ended)
+m14	4	go-to-navpoint	?	dist <60
+m14	6	enter-vehicle		needs vehicle
+m14	7	enter-vehicle		needs vehicle
+m14	9	go-to-trigger	Trigger Heli Validation 001	object_is_in_trigger()
+m14	11	go-to-trigger	Trigger Tower 001	on_trigger->m14_transmitter_placement_started_cb
+m14	12	enter-vehicle		needs vehicle
+m14	13	enter-vehicle		needs vehicle
+m14	14	go-to-navpoint	Nav T2 Helipad	dist <25; mover=npc/vehicle Nav T2 Helipad
+m14	16	go-to-trigger	Trigger Heli Validation 002	object_is_in_trigger()
+m14	17	go-to-trigger	Trigger Tower 002	on_trigger->m14_transmitter_placement_started_cb
+m14	19	enter-vehicle		needs vehicle
+m14	20	enter-vehicle		needs vehicle
+m14	22	wait-flag	target_progress	set in m14_objective_target_the_van
+m14	24	go-to-navpoint	Trigger Helipad	dist <100; mover=npc/vehicle Trigger Helipad
+m14	28	go-to-trigger	Trigger Helipad	on_trigger->m14_helipad_reached_cb
+m14	29	go-to-trigger	Trigger Interview Stairs	on_trigger->m14_interview_stairs_reached_cb
+m14	31	kill-target	NPC Decker Studio 001|NPC Decker Studio 002|NPC Decker Studio 003|NPC Decker Studio 00	on_death->m14_remove_marker_cb
+m14	32	kill-target	NPC Decker Elevator RB 001|NPC Decker Elevator RB 002	on_death->m14_remove_marker_cb
+m14	33	kill-target	NPC Decker Side RB 001	on_death->m14_remove_marker_cb
+m14	34	kill-target	NPC Decker Stairs RB 001|NPC Decker Stairs RB 002|NPC Decker Stairs RB 003	on_death->m14_remove_marker_cb
+m14	35	wait-thread	m14_abandon_heli_thread	thread started at m14_initialize_checkpoint:1783
+m14	37	go-to-trigger	Trigger Stairs1	on_trigger->m14_helipad_reached_cb
+m14	38	go-to-trigger	Trigger Stairs2	on_trigger->m14_helipad_reached_cb
+m14	39	go-to-trigger	Trigger Helipad	on_trigger->m14_helipad_reached_cb
+m14	40	enter-vehicle		needs vehicle
+m14	41	enter-vehicle		needs vehicle
+m14	42	timed-wait	delay(5)	5 s of game time, no player action
+m14	44	wait-flag	local_caught_kb	set in m14_objective_catch_killbane
+m14	45	go-to-navpoint	Veh Killbane Escape	dist >55
+m14	0	hazard	Trigger Studio Massacre	
+m14	0	hazard	Trigger Studio Massacre	
+m14	0	hazard	Trigger T1 Massacre	
+m14	0	hazard	Trigger T2 Massacre	
+m15	1	wait-cutscene-or-phone	cutscene_play(15_in)	engine-driven (blocking helper)
+m15	3	go-to-trigger	trigger_pr_center_radius	on_trigger->m15_trigger_cback
+m15	4	go-to-trigger	trigger_pr_center_front	on_trigger->m15_trigger_cback
+m15	5	go-to-trigger	trigger_pr_center_enterance	on_trigger->m15_trigger_cback
+m15	6	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m15	7	wait-flag	M15_waves.lobby_stag.thread	set in m15_setup_outside_garage, m15_close_roadblock, m15_chase_truck
+m15	8	wait-flag	M15_extra_npcs_in_lobby	set by script
+m15	9	go-to-trigger	trigger_elevator_to_garage 002	on_trigger->m15_trigger_cback
+m15	12	kill-target	vehicle_tank_garage	kill
+m15	13	go-to-trigger	trigger_garage_door	on_trigger->m15_trigger_cback
+m15	14	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m15	15	wait-flag	m15_player_is_close_to_chase_start()	script predicate
+m15	16	wait-thread	m15_convo_to_pr_center	thread started at m15_run:672
+m15	17	wait-flag	in_progress	set in m15_vehicle_follow_path
+m15	18	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m15	19	wait-thread	m15_thread_chase_rubber_band	thread started at m15_chase:1748
+m16	1	wait-cutscene-or-phone	cutscene_play(16_IN)	engine-driven (blocking helper)
+m16	6	wait-cutscene-or-phone	cutscene_play(m16_cte_01)	engine-driven (blocking helper)
+m16	8	timed-wait	delay(25)	25 s of game time, no player action
+m16	9	timed-wait	delay(10)	10 s of game time, no player action
+m16	10	wait-flag	safe_to_transform	set in m16_transform_player_into_human_avatar
+m16	11	wait-flag	m16_players_are_ready_to_transform()	script predicate
+m16	12	timed-wait	delay(5)	5 s of game time, no player action
+m16	13	timed-wait	delay(10)	10 s of game time, no player action
+m16	14	go-to-trigger	Gate1_Trigger	on_trigger->m16_cb_firewall_area_reached
+m16	15	go-to-trigger	Trigger_Firewall	on_trigger->m16_cb_firewall_reached
+m16	17	wait-flag	UI_completion[ LOCAL_PLAYER ] / UI_completion[ REMOTE_PLAYER ]	set by script
+m16	19	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m16	21	go-to-trigger	Gate2_Trigger	on_trigger->m16_cb_antivirus_reached
+m16	24	engine-wait	human_is_downed()	engine/native predicate
+m16	26	wait-flag	m16_tank_combat_end_battle()	script predicate
+m16	27	timed-wait	delay(6)	6 s of game time, no player action
+m16	30	go-to-trigger	Gate3_Trigger	on_trigger->m16_cb_internet_security_reached
+m16	31	timed-wait	delay(8)	8 s of game time, no player action
+m16	33	wait-flag	UI_completion[ LOCAL_PLAYER ] / UI_completion[ REMOTE_PLAYER ]	set by script
+m16	36	go-to-trigger	Final_Trigger	on_trigger->m16_final_cb
+m16	37	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m16	38	wait-cutscene-or-phone	cutscene_play(16_z01)	engine-driven (blocking helper)
+m16	40	wait-flag	M16_conv.matt_battle_begins	set by script
+m16	42	engine-wait	character_exists()	engine/native predicate
+m16	43	wait-thread	m16_matt_health_thread	thread started at m16_set_phase:2246
+m16	44	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m16	45	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m16	46	interact		on_qte_animation_trigger->m16_final_qte_fade_cb
+m16	47	engine-wait	character_exists()	engine/native predicate
+m16	48	wait-thread	m16_matt_health_thread	thread started at m16_set_phase:2246
+m16	49	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m16	50	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m16	51	engine-wait	character_exists()	engine/native predicate
+m16	52	wait-thread	m16_matt_health_thread	thread started at m16_set_phase:2246
+m16	53	engine-wait	character_exists()	engine/native predicate
+m16	54	wait-thread	m16_matt_health_thread	thread started at m16_set_phase:2246
+m16	55	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m16	56	wait-cutscene-or-phone	action_play_is_finished	engine-driven
+m16	57	timed-wait	delay(45)	45 s of game time, no player action
+m16	58	engine-wait	character_exists()	engine/native predicate
+m16	59	wait-thread	m16_matt_health_thread	thread started at m16_set_phase:2246
+m16	60	wait-flag	m16_wait_for_qte_complete()	script predicate
+m16	61	engine-wait	character_exists()	engine/native predicate
+m16	62	wait-thread	m16_matt_health_thread	thread started at m16_set_phase:2246
+m16	63	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m16	64	wait-cutscene-or-phone	cutscene_play(16_Z02)	engine-driven (blocking helper)
+m16	66	wait-thread	m16_thread_play_convo	thread started at m16_helper_conversation_play:3014
+m16	67	go-to-trigger	Company_B_Trigger	on_trigger->m16_player_choice_made_cb
+m16	0	hazard	Death_Region	
+m18	1	wait-cutscene-or-phone	cutscene_play(18_in)	engine-driven (blocking helper)
+m18	3	kill-target	mov_cabin_door 001	on_take_damage->m18_cb_damaged_cabin_door; damage, not necessarily kill
+m18	5	kill-target	mov_cockpit_door 001	on_take_damage->m18_cb_damaged_cockpit_door; damage, not necessarily kill
+m18	7	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m18	9	go-to-trigger	tgr_tank_region 001	on_trigger->m18_cb_tank_region_entered
+m18	10	wait-cutscene-or-phone	cutscene_play(18_Z01)	engine-driven (blocking helper)
+m18	13	wait-flag	elapsed_time	set in m18_run_ff_set_01, m18_run_ff_set_02
+m18	15	wait-cutscene-or-phone	thread_check_done	engine-driven
+m18	17	wait-flag	elapsed_time	set in m18_run_ff_set_01, m18_run_ff_set_02
+m18	19	wait-cutscene-or-phone	thread_check_done	engine-driven
+m18	21	kill-target		on_vehicle_destroyed->m18_dive_bomb_vtol_destroyed_cb
+m18	22	go-to-navpoint	veh_player_tank 001 -> nav_player_tank_center	dist >1.0; mover=npc/vehicle veh_player_tank 001
+m18	23	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m18	25	engine-wait	vehicle_anim_finished()	engine/native predicate
+m18	27	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m18	28	wait-flag	player_reached_tank	set in m18_run_hijack_skydiving_tank
+m18	0	hazard	tgr_falling_tank 001	
+m18	0	hazard	tgr_falling_tank 002	
+m18	0	hazard	tgr_falling_tank 003	
+m18	0	hazard	tgr_falling_tank 004	
+m19	1	wait-cutscene-or-phone	cutscene_play(19_in)	engine-driven (blocking helper)
+m19	3	go-to-trigger	doors_trigger	trigger table M19_trigger.doors
+m19	4	wait-cutscene-or-phone	cutscene_play(m19_cte_01)	engine-driven (blocking helper)
+m19	6	wait-flag	size	set by script
+m19	7	wait-flag	M19_convo.help_me_call.thread	set in m19_start_convo_thread
+m19	8	go-to-trigger	m19_trigger_dumpster	trigger table M19_trigger.dumpster
+m19	9	go-to-trigger	m19_trigger_roof	trigger table M19_trigger.roof
+m19	10	go-to-navpoint	Suko_inside	dist >25; mover=npc/vehicle Suko_inside
+m19	11	engine-wait	group_members_alive()	engine/native predicate
+m19	12	timed-wait	delay(10)	10 s of game time, no player action
+m19	13	wait-flag	size	set by script
+m19	14	wait-flag	M19_convo.broken_mask.thread	set in m19_start_convo_thread
+m19	15	leave-trigger	mask_fix_trigger	on_trigger_exit->m19_mask_trigger_exit_cb
+m19	16	engine-wait	door_is_open()	engine/native predicate
+m19	17	go-to-navpoint	-> viola_mask_search_nav	dist >2.0; mover=npc/vehicle
+m19	18	engine-wait	ai_scripted_action_is_complete()	engine/native predicate
+m19	19	timed-wait	delay(15.0)	15.0 s of game time, no player action
+m19	20	timed-wait	delay(15.0)	15.0 s of game time, no player action
+m19	21	timed-wait	delay(15.0)	15.0 s of game time, no player action
+m19	22	leave-trigger	mask_fix_trigger	on_trigger_exit->m19_mask_trigger_exit_cb
+m19	23	go-to-navpoint	?	dist >5.0; mover=npc/vehicle
+m19	24	wait-flag	size	set by script
+m19	25	wait-flag	M19_convo.zombie_killing_03.thread	set in m19_start_convo_thread
+m19	26	enter-vehicle	chem_truck	on_vehicle_enter->m19_player_in_chem_truck_cb
+m19	27	wait-flag	M19_convo.take_sample.thread	set in m19_start_convo_thread
+m19	28	go-to-trigger	Escape_trigger 001	trigger table M19_trigger.escape1
+m19	29	enter-vehicle	chem_truck	on_vehicle_enter->m19_player_in_chem_truck_cb
+m21	1	wait-cutscene-or-phone	cutscene_play(21_in)	engine-driven (blocking helper)
+m21	3	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m21	4	wait-flag	Process_enemy_set_cleared	set by script
+m21	5	timed-wait	delay(6)	6 s of game time, no player action
+m21	6	wait-cutscene-or-phone	group_is_loaded	engine-driven
+m21	8	timed-wait	delay(6)	6 s of game time, no player action
+m21	9	wait-cutscene-or-phone	group_is_loaded	engine-driven
+m21	10	wait-flag	Process_enemy_set_cleared	set by script
+m21	11	wait-cutscene-or-phone	thread_check_done	engine-driven
+m21	12	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m21	13	wait-cutscene-or-phone	cutscene_play(21_Z01)	engine-driven (blocking helper)
+m21	15	kill-target	Chainsaw_Wave1_Group	on_death->m21_chainsaw_luchador_killed_cb
+m21	16	kill-target	Chainsaw_Wave2_Group	on_death->m21_chainsaw_luchador_killed_cb
+m21	17	kill-target	Chainsaw_Wave3_Group	on_death->m21_chainsaw_luchador_killed_cb
+m21	18	kill-target	Chainsaw_Wave4_Group	on_death->m21_chainsaw_luchador_killed_cb
+m21	19	go-to-trigger	Player_Reached_Angel_Trigger 001	on_trigger->m21_player_reached_angel
+m21	20	wait-flag	M21_conversations.player_killbane_fight	set by script
+m21	21	go-to-trigger	Player_Enter_Ring_Trigger 001	on_trigger->m21_player_enter_ring
+m21	22	wait-flag	M21_conversations.player_killbane_banter	set by script
+m21	23	wait-flag	player_win	set in m21_killbane_qte_beatup_finished
+m21	24	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m21	25	wait-cutscene-or-phone	cutscene_play(21_Z02)	engine-driven (blocking helper)
+m21	27	wait-flag	Play_choice_selection	set in m21_player_made_choice_cb
+m21	28	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m21	29	wait-cutscene-or-phone	cutscene_play(21_Z03)	engine-driven (blocking helper)
+m21	30	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m21	31	wait-cutscene-or-phone	cutscene_play(21_Z04)	engine-driven (blocking helper)
+m22	1	wait-cutscene-or-phone	cutscene_play(22_in)	engine-driven (blocking helper)
+m22	2	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m22	4	go-to-trigger	BZ2_Spawn_Trigger|BZ3_Spawn_Trigger|BZ4_Spawn_Trigger	on_trigger->m22_zone_triggered_cb
+m22	5	go-to-trigger	BZ2_Spawn_Trigger|BZ3_Spawn_Trigger|BZ4_Spawn_Trigger	on_trigger->m22_zone_triggered_cb
+m22	6	wait-cutscene-or-phone	thread_check_done	engine-driven
+m22	7	go-to-trigger	Armory_Spawn_Trigger	on_trigger->m22_armory_reached_cb
+m22	8	kill-target		on_human_killed->m22_battle_zone_initial_died_cb
+m22	9	kill-target		on_human_killed->m22_battle_zone_initial_died_cb
+m22	10	wait-flag	Current_bz.bosses_killed	set in m22_bz_boss_killed_cb
+m22	11	wait-thread	m22_helper_play_conversation	thread started at m22_process_armory_fight:2021
+m22	15	wait-thread	m22_helper_play_conversation	thread started at m22_process_armory_fight:2021
+m22	17	wait-cutscene-or-phone	cutscene_play(22_choice)	engine-driven (blocking helper)
+m22	18	wait-cutscene-or-phone	thread_check_done	engine-driven
+m22	21	go-to-trigger	Kill_Killbane_Trigger	on_trigger->m22_player_choice_cb
+m22	24	go-to-navpoint	Angel_Car -> Airport_Rail_Begin	dist >10.0; mover=npc/vehicle Angel_Car
+m22	25	kill-target	Killbane_Plane	kill
+m22	26	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+m22	28	wait-cutscene-or-phone	cutscene_play(22_Z01)	engine-driven (blocking helper)
+m22	30	interact		on_qte_animation_trigger->on_killbane_qte_fade_out_trigger
+m22	33	wait-cutscene-or-phone	cutscene_play(m22_cte_03)	engine-driven (blocking helper)
+m22	35	go-to-trigger	Statue_Elevator_Trigger	on_trigger->m22_player_used_elevator_cb
+m22	38	kill-target	C4_Mover 005|C4_Mover 006|C4_Mover 007|C4_Mover 008	on_mover_destroyed->m22_c41_destroyed_cb
+m22	39	go-to-trigger	Second_Floor_Trigger	on_trigger->m22_second_floor_cb
+m22	40	kill-target	C4_Mover 005|C4_Mover 006|C4_Mover 007|C4_Mover 008	on_mover_destroyed->m22_c41_destroyed_cb
+m22	41	go-to-trigger	Kia_Breadcrumb_Trigger	on_trigger->m22_player_reached_breadcrumb_cb
+m22	42	go-to-trigger	Player_reached_top_trigger	on_trigger->m22_player_reached_top_cb
+m22	44	timed-wait	delay(5)	5 s of game time, no player action
+m22	46	kill-target	Kia_gameplay	kill
+m22	0	hazard	Explosion_Region	
+m22	0	hazard	Trigger_Kia_Boss_Area 001	
+m24	1	wait-cutscene-or-phone	cutscene_play(22_out2)	engine-driven (blocking helper)
+m24	3	wait-cutscene-or-phone	cutscene_play(m24_cte_02)	engine-driven (blocking helper)
+m24	6	go-to-trigger	nil	on_trigger->m24_on_breadcrumb_reached
+m24	7	go-to-trigger	Terminal_Trigger 001	on_trigger->m24_terminal_hack_cb
+m24	8	wait-flag	M24_threads.homie_death_thread_handle / INVALID_THREAD_HANDLE	set by script
+m24	9	go-to-trigger	breadcrumb_trigger_01|breadcrumb_trigger_02	on_trigger->m24_on_breadcrumb_reached
+m24	10	go-to-trigger	Terminal_Trigger 002	on_trigger->m24_terminal_hack_cb
+m24	11	wait-flag	M24_threads.homie_death_thread_handle / INVALID_THREAD_HANDLE	set by script
+m24	12	go-to-trigger	breadcrumb_trigger_03	on_trigger->m24_on_breadcrumb_reached
+m24	13	go-to-trigger	Terminal_Trigger 003	on_trigger->m24_terminal_hack_cb
+m24	14	wait-flag	M24_threads.homie_death_thread_handle / INVALID_THREAD_HANDLE	set by script
+m24	15	go-to-trigger	{nil}|{breadcrumb_trigger_01|breadcrumb_trigger_02}|{breadcrumb_trigger_03}	on_trigger->m24_on_breadcrumb_reached
+m24	16	go-to-trigger	Terminal_Trigger 004	on_trigger->m24_terminal_hack_cb
+m24	17	wait-flag	M24_threads.homie_death_thread_handle / INVALID_THREAD_HANDLE	set by script
+m24	18	go-to-trigger	{nil}|{breadcrumb_trigger_01|breadcrumb_trigger_02}|{breadcrumb_trigger_03}	on_trigger->m24_on_breadcrumb_reached
+m24	19	go-to-trigger	Terminal_Trigger 005	on_trigger->m24_terminal_hack_cb
+m24	20	wait-flag	M24_threads.homie_death_thread_handle / INVALID_THREAD_HANDLE	set by script
+m24	22	go-to-trigger	breadcrumb_trigger_04	on_trigger->m24_on_breadcrumb_reached
+m24	23	go-to-trigger	Junction_Trigger 002|Junction_Trigger 003	on_trigger->m24_junction_bomb_cb
+m24	24	wait-flag	door_exploded	set in m24_door_explosion_cb
+m24	26	wait-cutscene-or-phone	cutscene_play(m24_cte_01)	engine-driven (blocking helper)
+m24	29	go-to-trigger	End_of_bridge_trigger	on_trigger->m24_objective_reached_cb
+m24	30	go-to-trigger	End_of_bridge_trigger	on_trigger->m24_objective_reached_cb
+m24	33	wait-cutscene-or-phone	cutscene_play(m24_cte_02)	engine-driven (blocking helper)
+m24	35	kill-target	Killbane	kill
+m24	0	hazard	Lava_Death_Trigger	
+mm_m1_5	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+mm_m1_5	2	engine-wait	customization_screen_is_ready()	engine/native predicate
+mm_m1_5	3	engine-wait	customization_creation_is_open()	engine/native predicate
+mm_p_01	1	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+mm_p_01	2	wait-cutscene-or-phone	cutscene_play(P_Z01)	engine-driven (blocking helper)
+mm_p_03	1	wait-cutscene-or-phone	cutscene_play(mmp03_cte_01)	engine-driven (blocking helper)
+mm_p_03	3	interact	store false	buy at store
+mm_p_03	4	timed-wait	delay(6)	6 s of game time, no player action
+mm_p_03	5	engine-wait	mission_collectible_collected()	engine/native predicate
+mm_p_03	6	interact	store true	buy at store
+mm_p_03	7	timed-wait	delay(5)	5 s of game time, no player action
+mm_p_03	8	wait-flag	flashpoint_num	set in mm_p_03_go_to_flashpoint
+mm_p_03	9	go-to-navpoint	MM_P_03_Nav_FP02	dist <17; mover=npc/vehicle MM_P_03_Nav_FP02
+mm_p_03	10	wait-flag	flashpoint_complete	set in mm_p_03_go_to_flashpoint
+mm_p_03	11	engine-wait	tutorial_visible()	engine/native predicate
+mm_p_06	1	wait-cutscene-or-phone	zscene_is_loaded	engine-driven
+mm_p_06	2	wait-cutscene-or-phone	cutscene_play(P_Z02)	engine-driven (blocking helper)
+mm_p_07	2	wait-cutscene-or-phone	phone call MM_P_07_End_Phone_Call	cellphone cb2 (ended)
+sh01	1	wait-cutscene-or-phone	cutscene_play(MS_SH01)	engine-driven (blocking helper)
+sh01	3	go-to-trigger	Warehouse_Door_Trigger 001	on_trigger->sh01_reached_warehouse_door
+sh01	4	go-to-trigger	trig_BreakRoom	on_trigger->sh01_reached_breakroom
+sh01	5	go-to-trigger	Upstairs_Trigger 001	on_trigger->sh01_reached_upstairs
+sh01	7	wait-cutscene-or-phone	cutscene_play(sh01_cte_01)	engine-driven (blocking helper)
+sh01	9	kill-target	MiniGun_Brute 001	on_death->sh01_brute_killed
+sh01	10	wait-flag	office_triggered	set in sh01_reached_office
+sh01	11	wait-thread	sh01_shaundi_hack_thread	thread started at sh01_run:568
+sh01	12	wait-thread	sh01_shaundi_hack_thread	thread started at sh01_run:568
+sh02	1	wait-cutscene-or-phone	cutscene_play(MS_SH02)	engine-driven (blocking helper)
+sh02	2	timed-wait	delay(15.0)	15.0 s of game time, no player action
+sh02	6	wait-flag	sh02_check_homies_thread()	script predicate
+sh02	7	go-to-trigger	trig_collection<001>	trigger table sh02_trigger.collection01 cb sh02_collection01_cb
+sh02	8	go-to-trigger	trig_collection<002>	trigger table sh02_trigger.collection02 cb sh02_collection02_cb
+sh02	9	go-to-trigger	trig_override<001>	trigger table sh02_trigger.override01 cb sh02_override01_cb
+sh02	11	go-to-trigger	trig_stairwell<001>	trigger table sh02_trigger.stairwell01 cb sh02_stairwell01_cb
+sh02	12	go-to-trigger	trig_stairwell<002>	trigger table sh02_trigger.stairwell02 cb sh02_stairwell02_cb
+sh02	13	go-to-trigger	trig_stairwell<003>	trigger table sh02_trigger.stairwell03 cb sh02_stairwell03_cb
+sh02	14	go-to-trigger	trig_stairwell<004>	trigger table sh02_trigger.stairwell04 cb sh02_stairwell04_cb
+sh02	15	go-to-trigger	trig_free_hos<001>	trigger table sh02_trigger.freehos01 cb sh02_freehos01_cb
+sh02	16	go-to-trigger	trig_jailcell01<001>	trigger table sh02_trigger.jailcell01_01 cb sh02_jailcell01_01_cb
+sh02	17	go-to-trigger	trig_jailcell01<002>	trigger table sh02_trigger.jailcell01_02 cb sh02_jailcell01_02_cb
+sh02	18	go-to-trigger	trig_free_hos<002>	trigger table sh02_trigger.freehos02 cb sh02_freehos02_cb
+sh02	19	go-to-trigger	trig_jailcell02<001>	trigger table sh02_trigger.jailcell02_01 cb sh02_jailcell02_01_cb
+sh02	20	go-to-trigger	trig_jailcell02<002>	trigger table sh02_trigger.jailcell02_02 cb sh02_jailcell02_02_cb
+sh02	21	go-to-trigger	trig_jailcell03<001>	trigger table sh02_trigger.jailcell03_01 cb sh02_jailcell03_01_cb
+sh02	22	go-to-trigger	trig_jailcell03<002>	trigger table sh02_trigger.jailcell03_02 cb sh02_jailcell03_02_cb
+sh02	23	go-to-trigger	trig_override<004>	trigger table sh02_trigger.override04 cb sh02_override04_cb
+sh02	24	kill-target	grp_jailcell03_wave	on_death->sh02_enemy_killed_cb
+sh02	25	go-to-trigger	trig_garage	trigger table sh02_trigger.garage cb sh02_garage_cb
+sh02	27	wait-cutscene-or-phone	cutscene_play(sh02_cte_01)	engine-driven (blocking helper)
+sh02	29	kill-target	npc_garage_brute	on_death->sh02_brute_killed_cb
+sh03	1	wait-cutscene-or-phone	cutscene_play(DK_SH01)	engine-driven (blocking helper)
+sh03	3	wait-flag	SH03_OBJECTIVE_ONE_COMPLETE	set in sh03_obj_one
+sh03	4	wait-flag	SH03_OBJECTIVE_THREE	set in sh03_setup_obj_two
+sh03	5	go-to-trigger	Tower_Trigger 001|Tower_Trigger2|Tower_Trigger3	on_trigger->sh03_obj_two
+sh03	6	exit-vehicle		player must be ON FOOT
+sh03	7	engine-wait	ai_scripted_action_is_complete()	engine/native predicate
+sh03	8	wait-flag	progress	set in sh03_kinzie_hack_tower
+sh03	9	drive-to	Helicopter_trigger	on_trigger->sh03_get_to_the_choppa; cb checks vehicle
+sh03	10	wait-thread	sh03_heli_arrival	thread started at sh03_obj_three_heli:1076
+sh03	11	go-to-navpoint	Rail_Heli	dist <=9; mover=npc/vehicle Rail_Heli
+sh03	12	engine-wait	NPC_Kinzie	waits for NOT dead/destroyed (no player action)
+sh03	13	engine-wait	human_is_downed()	engine/native predicate
+sh03	14	exit-vehicle		player must be ON FOOT
+sh03	15	engine-wait	qte_human_is_used()	engine/native predicate
+sh03	16	go-to-trigger	inside_trigger	on_trigger->sh03_inside_tower
+sh03	17	go-to-trigger	LinkTrigger1|LinkTrigger2|LinkTrigger3|LinkTrigger4	on_trigger->sh03_obj_four
+sh04	1	wait-cutscene-or-phone	cutscene_play(ld_sh01)	engine-driven (blocking helper)
+sh04	3	wait-thread	sh04_play_convo	thread started at sh04_initialize_checkpoint:1512
+sh04	4	kill-target	sh04	on_random_mover_killed->sh04_slot_died
+sh04	5	go-to-navpoint	sh04_manager	dist >20; mover=npc/vehicle sh04_manager
+sh04	6	wait-flag	SH04_INTERROGATION	set in sh04_grab_manager_local, sh04_manager_interrogation_cb
+sh04	8	go-to-trigger	Mask Cutscene	on_trigger->sh04_hit_mask_cutscene
+sh04	10	wait-cutscene-or-phone	cutscene_play(cte_s04_angel_gets_mask)	engine-driven (blocking helper)
+sh04	12	kill-target	SM Killbane Statue 1F SE|SM Killbane Statue 1F NW|SM Killbane Statue 1F SW|SM Killbane	on_mover_destroyed->sh04_statue_died
+sh04	13	kill-target	Post Statue|Post Statue 001|Post Statue 002|Post Statue 003	on_death->sh04_remaining_luchador_died
+sh04	14	kill-target	brute02|brute03	on_death->sh04_brute_killed
+dlc1_mm_01	1	wait-cutscene-or-phone	cutscene_play(dlc1_gb_in)	engine-driven (blocking helper)
+dlc1_mm_02	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+dlc1_mm_03	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+dlc1_mm_04	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+dlc1_mm_05	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+dlc1_mm_06	1	wait-cutscene-or-phone	cutscene_play(dlc1_gb_out)	engine-driven (blocking helper)
+dlc2_m03	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+dlc2_m03	3	go-to-trigger	Trigger_transmitter<001>	on_trigger->dlc2_m03_trigger_cb
+dlc2_m03	4	kill-target	DLC2_M03_global.current_transmitter_sequence.shields[*]	on_mover_destroyed->dlc2_m03_shield_destroyed_cb
+dlc2_m03	5	wait-thread	dlc2_m03_virus_transfer_thread	thread started at dlc2_m03_process_transmitter_sequence:2182
+dlc2_m03	6	timed-wait	delay(25.0)	25.0 s of game time, no player action
+dlc2_m03	7	wait-flag	DLC2_M03_global.near_crash_completed	set in dlc2_m03_on_near_crash_cb
+dlc2_m03	8	go-to-trigger	Trigger_Barnstorm 001	trigger table DLC2_M03_trigger.barnstorm_trigger_01
+dlc2_m03	9	go-to-trigger	Trigger_transmitter<002>	on_trigger->dlc2_m03_trigger_cb
+dlc2_m03	10	kill-target	DLC2_M03_global.current_transmitter_sequence.shields[*]	on_mover_destroyed->dlc2_m03_shield_destroyed_cb
+dlc2_m03	11	wait-thread	dlc2_m03_virus_transfer_thread	thread started at dlc2_m03_process_transmitter_sequence:2182
+dlc2_m03	12	go-to-trigger	Trigger_trap_spawn	trigger table DLC2_M03_trigger.trap_region_spawn
+dlc2_m03	13	go-to-trigger	Trigger_trap_region	trigger table DLC2_M03_trigger.trap_region
+dlc2_m03	14	wait-flag	npcs_alive	set in dlc2_m03_kill_list_wait_for_complete
+dlc2_m03	15	go-to-trigger	DLC2_M03_transmitter_regions.three.trigger	on_trigger->dlc2_m03_trigger_cb
+dlc2_m03	16	kill-target	DLC2_M03_global.current_transmitter_sequence.shields[*]	on_mover_destroyed->dlc2_m03_shield_destroyed_cb
+dlc2_m03	17	wait-thread	dlc2_m03_virus_transfer_thread	thread started at dlc2_m03_process_transmitter_sequence:2182
+dlc2_m03	18	timed-wait	delay(9.0)	9.0 s of game time, no player action
+dlc2_m03	19	go-to-trigger	Trigger_execute_region	trigger table DLC2_M03_trigger.execute_region
+dlc2_m03	20	timed-wait	delay(6.0)	6.0 s of game time, no player action
+dlc2_m03	21	timed-wait	delay(5.0)	5.0 s of game time, no player action
+dlc2_m03	22	go-to-trigger	Trigger_Barnstorm 002	trigger table DLC2_M03_trigger.barnstorm_trigger_02
+dlc2_m03	23	go-to-trigger	Trigger_escape_region	trigger table DLC2_M03_trigger.escape_region
+m01	1	wait-cutscene-or-phone	cutscene_play(01_IN)	engine-driven (blocking helper)
+m01	2	wait-cutscene-or-phone	character_is_ready	engine-driven
+m01	3	engine-wait	vehicle_enable_physics()	engine/native predicate
+m01	4	engine-wait	vehicle_enable_physics()	engine/native predicate
+m01	5	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m01	6	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m01	7	enter-vehicle	heli_vault 001	needs vehicle
+m01	8	enter-vehicle	heli_vault 001	needs vehicle
+m01	10	wait-thread	m01_josh_is_dumbass_thread	thread started at m01_kill_lobby_guards:1332
+m01	11	engine-wait	ai_scripted_action_is_complete()	engine/native predicate
+m01	12	go-to-trigger	Freerun_trigger 001	trigger table M01_trigger.freerun
+m01	13	go-to-trigger	vault_trigger 000	trigger table M01_trigger.pre_vault
+m01	14	go-to-trigger	vault_trigger 001	trigger table M01_trigger.vault
+m01	15	wait-cutscene-or-phone	cutscene_play(01_z01)	engine-driven (blocking helper)
+m01	16	engine-wait	group_create_check_done()	engine/native predicate
+m01	17	engine-wait	ai_scripted_action_is_processing()	engine/native predicate
+m01	18	go-to-trigger	bomb_trigger 000	trigger table M01_trigger.pre_bomb
+m01	19	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m01	20	go-to-trigger	bomb_trigger 001	trigger table M01_trigger.bomb
+m01	21	wait-cutscene-or-phone	cutscene_play(01_Z02)	engine-driven (blocking helper)
+m01	24	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m01	25	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m01	27	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m01	28	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m01	29	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m01	31	timed-wait	delay(10.0)	10.0 s of game time, no player action
+m01	32	wait-thread	m01_respawn_pair_thread	thread started at m01_start_swat_respawn_pairs:3254
+m01	33	timed-wait	delay(6.0)	6.0 s of game time, no player action
+m01	35	kill-target	police_heli 003	on_damage->m01_attack_heli_damaged_cb; damage, not necessarily kill
+m01	36	wait-cutscene-or-phone	cutscene_play(01_Z03)	engine-driven (blocking helper)
+m01	37	engine-wait	vehicle_enable_physics()	engine/native predicate
+m01	38	engine-wait	vehicle_enable_physics()	engine/native predicate
+m01	39	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m01	40	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m01	41	enter-vehicle	heli_vault 001	needs vehicle
+m01	42	enter-vehicle	heli_vault 001	needs vehicle
+m01	44	timed-wait	delay(6.0)	6.0 s of game time, no player action
+m01	45	engine-wait	vehicle_anim_playing()	engine/native predicate
+m01	46	wait-thread	m01_fighter_attack_run_thread	thread started at m01_vault_roof_setup:2055
+m01	48	engine-wait	vehicle_anim_playing()	engine/native predicate
+m01	49	kill-target	transport_table.vehicle	on_vehicle_destroyed->m01_transport_destroyed_cb
+m01	50	wait-thread	m01_fighter_attack_run_thread	thread started at m01_vault_roof_setup:2055
+m01	52	timed-wait	delay(8.0)	8.0 s of game time, no player action
+m01	53	engine-wait	vehicle_anim_playing()	engine/native predicate
+m01	54	go-to-navpoint	police_heli 003 -> attack_position2_nav	dist >20.0; mover=npc/vehicle police_heli 003
+m01	55	engine-wait	helicopter_shoot_human()	engine/native predicate
+m01	57	engine-wait	vehicle_anim_playing()	engine/native predicate
+m01	58	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m01	60	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m01	61	kill-target	police_heli 003	on_damage->m01_attack_heli_damaged_cb; damage, not necessarily kill
+m01	62	engine-wait	vehicle_anim_finished()	engine/native predicate
+m01	63	terminal	(endless loop)	never exits; mission ends via failure/death callback
+m01	0	hazard	trigger	
+m02	1	wait-cutscene-or-phone	cutscene_play(02_in)	engine-driven (blocking helper)
+m02	4	interact	mvr_cargo_plane_door 004	on_door_opened->m02_door_to_cargo_bay_opened_cb
+m02	5	go-to-trigger	tgr_cargo_plane_exit 001	on_trigger->m02_cb_triggered_grab_parachute
+m02	7	wait-cutscene-or-phone	cutscene_play(02_z01)	engine-driven (blocking helper)
+m02	9	wait-flag	M02_flags.local_gun_grapple_finished	set in m02_cb_local_gun_grapple_finished
+m02	10	kill-target	Group_sky_goons 001	on_death->m02_cb_sky_goon_killed
+m02	11	wait-flag	M02_flags.local_gun_grapple_finished	set in m02_cb_local_gun_grapple_finished
+m02	12	timed-wait	delay(5.0)	5.0 s of game time, no player action
+m02	13	engine-wait	get_char_skydiving_state()	engine/native predicate
+m02	14	kill-target	Group_sky_goons 002	on_death->m02_cb_sky_goon_killed
+m02	15	kill-target	Group_sky_goons 003	on_death->m02_cb_sky_goon_killed
+m02	16	go-to-trigger	tgr_vertical_dive 001	on_trigger->m02_cb_triggered_final_dive_01
+m02	17	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	18	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	19	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	20	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	21	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	22	engine-wait	vehicle_anim_finished()	engine/native predicate
+m02	23	wait-flag	(true)	set by script
+m02	24	wait-cutscene-or-phone	cutscene_play(02_z02)	engine-driven (blocking helper)
+m02	25	kill-target	Group_sky_goons 005	on_death->m02_cb_sky_goon_killed
+m02	26	wait-flag	M02_flags.local_final_grapple_finished	set in m02_cb_local_final_grapple_finished
+m02	27	go-to-trigger	tgr_vertical_dive 001	on_trigger->m02_cb_triggered_final_dive_01
+m02	28	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	29	engine-wait	action_play_synced_is_finished()	engine/native predicate
+m02	30	timed-wait	delay(6.0)	6.0 s of game time, no player action
+m07	1	wait-cutscene-or-phone	cutscene_play(07_In)	engine-driven (blocking helper)
+m07	2	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m07	3	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m07	5	go-to-navpoint	Trigger Barge Dock	dist >100; mover=npc/vehicle Trigger Barge Dock
+m07	6	go-to-trigger	Trigger Barge Dock	on_trigger->m07_reached_goal_cb
+m07	7	wait-cutscene-or-phone	character_is_ready	engine-driven
+m07	8	timed-wait	delay(5)	5 s of game time, no player action
+m07	11	go-to-trigger	Trigger Barge Wheelhouse	on_trigger->m07_reached_wheelhouse
+m07	12	go-to-trigger	Trigger Untie Kinzie	on_trigger->m07_kinzie_untie_cb
+m07	15	wait-cutscene-or-phone	cutscene_play(M07_FREE_KINZIE)	engine-driven (blocking helper)
+m07	17	timed-wait	delay(5)	5 s of game time, no player action
+m07	18	wait-cutscene-or-phone	phone call m07_convo_17	cellphone cb2 (ended)
+m07	19	timed-wait	delay(6)	6 s of game time, no player action
+m07	20	go-to-trigger	Trigger BDSM Club	on_trigger->m07_reached_goal_cb
+m07	22	go-to-trigger	Trigger Club Owner	on_trigger->m07_reached_goal_cb
+m07	24	drive-to	Trigger grab club owner	on_trigger->m07_bdsm_owner_interrogate_cb; cb checks vehicle
+m07	25	go-to-trigger	Trigger Pony Stairs	on_trigger->m07_reached_goal_cb
+m07	26	go-to-trigger	Trigger Pony Stairs Two	on_trigger->m07_reached_goal_cb
+m07	27	go-to-trigger	Trigger Pony Barn	on_trigger->m07_reached_goal_cb
+m07	28	go-to-trigger	Trigger Pony Carts	on_trigger->m07_reached_goal_cb
+m07	29	wait-cutscene-or-phone	cutscene_play(07_Z01)	engine-driven (blocking helper)
+m07	30	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m07	31	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m07	33	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m07	34	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m07	36	kill-target	{Pony Cart Enemy 001|Pony Cart Enemy 002}|{Pony Cart Enemy 003|Pony Cart Enemy 004}|{	on_death->m07_pony_enemy_killed_cb
+m07	37	kill-target	{Pony Cart Enemy 001|Pony Cart Enemy 002}|{Pony Cart Enemy 003|Pony Cart Enemy 004}|{	on_death->m07_pony_enemy_killed_cb
+m07	38	wait-cutscene-or-phone	cutscene_play(07_Z02)	engine-driven (blocking helper)
+m07	41	wait-cutscene-or-phone	phone call m07_convo_17	cellphone cb2 (ended)
+m07	44	timed-wait	delay(5)	5 s of game time, no player action
+m07	45	go-to-trigger	Trigger Outside Casino	on_trigger->m07_outside_casino_reached_cb
+m07	46	kill-target	Luch Out Brute	kill
+m07	48	kill-target	Luch Out Brute	on_death->m07_enemy_killed_cb
+m07	49	engine-wait	group_create_check_done()	engine/native predicate
+m07	50	kill-target	Luch Out Brute	on_death->m07_enemy_killed_cb
+m07	51	go-to-trigger	Trigger Casino Lobby	on_trigger->m07_inside_casino_reached_cb
+m07	52	wait-cutscene-or-phone	cutscene_play(07_Z03)	engine-driven (blocking helper)
+m07	55	timed-wait	delay(8.0)	8.0 s of game time, no player action
+m07	56	kill-target	Cas Def Brute	kill
+m07	57	engine-wait	character_exists()	engine/native predicate
+m07	58	kill-target	Cas Def Brute Minigun	on_death->m07_brute_killed_cb
+m07	60	engine-wait	character_exists()	engine/native predicate
+m07	61	engine-wait	character_exists()	engine/native predicate
+m07	62	kill-target	Cas Def Brute Flamer 002	on_death->m07_brute_killed_cb
+m11	1	wait-cutscene-or-phone	cutscene_play(11_in)	engine-driven (blocking helper)
+m11	2	engine-wait	vehicle_enter_teleport()	engine/native predicate
+m11	4	go-to-trigger	t_sb1_restricted	on_trigger->m11_reached_callback
+m11	5	wait-cutscene-or-phone	group_is_loaded	engine-driven
+m11	7	wait-thread	m11_player_vtol_tracking_thread	thread started at m11_initialize_checkpoint:1132
+m11	8	drive-to	v_sb1_vtol 001|v_sb1_vtol 002	on_vehicle_enter_water->m11_vtol_destroyed_callback
+m11	9	wait-thread	m11_player_vtol_tracking_thread	thread started at m11_initialize_checkpoint:1132
+m11	10	kill-target	sb 001|sb 002|sb 003|sb 005	on_mover_destroyed->m11_box_destroyed
+m11	11	wait-thread	m11_radio_chatter_thread	thread started at m11_run:755
+m11	12	kill-target	sb 001|sb 002|sb 003|sb 005	on_mover_destroyed->m11_box_destroyed
+m11	13	wait-thread	m11_radio_chatter_thread	thread started at m11_run:755
+m11	17	go-to-trigger	rb 001	on_trigger->m11_reached_callback
+m11	18	kill-target	rb 001	on_vehicle_destroyed->m11_target_destroyed
+m11	19	wait-thread	m11_radio_chatter_thread	thread started at m11_run:755
+m11	20	timed-wait	delay(5)	5 s of game time, no player action
+m11	22	kill-target	sb 001|sb 002|sb 003|sb 005	on_mover_destroyed->m11_box_destroyed
+m11	23	wait-thread	m11_radio_chatter_thread	thread started at m11_run:755
+m11	24	go-to-trigger	t_oleg_battle	on_trigger->m11_reached_callback
+m11	26	timed-wait	delay(5)	5 s of game time, no player action
+m11	27	wait-thread	m11_radio_chatter_thread	thread started at m11_run:755
+m11	28	kill-target	M11_groups.oleg_battle.tank1|M11_groups.oleg_battle.tank2|M11_groups.oleg_battle.tank3	on_vehicle_destroyed->m11_target_destroyed
+m11	29	kill-target	v_ob_apc 001|v_ob_apc 002|v_ob_apc 003	on_vehicle_destroyed->m11_target_destroyed
+m11	31	go-to-navpoint	v_sba_target 001	dist >600; mover=npc/vehicle v_sba_target 001
+m11	32	wait-thread	m11_stag_vtol_radio_chatter_thread	thread started at m11_help_oleg:1860
+m11	33	timed-wait	delay(10)	10 s of game time, no player action
+m11	34	kill-target	v_sba 002|v_sba 003	on_vehicle_destroyed->m11_guard_destroyed
+m11	35	kill-target	v_sba_target 002|v_sba_target 003	on_vehicle_destroyed->m11_transport_destroyed
+m11	36	kill-target	v_sba_target 001	on_damage->m11_final_plane_destroyed; damage, not necessarily kill
+m11	37	timed-wait	delay(6)	6 s of game time, no player action
+m12	1	wait-cutscene-or-phone	cutscene_play(12_In)	engine-driven (blocking helper)
+m12	2	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	4	engine-wait	character_is_ragdolled()	engine/native predicate
+m12	5	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	7	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	9	engine-wait	character_is_ragdolled()	engine/native predicate
+m12	10	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	13	go-to-trigger	trigger_pr_center_front	on_trigger->m12_trigger_cback
+m12	14	go-to-trigger	trigger_pr_center_enterance	on_trigger->m12_trigger_cback
+m12	15	go-to-trigger	trigger_reception	on_trigger->m12_trigger_cback
+m12	16	timed-wait	delay(6.0)	6.0 s of game time, no player action
+m12	17	go-to-trigger	trigger_lobby_middle	on_trigger->m12_trigger_cback
+m12	18	go-to-trigger	trigger_lobby_top	on_trigger->m12_trigger_cback
+m12	19	leave-trigger	M12_elevator.lobby_upper	on_trigger_exit->m12_elevator_exit_cback
+m12	21	engine-wait	character_is_ragdolled()	engine/native predicate
+m12	22	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	24	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	25	go-to-trigger	trigger_door_to_josh	on_trigger->m12_trigger_cback
+m12	26	go-to-navpoint	npc_josh	dist >14.0
+m12	27	wait-cutscene-or-phone	cutscene_play(12_z01)	engine-driven (blocking helper)
+m12	29	engine-wait	character_is_ragdolled()	engine/native predicate
+m12	30	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	32	go-to-trigger	trigger_studio 001	on_trigger->m12_trigger_cback
+m12	33	go-to-trigger	trigger_studio 002	on_trigger->m12_trigger_cback
+m12	34	go-to-trigger	trigger_studio 003	on_trigger->m12_trigger_cback
+m12	35	go-to-trigger	trigger_studio_door_to_stairs	on_trigger->m12_trigger_cback
+m12	36	go-to-trigger	trigger_cubicle 001	on_trigger->m12_trigger_cback
+m12	37	leave-trigger	M12_elevator.cubical	on_trigger_exit->m12_elevator_exit_cback
+m12	39	engine-wait	character_is_ragdolled()	engine/native predicate
+m12	40	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	42	go-to-trigger	trigger_lobby_middle	on_trigger->m12_trigger_cback
+m12	43	leave-trigger	M12_elevator.lobby_lower	on_trigger_exit->m12_elevator_exit_cback
+m12	45	engine-wait	character_is_ragdolled()	engine/native predicate
+m12	46	wait-cutscene-or-phone	thread_check_done	engine-driven
+m12	48	go-to-trigger	trigger_load_josh	on_trigger->m12_on_load_josh
+m12	49	enter-vehicle	Script_Vehicle 004	on_vehicle_enter->m12_escape_vehicle_entered
+m12	50	drive-to	trigger_garage_door	on_trigger->m12_trigger_cback; follows enter-vehicle
+m12	51	timed-wait	delay(15.0)	15.0 s of game time, no player action
+m12	52	go-to-trigger	trigger_saints_hq	on_trigger->m12_trigger_cback
+m17	1	wait-cutscene-or-phone	cutscene_play(17_in)	engine-driven (blocking helper)
+m17	4	timed-wait	delay(6)	6 s of game time, no player action
+m17	6	timed-wait	delay(6)	6 s of game time, no player action
+m17	7	enter-vehicle		on_vehicle_enter->m17_heli_entered
+m17	9	timed-wait	delay(6)	6 s of game time, no player action
+m17	11	timed-wait	delay(6)	6 s of game time, no player action
+m17	12	go-to-trigger	m17_trigger_convo_close	on_trigger->m17_trigger_reached
+m17	13	go-to-trigger	m17_trigger_carrier	on_trigger->m17_trigger_reached
+m17	14	wait-cutscene-or-phone	cutscene_play(17_mid)	engine-driven (blocking helper)
+m17	16	wait-cutscene-or-phone	character_is_ready	engine-driven
+m17	17	timed-wait	delay(20.0)	20.0 s of game time, no player action
+m17	18	wait-flag	sel	set in m17_meeting
+m17	19	wait-cutscene-or-phone	cutscene_play(17_z01)	engine-driven (blocking helper)
+m17	21	engine-wait	door_is_open()	engine/native predicate
+m17	22	go-to-trigger	trigger_enter_tank_bay	on_trigger->m17_trigger_reached
+m17	23	timed-wait	delay(8)	8 s of game time, no player action
+m17	24	engine-wait	door_is_open()	engine/native predicate
+m17	25	engine-wait	door_is_open()	engine/native predicate
+m17	26	go-to-trigger	m17_trigger_shaundi	on_trigger->m17_shaundi_freed
+m17	28	go-to-trigger	m17_trigger_brig_stairs	on_trigger->m17_trigger_reached
+m17	29	go-to-trigger	m17_trigger_rspawn	on_trigger->m17_trigger_reached
+m17	30	go-to-trigger	m17_trigger_rhall	on_trigger->m17_trigger_reached
+m17	31	go-to-trigger	trigger_enter_reactor	on_trigger->m17_trigger_reached
+m17	33	engine-wait	mesh_mover_destroyed()	engine/native predicate
+m17	34	go-to-trigger	trigger_enter_reactor	on_trigger->m17_trigger_reached
+m17	35	go-to-trigger	m17_trigger_escape_hall	on_trigger->m17_trigger_reached
+m17	36	engine-wait	door_is_open()	engine/native predicate
+m17	37	go-to-trigger	trigger_enter_hangar	on_trigger->m17_trigger_reached
+m17	38	go-to-navpoint	m17_vtol	dist >20; mover=npc/vehicle m17_vtol
+m17	0	hazard	m17_trigger_ehall<001>	
+m17	0	hazard	m17_trigger_ehall<002>	
+m20	1	wait-cutscene-or-phone	cutscene_play(20_in)	engine-driven (blocking helper)
+m20	2	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	3	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	4	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	5	wait-cutscene-or-phone	character_is_ready	engine-driven
+m20	6	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	7	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	8	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	9	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	10	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	11	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	12	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	13	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	14	enter-vehicle	Veh Angel Heli MS	needs vehicle
+m20	17	go-to-trigger	Trigger Gym	object_is_in_trigger(LOCAL_PLAYER)
+m20	18	wait-cutscene-or-phone	character_is_ready	engine-driven
+m20	20	wait-flag	player_controls_car	set in m20_objective_take_control_of_the_car
+m20	22	wait-flag	M20_status.rc_car_peds_hit	set in m20_rc_car_hit_ped_cb
+m20	24	kill-target	Veh RC Car	kill
+m20	26	go-to-trigger	Trigger Boat	on_trigger->m20_boat_reached_cb
+m20	27	go-to-navpoint	Veh Angel Heli MS -> Nav Heli Float Boat	dist <60; mover=npc/vehicle Veh Angel Heli MS
+m20	28	wait-flag	M20_status.player_has_rc_vehicle	set in m20_objective_crash_the_boat, m20_objective_crash_the_helicopter, m20_objective_
+m20	30	wait-thread	m20_beach_party_polling_thread	thread started at m20_objective_crash_the_boat:1160
+m20	32	wait-thread	m20_beach_party_polling_thread	thread started at m20_objective_crash_the_boat:1160
+m20	34	go-to-trigger	Trigger Circular Path	on_trigger->m20_circular_path_reached_cb
+m20	35	wait-cutscene-or-phone	group_is_loaded	engine-driven
+m20	36	wait-cutscene-or-phone	group_is_loaded	engine-driven
+m20	37	wait-flag	M20_status.player_has_rc_vehicle	set in m20_objective_crash_the_boat, m20_objective_crash_the_helicopter, m20_objective_
+m20	38	wait-cutscene-or-phone	group_is_loaded	engine-driven
+m20	39	kill-target	Veh Heli Wrestler	kill
+m20	41	go-to-trigger	Trigger Tank Path	on_trigger->m20_tank_path_reached_cb
+m20	42	kill-target	NPC Last Wrestler	on_death->m20_last_wrestler_killed_cb
+m20	43	wait-flag	M20_status.player_has_rc_vehicle	set in m20_objective_crash_the_boat, m20_objective_crash_the_helicopter, m20_objective_
+m20	44	drive-to	Veh STAG Tank 001|Veh STAG Tank 002|Veh STAG Tank 003|Veh STAG Tank 004|Veh STAG Tank	on_vehicle_enter_water->m20_rc_tank_destroyed_cb
+m23	1	wait-cutscene-or-phone	cutscene_play(23_in)	engine-driven (blocking helper)
+m23	3	go-to-trigger	tgr_saints_hq_entry	on_trigger->m23_saints_hq_entry_cb
+m23	4	wait-flag	M23_flags.player_got_heli[1] / M23_flags.player_got_heli[2]	set by script
+m23	5	go-to-trigger	tgr_daedalus_airspace 001	on_trigger->m23_daedalus_airspace_entered_cb
+m23	6	timed-wait	delay(9.0)	9.0 s of game time, no player action
+m23	7	kill-target		on_mover_destroyed->m23_callback_daedalus_gun_destroyed_cb
+m23	10	exit-vehicle		on_vehicle_exit->m23_daedalus_landing_player_exited_vehicle
+m23	11	go-to-trigger	tgr_plant_bomb_1	on_trigger->m23_bomb_planted_or_flown_to_cb
+m23	12	go-to-trigger	tgr_plant_bomb_2	on_trigger->m23_bomb_planted_or_flown_to_cb
+m23	13	go-to-trigger	tgr_fly_to_side	on_trigger->m23_bomb_planted_or_flown_to_cb
+m23	14	go-to-trigger	tgr_plant_bomb_3	on_trigger->m23_bomb_planted_or_flown_to_cb
+m23	15	go-to-trigger	tgr_plant_bomb_4	on_trigger->m23_bomb_planted_or_flown_to_cb
+m23	17	kill-target	M23_groups.cyrus_vtol.vtol	on_vehicle_destroyed->m23_cyrus_vtol_destroyed_cb
+m23	18	timed-wait	delay(5)	5 s of game time, no player action
+m23	19	wait-flag	(true)	set by script
+m23	20	wait-cutscene-or-phone	cutscene_play(23_z01)	engine-driven (blocking helper)
+m23	21	wait-flag	M23_flags.escape_timer_expired	set in m23_cb_boss_battle_self_destruct_time_expired, m23_cb_escape_time_expired
+m23	22	timed-wait	delay(20.0)	20.0 s of game time, no player action
+m23	0	hazard	tgr_cyrus_combat 001	
+m23	0	hazard	tgr_daedalus_gunfire	
+mm_p_02	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+mm_p_04	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)
+mm_p_05	1	wait-cutscene-or-phone	cutscene_play()	engine-driven (blocking helper)

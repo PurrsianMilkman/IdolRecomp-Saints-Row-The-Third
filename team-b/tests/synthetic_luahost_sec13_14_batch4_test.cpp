@@ -484,7 +484,8 @@ static void test_block_13() {
         lua_pop(gp, 1);
 
         c.scriptedActionDispatchGatePasses.set(true);
-        refuses(host, gp, "ai_scripted_action_is_processing('Npc3')", "0x012e1c64");
+        // Sec13.7 gate polarity (2026-10-12): gate true -> no scripted-action tags modelled -> false, no error.
+        ok(host, gp, "assert(ai_scripted_action_is_processing('Npc3') == false)");
 }
 
 

@@ -171,6 +171,8 @@ struct VehicleState {
     // gap as game_audio_get_audio_id's own Wwise-hash resolver elsewhere).
     OpenValue<int32_t> vehicleClass{"vehicle class enum ((+0xbf4)+0x4c4)", "spec-lua-api-behaviour.md Sec33.1"};
     OpenValue<bool> bodyActive{"vehicle body-active flag (+0xbd0)", "spec-lua-api-behaviour.md Sec33.1"};
+    // ce4556f Sec38.1 FINAL: +0xbd0 is 1 for every activated (spawned/streamed) live vehicle; 0 only before activation/after destruction.
+    bool bodyActiveOrDefault() const { return bodyActive.known() ? bodyActive.get() : true; }
     // spec-player-runtime.md Sec13.4 step 5's own gate, `0x00ad3140(vehicle)`:
     // "(vehicle+0xbf4)+0x4c4 == 0xe" - the SAME physical field as vehicleClass
     // above, re-read by the real seat-pick validator 0x00b0fdf0 to decide

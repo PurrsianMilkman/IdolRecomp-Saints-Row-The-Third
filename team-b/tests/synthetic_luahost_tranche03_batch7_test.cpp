@@ -327,7 +327,7 @@ int main() {
 
     es.objectResolves().set("stopchar01", true);
     es.getOrCreateCharacter("stopchar01"); // pre-create so hasCharacter() selects the via-character path
-    fails(host, gp, "vehicle_stop_do('stopchar01')", "0x16c0");
+    ok(host, gp, "vehicle_stop_do('stopchar01')"); // link null at construction (Team A sync 9c70c61): no live vehicle
     es.getOrCreateCharacter("stopchar01").currentVehicleName.set("");
     ok(host, gp, "vehicle_stop_do('stopchar01')"); // no live vehicle -> does nothing
 
@@ -452,7 +452,7 @@ int main() {
     CHECK(!es.hasVehicle("comp01"));
 
     es.objectResolves().set("comp02", true);
-    fails(host, gp, "vehicle_component_detach('comp02', 'Engine')", "0xbd0");
+    ok(host, gp, "vehicle_component_detach('comp02', 'Engine')"); // ce4556f: +0xbd0 default active; name not in componentNames -> miss
     es.getOrCreateVehicle("comp02").bodyActive.set(false);
     ok(host, gp, "vehicle_component_detach('comp02', 'Engine')"); // not active -> no-op
     CHECK(es.getOrCreateVehicle("comp02").componentDetachAttempts == 0);
@@ -535,7 +535,7 @@ int main() {
 
     es.objectResolves().set("tvtchar01", true);
     es.getOrCreateCharacter("tvtchar01"); // pre-create so hasCharacter() selects the via-character path
-    fails(host, gp, "teleport_vehicle_to_object('tvtchar01', 'tvttgt02')", "0x16c0");
+    ok(host, gp, "teleport_vehicle_to_object('tvtchar01', 'tvttgt02')"); // link null at construction (9c70c61)
     es.getOrCreateCharacter("tvtchar01").currentVehicleName.set("");
     ok(host, gp, "teleport_vehicle_to_object('tvtchar01', 'tvttgt02')"); // no live vehicle -> no-op
 

@@ -1034,7 +1034,7 @@ int stub_qte_human_is_used(lua_State* L) {
 // ---------------------------------------------------------------------
 int stub_audio_any_conversation_playing(lua_State* L) {
     logCall(L, upLog(L), "audio_any_conversation_playing", upStateTag(L));
-    bool active = upState(L)->conversationChannelActive().get("mission_conv"); // OPEN until set
+    bool active = upState(L)->missionConvActive(); // e6691f1: false (0xff) until played
     lua_pushboolean(L, active ? 1 : 0);
     return 1;
 }

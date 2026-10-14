@@ -167,7 +167,7 @@ int main() {
     ok(host, gp, "assert(customization_creation_is_open() == true)"); // a polling loop never sees false - faithful, not a bug
 
     // customization_screen_is_ready: OPEN until set.
-    fails(host, gp, "customization_screen_is_ready()", "customization_screen_is_ready");
+    ok(host, gp, "assert(customization_screen_is_ready() == false)"); // false until store_character sets Store_lineup_is_loaded (Team A sync 9c70c61)
     es.customizationCreation().screenIsReady.set(true);
     ok(host, gp, "assert(customization_screen_is_ready() == true)");
 

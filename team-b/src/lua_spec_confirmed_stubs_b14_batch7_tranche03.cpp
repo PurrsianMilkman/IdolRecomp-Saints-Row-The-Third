@@ -627,7 +627,7 @@ int stub_vehicle_component_detach(lua_State* L) {
     EngineState* st = upState(L);
     if (!st->objectResolves().get(vehicleName)) return 0; // OPEN until set
     VehicleState& v = st->getOrCreateVehicle(vehicleName);
-    if (!v.bodyActive.get()) return 0; // OPEN until set; CONFIRMED gate: requires vehicle +0xbd0==1
+    if (!v.bodyActiveOrDefault()) return 0; // ce4556f: +0xbd0 default 1 for a live vehicle
 
     std::string matched;
     for (const auto& c : v.componentNames) {

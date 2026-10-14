@@ -59,6 +59,10 @@ struct PlacedObjectState {
     // header.
     OpenValue<bool> hasInteractionAnchor{"door +0xc8 interaction-anchor sub-object present",
                                           "spec-lua-api-behaviour.md Sec1.10"};
+    // CONFIRMED (Team A sync 9c70c61, Sec3.9 data-dependent sub-objects, m01): +0xc8 is present iff the
+    // placed door's zone data defines an interaction anchor; a host that does not model it treats it as
+    // absent (open the door, skip the character animation, push the normal result). Tests may .set(true).
+    PlacedObjectState() { hasInteractionAnchor.set(false); }
     // Raw rich-path request, recorded on the last successful call: this
     // project has no animation-state name->id table (0x004bf810, the same
     // table character_kill's own arg 3 reads, Sec3.15) and no vtable

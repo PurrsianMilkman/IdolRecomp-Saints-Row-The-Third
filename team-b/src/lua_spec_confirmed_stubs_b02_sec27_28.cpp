@@ -76,7 +76,7 @@ int stub_cell_is_mission_complete(lua_State* L) {
     bool complete = false;
     if (!name.empty()) {
         if (upState(L)->objectResolves().get(name)) { // OPEN until set
-            complete = upState(L)->missionComplete().get(name); // OPEN until set
+            complete = upState(L)->missionIsComplete(name); // Sec20.14 port pointer: false unless host state says complete
         }
     }
     lua_pushboolean(L, complete ? 1 : 0);
@@ -875,7 +875,7 @@ int stub_continuous_explosion_start(lua_State* L) {
     std::string targetName = argString(L, 2);
     EngineState* st = upState(L);
     auto& ce = st->continuousExplosion();
-    if (!ce.definitionResolves.get(defName)) return 0;     // OPEN until set
+    if (!ce.resolve(defName)) return 0;     // Sec28.16: unknown row name is a silent no-op once the table is installed
     if (!st->objectResolves().get(targetName)) return 0;   // OPEN until set
     if (ce.active.get()) return 0; // OPEN until set; CONFIRMED "ignored if one is already active"
     ce.active.set(true);

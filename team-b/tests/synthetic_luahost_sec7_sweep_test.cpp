@@ -211,7 +211,7 @@ int main() {
         es.objectResolves().set("NotThere", false);
         ok(host, gp, "assert(ai_scripted_action_is_complete('NotThere') == true)");
         es.objectResolves().set("Known", true);
-        refuses(host, gp, "ai_scripted_action_is_complete('Known')", "0x004f2880"); // OPEN until set
+        ok(host, gp, "assert(ai_scripted_action_is_complete('Known') == true)"); // ce4556f: no ticket -> non-null
         es.getOrCreateCharacter("Known").scriptedActionLookupNonNull.set(true);
         ok(host, gp, "assert(ai_scripted_action_is_complete('Known') == true)");
         es.getOrCreateCharacter("Known").scriptedActionLookupNonNull.set(false);

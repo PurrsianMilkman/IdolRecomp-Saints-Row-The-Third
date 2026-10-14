@@ -209,7 +209,7 @@ int stub_door_open(lua_State* L) {
         lua_pushboolean(L, 0);
         return 1;
     }
-    if (!door.hasInteractionAnchor.get()) { // OPEN until set
+    if (!(door.hasInteractionAnchor.known() && door.hasInteractionAnchor.get())) { // Sec4.13.0: anchor absent unless set -> skip the animation step
         lua_pushboolean(L, 0);
         return 1;
     }
@@ -314,12 +314,33 @@ int stub_object_is_in_trigger(lua_State* L) {
     EngineState* st = upState(L);
     bool triggerResolved = st->objectResolves().get(triggerName); // OPEN until set
     bool objectResolved = st->objectResolves().get(objectName);   // OPEN until set - parsed unconditionally (CONFIRMED)
+    if (triggerResolved && (objectName == "#PLAYER1#" || objectName == "LOCAL_PLAYER")) st->noteTriggerPollQuery(triggerName); // harness bookkeeping (--auto-objective)
     if (!triggerResolved || !objectResolved) {
         lua_pushboolean(L, 0);
         return 1;
     }
-    bool contains = st->triggerContainsObject().get(
-        EngineState::triggerContainsObjectKey(triggerName, objectName)); // OPEN until set
+    // Sec1.12 port pointer (2026-10-12, FINAL): a pure geometric test of the arg-2 object's current world
+    // position against the arg-1 trigger's shape (EngineState::TriggerVolumeContainsPoint, the same test the
+    // trigger ENTER/EXIT dispatch uses). An explicit triggerContainsObject().set() (tests) still wins.
+    // Still OPEN when the trigger has no registered geometry or the object has no known position.
+    const std::string key = EngineState::triggerContainsObjectKey(triggerName, objectName);
+    bool contains;
+    if (st->triggerContainsObject().known(key)) {
+        contains = st->triggerContainsObject().get(key);
+    } else if (const EngineState::TriggerVolumeGeometry* g =
+                   st->triggerGeometry(triggerName)
+                       ? st->triggerGeometry(triggerName)
+                       // Team A sync 9c70c61: the trigger's shape/position come from its zone-data record, so
+                       // register them on demand (same geometry the ENTER/EXIT dispatch uses).
+                       : (st->registerTriggerGeometryFromZoneData(triggerName) ? st->triggerGeometry(triggerName)
+                                                                                : nullptr)) {
+        CharacterState& oc = st->getOrCreateCharacter(objectName);
+        st->tryResolveWorldPositionFromZoneData(objectName, oc.worldPosition);
+        const WorldPosition p = oc.worldPosition.get(); // OPEN until the object has a position
+        contains = EngineState::TriggerVolumeContainsPoint(*g, p.x, p.y, p.z);
+    } else {
+        contains = st->triggerContainsObject().get(key); // OPEN: no trigger geometry registered
+    }
     lua_pushboolean(L, contains ? 1 : 0);
     return 1;
 }
@@ -481,7 +502,16 @@ int stub_release_to_world(lua_State* L) {
     std::string name = argString(L, 1);
     EngineState* st = upState(L);
     if (!st->objectResolves().get(name)) return 0; // OPEN until set
-    int32_t kind = st->releaseToWorldKind().get(name); // OPEN until set - which tier resolved
+    // Sec4.4 port pointer (2026-10-12, FINAL): the kind is not stored state - it is whichever resolver
+    // accepts the name, tried group -> character -> vehicle, against the host's own object registry.
+    // An explicit releaseToWorldKind().set() (tests) still wins. A name this host cannot classify (no
+    // group/character/vehicle record under that name) releases nothing observable and returns normally.
+    int32_t kind;
+    if (st->releaseToWorldKind().known(name)) kind = st->releaseToWorldKind().get(name);
+    else if (st->releaseToWorldGroupMembers().count(name) != 0) kind = 1;
+    else if (st->hasCharacter(name)) kind = 2;
+    else if (st->hasVehicle(name)) kind = 3;
+    else { ++st->releaseToWorldUnclassifiedCount(); return 0; }
     if (kind == 1) {
         for (const auto& member : st->releaseToWorldGroupMembers()[name]) {
             ++st->releasedCount()[member];

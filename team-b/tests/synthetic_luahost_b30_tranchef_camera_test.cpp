@@ -45,7 +45,7 @@ void fails(Host& host, lua_State* L, const std::string& code, const std::string&
 std::vector<RegisteredName> batchFixtureNames() {
     return {
         {"character_kill", "gameplay"},
-        {"vehicle_is_destroyed", "gameplay"},
+        {"vehicle_is_destroyed", "gameplay"}, {"vehicle_detonate", "gameplay"},
         {"camera_restrict_set_active", "gameplay"},
     };
 }
@@ -134,7 +134,15 @@ int main() {
         es.objectResolves().set("Hollywood", true);
         es.getOrCreateVehicle("Hollywood").destroyedFlag16c8.set(false);
         ok(host, gp, "assert(vehicle_is_destroyed('Hollywood') == false)");
+        // f752324: the latch is never observable; even a seeded flag does not flip the answer.
         es.getOrCreateVehicle("Hollywood").destroyedFlag16c8.set(true);
+        ok(host, gp, "assert(vehicle_is_destroyed('Hollywood') == false)");
+        // vehicle_detonate with an unseeded latch (fresh vehicle) = latch 0 -> gate passes, no OPEN throw.
+        es.objectResolves().set("Fresh", true);
+        ok(host, gp, "vehicle_detonate('Fresh')");
+        CHECK(es.getOrCreateVehicle("Fresh").detonateAppliedCount == 1);
+        // Vehicle removed/non-live -> true.
+        es.objectResolves().set("Hollywood", false);
         ok(host, gp, "assert(vehicle_is_destroyed('Hollywood') == true)");
     }
 

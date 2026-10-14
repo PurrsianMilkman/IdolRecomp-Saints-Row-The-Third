@@ -113,7 +113,7 @@ int main() {
     CaseSelectorScratchSource caseSelectorA(br, kLumaWidthPixels);
     CaseSelectorScratchSource caseSelectorB(br, kLumaWidthPixels, caseSelectorLengthFieldBitWidthB,
                                              kDescriptorBSiblingTableIndex);
-    const CaseSelectorStatus rowStatus = caseSelectorA.beginBlockRow(&caseSelectorB);
+    SiblingTableBank siblingBank; const CaseSelectorStatus rowStatus = caseSelectorA.beginBlockRow(&caseSelectorB, &siblingBank);
     CHECK(rowStatus == CaseSelectorStatus::Ok);
     CHECK(br.bitsConsumedSoFar() == 2871);  // Sec5.3r: descriptor B's own real build/expansion ends here
 
@@ -127,7 +127,7 @@ int main() {
     // == 240 for this row, matching the already-documented 2432/12-bit bound
     // for this exact call.
     const int blockCols = kLumaWidthPixels / 8;
-    const std::vector<uint8_t> decoded = decode0x10019d10(br, caseSelectorA.builtTable(), blockCols);
+    const std::vector<uint8_t> decoded = decode0x10019d10(br, siblingBank.tree19d10, blockCols);
 
     // CHECK (hard-asserted): leading-count-driven termination. Independent
     // of whether the per-symbol CONTENT is correct (see below), the loop
@@ -154,7 +154,6 @@ int main() {
             ++diffCount;
         }
     }
-    const bool first8Ok = firstDiff >= 8;
     std::cout << "  Sec5.3ad 528-byte diff: " << diffCount << " byte(s) differ";
     if (firstDiff != SIZE_MAX) {
         std::cout << ", first at offset 0x" << std::hex << firstDiff << std::dec << " (got 0x" << std::hex
@@ -169,23 +168,12 @@ int main() {
     std::cout << "  cumulative bits after 0x10019d10: " << bitsAfter19d10
                << " (Sec5.3r: expected 9236 = 6255 + 2981) -> " << (bitCostOk ? "MATCH" : "MISMATCH") << "\n";
 
-    const bool contentMatches = diffCount == 0 && bitCostOk;
-    (void)first8Ok;
-    if (!contentMatches) {
-        std::cout << "  KNOWN DISCREPANCY (see HANDOFF.md): decode0x10019d10()'s literal Sec5.3ab algorithm\n"
-                      "  does not reproduce this golden fixture's own content/bit-cost. The leading-count-\n"
-                      "  driven termination above IS confirmed correct. NOT wired into the production path\n"
-                      "  (consumeDcArrayPreStageGap() still pays skip0x10019d10()'s own measured-total model).\n";
-    }
+    CHECK(diffCount == 0);
+    CHECK(bitCostOk);
 
     if (g_failures != 0) {
         std::cout << "\nreal_bink_0x10019d10_real_decode_test: " << g_failures << " check(s) FAILED\n";
         return 1;
-    }
-    if (!contentMatches) {
-        std::cout << "\nreal_bink_0x10019d10_real_decode_test: SKIPPED (leading-count termination confirmed; "
-                      "per-symbol content/bit-cost has a known, documented discrepancy - see HANDOFF.md).\n";
-        return 77;
     }
     std::cout << "\nreal_bink_0x10019d10_real_decode_test: all checks passed\n";
     return 0;

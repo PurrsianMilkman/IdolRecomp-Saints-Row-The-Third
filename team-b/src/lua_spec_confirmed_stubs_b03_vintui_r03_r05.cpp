@@ -639,7 +639,7 @@ int stub_vehicle_set_sirenlights(lua_State* L) {
     EngineState* st = upState(L);
     if (!st->objectResolves().get(name)) return 0; // OPEN until set
     auto& v = st->getOrCreateVehicle(name);
-    if (!v.bodyActive.get()) return 0; // OPEN until set; CONFIRMED gate +0xbd0==1
+    if (!v.bodyActiveOrDefault()) return 0; // ce4556f: +0xbd0 default 1 for a live vehicle
     int32_t cls = v.vehicleClass.get(); // OPEN until set
     switch (cls) {
         case 3: case 5: case 6: case 7: case 8: case 11:
@@ -867,7 +867,7 @@ int stub_vehicle_exit_group_check_done(lua_State* L) {
     for (const auto& name : names) {
         if (!st->objectResolves().get(name)) continue; // OPEN until set
         CharacterState& c = st->getOrCreateCharacter(name);
-        if (!c.isAlive.get()) continue; // OPEN until set
+        if (!c.aliveByPredicate()) continue; // OPEN until set
         int32_t state = c.stateEnum.get(); // OPEN until set
         if (state == 2 || state == 3) {
             lua_pushboolean(L, 0);

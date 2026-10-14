@@ -364,7 +364,7 @@ int stub_mission_is_complete(lua_State* L) {
     bool complete = false;
     if (!name.empty()) {
         if (st->objectResolves().get(name)) { // OPEN until set - SAME shared map stub_cell_is_mission_complete reads
-            complete = st->missionComplete().get(name); // OPEN until set - SAME shared map
+            complete = st->missionIsComplete(name); // Sec20.14 port pointer: false unless host state says complete
         }
     }
     lua_pushboolean(L, complete ? 1 : 0);
@@ -1166,7 +1166,17 @@ int stub_trigger_get_radius(lua_State* L) {
     EngineState* st = upState(L);
     double radius = 0.0; // CHOSEN fallback for an unresolved name, see doc comment above
     if (st->objectResolves().get(name)) { // OPEN until set
-        radius = st->getOrCreatePlacedObject(name).triggerRadius.get(); // OPEN until set
+        PlacedObjectState& po = st->getOrCreatePlacedObject(name);
+        if (po.triggerRadius.known()) {
+            radius = po.triggerRadius.get(); // explicit override (tests)
+        } else {
+            // Spec sync e6691f1 (Sec21.13 FINAL): sphere -> +0x90 radius; cylinder -> +0x94; box -> 0.5 *
+            // corner-to-corner diagonal. A trigger whose real shape cannot be decoded stays OPEN.
+            if (!st->triggerGeometry(name)) st->registerTriggerGeometryFromZoneData(name);
+            const EngineState::TriggerVolumeGeometry* g = st->triggerGeometry(name);
+            if (!g || !g->shapeKnown) throw OpenStateError(po.triggerRadius.global(), po.triggerRadius.spec());
+            radius = EngineState::triggerRadiusForGeometry(*g);
+        }
     }
     lua_pushnumber(L, radius);
     return 1;

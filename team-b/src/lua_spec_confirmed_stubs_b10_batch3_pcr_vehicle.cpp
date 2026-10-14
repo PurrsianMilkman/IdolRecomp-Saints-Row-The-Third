@@ -973,13 +973,13 @@ int stub_get_current_hit_points(lua_State* L) {
     std::string resolvedName;
     if (isFollowerSentinelLiteral(name)) {
         if (resolveFollowerAwareObject(st, name, resolvedName)) { // may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
-            hp = st->getOrCreateCharacter(resolvedName).currentHitPoints.get(); // OPEN until set, REUSED existing field
+            hp = st->drawOrGetCurrentHitPoints(resolvedName); // Sec34.2: starts at the table/max value
         }
     } else if (st->objectResolves().get(name)) { // OPEN until set
         if (st->hasVehicle(name) && !st->hasCharacter(name)) {
             hp = st->getOrCreateVehicle(name).hitPointsForQuery.get(); // OPEN until set
         } else {
-            hp = st->getOrCreateCharacter(name).currentHitPoints.get(); // OPEN until set, REUSED existing field
+            hp = st->drawOrGetCurrentHitPoints(name); // Sec34.2: starts at the table/max value
         }
     }
     lua_pushnumber(L, hp);

@@ -169,6 +169,20 @@ int main() {
         CHECK(slot.removeCount == 1);
     }
 
+    // installWeaponDefinitionNames(): real weapons.xtbl names resolve true
+    // case-insensitively, and the table becoming complete turns an unknown
+    // name into a silent no-op (native does nothing) instead of OPEN.
+    CHECK(!es.weaponDefinitionTableComplete());
+    es.installWeaponDefinitionNames({"pistol-gang", "Molotov", "special-sonicgun"});
+    CHECK(es.weaponDefinitionTableComplete());
+    ok(host, gp, "inv_weapon_add_temporary('Bob', 'PISTOL-GANG', 5)");
+    CHECK(es.weaponTemporaryInventory()["Bob"][AsciiLowerFold("pistol-gang")].ammoCount == 5);
+    ok(host, gp, "inv_weapon_add_temporary('Bob', 'molotov')");
+    ok(host, gp, "inv_weapon_add_temporary('Bob', 'special-sonicgun')");
+    ok(host, gp, "inv_weapon_add_temporary('Bob', 'no-such-weapon')"); // no throw
+    CHECK(es.weaponTemporaryInventory()["Bob"].count(AsciiLowerFold("no-such-weapon")) == 0);
+    ok(host, gp, "inv_weapon_remove_temporary('Bob', 'no-such-weapon')");
+
     if (g_failures == 0) {
         std::cout << "synthetic_luahost_b28_batch1_deferred6_test: all checks passed\n";
         return 0;

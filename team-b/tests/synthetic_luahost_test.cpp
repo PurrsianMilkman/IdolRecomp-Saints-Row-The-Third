@@ -2268,7 +2268,7 @@ static void test_block_17() {
             CHECK(resolves.known(name));
             CHECK(resolves.get(name) == true);
         }
-        CHECK(resolves.knownCount() == 5);
+        CHECK(resolves.knownCount() == 6 /* +"#CLOSEST_PLAYER#" = false, Sec4.13.0 */);
         // An arbitrary name NOT in the closed set - including the actual
         // mission-blocker name - stays OPEN: producer (3) (173 in-memory
         // call sites, never individually traced) could register essentially
@@ -2727,7 +2727,9 @@ static void test_block_21() {
         {
             es.objectResolves().set("cruiser1", true);
             auto& v = es.getOrCreateVehicle("cruiser1");
-            refusesOpen(gp, "vehicle_set_sirenlights('cruiser1', true)", "body-active flag");
+            // ce4556f Sec38.1: +0xbd0 defaults to 1 for a live vehicle, so the
+            // first OPEN reached is the class enum.
+            CHECK(v.bodyActiveOrDefault());
             v.bodyActive.set(true);
             refusesOpen(gp, "vehicle_set_sirenlights('cruiser1', true)", "class enum");
             v.vehicleClass.set(3);
@@ -2886,7 +2888,7 @@ static void test_block_21() {
 
         // audio_any_conversation_playing (Sec33.4): settles the "mission_conv" identity question.
         {
-            refusesOpen(gp, "audio_any_conversation_playing()", "mission_conv");
+            ok(gp, "assert(audio_any_conversation_playing() == false)"); // e6691f1: slot starts 0xff
             es.conversationChannelActive().set("mission_conv", true);
             ok(gp, "assert(audio_any_conversation_playing() == true)");
             es.conversationChannelActive().set("mission_conv", false);

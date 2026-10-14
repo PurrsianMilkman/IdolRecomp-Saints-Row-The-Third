@@ -2248,6 +2248,653 @@ left to the orchestrator/user to dispatch. Full detail: `spec-terrain-format.md`
 
 **The `~al` ("Level Always Loaded") zone-entry question is unrelated to pavement, now CONFIRMED.** `~al` (§10.5's own padding finding) is the on-disk marker for container kind `0x1B`, the engine's one global, distance-independent streaming tier (`spec-world-streaming.md` §10.7/§11.1) — not an LOD rung, not a lighting proxy, not a literal "all objects" aggregate. Its real, format-identical `.czn_pc`/`.gzn_pc` content is dispatched through the same per-id handlers as any ordinary tile. The one render sample available (rooftop/window-grid geometry) is consistent with this: `~al` zones most plausibly carry the always-resident distant building-silhouette/rooftop detail that must never pop in/out with camera distance — the opposite end of a building's vertical extent from street level, and a poor fit for pavement (which only matters at close range, where the already-active distance-gated tiers would carry it instead). HIGH CONFIDENCE, not independently re-verified that `~al` content specifically and exclusively routes through the `0x2237` handler.
 
+### 13.2a Road and sidewalk graph, byte-complete (2026-10-14)
+
+**Scope.** The full on-disk layout of the Traffic (`0x2236`) and Sidewalks (`0x2238`) payloads, every field
+tied to a reader in the executable and checked against every shipped byte. Tools:
+`tools/scratchpad/roadgraph_extract.py` (container walk, one archive per process, memory-mapped),
+`roadgraph_decode.py` (decoder plus 60 invariant checks), `roadgraph_vectors.py` (test vectors). The
+complete decode is in `tools/scratchpad/roadgraph/` (`traffic_segments.tsv`, `traffic_nodes.tsv`,
+`traffic_junctions.tsv`, `traffic_lights.tsv`, `sidewalk_nodes.tsv`, `sidewalk_edges.tsv`,
+`sidewalk_crossings.tsv`, `roadgraph_per_tile.tsv`, `roadgraph_per_zone.tsv`). All offsets are relative to
+the start of the section payload, which is the byte after the section's 12-byte tag header. All integers
+are little-endian.
+
+This section **corrects three readings in §13.2 above and in `spec-ai-runtime.md` §20.2**. Each is
+marked where it comes up below:
+- the Traffic "point pool" is not header pair #8;
+- header pair #9 is not an ambient-vehicle handle pool;
+- the Sidewalks 24-byte array holds nodes, not segments.
+
+#### (a) Where the graph lives — FINAL
+
+The city has **one** road graph and **one** sidewalk graph. Both are in a single zone file:
+`sr3_city~fawld.czn_pc`, inside `sr3_city_0.vpp_pc` → `awld_compact.str2_pc`.
+
+| Section | Tag offset in the `.czn_pc` | Tag header | Payload size |
+|---|---|---|---|
+| `0x2236` | 463,632 | 12 bytes (bit 31 of the tag is set) | 1,565,916 bytes |
+| `0x2238` | 2,029,560 | 12 bytes (bit 31 of the tag is set) | 553,752 bytes |
+
+In both headers the third dword is 0.
+
+**Evidence, population census:**
+- All 2,878 `.czn_pc` files were walked (2,068 in `sr3_city_0`, 810 in `sr3_city_1`). No other file
+  carries either id.
+- 152 files carry `0x2241` (Traffic signals): 24 in `sr3_city_0` and 128 in `sr3_city_1`.
+
+This answers `spec-ai-runtime.md` §18's open note "whether the Traffic record is strictly
+one-per-zone-file": there is exactly one Traffic record in the whole city.
+
+**Coordinates are absolute world metres.** No zone origin is added, and no transform is applied when
+the graph is read:
+- `0x00a69c30` and `0x00a6b160` return pointers straight into the node array.
+- The traffic spatial-query and distance code uses those pointers as world positions.
+- Empirically, 10,057 of 10,141 traffic nodes and 7,643 of 7,659 sidewalk nodes lie in a tile that has
+  named placed objects. Sampled nodes sit within a median 0.07 m in height of the nearest placed object
+  in the same tile.
+- Node bounding box: x −2003.3 … 2423.6, y −4.39 … 60.15, z −1632.4 … 1617.9.
+
+Tiles are assigned with the §10.6(g) lattice (`spec-world-streaming.md`):
+`row = round((3640 − z)/280)`, then `col = round((x + 4000 + 160·(row mod 2))/320)`.
+- Traffic nodes fall in 135 tiles.
+- Sidewalk nodes fall in 104 tiles.
+
+#### (b) Traffic header (`0x2236`, `0x78` bytes) — FINAL
+
+The header is 14 `{s32 count, s32 offset}` pairs, then two dwords at `+0x70`/`+0x74`.
+
+The loader `0x00a69570` handles the pairs as follows:
+- It adds the payload base to each offset when count > 0, and zeroes the offset otherwise.
+- It applies the same rule to pair `+0x28`/`+0x2c`, which §13.2's list omits.
+- It then resolves pair 7's per-record offsets, builds the spatial tree, and installs pair 9.
+
+Strides were measured as the distance to the next array and then confirmed by the readers.
+
+| Hdr | Count (city) | Array | Stride | Content |
+|---|---|---|---|---|
+| `+0x00` | 11,455 | segments | 64 | (c) |
+| `+0x08` | 10,141 | nodes | 12 | `float3` world position, metres |
+| `+0x10` | 7,498 | u16 | 2 | successor-list pool (e) |
+| `+0x18` | 7,491 | u16 | 2 | predecessor-list pool (e) |
+| `+0x20` | 327 | u16 | 2 | conflict-list pool (e) |
+| `+0x28` | 18,648 | s16 | 2 | shape-point pool: 3 × s16 per point, so 6,216 points (f) |
+| `+0x30` | 11,455 | path-search records | 24 | (h) |
+| `+0x38` | 21,161 | u16 | 2 | per-segment adjacency lists (h) |
+| `+0x40` | 11,455 | u32 | 4 | path-search open-list storage, zero on disk (h) |
+| `+0x48` | 1,207 | signal lights | 16 | (i) |
+| `+0x50` | 346 | signalised junctions | 20 | (i) |
+| `+0x58` | 678 | signal phases | 6 | (i) |
+| `+0x60` | 1,233 | u16 | 2 | phase → light index lists (i) |
+| `+0x68` | 1,544 | u16 | 2 | phase → segment index lists (i) |
+| `+0x70` | — | s32 | — | payload offset of the spatial-tree blob (k); here `0x142b34`. Not fixed up; passed by address to `0x00dc6190` |
+| `+0x74` | — | u32 | — | runtime tree handle, 0 on disk |
+
+Arrays sit in the payload in this order: nodes `0x78`, segments, `+0x10`, `+0x18`, `+0x20`, `+0x38`,
+`+0x28`, `+0x30`, `+0x40`, `+0x48`, `+0x50`, `+0x58`, `+0x60`, `+0x68`, tree. The u16 pools that end on
+an odd element count are padded to 4 bytes. The tree runs exactly to the end of the payload.
+
+**Answer to `FREE-ROAM-GAPS.md`:**
+- The node array has a 12-byte stride: an absolute `float3`.
+- The shape-point pool has a **6-byte stride**: `s16 × 3`, scaled by **0.0625**. It is not 12 and the
+  scale is not 1.0.
+
+#### (c) Segment record (64 bytes) — FINAL, except the class bits of the flags word (PARTIAL)
+
+A segment is **one lane, one direction**. It is a cubic Bézier from node A to node B.
+
+| Off | Type | Meaning | Evidence |
+|---|---|---|---|
+| `+0x00` | u16 | node A index (start) | `0x00a69c30` with arg 0; `0x00a6b160` |
+| `+0x02` | u16 | node B index (end) | `0x00a69c30` with arg 1 |
+| `+0x04` | float3 | Bézier control point 1 (near A) | `0x00a6bc70` → `0x00a69c60` |
+| `+0x10` | float3 | Bézier control point 2 (near B) | `0x00a6bc70` → `0x00a69c60` |
+| `+0x1c` | u32 | flags (d) | |
+| `+0x20` | u16 | chord length `|B − A|` × 256, truncated to 16 bits | `0x00a6b0e0` and `0x00a69c10` multiply by the double `1/256` at `0x012a2de8` |
+| `+0x22` | u16 | arc length of the Bézier over t∈[0, 0.5], × 256 | `0x00a6b120`; consumer below |
+| `+0x24` | s16×3 | AABB minimum, as an offset from node A, × 0.0625 | `0x00a6a440` |
+| `+0x2a` | s16×3 | AABB maximum, as an offset from node A, × 0.0625 | `0x00a6a440` |
+| `+0x30` | u8 | signal state (i) | |
+| `+0x31` | u8 | 0 in every record; no reader found | |
+| `+0x32` | u16 | runtime head of this segment's vehicle-occupancy list; `0xffff` on disk | (j) |
+| `+0x34` | u16 | successor reference (e) | `0x007d0f80`/`0x007d0fc0` |
+| `+0x36` | u16 | predecessor reference (e) | `0x007d1000`, `0x00a69830` |
+| `+0x38` | u16 | cross-traffic conflict reference (e) | `0x00b5da90`, `0x00b5e960` |
+| `+0x3a` | u16 | right-hand lane neighbour, segment index; `0xffff` = none | `0x00b1aa5d` |
+| `+0x3c` | u16 | left-hand lane neighbour, segment index; `0xffff` = none | `0x00b1aa35` |
+| `+0x3e` | u16 | index of the segment's first shape point; the index array is cumulative (f) | `0x007d1040`, `0x007d3830` |
+
+The 64-byte stride is confirmed four ways:
+- the spatial-tree callback `0x00a69530` computes `index << 6`;
+- `0x00a69b60` and `0x00a69b90` convert between pointer and 1-based handle (`(ptr − base)/64 + 1`; 0 = null);
+- the shape-point accessors' last-element test uses `base + count·64 − 0x40`;
+- the decode passes.
+
+**Curve (FINAL).** The segment curve is a cubic Bézier with control points A, `+0x04`, `+0x10`, B.
+- `0x00a6bc70` builds a two-point spline object: points [A, B] and control array [`+0x04`, `+0x10`].
+  It does this via `0x00a69c60`, which calls `0x00db6f90` with count 2.
+- The derivative evaluator `0x00db6fb0` returns `3·(ctrl − point)` at the ends; the constant 3.0 is at
+  `0x012a2e18`. It uses Bernstein derivative weights in between.
+- Empirically, the stored interior shape points lie on this curve: median distance 0.029 m, maximum
+  0.25 m, over all 6,216 points.
+- Typical control-point distances from their end node are 5.0 m (2,575 records), 10.2 m and 8.8 m.
+
+**Length fields (FINAL).**
+- `+0x20` equals the chord `|B − A|`, not the arc length. It matches within 1/256 m for 11,455 of
+  11,455 segments, provided the value is taken as `round(chord·256) mod 65536`.
+- **Segments of 256 m or more wrap:** 148 segments are that long, and for them the stored value is
+  chord − 256·k.
+- `+0x22` equals the Bézier arc length from t = 0 to 0.5, × 256, also truncated to 16 bits. 15 segments
+  have a half-arc of 256 m or more and wrap. Taken mod 65536, it matches within 0.05 m for 11,427
+  segments and within 0.15 m for all 11,455.
+- The engine uses both fields together in `0x00b1e0c0`. For a "split" request it makes 3 pieces at
+  t = 0, 0.5, 1 with lengths [`+0x22`, `+0x20` − `+0x22`, 0]; the 0.5 is at `0x012a2dc0`. Otherwise it
+  makes 2 pieces at t = 0, 1 with lengths [`+0x20`, 0].
+
+**AABB codec (FINAL).** `0x00a6a440` is the spatial tree's per-element bounding-box callback. It is
+passed by address at `0x00a6b36d` and `0x00a6cace`, and has no direct callers. For each axis:
+
+```
+corner.axis = float( double(nodeA.axis) + double(float(s16)) × 0.0625 )
+```
+
+- 0.0625 is the double at `0x0115a220`. **This closes §13.2's open item on that constant's value.**
+- The origin is node A, `+0x00`; it is not the segment's control point and not a tile origin.
+- With a 1/16 m tolerance, the box contains every node and shape point of its segment for 11,455 of
+  11,455 segments.
+
+#### (d) Segment flags `+0x1c` — PARTIAL
+
+Bits 28–29 hold a 2-bit "kind" read by `0x00a69af0`. It is **0 in every shipped record**.
+
+Bits with confirmed readers:
+
+| Bit | Set on (of 11,455) | Reader and effect |
+|---|---|---|
+| 0 | 4,542 | path search skips the lane change to the `+0x3c` neighbour (`0x00b1c3f0`). Empirically 4,542 of 4,542 have an oncoming `+0x3c` neighbour, and no clear-bit record has one. FINAL |
+| 1 | 0 | same for the `+0x3a` neighbour (`0x00b1c510`) |
+| 2 and 8 | 3,133 / 1,016 | mask `0x104` excludes these from the two runtime lists built by `0x00a6a8a0` |
+| 10 | 9,923 | the `Spline_Type` = 10 class; it is the only `distant_vehicle_traffic_types.xtbl` row, "Ambient", stored as `1<<10` (`spec-tables-traffic-ai.md` §14.4). The low bits are the road-class one-hot mask that row types and the path filter `0x00b1aac0` AND against. FINAL for bit 10 |
+| 12, 13, 20, 23, 30 | 0 on disk | runtime-only; written by the engine (`0x00a6a8a0`, `0x00a69770`, `0x00a69bd0`, `0x00a6a590`) |
+| 15, 27 | 263 / 0 | counted by `0x00a69b00`; bit 15 with bit 27 clear is rejected by `0x00b1aac0` under a caller flag |
+| 18 | 240 | counted into `0x02705ff8`, read by `0x00a69ae0` |
+| 19 | 0 | blocks vehicle-occupancy registration (`0x00a6b6ff`) |
+
+Bit census on disk: 0:4542, 2:3133, 3:205, 4:1049, 5:179, 6:422, 7:195, 8:1016, 10:9923, 15:263, 16:13,
+18:240, 24:301, 25:1256. Most common words: `0x401` (3,855), `0x404` (2,628), `0x100` (951), `0x400` (894).
+
+**Empirical characterisation, HYPOTHESIS only:**
+- bit 2 marks the turning connectors inside junctions: 92.8 % start within 30 m of a signalised
+  junction, none has a lane neighbour, and all 735 conflict-list owners have it;
+- bit 18 marks water routes: 240 of 240 have y < 5 m and no bit 10, and the median length is 122 m;
+- bit 7 marks signalised approaches: 100 % have `+0x30` = 3.
+
+**OPEN:** names for bits 3–8, 15, 16, 24 and 25 beyond these observations.
+
+**[2026-10-14 segment flag bits: readers scanned across the whole `.text` for tests of segment `+0x1c`; counts from `traffic_segments.tsv` (11,455 segments, all in `sr3_city~fawld`). Bits 5, 6, 7, 24 have no reader that tests them as an immediate or through the spawner mask tables; they stay OPEN.]**
+
+| Bit | Meaning | Reader address(es) | Shipped count | Status |
+|---|---|---|---|---|
+| 0 | left (`+0x3c`) neighbour is oncoming | `0x00b1c3f0`, `0x00b1f1be` | 4,542 | FINAL (above) |
+| 3 | excluded from spawning; also bars use as a lane-change target when walking `+0x34` links (masks `0x00800109` / `0x0080010a`) | spawner exclude mask `0x0080010c`; `0x00b1da6b`, `0x00b1da9f` | 205 | HIGH (effect), OPEN (name). 205 of 205 have no lane neighbours, 204 of 205 have sig 1, all have bit 10, median y 60 m, 135 also carry bit 24 |
+| 4 | Highway Only | table `0x01308ad4`; `0x00b1adbd`, `0x00b1c8df` (route cost halved in mode 1); `0x00a6bb00` | 1,049 | FINAL (table) |
+| 5 | unknown | none found | 179 | OPEN. 84 coincide with bit 2, no succ >1, 31 % have pred >1, 176 sig 1 |
+| 6 | unknown, only on highway segments | none found | 422 | OPEN. 422 of 422 also bit 4; never branching, no shape points, median length 15 m (ramp or slip-style stubs?) |
+| 7 | signalised approach | none found | 195 | HYPOTHESIS. 195 of 195 sig 3, 90 % branch (succ >1), 84 % have a left neighbour |
+| 8 | excluded from spawning and from the runtime lists | spawner exclude mask `0x0080010c`; `0x00a6a8a0` mask `0x104`; `0x00b1d729`, `0x00b1d853`, `0x00b1dd8e`, `0x00b1de6e`, `0x00b1ee67`, `0x00b28bb7` (mask `0x00800100` makes the search skip them) | 1,016 | HIGH (effect). 0 of 1,016 have bit 10; 204 of them sig 3, none has lane neighbours. Junction-internal connector class |
+| 15 | caller-handle gated segment | `0x00b1aac0` (with bit 27), `0x00a69b00` | 263 | HIGH. All sig 1, no bit 10, 67 % branch; rejected by the path filter when bit 27 is clear and the caller flag is set. Bit 27 is 0 on disk |
+| 16 | Offroad | table `0x01308ad4`; spawner include mask `0x10000` | 13 | FINAL (table). No bit 10, y median 11 m |
+| 18 | Boat / water | table `0x01308ad4`; `0x0060a490` (roadblocks refuse) | 240 | FINAL |
+| 24 | unknown | none found | 301 | OPEN. 301 of 301 have bit 10; 135 also bit 3; 30 % have a left neighbour, none a right |
+| 25 | no usable opposite lane: the oncoming-lane finder returns nothing | `0x00b1f211`, `0x00b1f26e` in `0x00b1f180` (caller `0x00b20cb7`) | 1,256 | HIGH. Tested on the segment whose bit 0 says "left is oncoming"; 450 of the 1,256 have bit 0, 422 are highway (bit 4) |
+
+How `0x00b1f180` uses bit 25: it walks the `+0x3c` chain until a segment with bit 0 (the oncoming boundary) is reached, then returns that segment's `+0x3c` neighbour, unless the boundary segment has bit 25, in which case it returns none. The right chain is walked the same way with bit 1 and bit 25 (no shipped segment has bit 1).
+
+Port rules, one per bit:
+- Bit 0: never offer a lane change to the left neighbour.
+- Bit 3: never spawn on it and never use it as a lane-change or merge target.
+- Bit 4: highway; halve the route cost in mode 1, keep the 5-vehicle occupancy cap, restrict spawns by the highway rule.
+- Bit 5, 6, 24: no known effect, carry the bit unchanged.
+- Bit 7: carry unchanged; do not use it as a signal test, use the sig field at `+0x30`.
+- Bit 8: never spawn on it and keep it out of the runtime lists built by `0x00a6a8a0`.
+- Bit 15: treat as rejected for route search unless bit 27 is set (bit 27 is never set on disk).
+- Bit 16: include in the spawn mask only for the Offroad `Spline_Type`.
+- Bit 18: boats only; a player on one does not trigger roadblocks.
+- Bit 25: the opposite-lane lookup returns none from a bit-0 boundary that carries it.
+
+#### (e) Link references (`+0x34`/`+0x36`/`+0x38`) — FINAL
+
+All three use the same encoding (`0x007d0f80`, `0x007d0fc0`, `0x00b5da90`). Let `N` be the segment
+count (11,455):
+- `0xffff` means an empty list;
+- a value below `N` means a single entry, that segment index;
+- a value of `N` or more is a pool index `k = value − N` into the field's pool:
+  - successors use `+0x10`/`+0x14`;
+  - predecessors use `+0x18`/`+0x1c`;
+  - conflicts use `+0x20`/`+0x24`.
+
+  At `pool[k]` the layout is `u16 n, then n × u16 segment index`.
+
+Each pool is tiled exactly by its lists, with no gaps or sharing (checked).
+
+| Field | Single direct | Pooled lists | Empty |
+|---|---|---|---|
+| successor | 9,120 | 2,293 | 42 |
+| predecessor | 9,129 | 2,295 | 31 |
+| conflict | 626 | 109 | 10,720 |
+
+Topology invariants, all checked with 0 failures:
+- every successor's predecessor list contains the segment back (14,325 links);
+- every successor's A coincides with this segment's B within **0.033 m**. It is the same node index in
+  12,396 of 14,325 links; the rest are duplicate coincident nodes.
+
+**`+0x38` is the cross-traffic conflict list.** `0x00b5e6c0` walks it, and for each conflicting segment
+walks that segment's vehicle-occupancy list (`+0x32`, (j)) to find vehicles to yield to. Its targets
+never share an end node with the owner. In 778 of 844 links the two polylines cross in x-z.
+
+**Lane neighbours.** `+0x3a`/`+0x3c` are back-referenced symmetrically, with 0 failures over 6,836
+links.
+
+Side and direction census, in a top-down x-z view with +x to the right and +z up (rows run toward −z):
+- `+0x3c` is always the neighbour to the **left** of travel (5,689 of 5,689).
+- `+0x3a` is always to the right (1,147 of 1,147).
+- Every `+0x3a` neighbour runs in the same direction.
+- A `+0x3c` neighbour runs in the opposite direction exactly when flag bit 0 is set (4,542 cases),
+  which is right-hand traffic.
+
+A lane count is therefore the chain length through `+0x3a`/`+0x3c`. Census:
+
+| Same-direction lanes | Oncoming lanes | Segments |
+|---|---|---|
+| 1 | 0 | 5,369 |
+| 1 | 1 | 3,792 |
+| 2 | 2 | 1,500 |
+| 2 | 0 | 794 |
+
+#### (f) Shape points — FINAL
+
+The pool at `+0x28` holds `count` s16 values, 3 per point (`0x007d1040` divides `count` by 3 using
+the constant `0x55555556`). A segment has `n = next.+0x3e − this.+0x3e + 2` points; for the last
+segment, `next.+0x3e` is replaced by `count/3`.
+
+Reader `0x007d3830` returns point k of the segment:
+- k = 0 → node A;
+- k = n − 1 → node B;
+- otherwise `nodeA + 0.0625 × s16triple[ (+0x3e + k − 1) ]`. That is index `(+0x3e + k)·3 − 3` into the
+  s16 array.
+
+Offsets are all relative to node A, not chained. The constant is again `0x0115a220`.
+
+`+0x3e` is monotone non-decreasing, with 0 failures, and the last segment ends exactly at 6,216.
+
+2,899 segments have interior points, between 1 and n of them. 8,556 are straight with n = 2.
+
+**OPEN, generator-side only:** the t-spacing the authoring tool used for the interior points. It is not
+uniform in t, and the runtime does not need it.
+
+#### (g) Nodes — FINAL
+
+The node array is `float3` × 10,141; see (a) for coordinates.
+
+`0x00a69c30` (thiscall on a segment; arg 0 means A, 1 means B) returns `&node[index]` with
+`base = hdr+0x0c`.
+
+#### (h) Path-search side arrays (`+0x30`, `+0x38`, `+0x40`) — FINAL on-disk; runtime role FINAL
+
+These **correct §13.2's "segment → point-pool graph" and "active traffic pool" readings.**
+
+`+0x30` is a 24-byte record, index-parallel with the segments. `0x00b1a730` and `0x00b1a820` convert a
+record to a segment through a signed divide by 24 and `<< 6`.
+
+| Off | Type | On disk | Meaning |
+|---|---|---|---|
+| `+0x00` | u16 | `0xffff` (11,455 of 11,455) | runtime parent segment in the path search; written by `0x00b1a870` |
+| `+0x02` | u8 | position of the `+0x3c` neighbour within this record's adjacency list; `0xff` = none | read by the expansion at `0x00b1c48f` |
+| `+0x03` | u8 | position of the `+0x3a` neighbour; `0xff` = none | read at `0x00b1c4af`/`0x00b1c4c9` |
+| `+0x04` | s32 | byte offset of this record's list in the `+0x38` pool; resolved to a pointer by the loader; `−1` → null | |
+| `+0x08` | f32 | 0 on disk | runtime cost so far |
+| `+0x0c` | f32 | 0 on disk | runtime cost plus estimate |
+| `+0x10` | u32 | 0 on disk | runtime search generation, compared with `0x028921dc` |
+| `+0x14` | u8×4 | 0 on disk | runtime flags; byte `+0x16` bit 0 = in open list |
+
+**`+0x38` pool.** It holds, per segment, the successor list, then the `+0x3c` neighbour if present, then
+the `+0x3a` neighbour if present. This was checked equal for 11,455 of 11,455 segments; list lengths are
+0–5.
+
+**`+0x40`.** One zero-filled u32 slot per segment. It is the storage of the path search's open
+list / priority queue `0x028921d0`:
+- installed by `0x00b1a670`/`0x00b1a650` with capacity `count`;
+- `0x00b1a870` pushes a `+0x30` record with its cost via `0x00b1a690`;
+- `0x00b1c5da` pops the best one via `0x00b1a6e0` and converts it back to a segment.
+
+The tail-jump target `0x00a69330` is not part of the data. It resets a separate static pool of 123
+24-byte list cells at `0x0130cbb0` (41 iterations × 3 cells): the vehicle-occupancy cells of (j).
+
+#### (i) Signals: lights, junctions, phases — FINAL, except junction `+0x0f` (PARTIAL)
+
+**Light record, `+0x48`, 16 bytes.**
+
+| Off | Type | On disk | Meaning |
+|---|---|---|---|
+| `+0x00` | u64 | | light identifier |
+| `+0x08` | s32 | `−1` | runtime light-object index |
+| `+0x0c` | u16 | `0xffff` | runtime zone id |
+| `+0x0e` | u8 | 3 | vehicle-light state |
+| `+0x0f` | u8 | 2 | pedestrian-light state |
+
+- The identifier is matched against the first 8 bytes of the 72-byte light records of a loaded zone's
+  Traffic signals (`0x2241`) section by `0x00a6f3b0`. That function is called from the `0x2241` loader
+  `0x00a6a6c0`.
+- On a match it stores the record index at `+0x08` and the zone id (zone `+0x134`) at `+0x0c`, then
+  pushes both states to the light. Before any match, `0x00861e60` treats `0xffff` as "no zone".
+- On disk, `+0x08`, `+0x0c`, `+0x0e` and `+0x0f` hold exactly (`−1`, `0xffff`, 3, 2) in 1,207 of 1,207
+  records.
+- `0x00a6f2f0` writes the vehicle state; `0x00a6f350` writes the pedestrian state.
+
+**Junction record, `+0x50`, 20 bytes.**
+
+| Off | Type | On disk | Meaning |
+|---|---|---|---|
+| `+0x00` | float3 | | position; used by the nearest-junction query `0x00a6a260` |
+| `+0x0c` | u16 | | first phase index |
+| `+0x0e` | u8 | 0 | runtime current phase |
+| `+0x0f` | u8 | 1 on 328, 0 on 18 | gates `0x00a6a3a3` under a caller flag. **PARTIAL:** meaning not named |
+| `+0x10` | s32 | `−1` | runtime timer |
+
+- The phase count is the next record's `+0x0c` minus this one's, or the phase count for the last
+  record. This is computed by `0x00a68fb0`.
+- The junction y is consistently **+9.67 to +9.87 m** above the end nodes of the lanes it controls (all
+  346 junctions). The x-z position is the intersection centre; 1,542 of 1,544 controlled lanes end
+  within 60 m.
+
+**Phase record, `+0x58`, 6 bytes.**
+
+| Off | Type | Meaning |
+|---|---|---|
+| `+0x00` | u16 | first index in the `+0x60` light list |
+| `+0x02` | u16 | first index in the `+0x68` segment list |
+| `+0x04` | u16 | phase duration |
+
+- List ends come from the next phase or the pool count (`0x00a69010` and `0x00a68fe0`).
+- The duration is loaded into the junction timer by `0x00d9e140`. Its unit is milliseconds, HIGH
+  CONFIDENCE: the same timer's elapsed value is compared with 3,000 at `0x00a6a01f` for the amber
+  window.
+- Shipped durations: 10,000 (567 phases), 0 (108), 15,000 (2), 8,000 (1).
+
+**Controller (`0x00a6a8a0` init, `0x00a69da0` tick, `0x00a6ab30` round-robin).**
+- For the current phase it sets lights to vehicle 1 and pedestrian 1. For the other phases it sets
+  vehicle 3 and pedestrian 2.
+- It writes the low bits of segment `+0x30` for every segment in each phase's `+0x68` list: 1 = proceed,
+  2 = amber, 3 = stop. Amber is set by `0x00a6a0a4` within the 3,000 ms window.
+- On disk, `+0x30` is 3 exactly for the 1,544 segments named in phase lists and 1 for all others
+  (checked as a set identity).
+- `0x00bbf0e0` reads the lights for pedestrians. A crossing is closed when the vehicle state is 2, 3 or
+  5, or the pedestrian state is 2.
+
+All phase lists are in range. All 1,207 lights are referenced by some phase.
+
+#### (j) Vehicle-occupancy lists (runtime) — FINAL
+
+Segment `+0x32` heads a doubly-linked list of 24-byte cells. The cells live in the static pool
+`0x0130cbb0` and are addressed by cell index.
+
+| Cell off | Content |
+|---|---|
+| `+0x00` | previous |
+| `+0x02` | next |
+| `+0x08`/`+0x0c` | object handle |
+
+The insert function is `0x00a6b6d0` and the find-and-remove function is `0x00a6b810`. Nothing in this
+structure is on disk except the `0xffff` heads.
+
+#### (k) Spatial-tree blob (shared primitive `0x00dc6190` → `0x00dc5d50`) — FINAL
+
+The blob is at `payload + hdr[+0x70]`.
+
+Blob header, 12 bytes:
+
+| Off | Type | Value | Meaning |
+|---|---|---|---|
+| `+0x00` | s32 | 4 | element storage size |
+| `+0x04` | s32 | 0 | |
+| `+0x08` | ptr | 0 on disk | runtime root pointer |
+
+The root node follows at `+0x0c`.
+
+Node, 32 bytes:
+
+| Off | Type | Meaning |
+|---|---|---|
+| `+0x00` | s32 | count: 0 = interior node; > 0 = leaf with `count` elements; < 0 = empty |
+| `+0x04` | float3 | box minimum |
+| `+0x10` | float3 | box maximum |
+| `+0x1c` | u32 | runtime pointer, 0 on disk |
+
+The rest of the blob is serialised depth-first, with a cursor starting just after the root:
+- An **interior node** takes the next 64 bytes as its two children. The first child is processed
+  recursively; the second is then processed in place.
+- A **leaf** takes the next `count × elemsize` bytes as u32 element indices, then aligns the cursor to 4.
+
+The section's callback converts each index into a pointer:
+- Traffic, `0x00a69530`: index → `&segment[i]`.
+- Sidewalks, `0x00bbdc30`: index → `&edge[i]`.
+
+Checked on both trees:
+- every child box lies inside its parent box (12,058 checks);
+- every element's box lies inside its leaf's box (Traffic uses the AABB from (c));
+- each element appears exactly once;
+- the cursor ends exactly at the end of the payload.
+
+| Tree | Nodes | Leaves | Depth | Elements | Root box |
+|---|---|---|---|---|---|
+| Traffic | 6,197 | 3,099 | 17 | 11,455 | (−2020.1, −7.46, −1640.4)…(2432.3, 60.19, 1617.9) |
+| Sidewalks | 5,863 | 2,932 | 16 | 8,703 | |
+
+#### (l) Sidewalks section (`0x2238`) — FINAL, except node bytes `+0x0c`/`+0x0d` (PARTIAL)
+
+**Header.** Four `{s32 count, s32 offset}` pairs, then `+0x20` (s32 payload offset of the tree blob,
+here `0x50e30`) and `+0x24` (runtime tree handle, 0 on disk). Loader `0x00bbdcc0`. The tree callback is
+`0x00bbdc30` (8-byte stride, so the tree indexes **edges**).
+
+| Hdr | Count | Array | Stride | Content |
+|---|---|---|---|---|
+| `+0x00` | 7,659 | **nodes** | 24 | see below |
+| `+0x08` | 17,406 | u16 | 2 | node → incident-edge lists (CSR) |
+| `+0x10` | 8,703 | **edges** | 8 | see below |
+| `+0x18` | 1,195 | crossings | 36 | see below |
+
+This **corrects §13.2 and `spec-ai-runtime.md` §20.2**:
+- the 24-byte array holds nodes, not segments;
+- `+0x08` is node adjacency, no longer "uncharacterized";
+- `+0x10` is the edge array, not a "node-count array".
+
+The 1-based handle helpers `0x00bbdda0`/`0x00bbddf0` therefore convert node pointers.
+
+**Node, 24 bytes.**
+
+| Off | Type | On disk | Meaning |
+|---|---|---|---|
+| `+0x00` | float3 | | world position |
+| `+0x0c` | u8 | `0xff` on all nodes | **OPEN:** no reader identified |
+| `+0x0d` | u8 | 1 on 238 nodes, else 0 | `0x00bbde9d` rejects an edge whose two end nodes both have it set, unless query flag `0x10` is given. The 238 nodes mostly end the 4 m- and 6 m-wide edges. **PARTIAL:** meaning not named |
+| `+0x0e` | u16 | | first index into the `+0x08` adjacency pool; the list ends at the next node's value, or at the pool count for the last node |
+| `+0x10` | s32 | `−1` | runtime |
+| `+0x14` | u32 | 0 | runtime |
+
+**Edge, 8 bytes.**
+
+| Off | Type | Meaning |
+|---|---|---|
+| `+0x00` | u16 | node A |
+| `+0x02` | u16 | node B |
+| `+0x04` | u16 | walkway width × 256 (`0x00bbe1f3` and `0x00bbe761`: × 1/256, then × 0.5 gives the half-width used for lateral offsets) |
+| `+0x06` | u16 | crossing index; `0xffff` = none (`0x00bbde6d`, `0x00bbf0e0`) |
+
+Shipped widths are 3.0 m (8,460 edges), 4.0 m (239) and 6.0 m (4).
+
+**Crossing, 36 bytes.**
+
+| Off | Type | Meaning |
+|---|---|---|
+| `+0x00` | s32 | byte offset into the **Traffic** light array (`+0x48` pair); fixed up against Traffic `hdr+0x4c` by `0x00bbdd37`; `−1` → null |
+| `+0x04` | float2 × 4 | crosswalk quad corners, (x, z) |
+
+- 876 crossings point at a light and 319 do not. All light offsets are multiples of 16 and in range.
+- Record 0 is an all-null placeholder (offset `−1`, zero quad), yet 75 edges reference index 0. The
+  reader treats it as a real crossing with no light.
+- Each of the other 1,194 crossings is referenced by exactly one edge, whose midpoint is 2.000 m from
+  the quad centroid. Quads are 4.0 m wide and typically 13–25 m long.
+
+**Invariants, 0 failures:**
+- every edge appears in both end nodes' lists;
+- every listed edge touches its node;
+- the adjacency pool holds exactly 2 × edges.
+
+Node degree: 1 → 183, 2 → 5,205, 3 → 2,271.
+
+Sidewalk nodes lie a median 5.1 m (p90 9.1 m) in x-z from the nearest traffic node.
+
+#### (m) Global totals (the whole city = `sr3_city~fawld.czn_pc`) — FINAL
+
+| Quantity | Value |
+|---|---|
+| Traffic segments | 11,455 |
+| Traffic nodes | 10,141 |
+| Shape points | 6,216 |
+| Sum of stored `+0x20` | 346,221.3 m (lower than the chord sum because of the 148 wrapped segments) |
+| Sum of chords | 387,714.9 m |
+| Sum of Bézier arc lengths | **397,169.9 m** |
+| Signalised junctions | 346 |
+| Phases | 678 |
+| Lights | 1,207 |
+| Signal-controlled lanes | 1,544 |
+| Conflict-list owners | 735 |
+| Sidewalk nodes | 7,659 |
+| Sidewalk edges | 8,703 |
+| Total sidewalk edge length | 173,994.4 m |
+| Crossings | 1,195 (876 with a light) |
+
+Checks: `roadgraph_decode.py` runs 59 invariant families over every shipped record. 53 pass with 0
+failures. The other six are hypotheses that turned out wrong or too loose, each replaced by the form
+that does hold:
+- the two "same node index" forms of successor/predecessor continuity (1,929 each). The 0.033 m
+  coincidence form holds.
+- "interior points at uniform t" (2,885). The on-curve form holds.
+- `+0x20` as arc length (2,754). The chord form holds for 11,455 of 11,455.
+- `+0x22` without wrap (15). It holds mod 65536 for 11,455 of 11,455.
+- controlled lane ends within 60 m of the junction (2 of 1,544 are farther).
+
+#### (n) Test vectors — FINAL
+
+Tile rules for these vectors:
+- a segment belongs to the tile of its node A;
+- nodes, junctions and sidewalk nodes belong to the tile of their own position;
+- a sidewalk edge belongs to the tile of its node A.
+
+All values come from `sr3_city~fawld.czn_pc`. Each tile's own zone files (`sr3_city~f<CCRR>.czn_pc` and
+`~s<CCRR>.czn_pc`) carry no road graph. The region tags come from activity-object names in the tiles'
+`~al` zones (`_A_xx_DT_nn` and `_A_xx_NW_nn`).
+
+**Downtown — tile 1215** (zone `sr3_city~f1215.czn_pc`/`~s1215`, activity region "DT")
+
+Counts:
+
+| Quantity | Value |
+|---|---|
+| Segments | 161 |
+| Nodes | 140 |
+| Shape points | 76 |
+| Σ`+0x20` | 5,072.977 m |
+| Σ Bézier arc | 5,197.478 m |
+| Signal lanes | 41 |
+| Junction records | 6 |
+| Bit-10 lanes | 142 |
+| Sidewalk nodes | 120 |
+| Sidewalk edges | 149 (3,046.564 m, 33 with crossings) |
+
+First 3 segments:
+- seg 33:
+  - geometry: node 36 (−203.500, 16.330, −511.500) → node 37 (−219.000, 16.130, −496.500); ctrl1
+    (−215.900, 16.330, −511.500), ctrl2 (−219.000, 16.290, −508.500);
+  - flags and lengths: flags `0x02000404`; `+0x20` = 21.5703 m (chord 21.571); `+0x22` = 13.0508 m;
+  - AABB: raw (−248, −3, 0)/(0, 0, 240), i.e. (−219.000, 16.142, −511.500)…(−203.500, 16.330, −496.500);
+  - links: sig 1; successor [43]; predecessor [54]; no conflicts; no lane neighbours, so 1 lane and 0
+    oncoming;
+  - shape: first index 35, 2 interior points (−211.250, 16.330, −510.812) and (−216.313, 16.267, −508.062).
+- seg 34: node 36 → node 38 (−240.500, 16.330, −511.500); straight; flags `0x02000404`; `+0x20` = 37.0000;
+  `+0x22` = 18.5000; AABB raw (−592, 0, 0)/(0, 0, 1); successor [217]; predecessor [54]; 1 lane.
+- seg 35: node 39 (−240.500, 16.330, −520.500) → node 40 (−203.500, 16.330, −520.500); straight; flags
+  `0x02000404`; `+0x20` = 37.0000; AABB raw (0, 0, 0)/(592, 0, 1); successor [53]; predecessor [218]; 1 lane.
+
+Graph junction: node 189 at (−208.000, 16.130, −607.000). Incoming segments [212, 328] lead to outgoing
+segments [183, 184]; both incoming segments have the successor list [183, 184].
+
+Signal junction record 2 at (−222.000, 26.000, −516.000), `+0x0f` = 1:
+- phase 0: 10,000 ms; lights [937, 936, 938, 939]; green segments [218, 54];
+- phase 1: 10,000 ms; light [954]; green segments [192, 191].
+
+First 3 sidewalk nodes, all with `+0x0c` = 255 and `+0x0d` = 0:
+- node 271 (−203.500, 16.150, −502.425), edges [259, 260, 261];
+- node 272 (−213.925, 16.150, −502.425), edges [259, 262];
+- node 273 (−213.925, 16.150, −496.500), edges [262, 263, 264].
+
+First 3 sidewalk edges:
+- edge 259: 271–272, 10.425 m, width 3.00 m;
+- edge 260: 271–282, 27.174 m, width 3.00 m, crossing 10 (light 954; quad (−203.5, −503.901), (−207.5, −503.901),
+  (−203.5, −528.075), (−207.5, −528.075));
+- edge 261: 271–298, 130.500 m, width 3.00 m.
+
+**Suburban-type — tile 1517** (zone `sr3_city~f1517.czn_pc`/`~s1517`, outer region "NW", unsignalised, low density)
+
+Counts:
+
+| Quantity | Value |
+|---|---|
+| Segments | 45 |
+| Nodes | 44 |
+| Shape points | 30 |
+| Σ`+0x20` | 1,203.504 m |
+| Σ Bézier arc | 1,241.178 m |
+| Signal lanes | 0 |
+| Junction records | 0 |
+| Bit-10 lanes | 21 |
+| Sidewalk nodes | 20 |
+| Sidewalk edges | 20 (262.637 m, 0 crossings) |
+
+First 3 segments:
+- seg 6900: node 6286 (745.326, 2.975, −980.073) → node 6287 (747.092, 4.739, −999.027); ctrl1
+  (745.570, 3.419, −985.047), ctrl2 (746.430, 4.261, −994.094); flags `0x00000401`; `+0x20` = 19.1172
+  (chord 19.118); `+0x22` = 9.5586; AABB raw (0, 0, −303)/(29, 29, 0); successor [6901]; predecessor
+  [6899]; L 6920 (oncoming), so 1 lane and 1 oncoming; shape first index 2873, 0 interior points.
+- seg 6901: node 6287 → node 6288 (749.963, 6.336, −1015.568); flags `0x00000401`; `+0x20` = 16.8633;
+  `+0x22` = 8.4336; AABB raw (0, 0, −264)/(46, 26, 0); successor [6902]; predecessor [6900]; L 6921.
+- seg 6902: node 6288 → node 6289 (753.568, 7.698, −1029.810); flags `0x00000401`; `+0x20` = 14.7500;
+  `+0x22` = 7.3750; AABB raw (0, 0, −227)/(58, 22, 0); successor raw `0x3bbd`, i.e. pool list [6903, 11395];
+  predecessor [6901]; L 6922.
+
+Graph junction: node 6289. Incoming segment [6902] leads to outgoing segments [6903, 11395]; it is a fork.
+
+First 3 sidewalk nodes:
+- node 4965 (741.000, 3.882, −990.250), edges [5572, 5573];
+- node 4966 (743.447, 5.589, −1008.504), edges [5573, 5574];
+- node 4967 (746.772, 7.060, −1024.126), edges [5574, 5575].
+
+First 3 sidewalk edges:
+- edge 5573: 4965–4966, 18.496 m, width 3.00 m;
+- edge 5574: 4966–4967, 16.040 m, width 3.00 m;
+- edge 5575: 4967–4968, 14.771 m, width 3.00 m.
+
+#### (o) Still OPEN after this pass
+
+1. Names for segment flag bits 3–8, 15, 16, 24 and 25. The readers that exist are listed in (d), and bit
+   10 is FINAL.
+2. Sidewalk node byte `+0x0c` (always `0xff`, no reader found) and the meaning of node byte `+0x0d`.
+3. The meaning of junction byte `+0x0f`.
+4. Generator-side only, not needed by a reader: the interior shape-point spacing rule, and the precision
+   of the `+0x22` integration.
+
+Everything else in both sections is FINAL.
+
 ### 13.3 The other 14 ids, surveyed (not full field census — depth varies, every gap flagged OPEN honestly)
 
 - **`0x2233` Crunched ref geom** — own bespoke `0x70`-byte-stride outer array (via `0x00862dd0`, NOT the Mesh+Material+AABB family despite the same stride number) plus a nested 12-byte instance list that re-indexes it and computes a derived AABB.
@@ -2407,6 +3054,19 @@ closes the "which file supplies ground collision" open item that section tracked
 ---
 
 ## Changelog
+
+- **2026-10-14 — new §13.2a: Traffic (`0x2236`) and Sidewalks (`0x2238`) road/sidewalk graph made
+  byte-complete** (SPEC TEAM, self, executable plus every shipped byte). Both sections live only in
+  `sr3_city~fawld.czn_pc` (one graph for the whole city). The `0x0115a220` constant is 0.0625 (1/16 m):
+  s16 offsets from segment node A, for both the AABB and the shape points. The shape-point pool is
+  `+0x28` with a 6-byte stride (3 × s16), not pair #8. Corrections to §13.2: pair #8 is per-segment
+  adjacency; pair #9 is the path-search open-list storage; the Sidewalks 24-byte array holds nodes;
+  `+0x10` holds 8-byte edges; `+0x08` is node adjacency. Segment curves are cubic Béziers;
+  successor, predecessor and conflict lists are documented, plus lane neighbours, signal
+  junctions/phases/lights, sidewalk crossings and the shared spatial-tree blob. Test vectors for
+  tiles 1215 (downtown) and 1517 (NW, suburban-type), plus global totals. Full TSV decode in
+  `tools/scratchpad/roadgraph/`. OPEN: names for some segment class bits, sidewalk node bytes
+  `+0x0c`/`+0x0d`, junction byte `+0x0f`. Cleanroom self-check: strict regex 0 hits.
 
 - **2026-10-11 — water-vs-missing-ground hypothesis tested for the long-parked ground-missing
   live-playtest bug: CLEAN NEGATIVE as a tile-classification signal** (SPEC TEAM, self, direct

@@ -120,7 +120,8 @@ int main() {
     // character_is_ready: unresolved -> false (no throw: resolve failure is
     // itself an OPEN refusal at the SAME shared gate every other native
     // uses, tested separately below); dead -> false; alive+not-blocked ->
-    // the remaining AND-chain is OPEN, refuses.
+    // the remaining AND-chain is OPEN, refuses. 0x009a1dc0 (ragdolled) is
+    // CONFIRMED: unseeded = false (standing NPC) so it reaches the AND-chain.
     {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
@@ -130,10 +131,11 @@ int main() {
         es.getOrCreateCharacter("Alice").isAlive.set(false);
         ok(host, gp, "assert(character_is_ready('Alice') == false)");
         es.getOrCreateCharacter("Alice").isAlive.set(true);
+        ok(host, gp, "assert(character_is_ready('Alice') == true)");  // ce4556f: ordinary standing NPC is ready
         es.characterReadyBlocked().set("Alice", true);
         ok(host, gp, "assert(character_is_ready('Alice') == false)");
         es.characterReadyBlocked().set("Alice", false);
-        refuses(host, gp, "character_is_ready('Alice')", "AND-chain");
+        ok(host, gp, "assert(character_is_ready('Alice') == true)");
     }
 
     // character_playing_combat_move: unresolved (OPEN, no .set() at all) ->
@@ -148,7 +150,7 @@ int main() {
         es.objectResolves().set("NotAThing", false);
         ok(host, gp, "assert(character_playing_combat_move('NotAThing') == false)");
         es.objectResolves().set("Bob", true);
-        refuses(host, gp, "character_playing_combat_move('Bob')", "0x009634f0");
+        ok(host, gp, "assert(character_playing_combat_move('Bob') == false)"); // ce4556f: default none
         es.characterPlayingCombatMove().set("Bob", true);
         ok(host, gp, "assert(character_playing_combat_move('Bob') == true)");
         es.characterPlayingCombatMove().set("Bob", false);

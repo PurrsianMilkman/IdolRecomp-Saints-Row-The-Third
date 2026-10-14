@@ -113,7 +113,12 @@ int stub_on_vehicle_enter(lua_State* L) {
         return 0;
     }
     if (!st->objectResolves().get(target)) return 0; // OPEN until set - neither type-gated resolver matched
-    int32_t kind = st->onVehicleEnterResolverKind().get(target); // OPEN until set - which type-gated tier matched
+    // Spec sync e6691f1 (Sec4.12, FINAL): script_npc (kind 1) and script_vehicle (kind 2) are sibling classes,
+    // names never overlap; a name that passed the generic resolver but is no known character is a vehicle.
+    // An explicit onVehicleEnterResolverKind().set() (tests) still wins.
+    int32_t kind = st->onVehicleEnterResolverKind().known(target)
+                       ? st->onVehicleEnterResolverKind().get(target)
+                       : (st->hasCharacter(target) ? 1 : 2);
     if (kind == 1) {
         st->getOrCreateCharacter(target).onVehicleEnterCharacterSlotCallback = callback; // branch 2: hook slot 0x17, +0xf8
     } else {
@@ -213,7 +218,7 @@ int stub_tutorial_start(lua_State* L) {
             // real engine (same "resolve first, mutate only once everything
             // is known" discipline continuous_spawn_start's own new-
             // registration path above already follows).
-            int32_t gatedValue = B5 ? 0 : ts.defaultParam20.get(stateKey(A)); // OPEN until set when B5 is false
+            int32_t gatedValue = B5 ? 0 : (ts.defaultParam20.known(stateKey(A)) ? ts.defaultParam20.get(stateKey(A)) : EngineState::tutorialDescriptorDefaultParam20(A)); // e6691f1 FINAL table
             entry.queuedForSimplePrompt = true;
             st->tutorialState().set(stateKey(A), 2);
             entry.argument2Value = N;

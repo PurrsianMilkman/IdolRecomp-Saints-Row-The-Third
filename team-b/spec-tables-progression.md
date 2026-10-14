@@ -1352,7 +1352,133 @@ Confirms §10.9's core claim exactly: the document has **no `<root><Table>` wrap
 
 **Review status (2026-10-03), §14: NEEDS-DATA for 2 of the 3 original count conflicts — §14.1 type census (43 types / 308 rows listed vs 312), §14.12 categories (5 + 26 + 1 = 32 vs 31). ~~§14.6 `level_info` total (22 × 4 + 3 = 91 vs 80)~~ **closed: §14.6's own 2026-10-01 VALIDATED-BY-DATA note (Team B job `20261001T003803-team-b-upsq`) already reproduces 80/254/263 exactly, so the 80 stands as correct; the actual residual doubt is the "22/25 groups cover levels 2–5" arithmetic in §14.6's own OPEN note, not the 80 total, and that was already marked there — stale conflict removed from this tally, nothing new found this pass** (`review/exe-notes-2026-10-01/interp_needs_data_triage_20261003.md` §4). The main sections now carry or point to each §14 correction (§6.3 tree, §10.3 element case, §10.6 `Spline_Type`, §10.7 `Freerunning_fail_pct`, §10.9 extra elements, §10.11 second row).**
 
+## Free-roam respect grants and level-up flow (2026-10-14)
+
+**Scope.** Every way free roam adds respect, with the grant routine, the amounts (table and field), the multipliers and the cap; then the level-up loop, its events and the save fields; then test vectors. Static work: read-only disassembly (pefile + capstone) plus the shipped tables (`respect_levels.xtbl`, `tweak_table.xtbl`, `unlockables.xtbl`, `stats.xtbl` from `tools/ai_base_xtbl/`; `props.xtbl` and the diversion tables extracted read-only from `misc_tables.vpp_pc` / `da_tables.vpp_pc` into `tools/scratchpad/freeroam_save_xtbl/`). Scripts: `tools/scratchpad/freeroam_save_dis.py`, `freeroam_save_ctx.py`, `freeroam_save_divstat.py`, `freeroam_save_respect_sim.py` (the model that produced B.3). Each item is **FINAL** or **PARTIAL**.
+
+**Two corrections to earlier text.**
+- (1) `spec-activity-runtime.md` §4 concludes that the 10 "no direct primitive call" diversions have no locatable grant. **They do: the grant is in the HUD reward-toast system** (B.1.2). The toast pool's release paths call `0x007FA320`, which calls the award routine. The 2026-10-11 "HUD-array reader angle CLOSED" note missed this callee of `0x007FB4F0`.
+- (2) §5.4's "opens a stat-system record for stat id `0x44`" is the **HUD hint `0x44`** (the "+N Respect" pop) posted through the hint dispatcher `0x00710CB0`, with the granted amount, followed by `0x00710F50(1, level + 1)`.
+
+### B.1 Every free-roam respect source — **PARTIAL** (all grant routines and amounts FINAL; exploration, flashpoint and mugging delivery OPEN)
+
+#### B.1.1 The one award routine — `0x009E2440(player, amount, source)` — FINAL (disassembly)
+
+Every source below ends here. Steps:
+1. If the player is null or `amount < 1`, return 0. In horde mode (`0x006E44F0`) return 0.
+2. If the player is not locally owned (`0x008ADDB0`), send a `"player"`/`"respect"` network message with the amount and return the amount.
+3. **Overflow:** if total (`+0x1ED0`) ≥ cap, or level (`+0x1ED8`) ≥ level count − 1 (= 49), the respect is **converted 1:1 into dollars**. `0x009601D0` does dollars × 100 → raw cash, clamped to ±2,000,000,000; `0x0094D920` adds it. Return 0.
+4. Otherwise the grant is `amount`, clamped to `cap − total` when `total + amount ≥ cap`.
+5. Add the grant to the total (`0x009DB8C0`, floored at 0) and run the level-up loop (B.2).
+6. Post HUD hint `0x44` with the grant, then set hint argument 1 to `level + 1` (`0x00710F50`). Report to telemetry with `source` (`0x00BD9710`; `source` has no other use). Return the grant.
+
+**Cap** = `0x014B031C` = Σ `respect_levels` `Respect` − last row's `Respect` = **238,875**.
+
+**Multiplier.** The global respect multiplier `0x012FD1B0` is read through `0x007BDB70`. It is saved at `0x4A5C`, reset to 1.0 at game start (`0x007BDA50`), set on load (`0x007BDB30`), and **raised additively** by unlockable type `Respect_Bonus_Modifier` (`0x007BDB40`, from `0x0071F227`). Shipped rows: `Respect_Bonus_Purchase1..4` give +0.05 each (respect-level rows 7, 15, 30 unlock the first three), and `Respect_Bonus_Modifier` gives +0.10. Values seen in saves: 1.0, 1.25, 1.35, 1.45. **Callers that apply it:** the toast grant, streaking, the activity bonus, `game_award_respect`, Pay-Cash-for-Respect and store purchases. **Kills do not apply it** (B.1.2 row 5).
+
+#### B.1.2 Sources
+
+| # | Source | Grant path (`source` arg) | Amount (table → field) | Status |
+|---|---|---|---|---|
+| 1 | **Stunt diversions** (drifting, near miss, oncoming / wrong way, peel-out / burnout, hijacking, low flying, back-seat-driver row, big air / stunt jumping, wheels: two wheels, wheelie, stoppie) | The type's score routine calls **`0x006A4D80(&respect, &cash, fraction, Max_Respect, Max_Lifetime_Respect, Max_Cash, stat_id, show)`**, fills a 0x40-byte toast record (`0x007FC2D0`) with **`+0x10` = respect, `+0x14` = cash in dollars (float)**, and submits it with `0x007FC190`. **The grant happens when the toast is finalised:** `0x007FC190` with a dead handle, `0x007FB4F0` release mode 2, or the flush `0x007FC240` → **`0x007FA320`**: respect = round(multiplier × `+0x10`) → `0x009E2440(…, 3)`, then hint `+8` (or `0x00698BB0` when 0 was granted) and hint `0xA1`; cash = `+0x14` × 100 → clamp `0x00960160` → `0x0094D920(…, 5)` and hint `0xA0`. | **`0x006A4D80`:** `fraction` (the trick score, clamped to [0, 1]); if it is ≈ 0, nothing. If the diversion's lifetime statistic (`stat_id`, value at stat record `+0x38`) ≥ `Max_Lifetime_Respect`, **pay cash instead**: cash = round(fraction × `Max_Cash`), respect = 0. Otherwise respect = **trunc(fraction × `Max_Respect`)**, cash = 0. Shipped `Max_Respect / Max_Lifetime_Respect / Max_Cash`: drifting 30/3000/80 (stat `0xB4`), near miss 25/10000/100 (`0xC0`), oncoming 30/10000/100 (`0xD3` "wrong way"), peel-out 40/5000/100 (`0xB3` "burnout"), hijacking 10/1000/10 (`0xBB`), low flying 75/5000/100 (`0xBE`), back-seat driver 125/10000/250 (`0xC4`), stunt jumping 150/8000/150 (`0xB0` "big air"), two wheels 50/4000/200, wheelie 50/6000/200, stoppie 50/6000/200 (per-record stat). | **FINAL** for the formula, the grant path and the data. The statistic names come from `stats.xtbl` "<name> - respect earned"; the id → name map (`0xAF` + row offset) is consistent for 8 independent types. **OPEN: where the lifetime statistic is incremented.** |
+| 2 | **Other toast-granting diversions** found by the same call scan | `0x006A4D80` + toast as row 1: base jumping (`0x00695D50`, stat `0xAF`), driver bailout (`0x006A5ED0`, `0xB5`), hostage (`0x006B7210`, `0xBC`), QTE diversion (`0x006B8790`, `0xC3`), vehicle surfing (`0x006C4D00`, `0xD0`), windshield cannon (`0x006C6370`, `0xD2`). The toast submit alone (no `0x006A4D80`): barnstorming (`0x006926C0`), `0x006A2240`, `0x006C36C0`. | Base jumping: `Reward_Tier` `Respect` 30/75/150/225/300/375/525/675/1000, lifetime 15,000. Barnstorming: `Max_Respect` 250, `Max_Cash` 3000. | **FINAL** for the path; the barnstorming amount formula is in its own score routine (activity §2, PARTIAL). |
+| 3 | **Streaking** | `0x006B91A0` → round(multiplier × level `Respect`) → `0x009E2440` directly (activity §4) | `streaking.xtbl` levels: 10/20/30/40/50/75/100/150 respect (or cash 20…400), lifetime 5,000 | **FINAL** |
+| 4 | **Instanced activities** (fraud, trafficking, snatch, heli, mayhem, escort, tank mayhem, Genki) | `0x0061BB50` on completion: `0x009E2440(Props_Award, 0)`, then a second call with round(`Props_Award` × (multiplier − 1)) (activity §6.1) | `Props_Award` 200/400/600 for instances `_01/_02/_03` (DLC escort 400/500); paid once per level row (save bit) | **FINAL** |
+| 5 | **Killing gang members** | `0x00950320` (death handling, local-player killer) → `0x009E2950` → `0x009E2440(…, 4)`. Not multiplied by the respect multiplier; multiplied by a per-kill float (default 1.0, replaced by an object's `+0x19C` → `+0xC4` when present). | **`props.xtbl`** (loaded by `0x0060EA40` into 14 ints at `0x014B02E4`, index by a fixed name list): `kill thug`/`kill killa`/`kill gangsta`/`kill kingpin` = **10** each, chosen by the victim's rank (`+0xF8`: ≥3 kingpin, 2 gangsta, 1 killa, else thug). Only gang members count (`0x00943190`), and not when the victim's `+0x1E00` bit 2 is set. `assault *`, `shooting *` and `destroy gang car` exist (`0x009E26B0`, `0x009E2800`, `0x009E2AC0`) but ship **0**. `collect item pickup` = 10 has no reader. | **FINAL** |
+| 6 | **Pay-Cash-for-Respect upgrades** | Unlockable apply `0x0071F170`: charge `Cash_Cost`, then respect = round(multiplier × `Respect_Received`) → `0x009E2440(…, 7)` and the co-op mirror `0x006CED90` | `Cash_for_Respect_1/2/3`: cost 0, **4,000 / 8,000 / 12,000** respect. Made available by respect-level rows 5, 14 and 23. Paid when the unlockable is *applied* (bought), not when it becomes available. | **FINAL** (path); HIGH CONFIDENCE for "on purchase" |
+| 7 | **Store purchases** (weapons, `0x00816F00`; weapon adds, `0x00601380` / `0x00603230`) | respect = round(round(price × `Store_weapon_purchase_respect_multiplier`) × multiplier) → `0x009E2440(…, 6)` | `tweak_table` `Store_weapon_purchase_respect_multiplier` = **0** → amount 0 → rejected at step 1. **No purchase respect in the shipped game.** | **FINAL** |
+| 8 | **Collectibles** | — | `collectibles.xtbl`: every `Respect_Award` is **0** (cash 1,000 per item and per 5/10/15/20 threshold) | **FINAL** (no respect) |
+| 9 | **Exploration** (hoods, districts, secret areas, stunt jumps) | Values are loaded in the exploration constructor (`0x006A6250`: `Hood_Respect` read at `0x006A630A`, `District_Respect` at `0x006A62C2`, `Secret_Location_Respect` at `0x006A6327`, `Stunt_Jump_Respect` at `0x006A6362`). Its tick (`0x006A6C20`) is **not** among the toast submitters. | `exploration_diversion.xtbl`: hood 100, district 250, secret location 50 (+$500), stunt jump 50 (+$500) | **PARTIAL** (amounts FINAL; delivery OPEN) **[2026-10-14 RESOLVED. The constructor stores the values in the exploration object: `+0x1C` Message_Time×1000, `+0x20` hood, `+0x24` district, `+0x28` secret respect, `+0x2C` secret cash, `+0x30` stunt-jump respect, `+0x34` stunt-jump cash. Two paths. **(a) Hood and district → reward toast**, the row-1 pipeline. `0x006A65B0` (on a hood becoming explored, skipped while `0x014C2D19` "rewards suppressed" is set) builds a toast record (`0x00691E50`): kind 5, diversion type (vtable `+8`), `+0x0C` = `+0x1C` ms, **`+0x10` = hood respect `+0x20`**, text `DIVERSION_EXPLORATION_EXPLORED`. It submits it with `0x007FC020` (the toast-pool insert, sibling of `0x007FC190`) and marks the hood (`+0x48` \|= `0x20`). When every hood of the hood's district has bit `0x20`, a second toast follows with **`+0x10` = district respect `+0x24`**. The grant happens at toast finalisation in `0x007FA320`: round(multiplier × `+0x10`) → `0x009E2440(…, 3)`. **(b) Secret areas and stunt jumps → collection screen.** `0x006A6770` (secret) and `0x006A6C88` (stunt jump) call `0x007F1AD0`, which fills the 12-field UI data item read by `hud_collection.lua` (`collection_type, title, sub_title, items_left, items_total, cash_reward, respect_reward, district_pct_old, district_pct_new, district_name, save_in_mission, no_reward`). Secret: type 8 (`HUD_COLLECTION_SECRET`), cash `+0x2C`, respect `+0x28`. Stunt jump: type 5, cash `+0x34`, **respect `+0x28`**: the code reads `Secret_Location_Respect`, not `Stunt_Jump_Respect` `+0x30`; both ship 50, so no visible effect. When the screen ends, `hud_collection_finished` calls **`game_award_respect(respect_reward, STATS_INVALID, d_type, save_in_mission)`** and `game_award_cash(…)`, unless `no_reward`, and calls `game_autosave()` after the last queued screen. The respect multiplier applies through `game_award_respect` (B.1.1).]** |
+| 10 | **Flashpoints** (gang operations) | `0x006A75E0` posts `FLASHPOINT_COMPLETE_TITLE` through the big completion message `0x007F1AD0` with the respect and cash values. No award call was found in that routine. | `tweak_table` `Flashpoint_respect` = **100** (global `0x014C2E78`), `Flashpoint_cash` = 1,000 | **PARTIAL** (amount FINAL; delivery OPEN) **[2026-10-14 RESOLVED: `0x007F1AD0` is not only a message. It fills the `hud_collection.lua` data item, and that script performs the award. Flashpoint call `0x006A77D1`: type 0 (`HUD_COLLECTION_FLASHPOINT`, `d_type` 6), title `FLASHPOINT_COMPLETE_TITLE` / `_DESC_1`, cash = float `0x014C2E74` (`Flashpoint_cash`), respect = `0x014C2E78`, district name `0x014C2D70`, `no_reward` = 0. At the end of the screen `hud_collection_finished` calls `game_award_respect(100, STATS_INVALID, 6, save_in_mission)` and `game_award_cash(1000, 6, …)`, then `game_autosave()`. So a flashpoint completion is also an autosave point, the collection autosave of `spec-save-format.md` A.2. Side finding: the generic diversion-end reward in `0x006A4220` grants round(multiplier × `0x014C2D14`) and cash `0x014C2D40`, but `0x014C2D14` is only ever zeroed (`0x006A40FC`), so that respect grant is always 0.]** |
+| 11 | **Takeover / property purchase** | No respect award is reached from the building-purchase flow. Ownership respect comes only from row 9 (hood/district) | — | **FINAL** (no direct respect) |
+| 12 | **Missions and strongholds** (not free roam, listed for completeness) | Completion screens `cmp_mission_success` / `cmp_rewards_success` (`0x007BDEB0`) and `cmp_activity_success` (`0x007BE600`): base, then base × (multiplier − 1) | mission data | — |
+| 13 | **Lua `game_award_respect`** | `0x00843BF0`: round(multiplier × amount) → `0x009E2440` | script argument | **FINAL** |
+
+**Dead tweaks (FINAL).** `Respect_to_unlock_mission` (8000) is registered to `0x014B02E0` and **never read**. `Item_style_multiplier` (0.05, "respect for wearing items") is read only inside the clothing-store code (`0x00818C57`…`0x00830C85`); no award call is reachable from there (HYPOTHESIS: display only). **No style/clothing respect bonus exists in this game**: the only multiplier is `0x4A5C`.
+
+### B.2 Level-up — **FINAL** (disassembly; validated on 14/14 real saves)
+
+**Thresholds.** `respect_levels.xtbl` has 50 rows. Row *n*'s `Respect` is the cost to **leave** displayed level *n*. Internal level `L` = levels gained (save `0x4420`); displayed level = `L + 1`; cost of the next level = row `L + 1` = record `L` (`0x0060EB40`, which returns 22,000 for `L` ≥ 50).
+
+| Row | `Respect` | Cumulative to reach row + 1 | Unlocks granted on *arriving* at this row |
+|---:|---:|---:|---|
+| 1 | 2115 | 2115 | — (the starting level) |
+| 2 | 2230 | 4345 | Sprint_1, Damage_Bullet_1, Notoriety_Mstar_1, Upgrade_Ammo_Pool_Pistol_1, Vehicle_delivery |
+| 3 | 2345 | 6690 | Upgrade_Ammo_Pool_SMG_1, Health_Regen_1, Damage_Vehicle_1, Upgrade_Ammo_Pool_Grenades_1, Dual_Wield_Pistols |
+| 4 | 2460 | 9150 | Upgrade_Ammo_Pool_Shotgun_1, Money_Drop_Multiplier, Weekly_Payment_1, Pickpocket |
+| 5 | 2575 | 11725 | Upgrade_Ammo_Pool_Rifle_1, Faster_Homey_Revive_1, Muscles_1, Cash_for_Respect_1 |
+| 6 | 2690 | 14415 | Upgrade_Ammo_Pool_Pistol_2, Upgrade_Ammo_Pool_SMG_2, Player_Health_1, HomieSlot2, Notoriety_Mstar_2 |
+| 7 | 2805 | 17220 | Respect_Bonus_Purchase1, Sprint_2, Special_Homie_Health_1, Upgrade_Ammo_Pool_Explo_1, Homie_Saints_Backup |
+| 8 | 2920 | 20140 | Upgrade_Ammo_Pool_Grenades_2, Upgrade_Ammo_Pool_Shotgun_2, Damage_Fire_1, Gang_Weapons_SMG, Notoriety_Deckers_1 |
+| 9 | 3035 | 23175 | Damage_Bullet_2, Upgrade_Ammo_Pool_Rifle_2, Health_Regen_2, Faster_Reload_1, Upgrade_Ammo_Pool_Special_1 |
+| 10 | 3150 | 26325 | Damage_Vehicle_2, Upgrade_Ammo_Pool_Pistol_3, Upgrade_Ammo_Pool_SMG_3, Notoriety_Mstar_3 |
+
+**Formula beyond row 10:** `Respect(row n) = 2115 + 115·(n − 1)` for n = 1…49, `Respect(50) = 0`. Cumulative to reach internal level `L` (1 ≤ L ≤ 49) = **2115·L + 115·L(L−1)/2**. `L` = 49 (displayed 50) needs **238,875** = the cap. Row 50's unlocks (7 × `Unlimited_Ammo_*` + `Damage_Vehicle_4`) are applied on reaching L = 49.
+
+**Loop `0x009DB8E0(player, grant)`:**
+1. `r = in_level + grant`; `c = cost(L)`.
+2. If `c > 1` and `r ≥ c`, repeat:
+   - `L = L + 1`;
+   - milestone hook `0x00BD3150(player, L)`;
+   - unlock step `0x0060EBF0(L)`;
+   - `r −= c`; `c = cost(L)`;
+   - if `L ≥ 49`, set `r = 0` and stop; else stop when `r < c`.
+3. `in_level = max(r, 0)`.
+
+**What happens on a level-up:**
+- **Unlocks:** `0x0060EBF0(L)`. For each unlockable id of record `L` not yet applied (`0x0071D180`), it calls `0x0071CCF0(id, 0, 0)`, which sets the live flag at unlockables record `+0xE1`. `HomieSlot1` has its own notification. Most of these ids become **available in the upgrade store**. The `Respect_Bonus_Purchase*` and `Cash_for_Respect_*` effects apply when bought (B.1.2 row 6).
+- **HUD:** if at least one id was newly applied (or the flag `0x014B0324` is set), it posts hint **`0xA9`** (level-up) through `0x007169E0` and then calls `0x007F04D0`. Every row 2…50 has at least one unlockable, so every level-up shows it. The "+N Respect" pop is hint `0x44` from B.1.1 step 6, with the new displayed level as its second argument.
+- **Milestone:** `0x00BD3150` acts only in `sr3_city`, and only when `L % 10 == 0` (L = 10, 20, 30, 40). It stores event id `0x22`, the level and the player position in globals (`0x01312258`, `0x02946E80`, `0x02946EA4`). The `0x23` branch for L = 50 is unreachable, because L stops at 49. The consumer is OPEN.
+- **No cash** is paid on a level-up. Cash appears only through the overflow rule (B.1.1 step 3).
+
+**Save fields touched:**
+
+| Save offset | Field | Live source |
+|---|---|---|
+| `0x4418` | total respect | player `+0x1ED0` |
+| `0x441C` | respect in level | player `+0x1ED4` |
+| `0x4420` | internal level `L` | player `+0x1ED8` |
+| `0x49A0`–`0x4A23` | unlockable state sets (entry 13) | — |
+| `0x4A5C` | respect multiplier | changes only when a `Respect_Bonus_*` is bought |
+| `0x3340`+ | statistics block (entry 27), for the per-diversion lifetime statistics | — |
+
+**Data check (14/14 real saves):** every save satisfies `0x4418 − 0x441C = cumulative(L)`. Examples: L 22: 73,628 − 533 = 73,095. L 38: 167,547 − 6,332 = 161,215. L 41: 183,816 − 2,801 = 181,015. L 49: total 238,875, in-level 0. *(One older cheat-flag save in the §6 corpus holds `0x4420` = 50; this build's loop cannot produce it. Treat it as legacy data.)*
+
+### B.3 Test vectors — **FINAL** (model `freeroam_save_respect_sim.py`, shipped table)
+
+**Total respect → state** (granted from 0 in one award; same result as any split):
+
+| Total | L | Displayed level | In-level |
+|---:|---:|---:|---:|
+| 0 | 0 | 1 | 0 |
+| 2,114 | 0 | 1 | 2,114 |
+| 2,115 | 1 | 2 | 0 |
+| 10,000 | 4 | 5 | 850 |
+| 100,000 | 27 | 28 | 2,530 |
+| 238,875 (cap) | 49 | 50 | 0 |
+
+**Sequence A** (multiplier 1.0; start total 6,600 → L 2, in-level 2,255):
+1. Low-flying run at fraction 1.0: 75 → total 6,675, L 2, in 2,330. No level-up; hint `0x44`(75), displayed 3.
+2. Activity `_02` `Props_Award` 400 (first call; the second, scaled call is 0 because the multiplier is 1.0) → total 7,075, **L 3**, in 385. Events: milestone hook(3), unlocks of row 4 (Upgrade_Ammo_Pool_Shotgun_1, Money_Drop_Multiplier, Weekly_Payment_1, Pickpocket), hint `0xA9`, hint `0x44`(400), displayed 4.
+3. Script `game_award_respect(4000)` (round(1.0 × 4000)) → total 11,075, **L 4**, in 1,925. Events: milestone hook(4), unlocks of row 5 (Upgrade_Ammo_Pool_Rifle_1, Faster_Homey_Revive_1, Muscles_1, Cash_for_Respect_1; the last only becomes purchasable here), hint `0xA9`, hint `0x44`(4000), displayed 5.
+
+**Sequence B** (cap): start total 238,800 → L 48, in 7,560.
+- Grant 100 → **granted 75** (clamped to the cap), total 238,875, **L 49** (displayed 50), in 0. Events: unlocks of row 50 (7 × Unlimited_Ammo + Damage_Vehicle_4).
+- Grant 50 → granted 0, **+$50.00 cash** (raw +5,000), no hint `0x44`.
+
+**Team B wiring**
+1. Load the real `respect_levels.xtbl` (after `unlockables.xtbl`). Compute cap = Σ `Respect` − last row's `Respect`. Replace the test-supplied table in `engine_state.h` `awardRespect` / `applyRespectLevelUp`.
+2. Implement `awardRespect` as B.1.1 exactly: horde and remote guards, overflow to dollars at the cap or at L ≥ 49, clamp to cap, then the B.2 loop with `cost(L)` = record `L`, stop at L = 49, then hint `0x44`.
+3. One global respect multiplier: save `0x4A5C`, 1.0 at new game, `+= Modifier` per bought `Respect_Bonus_*`. Apply it in the toast grant, streaking, the activity bonus call, Lua `game_award_respect`, Pay-Cash-for-Respect and store purchase. **Not** in kills.
+4. Diversion grants: port `0x006A4D80` (trunc respect, or round cash once the lifetime statistic reaches `Max_Lifetime_Respect`). Port a reward-toast record (`+0x10` respect, `+0x14` cash dollars) that grants when the toast is dismissed or flushed. Until the lifetime-statistic increment is located, increment the diversion's "<name> - respect earned" statistic by the respect paid (recommended, not traced).
+5. Kills: load `props.xtbl`; give 10 respect (unscaled) per gang-member kill by the local player, using the victim-rank index.
+6. Level-up side effects: apply record `L`'s unlockables, post hint `0xA9`, run the decade milestone hook (event `0x22`, sr3_city only). No cash.
+7. Write `0x4418`/`0x441C`/`0x4420` verbatim on save. On load, restore them without recomputing.
+8. Leave exploration (hood 100 / district 250 / secret 50 / stunt jump 50) and flashpoint (100) as data-driven grants through the same award routine, flagged in code as "delivery path OPEN in spec". **[2026-10-14: delivery now FINAL (B.1.2 rows 9 and 10). Hood and district go through a reward toast (kind 5, respect in `+0x10`, multiplied at finalisation). Secret area, stunt jump and flashpoint go through the collection screen: `game_award_respect` / `game_award_cash` when the screen finishes, then an autosave. A stunt jump reads the secret-location respect field.]** Store purchases and collectibles grant 0 respect.
+
 ## Changelog
+
+- **2026-10-14 — new section "Free-roam respect grants and level-up flow (2026-10-14)"** (SPEC TEAM, self, no agent, no Ghidra: pefile + capstone, read-only). All 20 call sites of the award routine `0x009E2440` classified; the diversion grant path located (reward-toast release `0x007FA320`, correcting `spec-activity-runtime.md` §4's "unlocated"); `0x006A4D80` respect/cash-by-lifetime-statistic rule; `props.xtbl` kill respect (10); respect multiplier `0x4A5C` sources; overflow-to-cash at the cap; exact level-up loop and events; §5.4's "stat id 0x44" corrected to HUD hint `0x44`; test vectors validated against 14/14 real saves. Cleanroom self-check: strict regex 0 hits.
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked stale OPEN items resolved (§2.6 items 1–2, §3.1, §3.6, §4.5, §4.8, §5.3, §6.4, §7.3, §8.3, §8.4, §9.3, §12); added a §14.6 correction marker after the §6.3 tree; fixed counts (§8.2 25→27 names, §14.4 26→27; §14.13 capacity-exact fit 0x16AA8/0x698 = 55; §14.6 decay-rate levels 1–3→1–5); flagged unreconciled counts without changing them (§14.1 type census 43/308, §14.6 `Check_Detection` 11 vs 12); inlined the HANDOFF §27.8 rule (§14.6, §14.7).
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline; repointed 3 `HANDOFF.md` §27.x references to the archived headings (§27.8 → §36, §14.6/§14.7); 0 left (see review).

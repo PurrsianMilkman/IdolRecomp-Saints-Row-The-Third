@@ -1791,3 +1791,33 @@ material.
   the phone menu's fixed-depth pops (1 explicit pop + 1 automatic cascade from the shared base
   document's own focus-gained handler). Cleanroom self-check: strict regex 0 hits,
   C-cast-dereference check 0 hits.
+
+## 9. Walk-in store callback registry and the clothing-opener question (2026-10-13)
+
+**Live negative (CONFIRMED, user-approved capture 2026-10-13):** opening a clothing store never called `0x0082F840`, so that function is **not** the clothing opener.
+
+**[2026-10-14 LIVE CAPTURE, FINAL: the walk-in store chain.** User session 12:06–12:18, read-only hooks on `0x00A03940`, the type callbacks and `0x0080CC90`. 15 events:
+- **Call chain (identical backtrace every time):** player gameplay update `0x00703f09` → `0x00702ad9` → `0x005b7417` → interaction handler (return `0x005b68ba`) → **dispatcher `0x00A03940`(store object, 0)** → per-type callback through the registry table (call site `0x00A03A21`, second argument `0x0111F2E8`) → type callback → **opener `0x0080CC90`** (called from `0x0081549A` in type 1 and from `0x0082B0FF` in type 0).
+- `0x00A03940` fired 9 times but a type callback only 3 times. The other 6 are interaction-handler calls with no store opened (approach, prompt, or leaving), so the dispatcher runs on every use-prompt tick and opens only on confirm.
+- **Store types seen:** type 1 `0x00815490` opened once; type 0 `0x0082B0C0` opened twice. Both go through the same opener `0x0080CC90`, so per-type behaviour lives in the type callback, not the opener.
+- **Port rule:** walk-in = interaction-prompt confirm → `0x00A03940` → `registry[type]` (§9 table `0x0268D2DC`) → type callback → `0x0080CC90`.
+- **Shop identity (user, 2026-10-14):** the only store opened in that session was **Planet Saints (clothing)**. So **both** type callbacks are clothing-store paths:
+  - type 0 `0x0082B0C0` fired on two opens, for store objects `0x1ab99ee0` and `0x1ab9b0f0`;
+  - type 1 `0x00815490` fired on one open, for store object `0x1ab9adc0`.
+
+  Each open passed a **different store object**, so Planet Saints holds more than one walk-in store object, and they register under different type slots. HIGH: these are separate counters or sections, such as the clothes rack versus another counter. Which counter is which is OPEN; it needs one capture that notes where the player stood.
+- **Correction:** the earlier reading of "type 0 = clothing, type 1 = something else" was too narrow. **Port rule:** a clothing shop may register several store objects, of type 0 or type 1, and all of them open through `0x0080CC90`.]**
+
+**Static registry (CONFIRMED, raw byte scan plus disassembly):** the per-type walk-in callback table `0x0268D2DC` is written only by `0x00a00510` (`table[type] = callback`). The walk-in dispatcher `0x00A03940` reads it at `0x00a0398a`/`0x00a03a1a`. Five static registrations:
+
+| type | callback | registered at |
+|---|---|---|
+| 0 | `0x0082b0c0` | `0x0082b117` |
+| 1 | `0x00815490` | `0x00816165` |
+| 2 | not recovered | `0x0083659b` |
+| 4 | `0x00812800` | `0x00812a45` |
+| 5 | `0x005fb330` | `0x005fc3c7` |
+
+`0x0082b0c0` (type 0) validates the store through `0x00821ec0`, writes a store context (`0x022ffd3c` = store, `0x022ffd40` = the validator's result, `0x022ffd50` = the filter string `"all"` at `0x0111b478`), then calls the shared opener `0x0080CC90`. Type 0 lives in the same code region as the clothing functions, so it is the **likely clothing-store entry** (HIGH CONFIDENCE, not live-confirmed).
+
+**Port rule:** the walk-in interact dispatches by store type through this table; each callback validates, sets the store context, and calls the shared opener. **Next live run:** the `freeroam2` hook set now hooks all four recovered callbacks plus `0x00A03940` and `0x0080CC90`. One clothing-store visit will name the type and close this item.

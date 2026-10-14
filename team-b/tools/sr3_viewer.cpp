@@ -1,4 +1,4 @@
-﻿// SR3 engine viewer / rendering milestone driver.
+// SR3 engine viewer / rendering milestone driver.
 //
 // Usage:
 //   sr3_viewer clear <out.png> [width height]
@@ -85,6 +85,7 @@
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <d3d11shader.h>
 #include <d3dcompiler.h>
 
@@ -173,6 +174,7 @@
 // loop's own fire-key block, for the full call-chain citation.
 #include "sr3luahost/character_damage_sink.h"
 #include "sr3tables_weapons/weapons.h"
+#include "sr3tables_weapons/combat.h"
 #include "sr3weapons/weapon_fire.h"
 #include "vpp/container.h"
 // audio-playback task (2026-10-10): real SFX media lookup (sr3audio/hirc.h's
@@ -201,6 +203,7 @@
 // generic, backward-compatible DecodeCache hook any future call site can
 // opt into the same way).
 #include "vppcache/shader_cache.h"
+#include "vppcache/file_blob.h"
 // `vint-doc` (UI render unit U3, 2026-10-03): the live Vint element tree
 // (EngineState::loadVintDocument / vintQueryTransform / vintQueryBox), the
 // .vint_doc reader, and the bitmap-sheet tables (bitmap_sheets.xtbl + the
@@ -408,7 +411,11 @@ struct TextureSearchCache {
     bool built = false;
     struct Located {
         std::shared_ptr<std::vector<uint8_t>> cpegBytes; // kept alive for TexturePair's own lifetime
-        std::shared_ptr<std::vector<uint8_t>> gpegBytes;
+        // The (large) .gpeg_pixel payload is NOT retained: decompressing every pack in a multi-GB
+        // city archive and keeping the bytes pushed private bytes past 10 GB. It is located by
+        // (nested-container index path, entry index) and re-fetched on demand through gpegLru.
+        std::shared_ptr<std::vector<size_t>> nestPath;
+        size_t gpegIndex = 0;
         sr3texture::TexturePair pair;
         size_t recordIndex = 0;
         std::string recordNameLower; // the FULL real record name, lowercased - suffix-matched at lookup,
@@ -423,6 +430,10 @@ struct TextureSearchCache {
     // archive walk+decompress per material, and preserves the exact
     // original match rule rather than a narrower approximation of it.
     std::vector<Located> all;
+    // Bounded LRU of recently fetched gpeg payloads (key = nestPath ptr + index); capped by bytes.
+    struct GpegSlot { const void* pathKey; size_t index; std::shared_ptr<std::vector<uint8_t>> bytes; };
+    std::vector<GpegSlot> gpegLru; // front = most recent
+    size_t gpegLruBytes = 0;
     std::map<std::string, sr3render::UploadedTexture> uploadedByWantedName; // memo: a name asked for twice reuses one GPU upload
 };
 
@@ -433,7 +444,8 @@ struct TextureSearchCache {
 // rather than once per wanted name. First writer for a given real record
 // wins on a later duplicate (matches the original code's own "first match
 // in walk order" tie-break, which a caller relies on for determinism).
-void buildTextureSearchCache(const vpp::Container& container, TextureSearchCache& cache) {
+void buildTextureSearchCache(const vpp::Container& container, TextureSearchCache& cache,
+                             std::vector<size_t>& path) {
     for (size_t i = 0; i < container.entries().size(); ++i) {
         const std::string& name = container.entries()[i].name;
         if (endsWithNoCase(name, ".cpeg_pc") || endsWithNoCase(name, ".cvbm_pc")) {
@@ -446,19 +458,17 @@ void buildTextureSearchCache(const vpp::Container& container, TextureSearchCache
                     std::string gname = name;
                     size_t dot = gname.find_last_of('.');
                     if (dot != std::string::npos) gname[dot + 1] = 'g';
-                    std::vector<uint8_t> gbytes;
+                    size_t gIdx = container.entries().size();
                     for (size_t j = 0; j < container.entries().size(); ++j) {
-                        if (container.entries()[j].name == gname) {
-                            entryBytes(container, j, gbytes);
-                            break;
-                        }
+                        if (container.entries()[j].name == gname) { gIdx = j; break; }
                     }
-                    if (!gbytes.empty()) {
-                        auto gbytesPtr = std::make_shared<std::vector<uint8_t>>(std::move(gbytes));
+                    if (gIdx < container.entries().size()) {
+                        auto pathPtr = std::make_shared<std::vector<size_t>>(path);
                         for (size_t r = 0; r < pair.records().size(); ++r) {
                             TextureSearchCache::Located loc;
                             loc.cpegBytes = cbytesPtr;
-                            loc.gpegBytes = gbytesPtr;
+                            loc.nestPath = pathPtr;
+                            loc.gpegIndex = gIdx;
                             loc.pair = pair;
                             loc.recordIndex = r;
                             loc.recordNameLower = toLowerLocal(pair.records()[r].name);
@@ -473,11 +483,49 @@ void buildTextureSearchCache(const vpp::Container& container, TextureSearchCache
         if (container.entries()[i].payload.kind == vpp::PayloadKind::Raw) {
             try {
                 vpp::Container nested = container.openNested(i);
-                buildTextureSearchCache(nested, cache);
+                path.push_back(i);
+                try { buildTextureSearchCache(nested, cache, path); } catch (...) { path.pop_back(); throw; }
+                path.pop_back();
             } catch (const std::exception&) {
             }
         }
     }
+}
+
+// Re-fetches a Located's gpeg payload (bounded LRU, 192 MB cap).
+std::shared_ptr<std::vector<uint8_t>> fetchGpeg(const vpp::Container& top, TextureSearchCache& cache,
+                                                const TextureSearchCache::Located& loc) {
+    const void* key = loc.nestPath.get();
+    for (size_t k = 0; k < cache.gpegLru.size(); ++k) {
+        if (cache.gpegLru[k].pathKey == key && cache.gpegLru[k].index == loc.gpegIndex) {
+            auto hit = cache.gpegLru[k];
+            cache.gpegLru.erase(cache.gpegLru.begin() + k);
+            cache.gpegLru.insert(cache.gpegLru.begin(), hit);
+            return hit.bytes;
+        }
+    }
+    auto bytes = std::make_shared<std::vector<uint8_t>>();
+    try {
+        // Nested Containers are non-owning windows on the (mapped) top archive, so a chain of
+        // temporaries is valid while we walk it.
+        std::vector<vpp::Container> chain;
+        chain.reserve(loc.nestPath->size());
+        const vpp::Container* cur = &top;
+        for (size_t idx : *loc.nestPath) {
+            chain.push_back(cur->openNested(idx));
+            cur = &chain.back();
+        }
+        if (!entryBytes(*cur, loc.gpegIndex, *bytes) || bytes->empty()) return nullptr;
+    } catch (const std::exception&) {
+        return nullptr;
+    }
+    cache.gpegLruBytes += bytes->size();
+    cache.gpegLru.insert(cache.gpegLru.begin(), {key, loc.gpegIndex, bytes});
+    while (cache.gpegLru.size() > 1 && cache.gpegLruBytes > (size_t(192) << 20)) {
+        cache.gpegLruBytes -= cache.gpegLru.back().bytes->size();
+        cache.gpegLru.pop_back();
+    }
+    return bytes;
 }
 
 // Finds the .cpeg_pc/.cvbm_pc pair holding `tgaName` and uploads that
@@ -495,7 +543,8 @@ bool findAndUploadTexture(const vpp::Container& container, const std::string& tg
                           std::string& foundIn, TextureSearchCache* cache = nullptr) {
     if (cache != nullptr) {
         if (!cache->built) {
-            buildTextureSearchCache(container, *cache);
+            std::vector<size_t> nestPath;
+            buildTextureSearchCache(container, *cache, nestPath);
             cache->built = true;
         }
         const std::string wantedLower = toLowerLocal(tgaName);
@@ -511,8 +560,10 @@ bool findAndUploadTexture(const vpp::Container& container, const std::string& tg
         for (const auto& loc : cache->all) {
             if (!endsWithNoCase(loc.recordNameLower, wantedLower)) continue;
             std::string error;
+            auto gbytes = fetchGpeg(container, *cache, loc);
+            if (!gbytes) continue;
             if (sr3render::uploadTexture(device, loc.pair, loc.recordIndex,
-                                         sr3texture::ByteView(loc.gpegBytes->data(), loc.gpegBytes->size()), out,
+                                         sr3texture::ByteView(gbytes->data(), gbytes->size()), out,
                                          error)) {
                 foundIn = loc.foundIn;
                 cache->uploadedByWantedName[wantedLower] = out;
@@ -7374,6 +7425,20 @@ std::vector<uint8_t> readFileLargeC(const std::string& path) {
     return buf;
 }
 
+
+// Read-only file-backed mapping (FileBlob): pages are not committed memory,
+// unlike readFileLargeC()'s heap copy. Empty (size 0) on failure.
+struct MappedBytes {
+    vppcache::FileBlob blob;
+    const uint8_t* data() const { return blob.data(); }
+    size_t size() const { return blob.size(); }
+    bool empty() const { return blob.size() == 0; }
+};
+MappedBytes mapFileLargeC(const std::string& path) {
+    MappedBytes m;
+    try { m.blob = vppcache::FileBlob::load(path); } catch (const std::exception&) {}
+    return m;
+}
 // spec-world-streaming.md Sec10.6(g) (VALIDATED-BY-DATA) and Sec10.3 level 4.
 constexpr float kCityTilePitchX = 320.0f;
 constexpr float kCityTilePitchZ = 280.0f;
@@ -7446,7 +7511,7 @@ bool looksLikeHnVariantEntryName(const std::string& entryName) {
 struct CityArchive {
     std::string path;
     std::string label;
-    std::vector<uint8_t> bytes;
+    MappedBytes bytes;
     std::unique_ptr<vpp::Container> top;
     TextureSearchCache texCache;
     double texCacheBuildMs = -1.0;
@@ -9146,7 +9211,7 @@ int runCity(int argc, char** argv) {
             a->label = slash == std::string::npos ? path : path.substr(slash + 1);
         }
         const double t0 = cityNowMs();
-        a->bytes = readFileLargeC(path);
+        a->bytes = mapFileLargeC(path);
         if (a->bytes.empty()) {
             std::fprintf(stderr, "could not read %s\n", path.c_str());
             return 1;
@@ -11238,7 +11303,7 @@ int runWalkDemo(int argc, char** argv) {
             const size_t slash = path.find_last_of("/\\");
             a->label = slash == std::string::npos ? path : path.substr(slash + 1);
         }
-        a->bytes = readFileLargeC(path);
+        a->bytes = mapFileLargeC(path);
         if (a->bytes.empty()) {
             std::fprintf(stderr, "could not read %s\n", path.c_str());
             return 1;
@@ -14413,7 +14478,7 @@ int runDriveDemo(int argc, char** argv) {
             const size_t slash = cityArchivePath.find_last_of("/\\");
             a->label = slash == std::string::npos ? cityArchivePath : cityArchivePath.substr(slash + 1);
         }
-        a->bytes = readFileLargeC(cityArchivePath);
+        a->bytes = mapFileLargeC(cityArchivePath);
         if (a->bytes.empty()) {
             std::fprintf(stderr, "[city] could not read %s - scenery will be empty, vehicle still renders\n",
                          cityArchivePath.c_str());
@@ -16021,7 +16086,7 @@ int runVintDoc(int argc, char** argv) {
         a->path = p;
         const size_t slash = p.find_last_of("/\\");
         a->label = slash == std::string::npos ? p : p.substr(slash + 1);
-        a->bytes = readFileLargeC(p);
+        a->bytes = mapFileLargeC(p);
         if (a->bytes.empty()) { std::fprintf(stderr, "could not read %s\n", p.c_str()); return 1; }
         a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
         tablesArchives.push_back(std::move(a));
@@ -16094,7 +16159,7 @@ int runVintDoc(int argc, char** argv) {
         a->path = p;
         const size_t slash = p.find_last_of("/\\");
         a->label = slash == std::string::npos ? p : p.substr(slash + 1);
-        a->bytes = readFileLargeC(p);
+        a->bytes = mapFileLargeC(p);
         if (a->bytes.empty()) { std::fprintf(stderr, "could not read %s\n", p.c_str()); return 1; }
         a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
         texArchives.push_back(std::move(a));
@@ -16201,7 +16266,7 @@ int runVintDoc(int argc, char** argv) {
             a->path = p;
             const size_t slash = p.find_last_of("/\\");
             a->label = slash == std::string::npos ? p : p.substr(slash + 1);
-            a->bytes = readFileLargeC(p);
+            a->bytes = mapFileLargeC(p);
             if (a->bytes.empty()) { std::fprintf(stderr, "could not read %s\n", p.c_str()); return 1; }
             a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
             fontArchives.push_back(a.get());
@@ -17093,7 +17158,7 @@ int runHudLiveDemo(int argc, char** argv) {
         a->path = p;
         const size_t slash = p.find_last_of("/\\");
         a->label = slash == std::string::npos ? p : p.substr(slash + 1);
-        a->bytes = readFileLargeC(p);
+        a->bytes = mapFileLargeC(p);
         if (a->bytes.empty()) { std::fprintf(stderr, "could not read %s\n", p.c_str()); return 1; }
         a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
         fontArchives.push_back(a.get());
@@ -17508,7 +17573,7 @@ int runMinimapDemo(int argc, char** argv) {
         a->path = p;
         const size_t slash = p.find_last_of("/\\");
         a->label = slash == std::string::npos ? p : p.substr(slash + 1);
-        a->bytes = readFileLargeC(p);
+        a->bytes = mapFileLargeC(p);
         if (a->bytes.empty()) { std::fprintf(stderr, "could not read %s\n", p.c_str()); return 1; }
         a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
         fontArchives.push_back(a.get());
@@ -17560,7 +17625,7 @@ int runMinimapDemo(int argc, char** argv) {
         a->path = p;
         const size_t slash = p.find_last_of("/\\");
         a->label = slash == std::string::npos ? p : p.substr(slash + 1);
-        a->bytes = readFileLargeC(p);
+        a->bytes = mapFileLargeC(p);
         if (a->bytes.empty()) { std::fprintf(stderr, "--textures: could not read %s (skipped)\n", p.c_str()); continue; }
         a->top = std::make_unique<vpp::Container>(vpp::ByteView(a->bytes.data(), a->bytes.size()));
         texArchives.push_back(a.get());
@@ -18463,6 +18528,101 @@ void walkCzn(sr3luahost::EngineState& es, Counters& ctr, const vpp::Container& c
     }
 }
 
+// ce4556f Sec28.2 (m09 Girls_heli): copied from tools/lua_host_run.cpp's
+// installVehicleTypeClassTableFromCache. Builds the real `<name>_veh.xtbl`
+// type-name -> Vehicle_Type class table from whichever of misc_tables/dlc1-3
+// are in `archivePaths`, and installs it BEFORE the zone ingest so a placed
+// script_vehicle's class (3 Helicopter / 4 Vtol -> heli gate 0x00ad31a0) is
+// resolved from data. Never fatal.
+std::string installVehicleTypeClassTableFromArchives(const std::vector<std::string>& archivePaths,
+                                                      sr3luahost::EngineState& es) {
+    std::unordered_map<std::string, int32_t> classByLowerName;
+    size_t filesParsed = 0;
+    std::function<void(vpp::Container&)> walk = [&](vpp::Container& c) {
+        const auto& entries = c.entries();
+        for (size_t i = 0; i < entries.size(); ++i) {
+            const std::string& name = entries[i].name;
+            std::string lname = toLowerLocal(name);
+            if (lname.size() > 9 && lname.compare(lname.size() - 9, 9, "_veh.xtbl") == 0) {
+                try {
+                    std::string fileBytes;
+                    if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                        vpp::ByteView raw = c.rawEntryBytes(i);
+                        fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                    } else {
+                        vpp::DecompressResult r = c.decompressEntry(i);
+                        if (!(r.status == vpp::DecodeStatus::Ok || r.status == vpp::DecodeStatus::SizeMismatch ||
+                              r.status == vpp::DecodeStatus::OkUnconfirmedContent ||
+                              r.status == vpp::DecodeStatus::ContentValidated ||
+                              r.status == vpp::DecodeStatus::RecoveredSharedStream ||
+                              r.status == vpp::DecodeStatus::RecoveredSharedStreamLongChain))
+                            continue;
+                        fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                    }
+                    sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
+                    for (const auto& row : sr3vehicleinfo::ParseAllVehicles(doc)) {
+                        if (!row.name.has_value() || row.name->empty()) continue;
+                        if (row.vehicleType.vehicleClass == sr3vehicleinfo::VehicleClass::Unknown) continue;
+                        classByLowerName[sr3luahost::AsciiLowerFold(*row.name)] =
+                            static_cast<int32_t>(row.vehicleType.vehicleClass);
+                    }
+                    ++filesParsed;
+                } catch (const std::exception&) {
+                }
+                continue;
+            }
+            if (lname.size() >= 4 && lname.compare(lname.size() - 4, 4, "xtbl") == 0) continue;
+            if (entries[i].payload.kind != vpp::PayloadKind::Raw) {
+                try {
+                    vpp::DecompressResult r = c.decompressEntry(i);
+                    bool good = r.status == vpp::DecodeStatus::Ok || r.status == vpp::DecodeStatus::SizeMismatch ||
+                                r.status == vpp::DecodeStatus::OkUnconfirmedContent ||
+                                r.status == vpp::DecodeStatus::ContentValidated ||
+                                r.status == vpp::DecodeStatus::RecoveredSharedStream ||
+                                r.status == vpp::DecodeStatus::RecoveredSharedStreamLongChain;
+                    if (!good || r.data.size() < 4) continue;
+                    uint32_t magic = (uint32_t)r.data[0] | ((uint32_t)r.data[1] << 8) | ((uint32_t)r.data[2] << 16) |
+                                     ((uint32_t)r.data[3] << 24);
+                    if (magic != 0x51890ACEu) continue;
+                    vpp::Container nested(vpp::ByteView(r.data.data(), r.data.size()));
+                    walk(nested);
+                } catch (const std::exception&) {
+                }
+                continue;
+            }
+            try {
+                vpp::Container nested(c.rawEntryBytes(i));
+                walk(nested);
+            } catch (const std::exception&) {
+            }
+        }
+    };
+    // The vehicle tables live in the cache dir next to the mission archives
+    // (misc_tables.vpp_pc is not itself in `archivePaths`), so resolve the
+    // four archives from the first archive's own directory.
+    std::vector<std::string> wanted;
+    if (!archivePaths.empty()) {
+        std::filesystem::path dir = std::filesystem::path(archivePaths.front()).parent_path();
+        for (const char* n : {"misc_tables.vpp_pc", "dlc1.vpp_pc", "dlc2.vpp_pc", "dlc3.vpp_pc"}) {
+            std::error_code ec;
+            std::filesystem::path p = dir / n;
+            if (std::filesystem::is_regular_file(p, ec)) wanted.push_back(p.string());
+        }
+    }
+    for (const auto& archivePath : wanted) {
+        std::vector<uint8_t> bytes = readFileLargeC(archivePath);
+        if (bytes.empty()) continue;
+        try {
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            walk(c);
+        } catch (const std::exception&) {
+        }
+    }
+    es.installVehicleTypeClassTable(classByLowerName);
+    return "vehicle class table: files=" + std::to_string(filesParsed) +
+           " types_resolved=" + std::to_string(es.vehicleTypeClassTableSize());
+}
+
 // Walks every archive in `archivePaths` (the SAME list --mission already
 // resolves scripts against) and ingests every real `.czn_pc` Objects
 // section found into `es`. Returns a short human-readable summary, same
@@ -19055,7 +19215,7 @@ int runPlaytest(int argc, char** argv) {
                      "                           [--script-hud-prompt-response] [--auto-answer-hud-prompts [N]]\n"
                      "                           [--mission=<stem>] [--mission-registration-list <path>]\n"
                      "                           [--mission-package-tsv <path>] [--mission-timeout=<seconds>]\n"
-                     "                           [--auto-objective [N]] [--auto-seat-mission-vehicle]\n"
+                     "                           [--auto-objective [N]] [--auto-seat-mission-vehicle] [--auto-skip-cutscenes]\n"
                      "                           [--no-audio] [--sfx-archive <path>]\n"
                      "       Playtest v0 - the first genuinely interactive build. See this\n"
                      "       command's own doc comment (above runPlaytest() in this file) for the\n"
@@ -19305,6 +19465,11 @@ int runPlaytest(int argc, char** argv) {
     // the host exactly as a real script would, once, before the mission's
     // own scheduler pass gets a chance to reach vehicle_exit.
     bool autoSeatMissionVehicle = false;
+    // --auto-skip-cutscenes (fix/auto-objective-driving-2): CHOSEN harness opt-in that sets the REAL game option
+    // `skip_all_cutscenes` (byte 0x0153b556, spec-lua-api-behaviour.md Sec14.23/Sec26.25) via the existing
+    // EngineState::zsceneSkipAllCutscenes() before the mission starts. The engine's own skip branches
+    // (zscene_prep/zscene_is_loaded/cutscene_play) then run unchanged; this flag only picks the option value.
+    bool autoSkipCutscenes = false;
     float farZ = 3000.0f;
     std::string animArchiveOverride;
     float mouseSensitivity = 1.0f;
@@ -19571,6 +19736,8 @@ int runPlaytest(int argc, char** argv) {
             }
         } else if (arg == "--auto-seat-mission-vehicle") {
             autoSeatMissionVehicle = true;
+        } else if (arg == "--auto-skip-cutscenes") {
+            autoSkipCutscenes = true;
         } else if (arg.rfind("--mission=", 0) == 0) {
             missionEnabled = true;
             missionStem = arg.substr(10);
@@ -19605,6 +19772,13 @@ int runPlaytest(int argc, char** argv) {
         return 2;
     }
     if (noInput && !framesExplicit) maxFrames = 300;  // the smoke test's own documented frame count
+    // fix/auto-objective-driving (2026-10-13): a headless --mission --auto-objective run is a mission-SWEEP
+    // run, whose own --mission-timeout (default 180 s) is the intended budget - the 300-frame smoke cap above
+    // ended every such run after ~10 s of sim time, long before a multi-stage mission could be driven. CHOSEN
+    // harness heuristic: when no explicit --frames was given, size the cap to the timeout at the harness's
+    // fixed 1/30 s --no-input step (the timeout itself still stops the mission drive).
+    if (noInput && !framesExplicit && missionEnabled && autoObjective && missionTimeoutSeconds > 0.0)
+        maxFrames = static_cast<int>(missionTimeoutSeconds * 30.0) + 30;
     // CHOSEN default vehicle parking spot: 6m along +Z from --spawn (the
     // player's own forward axis at the default yaw=0 heading - see
     // sim.state_.heading's own "facing +X" comment on the VEHICLE side,
@@ -19675,7 +19849,7 @@ int runPlaytest(int argc, char** argv) {
     // ---- brad (rigged character) - IDENTICAL load/skin to runWalkDemo() above, including the
     // HEAD FIX (brad_head_lod.ccmesh_pc is a separate top-level entry in the same archive) - see
     // that function's own long comment block for the full citation, not repeated here. ----------
-    std::vector<uint8_t> charArchiveBytes = readFileLargeC(charactersPath);
+    MappedBytes charArchiveBytes = mapFileLargeC(charactersPath);
     if (charArchiveBytes.empty()) {
         std::fprintf(stderr, "could not read %s\n", charactersPath.c_str());
         return 1;
@@ -19814,7 +19988,7 @@ int runPlaytest(int argc, char** argv) {
     std::vector<std::array<float, 3>> headBindPositions = sr3rig::skinVertices(headVerts, headBindSkin, nullptr);
 
     // ---- misc_tables.vpp_pc: real control-parameter/graph tables - IDENTICAL to runWalkDemo(). ----
-    std::vector<uint8_t> miscBytes = readFileLargeC(miscTablesPath);
+    MappedBytes miscBytes = mapFileLargeC(miscTablesPath);
     if (miscBytes.empty()) {
         std::fprintf(stderr, "could not read %s\n", miscTablesPath.c_str());
         return 1;
@@ -19888,11 +20062,54 @@ int runPlaytest(int argc, char** argv) {
     // were not individually enumerated by name in this task's own spec
     // reading). bradWeaponDef is a real authored sr3tables_weapons::Weapon
     // row, not a fabricated placeholder.
+    std::vector<std::string> inventoryItemNames; // items_inventory.xtbl (+DLC) names -> inv_item_remove resolver
+    std::vector<std::string> items3dNames; // items_3d.xtbl row names -> character_add_prop resolver
+    std::vector<std::string> weaponDefNames; // every weapons.xtbl (+DLC) row Name -> inv_weapon_*_temporary resolver
+    std::vector<std::pair<std::string, int32_t>> weaponDefClasses; // same rows, Weapon_Class (Sec55.4 thrown-class rule)
     sr3tables_weapons::Weapon bradWeaponDef;
     bool bradWeaponDefFound = false;
     try {
         const sr3xtbl::Document weaponsDoc = docOf("weapons.xtbl");
         std::vector<sr3tables_weapons::Weapon> allWeapons = sr3tables_weapons::ParseAllWeapons(weaponsDoc);
+        for (const sr3tables_weapons::Weapon& w : allWeapons) { weaponDefNames.push_back(w.name); weaponDefClasses.emplace_back(w.name, w.weaponClass); }
+        {
+            // DLC rows (spec-tables-weapons-combat.md Sec2 "DLC rows"): sibling dlc2/dlc3 archives, optional.
+            const std::filesystem::path dir = std::filesystem::path(miscTablesPath).parent_path();
+            const std::pair<const char*, const char*> dlc[] = {{"dlc2.vpp_pc", "dlc2_weapons.xtbl"}, {"dlc3.vpp_pc", "dlc3_weapons.xtbl"}};
+            for (const auto& d : dlc) {
+                try {
+                    MappedBytes db = mapFileLargeC((dir / d.first).string());
+                    if (db.empty()) continue;
+                    vpp::Container dc(vpp::ByteView(db.data(), db.size()));
+                    std::vector<uint8_t> out, sib;
+                    if (!findEntry(dc, d.second, out, sib, std::string()) || out.empty()) continue;
+                    for (const auto& w : sr3tables_weapons::ParseAllWeapons(sr3xtbl::ParseDocument(std::string_view(reinterpret_cast<const char*>(out.data()), out.size())))) { weaponDefNames.push_back(w.name); weaponDefClasses.emplace_back(w.name, w.weaponClass); }
+                } catch (const std::exception&) {}
+            }
+        }
+        // items_inventory.xtbl (+DLC) row names (spec-lua-api-behaviour.md Sec17.25 "Item lookup source").
+        try {
+            for (const auto& n : sr3tables_vehicle_world::ParseItemsInventoryTable(docOf("items_inventory.xtbl")))
+                if (n.name) inventoryItemNames.push_back(*n.name);
+            const std::filesystem::path dir = std::filesystem::path(miscTablesPath).parent_path();
+            const std::pair<const char*, const char*> idlc[] = {{"dlc1.vpp_pc", "dlc1_items_inventory.xtbl"}, {"dlc2.vpp_pc", "dlc2_items_inventory.xtbl"}, {"dlc3.vpp_pc", "dlc3_items_inventory.xtbl"}};
+            for (const auto& d : idlc) {
+                try {
+                    MappedBytes db = mapFileLargeC((dir / d.first).string());
+                    if (db.empty()) continue;
+                    vpp::Container dc(vpp::ByteView(db.data(), db.size()));
+                    std::vector<uint8_t> out, sib;
+                    if (!findEntry(dc, d.second, out, sib, std::string()) || out.empty()) continue;
+                    for (const auto& n : sr3tables_vehicle_world::ParseItemsInventoryTable(sr3xtbl::ParseDocument(std::string_view(reinterpret_cast<const char*>(out.data()), out.size()))))
+                        if (n.name) inventoryItemNames.push_back(*n.name);
+                } catch (const std::exception&) {}
+            }
+        } catch (const std::exception&) {}
+        // items_3d.xtbl base names (spec-lua-api-behaviour.md Sec17.13 f752324: character_add_prop resolver).
+        try {
+            for (const auto& n : sr3tables_vehicle_world::ParseItems3DTable(docOf("items_3d.xtbl")))
+                if (n.name) items3dNames.push_back(*n.name);
+        } catch (const std::exception&) {}
         for (const sr3tables_weapons::Weapon& w : allWeapons) {
             if (w.weaponClass == 0 /* pistol, spec Sec2.5 */) {
                 bradWeaponDef = w;
@@ -20085,7 +20302,7 @@ int runPlaytest(int argc, char** argv) {
     // archive or clips are not found - same fallback runWalkDemo() itself uses. ----------
     RealClipRegistry clipRegistry;
     int32_t runRecord = -1, jogRecord = -1, wlkRecord = -1;
-    std::unique_ptr<std::vector<uint8_t>> animArchiveBytes;
+    std::unique_ptr<MappedBytes> animArchiveBytes;
     {
         std::string animArchivePath = animArchiveOverride;
         if (animArchivePath.empty()) {
@@ -20094,7 +20311,7 @@ int runPlaytest(int argc, char** argv) {
             animArchivePath = dir + "preload_anim.vpp_pc";
         }
         for (auto& ch : animArchivePath) if (ch == '\\') ch = '/';
-        animArchiveBytes = std::make_unique<std::vector<uint8_t>>(readFileLargeC(animArchivePath));
+        animArchiveBytes = std::make_unique<MappedBytes>(mapFileLargeC(animArchivePath));
         if (animArchiveBytes->empty()) {
             std::printf("anim     : could not read %s - falling back to the rigid-body render\n",
                         animArchivePath.c_str());
@@ -20271,7 +20488,7 @@ int runPlaytest(int argc, char** argv) {
             const size_t slash = path.find_last_of("/\\");
             a->label = slash == std::string::npos ? path : path.substr(slash + 1);
         }
-        a->bytes = readFileLargeC(path);
+        a->bytes = mapFileLargeC(path);
         if (a->bytes.empty()) {
             std::fprintf(stderr, "could not read %s\n", path.c_str());
             return 1;
@@ -20777,7 +20994,23 @@ int runPlaytest(int argc, char** argv) {
         // (Phase 2's still-OPEN live position bridge/name-resolver would
         // widen it; not attempted here).
         hudEs->objectResolves().set("player", true);
-        hudEs->weaponDefinitionResolves().set("pistol", true);
+        if (!weaponDefNames.empty()) hudEs->installWeaponDefinitionNames(weaponDefNames);
+        else hudEs->weaponDefinitionResolves().set("pistol", true);
+        if (!inventoryItemNames.empty()) hudEs->installInventoryItemNames(inventoryItemNames);
+        if (!items3dNames.empty()) hudEs->installItems3dNames(items3dNames);
+        for (const auto& wc : weaponDefClasses) hudEs->setWeaponDefinitionClass(wc.first, wc.second);
+        {
+            // continuous_explosions.xtbl (spec-tables-weapons-combat.md Sec10.2): the rows continuous_explosion_start resolves
+            // names against (Sec28.16 2026-10-12: unknown name = silent no-op). Optional, like the other tables here.
+            try {
+                std::vector<std::string> ceNames;
+                for (const auto& row : sr3tables_weapons::ParseAllContinuousExplosions(docOf("continuous_explosions.xtbl"))) ceNames.push_back(row.name);
+                hudEs->continuousExplosion().installNames(ceNames);
+                std::printf("weapons  : continuous_explosions.xtbl - %zu row name(s) installed\n", ceNames.size());
+            } catch (const std::exception& ex) {
+                std::printf("weapons  : continuous_explosions.xtbl not available (%s) - continuous_explosion_start names stay OPEN\n", ex.what());
+            }
+        }
         hudEs->hasLocalPlayer().set(true);
         // RECONCILED (this task, merging feature/inworld-mission-host-
         // triggers-v2 + feature/m05-jump-hud-prompt-test): this block used
@@ -20869,7 +21102,7 @@ int runPlaytest(int argc, char** argv) {
         fa->path = hudFontArchivePath;
         const size_t hudSlash = hudFontArchivePath.find_last_of("/\\");
         fa->label = hudSlash == std::string::npos ? hudFontArchivePath : hudFontArchivePath.substr(hudSlash + 1);
-        fa->bytes = readFileLargeC(hudFontArchivePath);
+        fa->bytes = mapFileLargeC(hudFontArchivePath);
         if (fa->bytes.empty()) {
             std::fprintf(stderr, "--hud: could not read %s\n", hudFontArchivePath.c_str());
             return 1;
@@ -21052,6 +21285,8 @@ int runPlaytest(int argc, char** argv) {
         // against, so the per-frame overlap test below can look up a real
         // trigger's real position by name.
         {
+            std::printf("mission  : %s\n",
+                        missionzoneobj::installVehicleTypeClassTableFromArchives(cityArchivePaths, *hudEs).c_str());
             std::string zoneSummary = missionzoneobj::installZoneObjectsFromArchives(cityArchivePaths, *hudEs);
             std::printf("mission  : real zone-object load for in-world triggers: %s\n", zoneSummary.c_str());
         }
@@ -21990,8 +22225,64 @@ int runPlaytest(int argc, char** argv) {
     QueryPerformanceCounter(&prevTime);
     int frames = 0;
     int64_t nowMsAccum = 0;
+    bool missionTimedOutDump = false; // fix/auto-objective-driving-2: --mission-timeout hit -> still dump live script threads' wait sites at session end
     bool autoObjectiveFired = false; // --auto-objective (get_dist stall): fires at most once per run
-    bool autoObjectiveTriggerFired = false; // --auto-objective (on_trigger stall): fires at most once per run, INDEPENDENTLY of the above
+    std::unordered_set<std::string> autoObjectiveVisitedTriggers; // --auto-objective (trigger wait): triggers already teleported into
+    bool autoSkipCutscenesApplied = false;
+    // feature/route-table-driving: per-mission objective route from tools/mission_routes.tsv (generated by
+    // tools/gen_mission_routes.ps1 from spec-mission-packages.md "Per-mission objective routes", spec sync 40feafc).
+    // Used ONLY to order/filter the harness's own teleport targets (route triggers first, in route order; spec-listed
+    // hazard triggers never) and to name vehicles to seat. It adds no engine behaviour.
+    struct AutoRoute {
+        bool loaded = false;
+        std::vector<std::string> triggers;   // lowercase, route order (go-to-trigger + drive-to rows)
+        std::vector<int> triggerRow;         // route step number of each entry (alternatives share a row)
+        std::unordered_map<std::string, int> altBlockedUntilFrame; // lowercase name -> frame
+        std::unordered_set<std::string> hazards; // lowercase
+        std::vector<std::string> vehicles;   // named enter-vehicle rows (original case)
+    } autoRoute;
+    // Hold: after a route teleport the player is re-warped every frame for autoRouteHoldFramesLeft frames so that
+    // zone exit callbacks (m22) / a script resetting its flag cannot see the player outside the volume. CHOSEN.
+    int autoRouteHoldFramesLeft = 0;
+    int autoRouteHoldAge = 0;
+    sr3luahost::WorldPosition autoRouteHoldPos{};
+    int autoVehicleWaitFrames = 0;
+    bool autoVehicleSeatedOnce = false;
+    auto lowerStr = [](std::string s) { for (char& ch : s) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch))); return s; };
+    if (autoObjective && missionEnabled) {
+        const char* routeCandidates[] = {"tools/mission_routes.tsv", "../../tools/mission_routes.tsv", "../tools/mission_routes.tsv"};
+        for (const char* rp : routeCandidates) {
+            std::ifstream rf(rp);
+            if (!rf) continue;
+            std::string ln;
+            while (std::getline(rf, ln)) {
+                std::vector<std::string> col;
+                size_t p = 0;
+                while (true) {
+                    size_t q = ln.find('\t', p);
+                    col.push_back(ln.substr(p, q == std::string::npos ? std::string::npos : q - p));
+                    if (q == std::string::npos) break;
+                    p = q + 1;
+                }
+                if (col.size() < 4 || col[0] != missionStem) continue;
+                autoRoute.loaded = true;
+                std::vector<std::string> names;
+                { size_t a = 0; const std::string& nm = col[3];
+                  while (a <= nm.size() && !nm.empty()) { size_t b = nm.find('|', a);
+                    names.push_back(nm.substr(a, b == std::string::npos ? std::string::npos : b - a));
+                    if (b == std::string::npos) break; a = b + 1; } }
+                if (col[2] == "hazard") { for (auto& n : names) autoRoute.hazards.insert(lowerStr(n)); }
+                else if (col[2] == "go-to-trigger" || col[2] == "drive-to") { for (auto& n : names) { autoRoute.triggers.push_back(lowerStr(n)); autoRoute.triggerRow.push_back(std::atoi(col[1].c_str())); } }
+                else if (col[2] == "enter-vehicle") { for (auto& n : names) autoRoute.vehicles.push_back(n); }
+            }
+            std::printf("auto-objective: route table '%s' for '%s': %s (%zu trigger steps, %zu hazards, %zu named vehicles)\n",
+                        rp, missionStem.c_str(), autoRoute.loaded ? "loaded" : "no rows", autoRoute.triggers.size(),
+                        autoRoute.hazards.size(), autoRoute.vehicles.size());
+            break;
+        }
+        if (!autoRoute.loaded) std::printf("auto-objective: no route rows for '%s' - legacy trigger heuristics only\n", missionStem.c_str());
+    }
+    std::unordered_set<std::string> autoObjectiveNpcMoved; // "npc|target" get_dist pairs already placed
     bool autoSeatMissionVehicleFired = false; // --auto-seat-mission-vehicle: fires at most once per run (frame 0 of mission drive)
     // TOD clock (originally 2026-10-08, sky/lighting/TOD task; slowed down
     // 2026-10-09, v0.3 polish task): a CHOSEN, slowly-advancing fraction-of-
@@ -23457,7 +23748,24 @@ int runPlaytest(int argc, char** argv) {
                     autoObjectiveFired = true; // fires at most once per run regardless of outcome below
                     const bool aIsPlayer = (stall.nameA == "#PLAYER1#");
                     const bool bIsPlayer = (stall.nameB == "#PLAYER1#");
-                    if (aIsPlayer == bIsPlayer) {
+                    if (!aIsPlayer && !bIsPlayer && stall.knownA && stall.knownB &&
+                        hudEs->characters().count(stall.nameA) &&
+                        !autoObjectiveNpcMoved.count(stall.nameA + "|" + stall.nameB)) {
+                        // fix/auto-objective-driving-2 (b): an NPC-follows-navpoint wait (dlc2_m02's
+                        // `while get_dist(homie, nav) > 3 do thread_yield() end` after ai_do_scripted_move).
+                        // CHOSEN harness stand-in: write the character's worldPosition (the SAME field get_dist
+                        // reads) at the navpoint, through the existing bridge - no AI/navigation behaviour is
+                        // invented or changed, the NPC is just placed where the move order points. One-shot per
+                        // (npc, target) pair.
+                        autoObjectiveNpcMoved.insert(stall.nameA + "|" + stall.nameB);
+                        autoObjectiveFired = false; // an NPC placement must not consume the player-teleport one-shot
+                        hudEs->bridgeLiveCharacterPosition(stall.nameA, stall.posB);
+                        std::printf("auto-objective: stalled %llu calls on get_dist('%s','%s') - placed NPC '%s' at "
+                                    "'%s' (%.2f, %.2f, %.2f) [CHOSEN test-harness stand-in, not real AI navigation]\n",
+                                    static_cast<unsigned long long>(stall.repeatCount), stall.nameA.c_str(),
+                                    stall.nameB.c_str(), stall.nameA.c_str(), stall.nameB.c_str(), stall.posB.x,
+                                    stall.posB.y, stall.posB.z);
+                    } else if (aIsPlayer == bIsPlayer) {
                         // Neither name is the player sentinel, or (degenerate) both are -
                         // no trackable target; honestly do nothing rather than guessing.
                         std::printf("auto-objective: stalled %llu calls on get_dist('%s','%s') but neither name is "
@@ -23475,6 +23783,7 @@ int runPlaytest(int argc, char** argv) {
                                         stall.nameB.c_str(), targetName.c_str());
                         } else {
                             pm.warp(sr3player::Vec3{targetPos.x, targetPos.y, targetPos.z});
+                            autoRouteHoldFramesLeft = 0; // a get_dist teleport supersedes any trigger hold
                             hudEs->bridgeLiveCharacterPosition("#PLAYER1#", targetPos);
                             std::printf("auto-objective: stalled %llu calls on get_dist('%s','%s') - teleported player "
                                         "to '%s' at (%.2f, %.2f, %.2f) [CHOSEN test-harness stand-in, not real "
@@ -23519,87 +23828,15 @@ int runPlaytest(int argc, char** argv) {
             {
                 auto tryAutoRegister = [&](const std::string& triggerName) {
                     if (hudEs->triggerGeometry(triggerName)) return; // already registered
-                    const sr3zone::ObjectRecord* rec = hudEs->resolveZoneObject(triggerName);
-                    std::optional<sr3zone::Position3f> pos = rec ? sr3zone::ObjectPosition(*rec) : std::nullopt;
-                    if (!pos) {
+                    std::string note;
+                    if (!hudEs->registerTriggerGeometryFromZoneData(triggerName, &note)) {
+                        // Re-tried next frame (cheap: one map lookup); a miss can never silently become a hit.
                         std::printf("mission  : in-world trigger '%s' has a registered callback but no real "
-                                    "zone-data position was found (%s) - not tested for overlap this session\n",
-                                    triggerName.c_str(), rec ? "no position property on its record" : "name not resolved");
-                        // Negative result recorded by registering a known-absent geometry entry is NOT
-                        // done here (that would need a tri-state, not this struct's own plain bool) -
-                        // instead this lambda is simply called again next frame; cheap (one map lookup)
-                        // and never wrong, since a miss here can never silently become a hit later.
+                                    "zone-data position was found - not tested for overlap this session\n",
+                                    triggerName.c_str());
                         return;
                     }
-                    sr3luahost::EngineState::TriggerVolumeGeometry g;
-                    g.px = pos->x; g.py = pos->y; g.pz = pos->z;
-                    g.positionKnown = true;
-
-                    std::optional<std::string> shapeTypeText = sr3zone::TriggerShapeType(*rec);
-                    std::optional<int> shapeCode = shapeTypeText ? sr3zone::TriggerShapeCodeForTypeString(*shapeTypeText)
-                                                                  : std::nullopt;
-                    const sr3zone::ObjectPropertyEntry* param1 = sr3zone::TriggerShapeParam1(*rec);
-                    const sr3zone::ObjectPropertyEntry* param2 = sr3zone::TriggerShapeParam2(*rec);
-                    bool decoded = false;
-                    if (shapeCode && *shapeCode == 0 && param1 && param2) {
-                        // Box: both params are 3-float vectors, the real local-space min/max corner.
-                        std::optional<sr3zone::Position3f> vmin = sr3zone::DecodePropertyAsVec3(*param1);
-                        std::optional<sr3zone::Position3f> vmax = sr3zone::DecodePropertyAsVec3(*param2);
-                        if (vmin && vmax) {
-                            g.shapeCode = 0;
-                            g.boxMinX = vmin->x; g.boxMinY = vmin->y; g.boxMinZ = vmin->z;
-                            g.boxMaxX = vmax->x; g.boxMaxY = vmax->y; g.boxMaxZ = vmax->z;
-                            decoded = true;
-                        }
-                    } else if (shapeCode && *shapeCode == 1 && param1) {
-                        // Sphere: param1 only, a scalar radius.
-                        std::optional<float> radius = sr3zone::DecodePropertyAsFloat(*param1);
-                        if (radius) {
-                            g.shapeCode = 1;
-                            g.radius = *radius;
-                            decoded = true;
-                        }
-                    } else if (shapeCode && *shapeCode == 2 && param1 && param2) {
-                        // Capped cylinder: param1=radius, param2=length (both scalars). The second
-                        // axis endpoint (ex/ey/ez) stays this project's own pre-existing CHOSEN
-                        // stand-in - Sec1.14 itself flags its true source as still genuinely OPEN.
-                        std::optional<float> radius = sr3zone::DecodePropertyAsFloat(*param1);
-                        std::optional<float> length = sr3zone::DecodePropertyAsFloat(*param2);
-                        if (radius && length) {
-                            g.shapeCode = 2;
-                            g.radius = *radius;
-                            g.length = *length;
-                            g.ex = 0; g.ey = *length; g.ez = 0; // CHOSEN axis (straight up) - OPEN source, see above
-                            decoded = true;
-                        }
-                    }
-                    g.shapeKnown = decoded;
-                    if (!decoded) {
-                        // CHOSEN fallback (unchanged from before this task): sphere, radius 3.0 -
-                        // only reached when the real shape genuinely could not be decoded.
-                        g.shapeCode = 1;
-                        g.radius = 3.0;
-                    }
-                    hudEs->registerTriggerGeometry(triggerName, g);
-                    // feature/auto-objective-trigger-vehicle-seat (2026-10-12):
-                    // record WHEN (registration order, not iteration order - an
-                    // unordered_map's own iteration order is not a "which
-                    // trigger is the mission waiting on first" signal) this
-                    // trigger's geometry became known, for the stall-teleport
-                    // block below.
-                    hudEs->noteTriggerRegistrationOrder(triggerName);
-                    if (decoded) {
-                        std::printf("mission  : in-world trigger '%s' geometry registered - REAL position (%.2f "
-                                    "%.2f %.2f) and REAL shape '%s' (enum %d) from zone data\n",
-                                    triggerName.c_str(), g.px, g.py, g.pz, shapeTypeText->c_str(), *shapeCode);
-                    } else {
-                        const std::string reason = shapeTypeText ? ("unmapped string \"" + *shapeTypeText + "\"")
-                                                                  : std::string("no trigger_shape_type property");
-                        std::printf("mission  : in-world trigger '%s' geometry registered - real position (%.2f %.2f "
-                                    "%.2f) from zone data, CHOSEN sphere radius=%.1f fallback (shape not decodable: "
-                                    "%s)\n",
-                                    triggerName.c_str(), g.px, g.py, g.pz, g.radius, reason.c_str());
-                    }
+                    std::printf("mission  : %s\n", note.c_str());
                 };
                 for (const auto& kv : hudEs->onTriggerCallbacksMap()) tryAutoRegister(kv.first);
                 for (const auto& kv : hudEs->onTriggerExitCallbacksMap()) tryAutoRegister(kv.first);
@@ -23646,8 +23883,13 @@ int runPlaytest(int argc, char** argv) {
                     // comparison in m09/m13's callbacks has a real, non-nil value on
                     // both sides.
                     lua_pushstring(hudGp, "#PLAYER1#");
+                    // Arg 2: the trigger's name string exactly as passed to on_trigger
+                    // (spec-lua-api-behaviour.md §1.2 callback-arguments port rule,
+                    // 2026-10-12 FINAL). m22_zone_triggered_cb looked its zone up by
+                    // this and got NO_ZONE (0) when only arg 1 was passed.
+                    lua_pushstring(hudGp, triggerName.c_str());
                     sr3luahost::BareThreadTable::Record* spawned =
-                        hudHost->bareGlobals().threads().allocate(hudGp, cbName, /*nargs=*/1, /*hasParent=*/false);
+                        hudHost->bareGlobals().threads().allocate(hudGp, cbName, /*nargs=*/2, /*hasParent=*/false);
                     if (!spawned) {
                         std::printf("mission  : in-world trigger '%s' %s transition - coroutine for '%s' NOT "
                                     "spawned (script-thread table full)\n",
@@ -23678,16 +23920,111 @@ int runPlaytest(int argc, char** argv) {
                 // "waiting on" the longest, matching a real player's own
                 // likely next destination better than an arbitrary pending
                 // trigger.
-                if (autoObjective && !autoObjectiveTriggerFired) {
+                // fix/auto-objective-driving (2026-10-13): REPEATING and target-aware (was a one-shot on the
+                // earliest never-entered trigger, which for m19 was the wrong trigger and for dlc2_m02-style
+                // object_is_in_trigger polling was never the polled one). CHOSEN harness heuristics, in order:
+                //  (1) a trigger the script POLLED for the live player via object_is_in_trigger this frame
+                //      (the latest such query wins - that is what the script is waiting on right now);
+                //  (2) else the EARLIEST-registered trigger with a non-empty on_trigger callback, not disabled by
+                //      trigger_enable(false), not currently inside, and not already auto-visited.
+                // The target must stay the same for autoObjectiveFrames consecutive frames before the teleport
+                // (recordTriggerWaitFrame resets on a name change); each trigger is visited at most once, so a
+                // mission with several sequential trigger waits is driven through them one after another.
+                if (autoObjective && autoRouteHoldFramesLeft > 0) {
+                    // HOLD in the trigger volume (m22: exit callback / flag reset must not see the player leave).
+                    --autoRouteHoldFramesLeft;
+                    ++autoRouteHoldAge;
+                    // spec-mission-packages.md step-kinds table: "Entry is edge-triggered: if the player is already
+                    // inside when the script resets its flag (m22 line 1591), step out and back in." CHOSEN: one
+                    // out-and-back pulse (3 frames out) per hold, 240 frames after the teleport.
+                    sr3luahost::WorldPosition holdAt = autoRouteHoldPos;
+                    if (autoRouteHoldAge >= 240 && autoRouteHoldAge < 243) holdAt.x += 300.0;
+                    pm.warp(sr3player::Vec3{holdAt.x, holdAt.y, holdAt.z});
+                    hudEs->bridgeLiveCharacterPosition("#PLAYER1#", holdAt);
+                }
+                if (autoObjective) {
+                    // feature/route-table-driving: enter-vehicle waits. A script polling
+                    // character_is_in_vehicle(#PLAYER1#[, V]) negatively for autoObjectiveFrames consecutive
+                    // frames gets the player seated via the REAL vehicle_enter_do native (instant), trying the vehicle
+                    // the script named, then the route table's named vehicles, then any vehicle object known to the
+                    // host. CHOSEN candidate order; on_vehicle_enter callback dispatch is NOT implemented (not specified).
+                    const std::vector<std::string> vq = hudEs->drainVehicleWaitQueries();
+                    if (vq.empty()) autoVehicleWaitFrames = 0; else ++autoVehicleWaitFrames;
+                    if (autoVehicleWaitFrames >= autoObjectiveFrames) {
+                        autoVehicleWaitFrames = 0;
+                        std::vector<std::string> cands;
+                        for (const auto& q : vq) if (!q.empty()) cands.push_back(q);
+                        for (const auto& v : autoRoute.vehicles) cands.push_back(v);
+                        for (const auto& kv : hudEs->vehicles()) cands.push_back(kv.first);
+                        bool seated = false;
+                        std::string seatedName;
+                        for (const std::string& vn : cands) {
+                            std::string esc;
+                            for (char ch : vn) { if (ch == '\'' || ch == '\\') esc += '\\'; esc += ch; }
+                            hudHost->runChunk(hudGp, "vehicle_enter_do(LOCAL_PLAYER, '" + esc + "', true)", "playtest_auto_route_seat.lua");
+                            if (hudEs->getOrCreateCharacter("#PLAYER1#").stateEnum.get() == 3) { seated = true; seatedName = vn; break; }
+                        }
+                        std::string candList;
+                        for (const auto& c : cands) candList += (candList.empty() ? "" : ", ") + c;
+                        std::printf("auto-objective: stalled on character_is_in_vehicle(#PLAYER1#) - %s%s (tried %zu candidates: %s) "
+                                    "[CHOSEN harness stand-in via real vehicle_enter_do]\n",
+                                    seated ? "seated in " : "could not seat any vehicle", seatedName.c_str(), cands.size(),
+                                    candList.c_str());
+                    }
+                }
+                if (autoObjective) {
                     std::string pendingTrigger;
-                    for (const std::string& name : hudEs->triggerRegistrationOrder()) {
-                        if (!hudEs->triggerEverEntered(name)) { pendingTrigger = name; break; }
+                    const std::vector<std::string> polled = hudEs->drainTriggerPollQueries();
+                    for (auto it = polled.rbegin(); it != polled.rend(); ++it) {
+                        if (autoObjectiveVisitedTriggers.count(*it)) continue;
+                        if (autoRoute.hazards.count(lowerStr(*it))) continue; // spec hazard trigger - never enter
+                        { auto ab = autoRoute.altBlockedUntilFrame.find(lowerStr(*it));
+                          if (ab != autoRoute.altBlockedUntilFrame.end() && frames < ab->second) continue; }
+                        if (!hudEs->triggerGeometry(*it)) hudEs->registerTriggerGeometryFromZoneData(*it);
+                        if (hudEs->triggerGeometry(*it) && !hudEs->triggerCurrentlyInside(*it)) { pendingTrigger = *it; break; }
+                    }
+                    if (pendingTrigger.empty()) {
+                        // feature/route-table-driving: among the eligible registered triggers prefer the one that
+                        // comes EARLIEST in the mission's route table; spec hazard triggers are never eligible.
+                        // Triggers not in the route fall back to registration order (legacy heuristic).
+                        size_t bestRouteIdx = static_cast<size_t>(-1);
+                        std::string firstNonRoute;
+                        for (const std::string& name : hudEs->triggerRegistrationOrder()) {
+                            if (autoObjectiveVisitedTriggers.count(name)) continue;
+                            if (autoRoute.hazards.count(lowerStr(name))) continue;
+                            if (hudEs->onTriggerCallbackValue(name).empty()) continue;
+                            if (hudEs->triggerEnableKnown(name) && !hudEs->triggerEnableValue(name)) continue;
+                            if (hudEs->triggerCurrentlyInside(name)) continue;
+                            const std::string ln = lowerStr(name);
+                            { auto ab = autoRoute.altBlockedUntilFrame.find(ln);
+                              if (ab != autoRoute.altBlockedUntilFrame.end() && frames < ab->second) continue; }
+                            size_t idx = static_cast<size_t>(-1);
+                            for (size_t ri = 0; ri < autoRoute.triggers.size(); ++ri)
+                                if (autoRoute.triggers[ri] == ln) { idx = ri; break; }
+                            if (idx != static_cast<size_t>(-1)) {
+                                if (bestRouteIdx == static_cast<size_t>(-1) || idx < bestRouteIdx) { bestRouteIdx = idx; pendingTrigger = name; }
+                            } else if (firstNonRoute.empty()) {
+                                firstNonRoute = name;
+                            }
+                        }
+                        if (pendingTrigger.empty()) pendingTrigger = firstNonRoute;
                     }
                     if (!pendingTrigger.empty()) {
                         hudEs->recordTriggerWaitFrame(pendingTrigger);
                         const sr3luahost::EngineState::TriggerWaitStallInfo& tstall = hudEs->triggerWaitStallInfo();
                         if (tstall.framesWaiting >= static_cast<uint64_t>(autoObjectiveFrames)) {
-                            autoObjectiveTriggerFired = true; // fires at most once per run regardless of outcome below
+                            autoObjectiveVisitedTriggers.insert(pendingTrigger);
+                            { // alternatives in the same route row ("{A, B, C}": the script waits on ANY) are not
+                              // visited for 600 frames (CHOSEN) so the one we entered can be served first.
+                                const std::string vl = lowerStr(pendingTrigger);
+                                for (size_t ri = 0; ri < autoRoute.triggers.size(); ++ri) {
+                                    if (autoRoute.triggers[ri] != vl) continue;
+                                    for (size_t rj = 0; rj < autoRoute.triggers.size(); ++rj)
+                                        if (autoRoute.triggerRow[rj] == autoRoute.triggerRow[ri] && rj != ri)
+                                            autoRoute.altBlockedUntilFrame[autoRoute.triggers[rj]] = frames + 600;
+                                    break;
+                                }
+                            }
                             const sr3luahost::EngineState::TriggerVolumeGeometry* g = hudEs->triggerGeometry(pendingTrigger);
                             if (!g || !g->positionKnown) {
                                 std::printf("auto-objective: stalled %llu frames waiting on trigger '%s' but its "
@@ -23698,6 +24035,15 @@ int runPlaytest(int argc, char** argv) {
                                     sr3luahost::EngineState::TriggerVolumeRepresentativePoint(*g);
                                 pm.warp(sr3player::Vec3{rep.x, rep.y, rep.z});
                                 hudEs->bridgeLiveCharacterPosition("#PLAYER1#", rep);
+                                { // drive-to: a seated player takes the vehicle along (route-table "drive-to" rule)
+                                    const std::string& cv = hudEs->getOrCreateCharacter("#PLAYER1#").currentVehicleName.get();
+                                    if (!cv.empty()) hudEs->bridgeLiveVehiclePosition(cv, rep);
+                                }
+                                autoRouteHoldPos = rep;
+                                // CHOSEN: hold until the NEXT route teleport (trigger or get_dist) replaces it, so exit
+                                // callbacks (m22_zone_exited_cb) never see the player leave while the script waits.
+                                autoRouteHoldFramesLeft = 1 << 30;
+                                autoRouteHoldAge = 0;
                                 std::printf("auto-objective: stalled %llu frames waiting on trigger '%s' - teleported "
                                             "player INTO its volume at (%.2f, %.2f, %.2f) [CHOSEN test-harness "
                                             "stand-in, not real navigation - see --auto-objective's own doc comment]\n",
@@ -23726,6 +24072,12 @@ int runPlaytest(int argc, char** argv) {
             // into its own `vehicle_exit(LOCAL_PLAYER)` call - calling the
             // REAL registered vehicle_enter_do native exactly as a mission
             // script's own vehicle_enter_teleport wrapper would.
+            if (autoSkipCutscenes && !autoSkipCutscenesApplied) {
+                autoSkipCutscenesApplied = true;
+                hudEs->zsceneSkipAllCutscenes().set(true);
+                std::printf("auto-skip: --auto-skip-cutscenes set the real skip_all_cutscenes option [CHOSEN harness "
+                            "option value; engine skip branches unchanged]\n");
+            }
             if (autoSeatMissionVehicle && !autoSeatMissionVehicleFired && missionStem == "m05") {
                 autoSeatMissionVehicleFired = true;
                 auto seatResult = hudHost->runChunk(
@@ -23749,6 +24101,7 @@ int runPlaytest(int argc, char** argv) {
             missionElapsedSeconds += dt;
             if (missionTimeoutSeconds > 0.0 && missionElapsedSeconds > missionTimeoutSeconds) {
                 missionDriveActive = false;
+                missionTimedOutDump = true;
                 std::printf("mission  : --mission=%s stopped - wall-clock timeout (%.1fs) exceeded while still "
                             "suspended; this frame's own rendering/input loop is UNAFFECTED (see this "
                             "function's own doc comment)\n",
@@ -24444,7 +24797,7 @@ int runPlaytest(int argc, char** argv) {
     // precisely where every still-live mission script thread is waiting instead of silently
     // ending the run. "How far did the mission get" should always be a measured fact from
     // this real per-thread Lua debug info, never an inference from the absence of a print.
-    if (missionEnabled && missionDriveActive) {
+    if (missionEnabled && (missionDriveActive || missionTimedOutDump)) {
         for (uint16_t id : hudHost->bareGlobals().threads().liveIds()) {
             const sr3luahost::BareThreadTable::Record* rec = hudHost->bareGlobals().threads().findAlive(id);
             if (!rec) continue;

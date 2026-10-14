@@ -1318,6 +1318,12 @@ struct CharacterState {
     // as every other computed predicate in this file.
     bool notDeadForActionPlay() const { return lifeState.get() != 5 && !killFinalizedFlagE3.get(); }
 
+    // 0x0096f4f0 alive predicate (spec sync e6691f1, Sec30.5/Sec34.5 round-2 FINAL): alive = !null &&
+    // state != 5 && !(byte_e3 & 1). The null case is handled by the resolve step upstream. An explicit
+    // isAlive.set() (tests) still wins; otherwise computed live from lifeState/killFinalizedFlagE3 (seeded
+    // at construction, so no longer OPEN by default).
+    bool aliveByPredicate() const { return isAlive.known() ? isAlive.get() : notDeadForActionPlay(); }
+
     // get_dist's own shared position-lookup function (0x00a455a0, Sec4.2),
     // reused by several other natives (object_is_in_trigger's arg-2 parser
     // Sec1.12, the vehicle-seated-character redirect Sec20.24). OPEN by

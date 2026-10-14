@@ -435,6 +435,8 @@ constexpr int kDescriptorBSiblingTableIndex = 1;
 // position - neither correct; see decode0x100195b0()'s own citation).
 struct SiblingTableBank {
     std::array<BuiltTable, 16> tables;
+    BuiltTable descTree;   // 19th build call (0-indexed 18): 0x10019300's 17th 0x10018ca0 call into desc+0x24/+0x20/+0x10 (frame -0x38), the tree 0x10019850's low nibble decodes with (spec 5.3ai answer 4; NOT tables[0])
+    BuiltTable tree19d10;  // 20th build call (0-indexed 19): the dedicated tree 0x10019d10 decodes with (matches spec 5.3ad ctx+0x10/+0x20/+0x24 exactly)
     bool valid = false;  // true once beginBlockRow() has run the full 23-call
                           // pass at least once without ranOutOfData() cutting
                           // it short - false means "not yet captured", not
@@ -548,6 +550,8 @@ public:
         for (int i = 0; i < kSiblingTableBuildsPerBlockRow; ++i) {
             BuiltTable built = buildCaseSelectorTable(br_);
             if (br_.ranOutOfData()) return CaseSelectorStatus::SourceExhausted;
+            if (outSiblingBank != nullptr && i == 19) outSiblingBank->tree19d10 = built;
+            if (outSiblingBank != nullptr && i == 18) outSiblingBank->descTree = built;
             if (i == siblingTableIndex_) freshSelf = built;
             if (sibling != nullptr && i == sibling->siblingTableIndex_) freshSibling = built;
             if (outSiblingBank != nullptr && i >= kSiblingBankFirstCall && i <= kSiblingBankLastCall) {

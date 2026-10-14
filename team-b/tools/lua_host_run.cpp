@@ -154,6 +154,7 @@
 #include "sr3luahost/hook_registry.h"
 #include "sr3tables_cutscene/scene_table.h"
 #include "sr3tables_progression/tables.h"
+#include "sr3tables_vehicle_world/world_items.h"
 #include "sr3tables_weapons/combat.h"
 #include "sr3vehicleinfo/vehicle_entry.h"
 #include "sr3vintdoc/vint_doc.h"
@@ -393,14 +394,16 @@ std::string installContinuousExplosionTableFromCache(const fs::path& cacheDir, s
                 }
                 sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
                 std::vector<sr3tables_weapons::ContinuousExplosion> rows = sr3tables_weapons::ParseAllContinuousExplosions(doc);
+                std::vector<std::string> ceNames;
                 for (const auto& row : rows) {
                     // Every parsed row becomes a real, resolvable definition
                     // name (CONFIRMED set, this host does not reproduce
                     // Sec10.2's own per-row reject-and-drop range checks -
                     // the real population census already found both real
                     // candidate files' rows clean against them).
-                    es.continuousExplosion().definitionResolves.set(row.name, true);
+                    ceNames.push_back(row.name);
                 }
+                es.continuousExplosion().installNames(ceNames); // table COMPLETE: unknown name = silent no-op (Sec28.16)
                 return "installed source=" + archivePath.filename().string() + " rows=" + std::to_string(rows.size());
             }
         } catch (const std::exception& ex) {
@@ -464,6 +467,7 @@ std::string installWeaponDefinitionTableFromCache(const fs::path& cacheDir, sr3l
     std::string notFound;
     size_t filesInstalled = 0;
     size_t totalRows = 0;
+    std::vector<std::string> allNames;
     for (const ArchiveFile& af : kFiles) {
         fs::path archivePath;
         for (auto& ent : fs::directory_iterator(cacheDir)) {
@@ -507,7 +511,8 @@ std::string installWeaponDefinitionTableFromCache(const fs::path& cacheDir, sr3l
                     // native stubs' own `_stricmp`-equivalent lookup already
                     // uses (engine_state.h's weaponDefinitionResolves() doc
                     // comment).
-                    es.weaponDefinitionResolves().set(sr3luahost::AsciiLowerFold(row.name), true);
+                    allNames.push_back(row.name);
+                    es.setWeaponDefinitionClass(row.name, row.weaponClass);
                 }
                 ++filesInstalled;
                 totalRows += rows.size();
@@ -522,12 +527,52 @@ std::string installWeaponDefinitionTableFromCache(const fs::path& cacheDir, sr3l
             notFound += std::string(af.xtbl) + " (" + ex.what() + ")";
         }
     }
+    if (filesInstalled > 0) es.installWeaponDefinitionNames(allNames);
     std::string summary = "installed files=" + std::to_string(filesInstalled) + "/" +
                            std::to_string(sizeof(kFiles) / sizeof(kFiles[0])) +
                            " rows=" + std::to_string(totalRows) +
                            " names_resolved=" + std::to_string(es.weaponDefinitionResolves().knownCount());
     if (!notFound.empty()) summary += " missing=" + notFound;
     return summary;
+}
+
+// items_inventory.xtbl (+ DLC) row names -> inv_item_remove resolver (spec-lua-api-behaviour.md Sec17.25
+// "Item lookup source", spec-tables-vehicle-world.md Sec15; DLC files are <framework>_items_inventory.xtbl).
+std::string installInventoryItemTableFromCache(const fs::path& cacheDir, sr3luahost::EngineState& es) {
+    static const std::pair<const char*, const char*> kFiles[] = {
+        {"misc_tables.vpp_pc", "items_inventory.xtbl"}, {"dlc1.vpp_pc", "dlc1_items_inventory.xtbl"},
+        {"dlc2.vpp_pc", "dlc2_items_inventory.xtbl"}, {"dlc3.vpp_pc", "dlc3_items_inventory.xtbl"}};
+    std::vector<std::string> names;
+    size_t files = 0;
+    for (const auto& af : kFiles) {
+        try {
+            for (auto& ent : fs::directory_iterator(cacheDir)) {
+                if (!ent.is_regular_file() || toLower(ent.path().filename().string()) != af.first) continue;
+                std::vector<uint8_t> bytes = readFile(ent.path());
+                vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+                const auto& entries = c.entries();
+                for (size_t i = 0; i < entries.size(); ++i) {
+                    if (toLower(entries[i].name) != af.second) continue;
+                    std::string fileBytes;
+                    if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                        vpp::ByteView raw = c.rawEntryBytes(i);
+                        fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                    } else {
+                        vpp::DecompressResult r = c.decompressEntry(i);
+                        if (r.status != vpp::DecodeStatus::Ok) break;
+                        fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                    }
+                    for (const auto& it : sr3tables_vehicle_world::ParseItemsInventoryTable(sr3xtbl::ParseDocument(fileBytes)))
+                        if (it.name) names.push_back(*it.name);
+                    ++files;
+                    break;
+                }
+                break;
+            }
+        } catch (const std::exception&) {}
+    }
+    if (files > 0) es.installInventoryItemNames(names);
+    return "installed files=" + std::to_string(files) + "/4 names=" + std::to_string(names.size());
 }
 
 // --- spawn_info_ranks.xtbl Hit_Points values (spec-tables-progression.md
@@ -2162,6 +2207,7 @@ int main(int argc, char** argv) {
     const std::string spawnRankHitPointsSummary = installSpawnRankHitPointsFromCache(cacheDir, host.engineState());
     // The weapon-definition name table (Sec4.10/Sec4.11): real data from the cache.
     const std::string weaponDefinitionTableSummary = installWeaponDefinitionTableFromCache(cacheDir, host.engineState());
+    (void)installInventoryItemTableFromCache(cacheDir, host.engineState());
     // The vehicle-type class table (spec-vehicle-data.md Sec7, vehicle-class
     // xtbl wiring task): real data from the cache. MUST run before
     // installZoneObjectsFromCache() below - see that function's own top

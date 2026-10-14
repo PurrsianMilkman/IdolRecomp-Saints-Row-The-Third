@@ -783,7 +783,7 @@ int stub_force_throw_do(lua_State* L) {
     EngineState* st = upState(L);
     if (st->objectResolves().get(character)) {
         CharacterState& c = st->getOrCreateCharacter(character);
-        if (c.hasThrowableItemEquipped.get()) { // CONFIRMED gate; OPEN until a test sets it (no inventory model here)
+        if (c.hasThrowableItemEquipped.known() ? c.hasThrowableItemEquipped.get() : st->characterHoldsThrownWeapon(character)) { // Sec55.4 CHOSEN rule (2026-10-12): thrown-class weapon with ammo > 0 in the inventory; explicit set() overrides
             c.caeStagedActionIndex = 4; // CONFIRMED literal: action 4 = throw grenade
             c.caeStagedTargetName = target;
         }
@@ -807,7 +807,7 @@ int stub_force_throw_char_do(lua_State* L) {
         return 0;
     }
     CharacterState& c = st->getOrCreateCharacter(character);
-    if (c.hasThrowableItemEquipped.get()) {
+    if (c.hasThrowableItemEquipped.known() ? c.hasThrowableItemEquipped.get() : st->characterHoldsThrownWeapon(character)) { // Sec55.4 CHOSEN rule, see force_throw_do
         c.caeStagedActionIndex = 4; // CONFIRMED literal: action 4 = throw grenade (same as force_throw_do)
         c.caeStagedTargetName = targetCharacter;
     }

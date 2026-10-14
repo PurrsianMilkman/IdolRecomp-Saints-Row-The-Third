@@ -614,16 +614,15 @@ int stub_notoriety_spawn_group_clear_destination(lua_State* L) {
 }
 
 // mission_store_purchased (Sec25.3, 0x00a52720). 1 mandatory boolean.
-// Return 1 Lua value (boolean). OPEN whether the real helper (0x00a015f0)
-// stores the input and echoes it back, or returns the PRIOR value
-// (Sec25.3's own text) - CHOSEN the directly-observable "store-and-echo"
-// reading rather than guessing at hidden prior-value semantics.
+// Arg = KIND selector (false store / true property). CONFIRMED pure query
+// (spec sync f752324): sticky purchased flag of the first mission-tagged
+// record of that kind, or true when no such record is loaded.
 int stub_mission_store_purchased(lua_State* L) {
     logCall(L, upLog(L), "mission_store_purchased", upStateTag(L));
-    bool purchased = lua_toboolean(L, 1) != 0;
+    bool isProperty = lua_toboolean(L, 1) != 0;
     EngineState* st = upState(L);
-    st->missionStorePurchased() = purchased;
-    lua_pushboolean(L, purchased ? 1 : 0);
+    const std::optional<bool>& rec = st->missionStoreRecordPurchased(isProperty);
+    lua_pushboolean(L, rec.has_value() ? (*rec ? 1 : 0) : 1);
     return 1;
 }
 
@@ -669,7 +668,7 @@ int stub_mesh_mover_update_control(lua_State* L) {
     if (!st->objectResolves().get(moverName)) return 0; // OPEN until set
     PlacedObjectState& obj = st->getOrCreatePlacedObject(moverName);
     if (obj.hasInteractionAnchor.get()) return 0;  // OPEN until set; acting as a door here, not a mover
-    if (!obj.hasMoverControlSubRecord.get()) return 0; // OPEN until set
+    if (!(obj.hasMoverControlSubRecord.known() ? obj.hasMoverControlSubRecord.get() : true)) return 0; // e6691f1 Sec25.6: link modelled present unless a test says otherwise
     int argType = lua_type(L, 3);
     if (argType == LUA_TBOOLEAN) {
         obj.moverBoolControls[controlName] = lua_toboolean(L, 3) != 0;

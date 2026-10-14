@@ -509,6 +509,8 @@ shape a cutscene call would also need.
 
 ### 6.4 OPEN — the cutscene-xtbl → module chain (flagged, not invented — the clearest concrete gap in part (a))
 
+**[CLOSED 2026-10-14, FINAL: the movie is opened at cutscene load by the state-7 handler `0x0072bff0` (`0x007201a0` → `0x00732fc0` → `0x00bddbb0` → `0x00bdd6e0` → BinkOpen), file name `"videos\" + basename(BinkMovieFilename)`; per-shot options `Bink Play` `0x00738150` / `Fullscreen Bink Play` `0x00738260` / `Bink Stop` `0x00738200` start and stop it. None of the 4 candidate handlers opens it. See spec-cutscene-camera-format.md "## In-game cutscene playback, end to end (2026-10-14)". OPEN item 4 in §7 is closed by this.]**
+
 **The actual runtime handler this command (and, by inference, cutscene playback) calls was not
 localized by the scoping pass.** A direct-call-site scan of the cutscene-table-reading code
 (`tools/harnesses/cutscene_xtbl_probe.py`'s `BinkMovieFilename`-reading reader, roughly

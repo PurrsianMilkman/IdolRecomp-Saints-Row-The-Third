@@ -325,6 +325,27 @@ void testGiantEngineFamilyIsOpenHook() {
     }
 }
 
+void testPrimary6SolidFill() {
+    // Spec 5.3aj: primary=6 = solid 8x8 fill, ONE colour byte from the shared colour cursor, 0 main-reader bits.
+    std::vector<uint8_t> bits = buildBlockBytes(6, nullptr, {});
+    BitstreamReader br(bits.data(), bits.size());
+    OwnedPlane dest;
+    dest.resize(8, 8, PlanarYuvFrame::kUndecodedSentinel);
+    FlatFillPrestageArray arr(std::vector<uint8_t>{25, 31}, 2, 0);
+    FlatFillPrestageCursor cur(&arr);
+    BlockGrid grid;
+    grid.blockCols = 1;
+    grid.blockRows = 1;
+    const size_t bitsBefore = br.bitsConsumedSoFar();
+    BlockRecord rec = decodeOneBlock(br, dest.view(), nullptr, 0, 0, nullptr, nullptr, nullptr, &cur, nullptr, &grid);
+    CHECK(rec.outcome == BlockOutcome::Reconstructed);
+    CHECK(rec.primary == PrimaryBlockType::SolidFill6);
+    CHECK(cur.cursor() == 1);
+    CHECK(br.bitsConsumedSoFar() - bitsBefore == 4);  // only the primary nibble itself (legacy path)
+    for (int r = 0; r < 8; ++r)
+        for (int x = 0; x < 8; ++x) CHECK(dest.view().at(x, r) == 25);
+}
+
 void testPrimary9BlockCopyReconstructed() {
     // Sec5.3b's own closing case-by-case table: "0, 9 | Plain block copy |
     // No - previous frame" - primary 9 must behave identically to primary 0.
@@ -978,6 +999,7 @@ int main() {
     testFlatDcFillBroadcastsLiteral();
     testTwoLiteralPatternReconstructs16x16Block();
     testGiantEngineFamilyIsOpenHook();
+    testPrimary6SolidFill();
     testPrimary9BlockCopyReconstructed();
     testRawCopyDualRowDuplicateSub6();
     testUpsample2x2StoreMatchesLiveSecondary2Row();

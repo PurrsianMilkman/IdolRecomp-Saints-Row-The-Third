@@ -43,6 +43,24 @@
 namespace sr3luahost {
 namespace {
 
+// Per-group first/last `level` from the shipped notoriety_spawn.xtbl (spec-lua-api-behaviour.md Sec6.2,
+// Team A sync 9c70c61, CONFIRMED - disassembly plus the extracted table).
+bool notorietyGroupTierInRange(const std::string& group, int64_t tier) {
+    struct R { const char* name; int lo, hi; };
+    static const R kRanges[] = {
+        {"stag", 2, 5}, {"police", 2, 5}, {"police_ng", 2, 5}, {"police_riot", 2, 5},
+        {"police_motorcycle", 2, 5}, {"police_speedboat", 2, 5}, {"police_waverunner", 2, 5},
+        {"luchadores", 2, 5}, {"deckers", 2, 5}, {"morningstar", 2, 5}, {"whored_one", 2, 5},
+        {"whored_two", 2, 5}, {"survival_bikers", 2, 5}, {"survival_mascots", 2, 5}, {"survival_bums", 2, 5},
+        {"stag_riot", 4, 5}, {"stag_heli", 4, 5}, {"stag_attack_heli", 4, 5}, {"police_attack_heli", 4, 5},
+        {"police_blackhawk", 4, 5}, {"morningstar_heli", 3, 5}, {"police_heli", 3, 3},
+        {"stag_tank", 5, 5}, {"police_tank", 5, 5},
+    };
+    for (const R& r : kRanges)
+        if (group == r.name) return tier >= r.lo && tier <= r.hi;
+    return false;
+}
+
 // ---------------------------------------------------------------------
 // disable_specific_notoriety_group (Sec6.2, 0x00a47330). CONFIRMED: 4
 // mandatory args, none nil-gated - arg1 GROUP name (notorietySpawnGroupResolves(),
@@ -70,7 +88,15 @@ int stub_disable_specific_notoriety_group(lua_State* L) {
         return 1;
     }
     std::string tierKey = groupName + "#" + std::to_string(tier);
-    if (!st->notorietyGroupTierInRangeResolves().get(tierKey)) { // OPEN until set - per-group bounds not given
+    // Team A sync 9c70c61 (Sec6.2 note): +0x3e0/+0x3e4 are the first/last level of the group's
+    // notoriety_spawn.xtbl row, inclusive. An explicit test override still wins.
+    bool inRange;
+    if (st->notorietyGroupTierInRangeResolves().known(tierKey)) {
+        inRange = st->notorietyGroupTierInRangeResolves().get(tierKey);
+    } else {
+        inRange = notorietyGroupTierInRange(groupName, tier);
+    }
+    if (!inRange) {
         lua_pushboolean(L, 0);
         return 1;
     }

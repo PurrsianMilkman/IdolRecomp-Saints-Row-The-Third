@@ -330,6 +330,317 @@ Both were re-derived directly from `tools/harnesses/csc_sampler_validate.py` §F
 
 **Review status (2026-09-30): NEEDS-DATA: §11.4's 3.98 s smallest-gap statement conflicts with the median and p90 of §10.6.3 / §11.5; re-run the gap histogram. The constants (0.001 as float widened to double, 30.0, 1000.0) and the 927/1,091/39/26 arithmetic check out on desk — desk review (not re-derived from the executable).**
 
+## In-game cutscene playback, end to end (2026-10-14)
+
+**Scope.** From a cutscene request (`cutscene_play`, or the native mission-flow driver) to the last frame: how the scene file picks real-time versus Bink, what is inside a real-time scene and how its actors, clips, camera, soundtrack and subtitles share one clock, how skip and end work, and two test vectors. It builds on §10 (sampler), `spec-lua-api-behaviour.md` §26.25 (the 20-state machine) and §57.2a (start entry, destinations), and `spec-bink-boundary.md` §2–§5 (the Bink module).
+**Method.** Disassembly with pefile + capstone (no Ghidra). Scripts: `tools/scratchpad/cs_lib.py`, `cs_q.py`, `cs_grep.py`, `cs_dd.py`. Data was read from the shipped archives: `cs_list.py`, `cs_census.py` (all 115 `.cte_xtbl` in `cutscene_tables.vpp_pc`), `cs_opts.py` (option and tag census), `cs_shotcheck.py` (shot count and length check over `cutscenes.vpp_pc`), `cs_audio.py` (soundtrack banks), `cs_subs.py` (subtitle keys) and `cs_vectors.py` (test vectors; output in `cs_out/vectors1.txt`). Game files were only read.
+**Status key.** **FINAL** = disassembly-read and checked against data where data exists. **PARTIAL** = the mechanism is located, but one named piece is still not read.
+
+### A. Headline results
+
+- **The kind does not choose Bink.** The kind (`CutsceneType`, entry `+0x8`) chooses only between a camera script (Zscene/Story) and no camera script (Designer, §10.6 item 7). **A Bink movie is an extra layer on top of a normal real-time Story scene.** If the scene file has `BinkMovieFilename`, the movie is opened at load. It is then started and stopped by **per-shot options**: `Fullscreen Bink Play`, `Bink Play` and `Bink Stop`. 15 of the 115 scene files name a movie, and all 15 are Story-kind scenes that also have a camera script and actors. **FINAL.**
+- **The "4 remaining handlers" item (`spec-bink-boundary.md` §6.4 / OPEN 4) is closed.** None of `0x0072c790`, `0x00720200`, `0x0072c260` or `0x0072c980` opens a movie.
+  - **Where the movie is opened:** the state-7 handler `0x0072bff0` calls the subsystem start `0x007201a0` after a successful scene load. That calls `0x00732fc0(manager +0x3590, manager)`, then the Bink module's `0x00bddbb0`, then `0x00bdd6e0`. There the path is built as `sprintf("%s%s", "videos\", <movie>)`, and `0x00bdc3b0` calls `BinkOpen`.
+  - **How the file name is built:** `<movie>` is the base name of `BinkMovieFilename`. The scene reader cuts the authoring path at the last `\` or `/` (`0x00da84e0`) and stores a heap copy in manager `+0x3590` (`0x0073700d`…`0x00737047`).
+  - **FINAL.**
+- **The soundtrack is one Wwise event, `Cinematic_CTE`, on a 2D game object named `"Cutscene"`.**
+  - The scene's `Soundtrack` text `GROUP : VALUE` becomes a SetSwitch(group, value). A second switch, `Cinematic_Persona`, is set to the player's voice persona. The event is posted once, at playback start.
+  - `VALUE` is also the soundbank id. The bank is `<value>.bnk_pc`, and its id is FNV-1 of the lower-cased name (3/3 banks checked).
+  - **FINAL.**
+- **There is one clock: the cutscene clock object `0x0153ba48` (§10.6).**
+  - It advances by the measured, uncapped frame time `0x0132a0b0` (`spec-lua-api-behaviour.md` resolution at l. 13763).
+  - The camera samples absolute time `t`. Actor clips and subtitle lines are started from the frame index within the current shot, `int(elapsed × 30)`.
+  - The soundtrack is posted once and runs free. It is only re-seeked when the clock jumps (seek, skip ranges, §D).
+  - **FINAL** for the code paths. Drift between the audio clock and the frame clock is not corrected anywhere that was read: **PARTIAL (no re-sync found)**.
+
+### B. Item 1 — Dispatch
+
+1. **Entry points (FINAL).** `0x00725df0` has exactly 4 callers:
+   - `cutscene_play_do` through `0x00728870` (`0x007288a0`);
+   - the state machine's own re-entries (`0x0072d7ca`, Zscene resident; `0x0072e05b`, the replicated skip/play command);
+   - **the native mission-flow driver `0x006db140`**:
+     - `0x006db68f`: a direct call once a fade requested with a 2000 ms argument (`0x005a0580`) has fully faded out, with the hashed name taken from the bound mission record `+4`;
+     - `0x006db9c9`: a call through `0x00728870` with the name string at global `0x014c846c`.
+
+   Both of the mission-flow driver's calls pass the destination block `0x014e94c0`. Mission scripts use the `game_lib.lua` wrapper (`zscene_is_loaded` wait, then `cutscene_play_do`; §26.25 item 4). Which mission-table field feeds `0x014c846c` was not read: **PARTIAL**.
+2. **Scene table row (FINAL, data).** All fields come from `<name>.cte_xtbl`, which is in two places: `cutscene_tables.vpp_pc` (table build, §26.25 item 5) and inside the scene's own `cutscenes.vpp_pc` → `<name>.str2_pc` (the copy streamed with the scene, size-identical for `05_in`).
+   - Census of the 115 files: Story 64, Zscene 31, Designer 20, including the test scenes `stress_test`, `test_pc_light`, `test_vehicle_light` and `cte_test`. `07_out` is not well-formed XML but reads as Story.
+   - `CameraScript` is present in 94 of the 114 parsed files (every non-Designer file), `Soundtrack` in 88, `BinkMovieFilename` in 15, `VintDocument` in 15, `NextScene` in 1 (`17_out` → `17_out_pt2`) and `CTSFilename` in 20.
+3. **Kind gate (FINAL, §10.6 item 7 and population).** Every non-Designer package in `cutscenes.vpp_pc` has a `<name>.csc_pc`, and the 19 Designer packages have none.
+   - **The script's shot count equals the XML `Shot` count in 89/89 packages.** This closes §10.9 item 5 and the open comparison in §10.6 item 6.
+   - **Script shot length = `DefinedShotLength + 1` frames in 1,270/1,275 shots.** So the clock's total for a scene is `Σ(DefinedShotLength + 1)/30` s.
+4. **Bink layer (FINAL).**
+   - **Open at load (state 7).** `0x00732fc0` sets up a 3 MB (`0x300000`) pool named `"cs_bink_pool"`. It fills a descriptor {file name, pool ×3, size/flag word, two zero bytes} and opens the movie through `0x00bddbb0` → `0x00bdd6e0`. The open flags are `0x204400`, with `|0x1000000` when the descriptor `+0x10` word is non-zero. The handle goes to manager `+0x219c`. The movie is opened, not started: slot `+0xd6` = 0.
+   - **Shot-option dispatch.** Options are in the table at `0x01147fa0`. Each record is 20 bytes {name, handler, value type, …, `+0x10` "pre-fire" byte}, with 82 entries. The dispatcher `0x00738970(list, preFire, force)` calls the handler of every option whose pre-fire byte matches, or all of them when `force` is set. It runs:
+     - at shot begin (`0x0072b3d0` → `0x0072b875`/`0x0072b886`);
+     - one shot ahead for pre-fire options (`0x00721e00`, from the clock update);
+     - at playback start (`0x00729396`);
+     - for scene-level options at load (`0x0072c1a6`).
+   - **`Bink Play`** (`0x00738150`, a float frame number). It does nothing if there is no handle. A frame < 0 pauses the movie (`BinkPause(h,1)` via `0x00bdcd70`). Otherwise:
+     - if the movie is not yet started (`0x00bdcea0`), it applies a descriptor through `0x00bdcc00` (handle, mode 1, drawn in-scene) and then seeks to the frame (`0x00bdcee0`);
+     - if it is already started, it seeks and then resumes (`BinkPause(h,0)` via `0x00bdcdc0`).
+   - **`Fullscreen Bink Play`** (`0x00738260`, bool).
+     - True: `0x00bdbd00(handle)` **pushes game state 7** (the Bink movie state, `0x00706e00(7)`, registered by `0x00bdc120`). It then applies a full-screen descriptor sized by `0x00bdc890` (1280×720 or 640×360 by aspect) or resumes the movie, and sets manager `+0x35d8` bit `0x20`.
+     - False: `0x00bdbcc0(1)` pauses the movie and pops the state.
+     - While game state 7 is on top, it still steps the cutscene machine (§26.25, item 3 correction), so the cutscene clock and the soundtrack keep running under the movie.
+   - **`Bink Stop`** (`0x00738200`). With bit `0x20` set: `0x00bdc160` (stop and pop the full-screen state). Otherwise: `0x00bdcc40` (stop).
+   - **Teardown** `0x00731da0` (from `0x0072a160`) stops the movie the same way. **Skip** stops it too (§E).
+   - **Population:** `Fullscreen Bink Play` is in 6 files (`01_in`, `15_in`, `22_choice`, `22_out2`, `genki`, `stress_test`). In-scene `Bink Play` is in the other 9 (`02_out`, `09_out`, `13_out`, `14_in`, `20_in`, `22_out1`, `dk_sh01`, `k_z02`, `ms_sh02`).
+   - **All 14 shipped cutscene movies in `videos\` have 0 Bink audio tracks** (header word at `+0x28`). Their sound comes from the Wwise soundtrack. `stress_test` names `02_IN_v2.bik`, which is not shipped.
+5. **In-scene Bink drawing (PARTIAL).** The Vint renderer has a Bink-by-handle draw callback. `0x00848c25` stores `0x00842ff0`, a jump to the module's draw-by-handle `0x00bdcba0`, into `0x02317a68`. Scenes with an in-scene movie mostly carry a `VintDocument` (`cte_news`, `cte_crack_binoc` …), loaded by the same `0x007201a0` into manager `+0x3588`. How a Vint element gets the movie handle, and how `13_out` (no `VintDocument`; a 768×1024 phone-screen movie) maps it onto a surface, was not read.
+
+### C. Item 2 — Real-time scene contents
+
+1. **Files per cutscene (FINAL, data).** One package, `cutscenes.vpp_pc` → `<name>.str2_pc`, holds:
+   - `<name>.cte_xtbl` (the scene file), `<name>.csc_pc` (camera, non-Designer only) and `<name>-lightset.xtbl`;
+   - every clip `<name>_<actor>_<shot>.anim_pc`;
+   - item meshes and rigs (`.ccmesh_pc`/`.gcmesh_pc`/`.rig_pc`), textures (`.cvbm_pc`/`.gvbm_pc`) and effects (`.cefct_pc`).
+
+   The female-player package `<name>_f.str2_pc` has the same file list, but each player clip is replaced by an `f_`-prefixed clip where one exists. For example, `09_in_f` swaps `09_in_pc_N` for `f_09_in_pc_N`; `05_IN_f` has `f_05_in_pc_6` and `f_05_in_pc_8` but no `f_05_in_pc_5`.
+   - Package choice: entry `+0x10` is chosen when the player's byte `+0xa41` = 1 (§26.25).
+   - Character meshes are not in the package. They come from the entry's `+0x20` resource list (the `Characters/Mesh` and `Vehicles/Variant` names; §26.25).
+   - Soundtrack banks are in `cutscene_sounds.vpp_pc` (story/zscene/companion scenes) or `sounds.vpp_pc` (e.g. `m22_cte`, `genki_tutorial`).
+   - Movies are loose files in `videos\`.
+2. **Actor declaration (FINAL).** The scene-level `Characters/Character` list is read by `0x007356d0` → `0x007354e0` into records of `0x208+` bytes:
+   - `+0x0` name. For a Zscene, if a live world object of that name exists (registry `0x02442750`, `0x005e4dd0`), the name becomes `"<name>_cs"`.
+   - `+0x100` mesh:
+     - `Mesh`;
+     - with `IsAngel`: `npc_Angel_clean` if mission `m21` is active, `Npc_Angel_withmask` if `sh04` is active, otherwise `npc_Angel_nomask`;
+     - with `Killbane` and `0x00a1f9f0(2)`: the alternate mesh.
+   - `+0x200` "is the player". This is set for `Player`/`#Player#`, and it also sets manager `+0x35d8` bit 8.
+   - `+0x201` `SpeakingThug`, `+0x202` `AmCribProp`, `+0x204` `CribPropID`.
+   - Non-player actors are spawned at load (from `0x00736ec0`, then `0x00735bf0`, then `0x00735940`/`0x007357c0`). The character type comes from the mesh through `0x00be3360`, falling back to `npc_cop`/`npc_TestCop`. The actor is created inside an object group tagged `"-- Cutscene Script Group --"` at the scene anchor (`0x007287b0`). Vehicles (`Variant`, `mesh`) are spawned by `0x00733930`.
+   - **FINAL** for the read; the exact human-create call inside `0x00735940` was not followed (**PARTIAL**).
+3. **Per-shot actor rows (FINAL).** `0x00736420` reads `Shots/Shot` into a manager shot table: manager `+0x34d8`, count `+0x34e0`, stride `0x700`. Shot fields:
+   - `+0x654` character rows (count `+0x65c`, stride `0xb0`, read by `0x00735d60`), plus vehicle rows (`0x00734ef0`) and item rows (`0x00736100`);
+   - `+0x678` options, `+0x684` audio lines (count `+0x68c`), `+0x6a0` effects (`CSEffects`, count `+0x6a8`);
+   - `+0x6bc` the shot length in frames: the larger of `DefinedShotLength` and the animation span.
+
+   A character row holds:
+   - `+0x88` the name. `#PLAYER#` is stored as **`#PLAYER1#`**, which the generic resolver `0x00a281a0` maps to the local player's **real** human. So the player's own customised body, clothing and voice persona are what play in the cutscene; no stand-in is spawned.
+   - `+0x50` `Pos` (a vec, normalised by `0x00da38e0`) and `+0x84` `OrientY` × π/180.
+   - `+0x48` option bits from `0x007341b0`: `FatBonesEnabled`/`FatBonesLeft`/`FatBonesRight`/`FatBonesFeet`/`FatBones` (bits 0–4), `HideChar` (5), `DontReposition` (6), `HeelsDisable` (7); `RenderOverUI` goes in `+0x49`.
+   - `ItemLeft`/`ItemRight` hand-item names built as `"%s_%s_%d"` (actor name, item text, number), `HiddenVids`, `ClothBones`, and `+0x78` the clip list (count `+0x80`).
+
+   `HideChar` is applied at shot setup through the visibility call `0x008ccb90(object, hide, 1, 0)` (`0x00727fc3`).
+4. **Clip lookup (FINAL).** `0x00732ce0` reads each `Animations/Animation` into a 28-byte record:
+   - `Filename`: base name (`0x00da8890`), then `.animx` stripped (`0x00da8790`), then the engine CRC of the lower-cased name (`0x00d9e8b0`). So `D:/…/05_IN_BIKINI_1.animx` → clip `05_in_bikini_1`.
+   - If the player is female (`+0xa41` = 1) or option byte `0x0153ba01` is set, it first tries `"f_%s"`. If the registry lookup `0x004bec10` returns −1, it falls back to the plain name.
+   - The record stores the clip index (`+0x14`), `MaxWeight` (`+0x10`), `StartFrame`/`EndFrame`/`OverlapPrevious` (u16 fields in `+0x0`…`+0xc`) and a slot handle (`+0x18`).
+   - **Population: 0 clips are missing from the package in the two vectors (§F).**
+5. **Clip start (FINAL).** `0x00725050(actor row, object, frame)` runs:
+   - at shot setup (`0x00727660` → `0x0072807b`, frame 0);
+   - every frame (`0x00729fb0`, from the per-frame shot update `0x0072bce0`, with `frame = int(elapsed_in_shot × 30)`).
+
+   For each clip record:
+   - **Start:** once `frame ≥ start` and the record has not started, the object is resolved as a human (`0x004e43f0`), vehicle (`0x00b71950`) or item (`0x004e4bd0`). `0x00722b40` then plays the clip on the object's animation controller (`object +0xd24 → +0x10`) through the record-index play `0x004b1ef0` (`spec-anim-runtime.md` §6.5). The call is in clip-index mode, flags `0x80000 | 0xc40` (Zscene/Story) or `| 0x848` (Designer), with f1 = 1.0, f2 = `MaxWeight` and f3 = −1.0. The slot handle is kept in `+0x18`.
+   - **End:** at the end of the window the slot is released through `0x004b41b0`.
+
+   After setup, every actor gets one animation and post-animation pass (`0x009a15f0`, `0x009a02a0`), so it is posed on the first frame.
+6. **Camera (FINAL, §10).** Camera mode 7 is entered at playback start (`0x005695e0`, from `0x00729150`). It samples the script at the clock's `t` every frame.
+7. **The shared clock (FINAL).**
+   - The playing handler (`0x0072c980`, states 10–12) calls the clock update `0x0073cbb0(dt)` with `dt` = the measured frame time `0x0132a0b0`.
+   - The clock steps `t` and the in-shot elapsed time. At each shot boundary it calls the shot-begin `0x0072b3d0(idx)` (options, actor setup, clips at frame 0) and the per-frame shot update `0x0072bce0` (clips, effects, audio lines).
+   - In-shot stepping can be replaced by a **range jump**. `0x00721f00` returns a skip-ahead step when byte `0x0153b554` is set and the current frame falls in one of the shot's frame ranges (shot `+0x6cc`, count `+0x6d4`). The soundtrack is then re-seeked to `(t + step) × 1000` ms (`0x00731750` → Wwise seek `0x0045ef20`). This is most likely the `Censor` option (type 7). That reading is **HIGH**; the range writer was not read.
+   - Pausing the game in states 10/11 pauses the soundtrack (`0x00731580`) and resumes it on unpause (`0x00731560`) (`0x0072d6b6`…`0x0072d6e6`).
+
+### D. Item 3 — Audio and subtitles
+
+1. **Bank load (FINAL).** `0x007315a0(bank id, isZscene)` requests bank `entry +0xf4` (= FNV-1 of the `Soundtrack` value) into one of two pools: `0x0153b730` for Zscene, `0x0153b7e0` otherwise. The bank is requested at Zscene promotion (`0x00720410`) or in state 5 (`0x00722f10`). State 6 (`0x0072c790`) waits until the bank's status is `0x66` (loaded) or 5 s have passed (`0x00731630`). It also waits for the scene request group and every `+0x20` resource to be resident, with a 120 s timeout → abort (`0x0072bf90`). The state then becomes 7.
+2. **Start (FINAL).** The first frame of the playing state (manager `+0x35da` bit 0 clear) calls `0x007316e0(entry +0xf0, entry +0xf4, isZscene)`:
+   - SetSwitch(`+0xf0` = FNV-1(`CINEMATIC`) = `0x6d96bfb0`, `+0xf4` = FNV-1(value), object) via `0x0045f5b0`;
+   - if there is a player, SetSwitch(FNV-1(`Cinematic_Persona`) = `0xe0fc12b9`, the persona id from `player +0x1c70` via `0x0070a290`, object);
+   - PostEvent(FNV-1(`Cinematic_CTE`) = `0x86e8dbcf`, object, play id → `0x0153b720`) via `0x0045ea70`.
+
+   The object `0x0153b710` is created as `"Cutscene"` (`0x00731520` → `0x0045da50`). The ids are hashed once by `0x007314f0`.
+
+   Every soundtrack bank checked holds exactly one Event, `0x86e8dbcf`, and its own `CINEMATIC`/value/persona ids (`story_05_intro`, `story_09_intro`, `story_13_outro`). So **"which audio" is decided by the switch value inside a shared event, not by a per-scene event name.**
+3. **Stop (FINAL).** Teardown `0x0072a160`:
+   - stops the play id and unloads the bank (`0x007317a0`);
+   - posts `Stop_Cinematics` (`0x9895c6ce`) on the global 2D voice (`0x0045d990`);
+   - posts `UnMute_After_Zscene` for a Zscene.
+
+   Skip also posts `Stop_Cinematics` (§E).
+4. **Lines, lipsync and subtitles (FINAL).** Each `Audios/Audio` row is read by `0x007345b0` into a 36-byte record:
+   - `+0x0` a Wwise id from `Filename`. A player line gets a persona prefix (`0x00731ae0` with `"player"`). Shipped `Filename`s are all `Audio Data N` (676/676).
+   - `+0x4` `DelayBefore`/30 s, measured **from the start of the shot**.
+   - `+0x8` the subtitle text: `0x00849df0(Subtitle)`, i.e. a key hashed with the localisation CRC into the `subtitle` table (`spec-localization-format.md`).
+   - `+0xc` `SubtitleDuration`/30 s; `+0x10` the lipsync clip; `+0x14` `LipsyncCharIndex` (a 1-based shot actor index).
+
+   Every frame, `0x00721070` does the following:
+   - 0.1 s before `+0x4` it starts the lipsync clip on that actor (`0x004b1ef0`, flags `0x200040`);
+   - at `+0x4` it resumes the line's voice handle `+0x20` (`0x0045f0d0`, the same call the soundtrack unpause path uses; where that handle is posted was not read) and shows the subtitle through `0x0073d070(text, 0, duration, 0)`.
+
+   **Subtitle keys are persona-independent.** Player lines are keyed `…_Player_BM` (173 rows), and no `_WF`/`_WM`/`_HM`/`_BF`/`_ZM` variant exists in `subtitle_us`.
+
+### E. Item 4 — Skip and end
+
+1. **Skip input (FINAL; the input hook is the `0x005b2170` entry of `spec-player-runtime.md`, l. 466).** While a cutscene is in progress, `0x005b2170` consumes `CBA_SKIP_MODAL_SEQUENCE` (`0x8e`) and calls `0x00720830`. That function accepts the skip only if all of these hold:
+   - the state is 10–13;
+   - manager `+0x35d9` has neither `0x02` nor `0x40` set;
+   - **more than 2000 ms have passed since playback start** (stamp `0x0153b548`, set in state 9);
+   - with the completion-screen flag (manager `+0x35d8` bit `0x80`, set by the `Show Completion Screen` option `0x00738050`), **more than 0.6 s of the scene remain**.
+
+   It then sets state 11 and a 5 s deadline (`0x0153b290 = t + 5.0`).
+2. **Skip execution (FINAL, `0x0072d030`…`0x0072d32e`).**
+   - **Plain scene (no tail hold, no completion screen):** `0x0072b340` stops it. Manager `+0x35da` bit 7 = "stopped from state 11" (i.e. skipped). A fade-out is requested if not already fading: Zscene 125 ms (`0x012f5d28`), otherwise a 0 ms request. The state then becomes 13.
+   - **Scene with a tail hold (manager `+0x2190` > 0) or a completion screen:**
+     1. Request a fade-out and wait until fully faded (`0x0059fa10`).
+     2. Seek the clock to the last shot (`0x0073c890`), then step it until only the hold remains (`+0x2190`, or 0.6 s).
+     3. Stop the movie (§B.4).
+     4. Post `Stop_Cinematics`.
+     5. Return to state 10, so the tail and the completion screen still play.
+
+     Special cases by name: `01_in` on its first shot goes to state 12 instead and re-stamps the skip timer; `17_out` forces the completion flag.
+3. **Normal end (FINAL).**
+   - **Fade before the end:** with ≤ 0.125 s left, a Zscene requests a 125 ms fade-out. Other kinds request a fade (0 ms argument) with ≤ 0.8 s left.
+   - **When the clock reaches the end** (`0x0073c6e0`), `0x0072b340` runs. If the completion flag is set, it waits first until HUD screens `0x35`–`0x39` are gone (`0x007bfad0`).
+   - **Later states:**
+     - **13:** `CS_STATE_STOP` and `0x0072a160` teardown, covering soundtrack, movie, camera script (`0x00569500`), option restore (`0x007382d0`) and the actor/visibility restores. Manager `+0x35cc` (`NextScene`) is copied to `0x0153b52c`.
+     - **14→15:** either chain to the next scene (`0x00725670`, state 5) or tear down.
+     - **0x10:** memory unlock.
+     - **0x11:** `CS_STATE_STOPPED`.
+     - **0x12:** `CS_STATE_FINAL_STREAMING`; world objects are re-streamed.
+     - **0x13:** if a fade is pending (`0x0153b6b5`), a fade-in of 125 ms (`0x0153b6b4` set) or 500 ms; then `cutscene_virtual_pool` and the manager are freed and the state returns to 0 (§26.25 item 6).
+4. **What is restored.**
+   - **Player position (PARTIAL).**
+     - At load, `0x0072bff0` teleports the local player to the scene anchor (`0x007287b0`) when the anchor is not the origin.
+     - `RestorePlayerPos` takes a snapshot, and `cutscene_play` destinations are written into the manager. No read-back was found for either (`spec-lua-api-behaviour.md` §57.2a, unchanged).
+     - On the skip-all path, the destination is applied at once.
+   - **Visibility (FINAL):** per-shot `HideChar` on `#PLAYER#` hides the real player through `0x008ccb90`. Teardown re-runs the visibility pass.
+   - **HUD (PARTIAL):** the load-time prep `0x00726980` (called first in state 7) makes the world, HUD and script-group changes. The individual HUD calls were not itemised.
+   - **Streaming (FINAL):** state 4 mounts `preload_items`/`preload_effects`, and states 0x10–0x12 release them and re-stream (§26.25).
+
+### F. Item 5 — Test vectors (from `cs_out/vectors1.txt`)
+
+**F.1 `05_in`: real-time Story (mission 5 intro; `m05.lua` calls `cutscene_play("05_IN", nil, start_navs, false)`).**
+- **Files:**
+  - `cutscenes.vpp_pc` → `05_IN.str2_pc`: 224 files, mode flags `0x4803` — `05_in.cte_xtbl` (176,213 B), `05_in.csc_pc` (8,668 B), `05_in-lightset.xtbl`, 161 `.anim_pc`, 2 item meshes (`BeerBottle_Z`, `Binoculars`), 26 texture pairs and 2 effects.
+  - Female package `05_IN_f.str2_pc` (224 files).
+  - `VintDocument` `cte_binoc_only.vint_doc`; `SceneLightset` `05_in-Lightset.xtbl`.
+  - Scene options `Time Of Day Set` = 500, `TOD Mission Override` = `m05_tod_override.xtbl`.
+  - No movie.
+- **Kind:** Story (2) → the camera script is required.
+- **Actors:**
+  - `#PLAYER#` = the real player, as `#PLAYER1#`.
+  - 24 NPCs, each with a mesh: e.g. `BIKINI`=`npc_ped_stripper05_fw`, `CLARA`=`npc_mstar_female_sol08`, `CLAUDE`=`npc_ped_clubber04_ma`, `PETE02`=`npc_mstar_male_sol02`, `STRIP01`=`npc_ped_stripper01_fw`, `VIC2`=`npc_mstar_male_sol03`. Four `*_Body` doubles reuse their owner's mesh.
+  - Vehicle `HELI02`=`heli_fighter_03`.
+  - Items `BEER01`…`BEER11`=`BeerBottle_Z` and `BINOC`=`Binoculars`.
+- **Shots** (`DefinedShotLength` frames → script seconds):
+
+| Shot | Defined | Script start–end (s) |
+|---|---|---|
+| 1 | 137 | 0.0000–4.6000 |
+| 2 | 74 | 4.6000–7.1000 |
+| 3 | 114 | 7.1000–10.9333 |
+| 4 | 80 | 10.9333–13.6333 |
+| 5 | 111 | 13.6333–17.3667 |
+| 6 | 77 | 17.3667–19.9667 |
+| 7 | 112 | 19.9667–23.7333 |
+| 8 | 82 | 23.7333–26.5000 |
+
+  - **Duration 26.5000 s** (795 frames = Σ(Defined + 1)). The XML sum is 787.
+- **Clips:**
+  - Shot 1: every NPC and item plays `05_in_<actor>_1.anim_pc`, frames 0–137, weight 1.0 (e.g. `05_in_bikini_1`, `05_in_fillvic_body_1`, `05_in_beer01_1`). `#PLAYER#`, `HELI02` and `BINOC` are hidden.
+  - `#PLAYER#` is hidden in shots 1–4 and 7, and plays `05_in_pc_5` (0–111), `05_in_pc_6` (0–77; female `f_05_in_pc_6`) and `05_in_pc_8` (0–82; female `f_05_in_pc_8`).
+  - Shot 5 has no female clip, so a female player falls back to `05_in_pc_5`.
+  - 0 clips are missing.
+- **Audio:**
+  - `Soundtrack` = `CINEMATIC : STORY_05_INTRO` → switch `0x6d96bfb0` = `0x32492709`.
+  - Bank `story_05_intro.bnk_pc` (BKHD id `0x32492709`) + `story_05_intro_media.bnk_pc`.
+  - Event `Cinematic_CTE` `0x86e8dbcf`, persona switch `0xe0fc12b9`.
+- **Subtitles** (absolute time = shot start + `DelayBefore`/30):
+
+| Time (s) | Key | Duration (s) | Text |
+|---|---|---|---|
+| 16.1333 | `Story05_In_01_Pierce` | 1.833 | "Whatchu thinkin?" |
+| 17.8000 | `Story05_In_02_Player_BM` | 2.333 | "Some asshole is in my pool." |
+| 20.0667 | `Story05_In_03_Shaundi` | 3.667 | "The crew's ready downstairs--say the word and we crash the party." |
+| 24.4000 | `Story05_In_04_Player_BM` | 2.500 | "Let's do it." |
+
+- **First camera key:** shot 1, t = 0.0.
+  - Position (40.3248, 16.6612, −15.0739).
+  - Channel 1 raw s16 (−2384, 6201, −406, 14971) → quaternion (−0.145517, 0.378502, −0.024782, 0.913813), |q| = 1.000054.
+  - FOV 1.396300 rad = 80.0021°; no DOF.
+  - Track sizes: 82 position keys, 32 orientation keys, 1 FOV key.
+  - Data note: every actor `Pos` (3.8914, 3.2939, 16.3286) is the negative of the slate navpoint `slate_SaintsHQ_helipad` (−3.8914, −3.2939, −16.3286).
+
+**F.2 `22_choice`: Story scene with a full-screen Bink (the mission-22 ending choice).**
+- **Files:**
+  - `22_choice.str2_pc`: 34 files — `22_choice.cte_xtbl`, `22_choice.csc_pc` (1,092 B), 1 clip, 15 texture pairs, 1 effect.
+  - `22_choice_f.str2_pc` (34 files).
+  - Movie `BinkMovieFilename` `…\videos\22_choice.bik` → opened as **`videos\22_choice.bik`** (44,264,080 B, 1,128 frames, 1280×720, 10,000,000/333,667 = 29.970 fps, 37.638 s, **0 audio tracks**).
+- **Kind:** Story (2).
+- **Actors:** `#PLAYER#` only. It plays `22_choice_pc_1.anim_pc`, frames 0–1128.
+- **Shots:** 1 (`Shot_1-v_cam01_1`, Defined 1128).
+  - Script: 1 shot, 0.0000–37.6333 s. **Duration 37.6333 s.**
+  - The shot option `Fullscreen Bink Play` = True fires at shot begin. The movie therefore covers the whole scene in game state 7, while the clock, the player clip and the soundtrack run underneath.
+- **Audio:**
+  - `CINEMATIC : M22_CTE` → `0x6d96bfb0` = `0x5da8d7a5`.
+  - Bank `m22_cte.bnk_pc` + `m22_cte_media.bnk_pc`. These are in `sounds.vpp_pc`, not `cutscene_sounds.vpp_pc`.
+  - Event `0x86e8dbcf`.
+- **Subtitles** (10 lines, shot-relative):
+
+| Time (s) | Key | Duration (s) | Text |
+|---|---|---|---|
+| 0.800 | `22_Choice_01_Angel` | 2.133 | "He's at the airport - there isn't much time!" |
+| 3.433 | `22_Choice_02_Player` | 0.500 | "Angel -" |
+| … | … | … | … |
+| 31.600 | `22_Choice_10_Kia` | 4.000 | "We'll see how many people believe that when Shaundi and Viola are found in the wreckage." |
+
+- **First camera key:**
+  - t = 0.0, position (0.2313, 4.3595, 7.1449).
+  - Raw (0, 11584, −11584, 0) → quaternion (0, 0.707074, −0.707074, 0), |q| = 0.999954.
+  - FOV 0.785400 rad = 45.0001°.
+  - The camera is mostly hidden by the movie.
+
+### G. Still open after this pass
+
+1. How an in-scene movie reaches a Vint element or world surface (§B.5).
+2. The mission-table field behind `0x014c846c` (§B.1).
+3. The human-create call inside `0x00735940` (§C.2).
+4. A HUD item list for `0x00726980` (§E.4).
+5. Who sets `0x0153b554` and fills the shot range list (§C.7).
+6. The destination and `RestorePlayerPos` read-back (§57.2a).
+7. Whether anything re-syncs the free-running soundtrack or a movie to the clock after a frame-time hitch.
+
+### H. Team B wiring
+
+1. **Load the scene from its package.** Read `<name>.cte_xtbl` and `<name>.csc_pc` from `cutscenes.vpp_pc` → `<name>.str2_pc`. Take `<name>_f.str2_pc` when the player is female. The clock length is `Σ(DefinedShotLength + 1)/30`, or the script's shot times. Do not use the XML sum.
+2. **Spawn the actors.**
+   - Spawn one NPC per scene-level `Character` from `Mesh` (Angel/Killbane rules in §C.2), named exactly as in the scene file.
+   - Map `#PLAYER#` to the **live player**. Do not spawn a copy.
+   - Spawn vehicles from `Variant`/`mesh` and items from `Mesh`.
+3. **Start clips per shot.** At each shot begin, and on every frame with `frame = int(elapsed_in_shot × 30)`, start a row's clip once `frame ≥ StartFrame`:
+   - Clip name: `basename(Filename)` without `.animx`, lower-cased. Try `f_`+name first for a female player, and fall back to the plain name.
+   - Play at weight `MaxWeight` and release at the end of the window.
+   - Apply `HideChar`, `Pos`/`OrientY` at shot setup.
+4. **Drive one clock.** Step `t` by the real frame time. Sample the camera at `t` (§10). Run shot begin and the per-frame shot update from the same step.
+5. **Soundtrack.**
+   - Load bank `lower(value).bnk_pc` (id FNV-1(value)). Wait for it (≤ 5 s) before playback.
+   - At the first playing frame, SetSwitch(FNV-1(left), FNV-1(right)) and SetSwitch(`Cinematic_Persona`, player persona) on a 2D object `"Cutscene"`, then PostEvent `Cinematic_CTE`.
+   - Seek it only when the clock jumps. Post `Stop_Cinematics` and unload at the end.
+6. **Subtitles and lipsync.** For each `Audios/Audio` row, show `subtitle[Subtitle]` at shot start + `DelayBefore`/30 for `SubtitleDuration`/30. Start the lipsync clip 0.1 s earlier.
+7. **Bink.**
+   - Open `videos\<basename(BinkMovieFilename)>` at load, paused (the movie has no audio).
+   - `Fullscreen Bink Play` = true: push a full-screen movie layer and keep the cutscene machine ticking. False: pause the movie and pop the layer.
+   - `Bink Play` = f: in-scene play from frame f; f < 0 pauses.
+   - `Bink Stop`, skip and teardown: stop the movie.
+   - The `bink_play` Lua native stays a no-op (§24.2).
+8. **Skip.**
+   - Accept `CBA_SKIP_MODAL_SEQUENCE` only in playing states, ≥ 2 s after playback start, and (with a completion screen) with > 0.6 s left.
+   - Plain scene: fade out, then stop.
+   - Tail hold or completion screen: fade out, jump to the last shot leaving the hold, stop the movie, post `Stop_Cinematics`, then play the tail.
+   - Set the skipped bit for `cutscene_was_skipped`.
+9. **End.**
+   - Fade out near the end: 125 ms for a Zscene; a fade request at 0.8 s left for other kinds.
+   - Tear down: soundtrack, movie, camera mode 7, option restores, visibility.
+   - Chain `NextScene` if present; otherwise re-stream and fade in (500 ms; 125 ms after a quick fade).
+   - Move the player only where a destination was given (§57.2a), plus the load-time anchor teleport.
+10. **Replace the playtest's auto-skip** (`sr3_viewer.cpp:19373`) with steps 1–9. Use F.1 and F.2 as the acceptance vectors: duration, first camera key, clip names, subtitle times and texts, audio ids.
+
+**Review status (2026-10-14): new section, single-pass (pefile + capstone + shipped data). Not desk-reviewed.**
+
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the "only entry 0 is readable" limitation superseded in §10.6 item 6, §10.7 and §10.9 item 5 (`spec-vpp-container.md` §7); marked §7's "keyframe payload remains undecoded" resolved (`spec-anim-format.md` §6c).
@@ -345,3 +656,5 @@ Both were re-derived directly from `tools/harnesses/csc_sampler_validate.py` §F
   file's own "parser not reachable from its registration row" framing (§1) one level further: the parser
   IS reachable, just through the state machine rather than the registration row directly. Full detail:
   `scratchpad/cutscene_playback_sequencing_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+
+- **2026-10-14 — new section "In-game cutscene playback, end to end".** Dispatch from `cutscene_play` and the native mission-flow driver; the cutscene-to-Bink chain closed (state-7 handler `0x0072bff0` → `0x007201a0` → `0x00732fc0` → `0x00bddbb0` → `0x00bdd6e0` → `BinkOpen` on `videos\<basename(BinkMovieFilename)>`, started/stopped by the `Bink Play`/`Fullscreen Bink Play`/`Bink Stop` shot options); actor declaration, `#PLAYER#` → `#PLAYER1#` live-player binding, clip lookup (`f_` female variant), clip start through `0x004b1ef0`; soundtrack = `Cinematic_CTE` with `CINEMATIC`/`Cinematic_Persona` switches; subtitles from the `subtitle` table at `DelayBefore`/30; skip and end; test vectors `05_in` and `22_choice`; Team B wiring. Also closes §10.9 item 5 (script shot count = XML shot count 89/89; script shot = `DefinedShotLength` + 1 frames, 1,270/1,275). pefile + capstone only; no Ghidra. Cleanroom self-check: 0 hits.

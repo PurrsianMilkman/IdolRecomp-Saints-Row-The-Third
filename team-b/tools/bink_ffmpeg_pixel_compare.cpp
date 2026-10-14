@@ -101,6 +101,9 @@ int main(int argc, char** argv) {
     size_t blocksChecked = 0;
     size_t pixelsChecked = 0;
     size_t pixelsMatch = 0;
+    size_t perPrimaryChecked[10] = {};
+    size_t perPrimaryExact[10] = {};
+    int firstBadRow = -1, firstBadCol = -1;
 
     for (const auto& b : trace.blocks) {
         if (b.outcome != BlockOutcome::Reconstructed) continue;
@@ -125,13 +128,28 @@ int main(int argc, char** argv) {
                     exact = false;
                 }
                 if (x == 0 && y == 0) {
-                    std::printf("block (row=%d,col=%d) pixel(0,0): ours=%u ffmpeg=%u %s\n", b.blockRow, b.blockCol,
-                                o, t, (o == t) ? "MATCH" : "MISMATCH");
+                    std::printf("block (row=%d,col=%d) primary=%d sub=%d pixel(0,0): ours=%u ffmpeg=%u %s\n",
+                                b.blockRow, b.blockCol, static_cast<int>(b.primary),
+                                b.sub ? static_cast<int>(*b.sub) : -1, o, t, (o == t) ? "MATCH" : "MISMATCH");
                 }
             }
         }
         if (exact) ++blocksExact;
+        const int pi = static_cast<int>(b.primary);
+        if (pi >= 0 && pi < 10) {
+            ++perPrimaryChecked[pi];
+            if (exact) ++perPrimaryExact[pi];
+        }
+        if (!exact && firstBadRow < 0) {
+            firstBadRow = b.blockRow;
+            firstBadCol = b.blockCol;
+        }
     }
+    std::printf("\nper-primary exact/checked:");
+    for (int i = 0; i < 10; ++i)
+        if (perPrimaryChecked[i]) std::printf(" p%d=%zu/%zu", i, perPrimaryExact[i], perPrimaryChecked[i]);
+    std::printf("\nfirst mismatching block: row=%d col=%d\n", firstBadRow, firstBadCol);
+    std::printf("stop reason: %s\n", trace.stopReasonText().c_str());
 
     std::printf("\n=== RESULT ===\n");
     std::printf("blocks reconstructed (in-bounds) : %zu\n", blocksChecked);

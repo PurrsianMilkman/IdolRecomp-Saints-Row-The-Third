@@ -313,6 +313,10 @@ public:
     // outliers like Killbane's 20000 included, not real per-character
     // fidelity).
     int32_t drawOrGetMaxHitPoints(const std::string& name);
+    // Current HP (+0x1cb8): Sec34.2 "starts equal to the table value (step 2 of Sec34.1)" - the same value
+    // maxHitPoints takes at spawn. A character whose current HP was never set takes its (drawn-or-known)
+    // maximum. Stays OPEN (throws) exactly where drawOrGetMaxHitPoints() does (script-NPC override unknown).
+    int32_t drawOrGetCurrentHitPoints(const std::string& name);
 
     // Looks up `name` (the plain Lua name string, see this header's own
     // top note on why no further resolution happens), creating a
@@ -1524,6 +1528,42 @@ public:
     // one shared "fold like the real engine's case-insensitive compare"
     // convention to live, rather than a second, separately-written fold.
     OpenValueMap<bool>& weaponDefinitionResolves() { return weaponDefinitionResolves_; }
+    // Real weapons.xtbl (+ loaded DLC) row names (spec-lua-api-behaviour.md
+    // Sec4.10 "Table contents"): every name resolves true, and once installed
+    // the table is COMPLETE, so any other name resolves false (native does
+    // nothing) instead of OPEN-throwing. Names are case-folded here.
+    void installWeaponDefinitionNames(const std::vector<std::string>& names) {
+        for (const std::string& n : names) weaponDefinitionResolves_.set(AsciiLowerFold(n), true);
+        weaponDefinitionTableComplete_ = true;
+    }
+    bool weaponDefinitionTableComplete() const { return weaponDefinitionTableComplete_; }
+    // weapons.xtbl `Weapon_Class` (spec-tables-weapons-combat.md Sec2.5: 5 = `thrown`) per row name,
+    // for the force_throw_do "holds a thrown/grenade-class weapon " rule (Sec55.4,
+    // 2026-10-12). Optional: a host that installs only names leaves every class unknown.
+    static constexpr int32_t kWeaponClassThrown = 5;
+    void setWeaponDefinitionClass(const std::string& name, int32_t weaponClass) {
+        weaponClassByName_[AsciiLowerFold(name)] = weaponClass;
+    }
+    // CHOSEN rule per spec-lua-api-behaviour.md Sec55.4 (2026-10-12, FINAL as guidance): true when the
+    // character holds a weapon of the thrown class (Weapon_Class == 5; the 2026-10-12 second pass drops the
+    // ammo condition and adds a carried-throwable-prop case this host does not model); false otherwise. Only the
+    // temporary-grant inventory (inv_weapon_add_temporary) is modelled here - the character's
+    // permanent inventory is not.
+    bool characterHoldsThrownWeapon(const std::string& character) const {
+        auto inv = weaponTemporaryInventory_.find(character);
+        if (inv == weaponTemporaryInventory_.end()) return false;
+        for (const auto& kv : inv->second) {
+            auto cls = weaponClassByName_.find(kv.first);
+            if (cls != weaponClassByName_.end() && cls->second == kWeaponClassThrown && kv.second.temporaryGrant)
+                return true;
+        }
+        return false;
+    }
+    // Resolve a case-folded weapon name; OPEN-throws only if no real table installed.
+    bool weaponDefinitionResolve(const std::string& foldedName) {
+        if (weaponDefinitionTableComplete_ && !weaponDefinitionResolves_.known(foldedName)) return false;
+        return weaponDefinitionResolves_.get(foldedName);
+    }
 
     // The real per-target, per-weapon inventory-slot record both natives
     // write/clear (WeaponTemporaryInventorySlot, misc_state.h - see its own
@@ -1724,6 +1764,15 @@ public:
     // triggerCurrentlyInside() itself, which can go back to false on EXIT and
     // would otherwise look identical to "never entered" to a stall tracker.
     bool& triggerEverEntered(const std::string& triggerName) { return triggerEverEntered_[triggerName]; }
+    // fix/auto-objective-driving (2026-10-13): triggers the running script POLLED for the live player via
+    // object_is_in_trigger (the polling analogue of an on_trigger wait), in query order, drained once per
+    // frame by the --auto-objective harness. Harness bookkeeping only; no engine semantics.
+    void noteTriggerPollQuery(const std::string& triggerName) { triggerPollQueries_.push_back(triggerName); }
+    std::vector<std::string> drainTriggerPollQueries() { std::vector<std::string> out; out.swap(triggerPollQueries_); return out; }
+    // feature/route-table-driving: negative character_is_in_vehicle(#PLAYER1#[, V]) queries this frame (harness
+    // bookkeeping only; V == "" for the any-vehicle form). Drained once per frame by --auto-objective.
+    void noteVehicleWaitQuery(const std::string& vehicleName) { vehicleWaitQueries_.push_back(vehicleName); }
+    std::vector<std::string> drainVehicleWaitQueries() { std::vector<std::string> out; out.swap(vehicleWaitQueries_); return out; }
 
     // --- zscene (spec-lua-api-behaviour.md Sec26.25, Sec14.23, Sec8.21;
     // batch 2026-10-01, lifecycle driver + scene table 2026-10-01 nnlt text;
@@ -2178,6 +2227,11 @@ public:
     // Sec27.2 `cell_is_mission_complete` (0x00a525a0, same function as Sec20.14's `mission_is_complete`):
     // keyed by mission name - the resolved object's own +0x88 bit 0x4 (resolve itself reuses objectResolves()).
     OpenValueMap<bool>& missionComplete() { return missionComplete_; }
+    // Sec20.14/Sec27.2 port pointer (2026-10-12, FINAL, m22): on a new game, or a harness starting a mission
+    // directly, no mission is complete: false unless the host's own state (missionComplete().set) says otherwise.
+    bool missionIsComplete(const std::string& name) const {
+        return missionComplete_.known(name) ? missionComplete_.get(name) : false;
+    }
 
     // Sec27.3 `Completion_should_wait_for_coop` / Sec27.4 `Completion_user_is_done_viewing`.
     struct CompletionScreen {
@@ -2534,6 +2588,17 @@ public:
         OpenValueMap<bool> definitionResolves{
             "continuous-explosion definition row resolves (0x005eb390, NOT the 0x02442750 singleton family)",
             "spec-lua-api-behaviour.md Sec28.16"};
+        // Sec28.16 port pointer (2026-10-12, FINAL): the rows are exactly continuous_explosions.xtbl's;
+        // a name matching no row is a silent no-op. Once the real table's names are installed it is COMPLETE.
+        bool tableComplete = false;
+        void installNames(const std::vector<std::string>& names) {
+            for (const std::string& n : names) definitionResolves.set(n, true);
+            tableComplete = true;
+        }
+        bool resolve(const std::string& name) const {
+            if (tableComplete && !definitionResolves.known(name)) return false;
+            return definitionResolves.get(name);
+        }
         OpenValue<bool> active{"0x012ec964 (continuous explosion global state)", "spec-lua-api-behaviour.md Sec28.16"};
         std::string lastDefName, lastTargetName; // CHOSEN, test-observable
         uint64_t startCount = 0;
@@ -2850,6 +2915,15 @@ public:
     // is a handful of summary predicates, not a member list) - collapsed
     // to one "is anyone active on this channel" flag per channel name, a
     // stated simplification; OPEN until a test sets it.
+    static int32_t tutorialDescriptorDefaultParam20(int32_t index) {
+        // Spec sync e6691f1 (Sec6.19 FINAL): 203 descriptors hold 2; indices 188 and 196-201 hold 1.
+        return (index == 188 || (index >= 196 && index <= 201)) ? 1 : 2;
+    }
+    // Spec sync e6691f1 (Sec33.4): "mission_conv" active slot starts at 0xff (no conversation), so
+    // audio_any_conversation_playing is false until a conversation is played. An explicit .set() wins.
+    bool missionConvActive() const {
+        return conversationChannelActive_.known("mission_conv") ? conversationChannelActive_.get("mission_conv") : false;
+    }
     OpenValueMap<bool>& conversationChannelActive() { return conversationChannelActive_; }
 
     // waiting_for_player_dialog (Sec33.5): CONFIRMED reference-counted
@@ -3959,7 +4033,8 @@ public:
     // never read back by anything in this project's scope, so it is not
     // separately tracked (would be fabricated detail).
     bool groupAlreadyCreated(const std::string& name) const { return groupsCreated_.count(name) != 0; }
-    void markGroupCreated(const std::string& name) { groupsCreated_.insert(name); }
+    // ce4556f Sec29 (m19 brutes): also flips any placed Script_Npc member registered as "pending group spawn" to resolvable.
+    void markGroupCreated(const std::string& name);
 
     // dlc2_m02_clapboards_set/_get/_reset (Sec55.5, tranche 22). CONFIRMED:
     // a 10-byte flag array plus a count, file-default count -1 ("so every
@@ -5593,8 +5668,8 @@ public:
                                             // above); still CHOSEN/caller-supplied - Sec1.14's own
                                             // "true source not identified" OPEN item, unresolved by
                                             // this task.
-        double radius = 0;                 // +0x90 - REAL for sphere/cylinder (trigger_shape_param1)
-        double length = 0;                 // +0x94 - REAL for cylinder (trigger_shape_param2), not
+        double radius = 0;                 // sphere: param1/+0x90; cylinder: param2/+0x94 (f752324)
+        double length = 0;                 // cylinder axis length: param1/+0x90 (f752324), not
                                             // separately consumed by the containment test below
                                             // (which uses the two axis endpoints directly) - Sec1.14
                                             // does not spell out its exact relationship to the
@@ -5604,9 +5679,27 @@ public:
                                             // were decoded for this trigger (vs. a CHOSEN fallback)
     };
 
+    // trigger_get_radius final value (Sec21.13, e6691f1). Cylinder returns the +0x94 field (stored in
+    // `length`, the on-disk trigger_shape_param2), per the spec's corrected offsets.
+    static double triggerRadiusForGeometry(const TriggerVolumeGeometry& g) {
+        if (g.shapeCode == 1) return g.radius;
+        if (g.shapeCode == 2) return g.radius; // +0x94 = radius (f752324); length is +0x90
+        if (g.shapeCode == 0) {
+            float dx = float(g.boxMaxX - g.boxMinX), dy = float(g.boxMaxY - g.boxMinY), dz = float(g.boxMaxZ - g.boxMinZ);
+            float sum = float(double(dx) * dx + double(dy) * dy + double(dz) * dz);
+            return double(float(0.5 * std::sqrt(double(sum))));
+        }
+        return 0.0;
+    }
     void registerTriggerGeometry(const std::string& triggerName, const TriggerVolumeGeometry& geometry) {
         triggerGeometry_[triggerName] = geometry;
     }
+    // Registers geometry for `triggerName` from the loaded zone data (real position + real shape when
+    // decodable, else the CHOSEN radius-3 sphere fallback). Returns false when the name does not resolve
+    // or has no position property. `note` (optional) receives a one-line description for logging.
+    // Shared by the viewer's per-frame auto-register and object_is_in_trigger (Sec1.12: the same geometry
+    // serves the containment test and the ENTER/EXIT dispatch).
+    bool registerTriggerGeometryFromZoneData(const std::string& triggerName, std::string* note = nullptr);
     const TriggerVolumeGeometry* triggerGeometry(const std::string& triggerName) const {
         auto it = triggerGeometry_.find(triggerName);
         return it != triggerGeometry_.end() ? &it->second : nullptr;
@@ -6171,6 +6264,9 @@ public:
     OpenValueMap<int32_t>& releaseToWorldKind() { return releaseToWorldKind_; }
     std::unordered_map<std::string, std::vector<std::string>>& releaseToWorldGroupMembers() { return releaseToWorldGroupMembers_; }
     std::unordered_map<std::string, uint64_t>& releasedCount() { return releasedCount_; }
+    // release_to_world calls whose name resolved (objectResolves) but matched no group/character/vehicle record
+    // this host holds, so the real tier could not be determined (Sec4.4 2026-10-12: native does nothing).
+    uint64_t& releaseToWorldUnclassifiedCount() { return releaseToWorldUnclassifiedCount_; }
 
     // vehicle_suppress_npc_exit (Sec4.5): see VehicleState's own new
     // vehicleAiForceFlagsByte4 field.
@@ -7559,6 +7655,11 @@ public:
     // same near-duplicate caution this header already applies elsewhere
     // (e.g. CharacterState::isAlive vs. isDeadHighConfidence).
     OpenValueMap<bool>& conversationSlotPlaying() { return conversationSlotPlaying_; }
+    // Sec14.22 "Per-slot query, exact" (2026-10-12, FINAL) port rule: report true while the conversation's
+    // lines are playing; a host with no voice playback reports false. A slot nobody marked playing is false.
+    bool conversationSlotActive(const std::string& slotKey) const {
+        return conversationSlotPlaying_.known(slotKey) ? conversationSlotPlaying_.get(slotKey) : false;
+    }
 
     // drug_effect_set_override_values (Sec14.19): a fixed channel-0 entry of
     // a structurally multi-channel pair of parallel arrays (0x02625848/
@@ -8357,13 +8458,14 @@ public:
     // bink_play, Sec24.2).
     uint64_t& missionSetNextMissionNoopCount() { return missionSetNextMissionNoopCount_; }
 
-    // mission_store_purchased (Sec25.3): OPEN whether 0x00a015f0 stores the
-    // input and echoes it back, or returns the PRIOR value (Sec25.3's own
-    // text) - CHOSEN the simpler, directly-observable "store-and-echo"
-    // reading (the boolean argument IS the pushed return value) rather than
-    // guessing at hidden prior-value semantics neither this project nor the
-    // spec can currently distinguish.
-    bool& missionStorePurchased() { return missionStorePurchased_; }
+    // mission_store_purchased (Sec25.3, f752324 answer): a pure QUERY; the
+    // boolean arg is a KIND selector (false=store, true=property), not a
+    // value. Holds the sticky purchased flag of the first mission-tagged
+    // record of each kind; nullopt = no such record loaded (query answers
+    // true). Nothing in the host loads shop records yet, so nullopt default.
+    std::optional<bool>& missionStoreRecordPurchased(bool isProperty) {
+        return isProperty ? missionPropertyPurchased_ : missionStorePurchased_;
+    }
 
     // hud_inventory_disable (Sec25.12): CONFIRMED "always both" category -
     // unconditionally local-applies AND fires a record, with the host-check
@@ -11060,6 +11162,12 @@ public:
         uint64_t replicateCount = 0; // coordinated-co-op-session-gated record, Sec17.24
     };
     OpenValueMap<bool>& lightGroupResolves() { return lightGroupResolves_; }
+    // spec-lua-api-behaviour.md Sec4.13.0 (2026-10-12, FINAL): a light-group name resolves only if a live,
+    // registered light group carries it; an unresolved group is a no-op, never an error. This host has no
+    // light-group registry, so a name nobody registered is unresolved (false) rather than OPEN.
+    bool lightGroupResolve(const std::string& name) const {
+        return lightGroupResolves_.known(name) ? lightGroupResolves_.get(name) : false;
+    }
     LightGroup& lightGroup(const std::string& name) { return lightGroups_[name]; }
     void registerLightGroupMemberForTesting(const std::string& groupName, const std::string& lightName) {
         lightGroups_[groupName].memberLightNames.push_back(lightName);
@@ -11069,11 +11177,48 @@ public:
     // 0x005feaa0) collapsed to one flat resolves-or-not predicate (same "no
     // fixed id table" class of gap).
     OpenValueMap<bool>& inventoryItemDefinitionResolves() { return inventoryItemDefinitionResolves_; }
+    // spec-lua-api-behaviour.md Sec17.25 "Item lookup source" (2026-10-12, FINAL): the lookup scans the
+    // items_inventory.xtbl rows; the placeholder "none" is not a row, so it resolves null and the removal
+    // is skipped silently. Any other unregistered name stays OPEN (the 110 row names are not installed).
+    bool inventoryItemDefinitionResolve(const std::string& name) const {
+        if (inventoryItemDefinitionResolves_.known(name)) return inventoryItemDefinitionResolves_.get(name);
+        if (inventoryItemTableComplete_) {
+            // items_inventory.xtbl (+DLC) installed: _stricmp over the COMPLETE row set; no match -> null.
+            const std::string f = AsciiLowerFold(name);
+            return inventoryItemDefinitionResolves_.known(f) ? inventoryItemDefinitionResolves_.get(f) : false;
+        }
+        if (AsciiLowerFold(name) == "none") return false;
+        return inventoryItemDefinitionResolves_.get(name); // throws OpenStateError
+    }
+
+    // Real items_inventory.xtbl (+ DLC) row names (spec-lua-api-behaviour.md Sec17.25 "Item lookup source",
+    // spec-tables-vehicle-world.md Sec15): _stricmp resolver; the table is then COMPLETE, so any other name
+    // resolves false (removal skipped silently). Names are case-folded.
+    void installInventoryItemNames(const std::vector<std::string>& names) {
+        for (const std::string& n : names) inventoryItemDefinitionResolves_.set(AsciiLowerFold(n), true);
+        inventoryItemTableComplete_ = true;
+    }
+    bool inventoryItemTableComplete() const { return inventoryItemTableComplete_; }
 
     // character_add_prop (Sec17.13): the prop/customization-item lookup
     // (0x006cf0c0/0x00904c10) collapsed to one flat resolves-or-not
     // predicate.
     OpenValueMap<bool>& propDefinitionResolves() { return propDefinitionResolves_; }
+    // f752324 (Sec17.13 answer): the prop name resolver is the items_3d.xtbl
+    // catalogue; once its names are installed the table is COMPLETE, so any
+    // other name resolves false (silent no-op). Case-folded.
+    void installItems3dNames(const std::vector<std::string>& names) {
+        for (const std::string& n : names) propDefinitionResolves_.set(AsciiLowerFold(n), true);
+        items3dTableComplete_ = true;
+    }
+    bool items3dTableComplete() const { return items3dTableComplete_; }
+    bool propNameResolves(const std::string& propName) {
+        if (items3dTableComplete_) {
+            const std::string k = AsciiLowerFold(propName);
+            return propDefinitionResolves_.known(k) && propDefinitionResolves_.get(k);
+        }
+        return propDefinitionResolves_.get(propName); // OPEN until set
+    }
 
     // set_civilians_flee (Sec17.4), the largest non-COMPLEX entry in Sec17-
     // 22: no generic world-object registry exists in this project (stated,
@@ -11266,6 +11411,8 @@ private:
     // own backing store, see those methods' own doc comments above.
     OpenValueMap<bool> weaponDefinitionResolves_{"weapon-definition name resolution (0x028dc4dc, stride 0x7ec)",
                                                  "spec-lua-api-behaviour.md Sec4.10/Sec4.11"};
+    bool weaponDefinitionTableComplete_ = false;
+    std::unordered_map<std::string, int32_t> weaponClassByName_;
     std::unordered_map<std::string, std::unordered_map<std::string, WeaponTemporaryInventorySlot>> weaponTemporaryInventory_;
     // DIAGNOSTIC ONLY state (see enableUnresolvedNameProbe()/probedFieldOr()
     // above) - empty, and probedFieldReadCount_ zero, unless a caller
@@ -11284,6 +11431,8 @@ private:
     TriggerWaitStallInfo triggerWaitStall_;             // feature/auto-objective-trigger-vehicle-seat, 2026-10-12
     std::vector<std::string> triggerRegistrationOrder_; // ditto
     std::unordered_map<std::string, bool> triggerEverEntered_; // ditto
+    std::vector<std::string> triggerPollQueries_;       // ditto (fix/auto-objective-driving)
+    std::vector<std::string> vehicleWaitQueries_;       // ditto (feature/route-table-driving)
 
     // --- action_play_do (Sec22.29), see the public accessor doc comments
     // above for citation/reasoning. Test-observable only, not real engine
@@ -11604,6 +11753,7 @@ private:
     std::unordered_map<int, int> tutorialLockCounts_;  // Sec52.3, by table index
     OpenValue<bool> radioNewsbreakActive_{"radio_newsbreak_clear global byte", "spec-lua-api-behaviour.md Sec51.3"};
     std::unordered_set<std::string> groupsCreated_;    // Sec53.3
+    std::unordered_map<std::string, std::vector<std::string>> pendingGroupMembers_; // lower(group) -> member alias names (ce4556f Sec29)
     std::array<bool, 10> dlc2ClapboardFlags_{};        // Sec55.5, zero-fill (file-default)
     int32_t dlc2ClapboardCount_ = -1;                  // Sec55.5, CONFIRMED file-default -1
     int dlc2ClapboardsGetNegativeIndexGuardCount_ = 0; // HOST-SAFETY, test-observable only
@@ -11722,6 +11872,7 @@ private:
     OpenValueMap<int32_t> releaseToWorldKind_{"release_to_world resolved-object kind (1=group/2=character/3=vehicle)",
                                                "spec-lua-api-behaviour.md Sec4.4"};
     std::unordered_map<std::string, std::vector<std::string>> releaseToWorldGroupMembers_;
+    uint64_t releaseToWorldUnclassifiedCount_ = 0;
     std::unordered_map<std::string, uint64_t> releasedCount_;
     std::unordered_map<std::string, bool> continuousSpawnActive_;
     std::unordered_map<std::string, uint64_t> continuousSpawnStopCount_;
@@ -11975,7 +12126,8 @@ private:
     std::unordered_map<int, int> tutorialUnlockCounts_;
     uint64_t messageRemoveAllCount_ = 0;
     uint64_t missionSetNextMissionNoopCount_ = 0;
-    bool missionStorePurchased_ = false;
+    std::optional<bool> missionStorePurchased_;
+    std::optional<bool> missionPropertyPurchased_;
     bool hudInventoryDisabled_ = false;
     uint64_t hudInventoryDisableReplicateCount_ = 0;
     uint64_t hudInventoryDisableSecondaryCallCount_ = 0;
@@ -11999,7 +12151,9 @@ private:
     int64_t nextRoadblockHandle_ = 1;
     OpenValueMap<bool> roadblockPlacementResolves_{"roadblock placement-object resolve (no road-network data here)",
                                                    "spec-lua-api-behaviour.md Sec39.2"};
-    OpenValue<double> rcMaxSignalRange_{"RC max signal range global float (start-up default not traced)",
+    // Start-up value 200.0: RESOLVED 2026-10-12 (Sec39.2), tweak_table.xtbl `RC_vehicle_gun_max_distance`
+    // (seeded by applySpecInitialState()).
+    OpenValue<double> rcMaxSignalRange_{"RC max signal range global float",
                                         "spec-lua-api-behaviour.md Sec39.2"};
     bool gangAmbientSpawnsAllowed_ = false;
     std::unordered_map<std::string, bool> spawnRegionLos_;
@@ -12287,6 +12441,8 @@ private:
     uint64_t missionAutosaveKickoffCount_ = 0;
     OpenValueMap<bool> lightGroupResolves_{"light-group name resolution (0x00739690)", "spec-lua-api-behaviour.md Sec17.24"};
     std::unordered_map<std::string, LightGroup> lightGroups_;
+    bool inventoryItemTableComplete_ = false;
+    bool items3dTableComplete_ = false;
     OpenValueMap<bool> inventoryItemDefinitionResolves_{"inventory item definition resolution (0x008dcb10/0x005feaa0)",
                                                          "spec-lua-api-behaviour.md Sec17.25"};
     OpenValueMap<bool> propDefinitionResolves_{"character prop/customization-item definition resolution",

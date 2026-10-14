@@ -163,7 +163,8 @@ int main() {
     ok(host, ui, "assert(cell_is_mission_complete('') == false)");
     fails(host, ui, "cell_is_mission_complete('mission01')", "named-object resolution");
     es.objectResolves().set("mission01", true);
-    fails(host, ui, "cell_is_mission_complete('mission01')", "+0x88");
+    CHECK(!es.missionIsComplete("mission01")); // Sec20.14 port pointer (2026-10-12): no mission complete unless host state says so
+    ok(host, ui, "assert(cell_is_mission_complete('mission01') == false)");
     es.missionComplete().set("mission01", true);
     ok(host, ui, "assert(cell_is_mission_complete('mission01') == true)");
     es.objectResolves().set("mission02", false);
@@ -581,7 +582,7 @@ int main() {
     fails(host, gp, "continuous_explosion_start('def01', 'target04')", "0x005eb390");
     es.continuousExplosion().definitionResolves.set("def01", true);
     es.objectResolves().set("target04", true);
-    fails(host, gp, "continuous_explosion_start('def01', 'target04')", "0x012ec964");
+    CHECK(!es.continuousExplosion().active.get()); // false at start (Team A sync 9c70c61)
     es.continuousExplosion().active.set(false);
     ok(host, gp, "continuous_explosion_start('def01', 'target04')");
     CHECK(es.continuousExplosion().startCount == 1);

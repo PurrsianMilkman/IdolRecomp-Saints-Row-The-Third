@@ -372,7 +372,9 @@ int stub_audio_persona_line_playing(lua_State* L) {
     bool playing = false;
     std::string resolvedName;
     if (resolveFollowerAwareObject(st, name, resolvedName)) { // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
-        playing = st->personaLinePlaying().get(resolvedName); // OPEN until set
+        // ce4556f Sec8.4 FINAL: true only while a voice instance is attached to the
+        // character's emitter; none exists unless seeded -> false.
+        playing = st->personaLinePlaying().known(resolvedName) ? st->personaLinePlaying().get(resolvedName) : false;
     }
     lua_pushboolean(L, playing ? 1 : 0);
     return 1;
@@ -459,6 +461,8 @@ int stub_character_is_in_vehicle(lua_State* L) {
     // 0x009b9290's unconditional first test - decides the WHOLE predicate
     // when it fails (short-circuit AND, see doc comment above).
     bool inVehicleState = character.stateEnum.get() == 3; // OPEN until set
+    // feature/route-table-driving: harness bookkeeping only (no engine semantics).
+    if (!inVehicleState && name == "#PLAYER1#") st->noteVehicleWaitQuery(vehicleName);
 
     if (!hasVehicleArg) {
         lua_pushboolean(L, inVehicleState ? 1 : 0);

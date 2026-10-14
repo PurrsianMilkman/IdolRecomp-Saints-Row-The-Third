@@ -430,28 +430,16 @@ inline DcArrayPreStageGapResult consumeDcArrayPreStageGap(BitstreamReader& br, c
     FlatFillTreeDecodeAttemptState state;
     DcArrayPreStageGapResult result;
     const int flatFillDim = blockCols * 8;  // plane pixel width, Sec5.3ab's dim contract for 0x100195b0
-    result.flatFillArray = decode0x100195b0TreeDecodeAttempt(br, state, bank, globalTable, flatFillDim);
-    // KNOWN DISCREPANCY (2026-10-11, fix/bink-0x10019d10-real-decode task,
-    // Sec5.3ab - see HANDOFF.md's "Known stopgaps" entry for the full
-    // diagnostic trail): decode0x10019d10() below is a literal
-    // transcription of Sec5.3ab's own described per-symbol shape (single
-    // shared global tree, two-nibble-per-byte, no class-carry), but does
-    // NOT reproduce the golden fixture - measured first byte 0x65 (expected
-    // 0x0f) and measured total bit cost 2993 (expected 2981), a divergence
-    // that persisted across 4 bounded diagnostic variants (nibble-combine
-    // order, descriptor A vs. B as the "global tree"). UNLIKE
-    // `0x100195b0`'s own eventual pass (this same project's prior task),
-    // this one does NOT match, so per this project's "no invented fixes"
-    // policy, production here STILL pays the measured-total skip
-    // (skip0x10019d10(), unchanged) rather than the real decode -
-    // `globalTable` is accepted (kept in this function's own signature for
-    // forward compatibility with every caller already updated to pass it)
-    // but intentionally UNUSED for this call; `result.sibling19d10Array`
-    // stays empty (never fabricated). decode0x10019d10() itself is kept,
-    // independently callable/testable (tests/real_bink_0x10019d10_real_decode_test.cpp),
-    // as a documented artifact for a future pass - not wired here.
+    result.flatFillArray = decode0x10019850(br, state, bank, flatFillDim);  // spec 5.3ag: BIKi colour pre-stage
     (void)globalTable;
-    (void)skip0x10019d10(br);
+    // Spec 5.3ad/5.3ae: 0x10019d10 decodes with its own dedicated tree (the 20th
+    // table-build call, bank.tree19d10); output verified byte-exact (528/528)
+    // and bit-exact (2981) by tests/real_bink_0x10019d10_real_decode_test.cpp.
+    if (bank.valid) {
+        result.sibling19d10Array = Sibling19d10Array(decode0x10019d10(br, bank.tree19d10, blockCols));
+    } else {
+        (void)skip0x10019d10(br);
+    }
     skip0x10019f00(br);
     skip0x10019f00(br);
     return result;

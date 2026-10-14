@@ -141,6 +141,10 @@ CharacterState& EngineState::getOrCreateCharacter(const std::string& name) {
     // +0x18f4 is zeroed unconditionally at construction (0x00954340 ->
     // 0x00942920) - see CharacterState::reviverHandle's own doc comment.
     c.reviverHandle.set(0);
+    // CONFIRMED (Team A sync 9c70c61, Sec30.5 note): +0x16c0/+0x16c4 is the
+    // current-vehicle handle, null until the vehicle-entry sequence starts;
+    // "" is this project's null.
+    c.currentVehicleName.set(std::string());
     // CHOSEN (not CONFIRMED): the 0x008addb0 single gate of the
     // player_controls_*/player_movement_* setters takes the direct-apply
     // branch - see CharacterState::controlLockGatePasses's own doc comment.
@@ -273,7 +277,7 @@ void EngineState::applyCharacterDamage(const std::string& targetName, const std:
     // - staying OPEN until set is the established, uniform behavior for
     // that field, not a gap introduced here.
     int32_t maxHp = drawOrGetMaxHitPoints(targetName);
-    int32_t oldHp = c.currentHitPoints.get();  // OPEN until set
+    int32_t oldHp = drawOrGetCurrentHitPoints(targetName);  // Sec34.2: starts at the table/max value
     // 0x0094d520(delta) -> 0x0094cfc0(value), clamped [0, maxHitPoints]. The
     // real engine's own separate force-snap-to-0.0 pre-write on "a clearly
     // lethal hit" is a float-precision-only safety measure that collapses
@@ -348,6 +352,9 @@ void EngineState::applyScriptNpcHitPointsForTesting(const std::string& name, int
 
 void EngineState::loadZoneObjectsSection(const sr3zone::ObjectsSection& section) {
     zoneObjects_.ingest(section);
+    std::unordered_set<std::string> lowerNames;
+    for (const sr3zone::ObjectRecord& rec : section.records)
+        if (rec.hasName && rec.nameText.has_value() && !rec.nameText->empty()) lowerNames.insert(AsciiLowerFold(*rec.nameText));
     for (const sr3zone::ObjectRecord& rec : section.records) {
         if (!rec.hasName || !rec.nameText.has_value() || rec.nameText->empty()) continue;
         const std::string& name = *rec.nameText;
@@ -395,8 +402,7 @@ void EngineState::loadZoneObjectsSection(const sr3zone::ObjectsSection& section)
         // is not a character, matching step 2's own "non-script_npc named
         // object... left alone beyond step 1" precedent for the reverse case.
         if (className.has_value() && *className == "Script_Vehicle") {
-            std::optional<std::string> typeName = sr3zone::ScriptVehicleTypeName(rec);
-            if (typeName.has_value()) {
+            std::optional<std::string> typeName = sr3zone::ScriptVehicleTypeName(rec);            if (typeName.has_value()) {
                 auto it = vehicleTypeClassByLowerName_.find(AsciiLowerFold(*typeName));
                 if (it != vehicleTypeClassByLowerName_.end()) {
                     VehicleState& v = getOrCreateVehicle(name);
@@ -410,6 +416,19 @@ void EngineState::loadZoneObjectsSection(const sr3zone::ObjectsSection& section)
         }
 
         if (!className.has_value() || *className != "script_npc") continue;
+
+        // ce4556f Sec29 (m19): group-member NPC, authored "Chem_02_brute", scripted
+        // as "chem_02_brute". The alias is unresolvable (false) until its
+        // "<name>_group" is created via group_create.
+        {
+            std::string lower = AsciiLowerFold(name);
+            std::string groupLower = lower + "_group";
+            if (lower != name && lowerNames.count(groupLower) && !groupsCreated_.count(groupLower) &&
+                !objectResolves_.known(lower)) {
+                objectResolves_.set(lower, false);
+                pendingGroupMembers_[groupLower].push_back(lower);
+            }
+        }
 
         CharacterState& c = getOrCreateCharacter(name);
         // Same "forget the CONFIRMED defaults, draw lazily" shape as
@@ -498,6 +517,15 @@ void EngineState::loadZoneObjectsSection(const sr3zone::ObjectsSection& section)
             c.scriptNpcHp.forget();
         }
     }
+}
+
+int32_t EngineState::drawOrGetCurrentHitPoints(const std::string& name) {
+    // Sec34.2: "Current HP (+0x1cb8) starts equal to the table value (step 2 of Sec34.1)". Whether it is refilled
+    // to match a script_npc_hp override differing from the table is OPEN - and drawOrGetMaxHitPoints() throws
+    // OpenStateError for exactly that state (script-NPC-bound, override unknown), so it stays OPEN here too.
+    CharacterState& c = getOrCreateCharacter(name);
+    if (!c.currentHitPoints.known()) c.currentHitPoints.set(drawOrGetMaxHitPoints(name));
+    return c.currentHitPoints.get();
 }
 
 int32_t EngineState::drawOrGetMaxHitPoints(const std::string& name) {
@@ -2272,6 +2300,87 @@ EngineState::MachinimaPathResult EngineState::buildMachinimaClipPath(const std::
     result.ok = true;
     result.path = "clips/" + clipName + ".srtt_clip"; // CHOSEN stand-in path, never dereferenced as a real filesystem path
     return result;
+}
+
+bool EngineState::registerTriggerGeometryFromZoneData(const std::string& triggerName, std::string* note) {
+    const sr3zone::ObjectRecord* rec = resolveZoneObject(triggerName);
+    std::optional<sr3zone::Position3f> pos = rec ? sr3zone::ObjectPosition(*rec) : std::nullopt;
+    if (!pos) return false;
+    TriggerVolumeGeometry g;
+    g.px = pos->x; g.py = pos->y; g.pz = pos->z;
+    g.positionKnown = true;
+
+    std::optional<std::string> shapeTypeText = sr3zone::TriggerShapeType(*rec);
+    std::optional<int> shapeCode = shapeTypeText ? sr3zone::TriggerShapeCodeForTypeString(*shapeTypeText)
+                                                  : std::nullopt;
+    const sr3zone::ObjectPropertyEntry* param1 = sr3zone::TriggerShapeParam1(*rec);
+    const sr3zone::ObjectPropertyEntry* param2 = sr3zone::TriggerShapeParam2(*rec);
+    bool decoded = false;
+    if (shapeCode && *shapeCode == 0 && param1 && param2) {
+        std::optional<sr3zone::Position3f> vmin = sr3zone::DecodePropertyAsVec3(*param1);
+        std::optional<sr3zone::Position3f> vmax = sr3zone::DecodePropertyAsVec3(*param2);
+        if (vmin && vmax) {
+            g.shapeCode = 0;
+            g.boxMinX = vmin->x; g.boxMinY = vmin->y; g.boxMinZ = vmin->z;
+            g.boxMaxX = vmax->x; g.boxMaxY = vmax->y; g.boxMaxZ = vmax->z;
+            decoded = true;
+        }
+    } else if (shapeCode && *shapeCode == 1 && param1) {
+        std::optional<float> radius = sr3zone::DecodePropertyAsFloat(*param1);
+        if (radius) {
+            g.shapeCode = 1;
+            g.radius = *radius;
+            decoded = true;
+        }
+    } else if (shapeCode && *shapeCode == 2 && param1 && param2) {
+        // f752324 spec answer: +0x90 (param1) = axis LENGTH, +0x94 (param2) = RADIUS.
+        std::optional<float> length = sr3zone::DecodePropertyAsFloat(*param1);
+        std::optional<float> radius = sr3zone::DecodePropertyAsFloat(*param2);
+        if (radius && length) {
+            g.shapeCode = 2;
+            g.radius = *radius;
+            g.length = *length;
+            g.ex = 0; g.ey = *length; g.ez = 0; // CHOSEN axis (straight up) - OPEN source, Sec1.14
+            decoded = true;
+        }
+    }
+    g.shapeKnown = decoded;
+    if (!decoded) {
+        g.shapeCode = 1; // CHOSEN fallback: sphere radius 3.0
+        g.radius = 3.0;
+    }
+    registerTriggerGeometry(triggerName, g);
+    noteTriggerRegistrationOrder(triggerName);
+    if (note) {
+        char buf[512];
+        if (decoded) {
+            std::snprintf(buf, sizeof buf,
+                          "in-world trigger '%s' geometry registered - REAL position (%.2f %.2f %.2f) and REAL "
+                          "shape '%s' (enum %d) from zone data",
+                          triggerName.c_str(), g.px, g.py, g.pz, shapeTypeText->c_str(), *shapeCode);
+        } else {
+            const std::string reason = shapeTypeText ? ("unmapped string \"" + *shapeTypeText + "\"")
+                                                      : std::string("no trigger_shape_type property");
+            std::snprintf(buf, sizeof buf,
+                          "in-world trigger '%s' geometry registered - real position (%.2f %.2f %.2f) from zone "
+                          "data, CHOSEN sphere radius=%.1f fallback (shape not decodable: %s)",
+                          triggerName.c_str(), g.px, g.py, g.pz, g.radius, reason.c_str());
+        }
+        *note = buf;
+    }
+    return true;
+}
+
+// ce4556f Sec29 (m19 chem_0N_brute): a placed Script_Npc whose own "<name>_group"
+// script_group exists in the same zone is a group member; it becomes a live,
+// resolvable character only once that group is created (group_create). Until
+// then its lower-case script alias resolves to FALSE (not OPEN).
+void EngineState::markGroupCreated(const std::string& name) {
+    groupsCreated_.insert(name);
+    auto it = pendingGroupMembers_.find(AsciiLowerFold(name));
+    if (it == pendingGroupMembers_.end()) return;
+    for (const std::string& alias : it->second) objectResolves_.set(alias, true);
+    pendingGroupMembers_.erase(it);
 }
 
 } // namespace sr3luahost

@@ -1,5 +1,21 @@
 # Spec Coverage Summary — Dashboard for Orchestrator
 
+## Target binary (2026-10-12, FINAL)
+
+Every hex address in every `spec-*.md` file refers to these exact files. The build is GOG
+50981934752068148.
+
+| File | Version | Size (bytes) | SHA-256 | Address space |
+|---|---|---|---|---|
+| `SaintsRowTheThird.exe` (DX9) | 1.0.0.1 | 16,257,024 | `17E4D85B05596D65E8386480F74D83A4ABD119C3CB29A7947C2D5A8FEA4547D7` | **All game-code addresses** (`0x004xxxxx`–`0x01xxxxxx` code/data, `0x02xxxxxx` globals). Image base `0x00400000`. This is the binary loaded in the Ghidra project. |
+| `binkw32.dll` | 1.99f | 214,016 | `13A57401C477BE421AF3679E3C1F0E851B31CD54E52D6AE53981A090C5723D2F` | All `0x1000xxxx`–`0x1003xxxx` addresses (`spec-bink-*.md`), at its preferred image base `0x10000000`. |
+| `SaintsRowTheThird_DX11.exe` | 1.0.0.1 | 70,814,208 | `66D3BA3A0328850A86A02E7A01A6ABE9B07C69B8D2C2407374ED8AA7AEB08D2B` | **Not** the address reference. Its layout differs: a raw scan for direct calls to DX9-exe functions finds none. Do not apply spec addresses to it. |
+
+**How this was verified:** the hashes were taken with `Get-FileHash` on the installed files. Raw-byte
+reads of the DX9 exe at spec-cited addresses reproduce the disassembly quoted in the specs. Examples:
+`0x009b9160`/`0x009b9230` (`+0x16d4` predicates), `0x00a906b0` (RC range swap), `0x0082F840`
+(prologue), and the 18 `0x0151d5a6` references.
+
 Status report as of 2026-10-10. Purpose: give a high-level read on how complete the reverse-engineering
 understanding is for each game system, to help decide where to invest further effort. This is a
 management document, not a technical spec — it intentionally omits most hex addresses and does not

@@ -82,8 +82,16 @@ int main() {
         EngineState& es = host.engineState();
         fails(host, gp, "disable_specific_notoriety_group('not_a_real_group', 1, 'riot_gear', true)",
               "notoriety spawn-group resolution");
-        fails(host, gp, "disable_specific_notoriety_group('police', 1, 'riot_gear', true)",
-              "notoriety group tier in-range");
+        // Team A sync 9c70c61: per-group first/last level from notoriety_spawn.xtbl, inclusive.
+        ok(host, gp, "assert(disable_specific_notoriety_group('police', 1, 'riot_gear', true) == false)"); // police is 2..5
+        ok(host, gp, "assert(disable_specific_notoriety_group('police', 6, 'riot_gear', true) == false)");
+        ok(host, gp, "assert(disable_specific_notoriety_group('police_heli', 4, 'x', true) == false)"); // 3..3
+        ok(host, gp, "assert(disable_specific_notoriety_group('stag_tank', 4, 'x', true) == false)");   // 5..5
+        CHECK(es.getOrCreateNotorietySpawnGroup("police").disableSpecificGroupWriteCount == 0);
+        ok(host, gp, "assert(disable_specific_notoriety_group('stag', 2, 'G_STAG_CopCar', true) == true)");
+        ok(host, gp, "assert(disable_specific_notoriety_group('stag', 5, 'G_STAG_BikeCop', false) == true)");
+        ok(host, gp, "assert(disable_specific_notoriety_group('police_heli', 3, 'x', true) == true)");
+        CHECK(es.getOrCreateNotorietySpawnGroup("stag").disableSpecificGroupWriteCount == 2);
         es.notorietyGroupTierInRangeResolves().set("police#1", false);
         ok(host, gp, "assert(disable_specific_notoriety_group('police', 1, 'riot_gear', true) == false)");
         CHECK(es.getOrCreateNotorietySpawnGroup("police").disableSpecificGroupWriteCount == 0);

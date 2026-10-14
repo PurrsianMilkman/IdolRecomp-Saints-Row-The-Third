@@ -572,4 +572,49 @@ inline FlatFillPrestageArray decode0x100195b0TreeDecodeAttempt(BitstreamReader& 
     return FlatFillPrestageArray(std::move(bytes), decoded, 0);
 }
 
+
+// `0x10019850` (spec-bink-codec.md 5.3ag, FINAL): the BIKi colour pre-stage the shipped game runs
+// (all shipped .bik are BIKi, flag 0x8000 clear). Same bit cost as 0x100195b0 but the output byte is
+// raw `(hi<<4)|lo` with NO sign/bias step, a 1-bit FILL flag follows the count (1 = decode one symbol
+// and replicate it N times), and the per-class translate row is class_set.translate[cls] (equal to the
+// bank's own per-class table16). Low nibble: the descriptor's own tree = build index 18 (bank.descTree, spec 5.3ai answer 4; formerly guessed as the class-0 slot
+// bank.tables[0]).
+// On N==0 or N > 8*dim+512 (count_bound) the call bails with an empty array.
+inline FlatFillPrestageArray decode0x10019850(BitstreamReader& br, FlatFillTreeDecodeAttemptState& state,
+                                              const SiblingTableBank& bank, int dim) {
+    const int widthBits = computeFlatFillLeadingMagnitudeWidth(dim);
+    const uint32_t n = br.readBits(widthBits);
+    if (br.ranOutOfData()) return FlatFillPrestageArray(std::vector<uint8_t>{});
+    const uint32_t bound = static_cast<uint32_t>(8 * dim + 512);
+    if (n == 0 || n > bound) return FlatFillPrestageArray(std::vector<uint8_t>{});
+    const uint32_t fill = br.readBits(1);
+    if (br.ranOutOfData()) return FlatFillPrestageArray(std::vector<uint8_t>{});
+    std::vector<uint8_t> bytes(n, 0);
+    uint8_t cls = state.classState;
+    const uint32_t iters = fill ? 1u : n;
+    size_t decoded = 0;
+    for (; decoded < iters; ++decoded) {
+        if (cls >= bank.tables.size()) break;
+        const BuiltTable& ct = bank.tables[cls];
+        const uint32_t idx1 = br.peekBits(ct.classByte);
+        if (br.ranOutOfData()) break;
+        const uint8_t p1 = ct.lutA[idx1];
+        br.readBits(static_cast<int>(p1 >> 4));
+        const uint8_t hi = ct.table16[p1 & 0xF];
+        const BuiltTable& lt = bank.descTree;  // spec 5.3ai answer 4: build index 18, not tables[0]
+        const uint32_t idx2 = br.peekBits(lt.classByte);
+        if (br.ranOutOfData()) break;
+        const uint8_t p2 = lt.lutA[idx2];
+        br.readBits(static_cast<int>(p2 >> 4));
+        const uint8_t lo = lt.table16[p2 & 0xF];
+        bytes[decoded] = static_cast<uint8_t>((hi << 4) | lo);
+        cls = hi;
+    }
+    if (fill && decoded == 1) {
+        for (uint32_t i = 1; i < n; ++i) bytes[i] = bytes[0];
+        decoded = n;
+    }
+    state.classState = cls;
+    return FlatFillPrestageArray(std::move(bytes), decoded, 0);
+}
 }  // namespace sr3binkcodec

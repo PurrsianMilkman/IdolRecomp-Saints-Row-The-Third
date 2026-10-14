@@ -178,7 +178,7 @@ int stub_set_attack_player_flag(lua_State* L) {
     if (!st->objectResolves().get(name)) return 0; // OPEN until set
     CharacterState& c = st->getOrCreateCharacter(name);
     c.attackPlayerBitAc.set(flag); // CONFIRMED: unconditional, no gate, no replication, applies BEFORE the OPEN read below
-    if (c.attackPlayerSecondaryGatePredicate.get()) { // OPEN until set - unidentified vtable +0x68 predicate
+    if (c.attackPlayerSecondaryGatePredicate.known() ? c.attackPlayerSecondaryGatePredicate.get() : true) { // Sec7.10 CHOSEN rule (2026-10-12): vtable +0x68 is true for a resolved live character (explicit set() still overrides)
         if (c.forceFlagGatePasses.get()) {            // CONFIRMED true in single player, Sec3.7
             c.attackPlayerOnSightBit9.set(flag);
         } else {
@@ -769,7 +769,8 @@ int stub_vehicle_detonate(lua_State* L) {
     EngineState* st = upState(L);
     if (!st->objectResolves().get(name)) return 0; // OPEN until set
     VehicleState& v = st->getOrCreateVehicle(name);
-    if (v.destroyedFlag16c8.get()) return 0; // OPEN until set - CONFIRMED early bail-out when already destroyed
+    // f752324: bit 0x1 is a re-entrancy latch, 0 on a fresh/intact vehicle -> unseeded = false.
+    if (v.destroyedFlag16c8.known() && v.destroyedFlag16c8.get()) return 0; // CONFIRMED early bail-out when latch set
     ++v.detonateAppliedCount;                // gate passed - the real force/damage dispatch's own deep internals are OPEN, not modelled
     return 0;
 }

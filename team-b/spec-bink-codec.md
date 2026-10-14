@@ -634,6 +634,8 @@ caller is `0x10025e00`, itself called from video primary case 4.** Full detail:
 
 ### 5.3b Primary cases 2/3, and the real video-side DCT residual family — CLOSES former OPEN item 5a (2026-10-08)
 
+**RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0). All 8,292 primary-5 Y cells are pixel-identical.
+
 A follow-up unit opened primary dispatch cases 2 and 3 (never read by any prior unit) and followed
 the three "external call" targets further than the entropy unit did, directly answering `spec-bink-codec.md`'s
 own standing question: **does this codec have a real residual/transform block type at all?** Answer:
@@ -1483,6 +1485,8 @@ invalid LEN from its 2nd call onward.]** Full detail:
 `scratchpad/bink_entropy_prestage_algorithm_2026-10-08.md`.
 
 ### 5.3h Descriptor B's own downstream consumer, traced live — closes the OPEN item above, and finds
+
+**RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0). Dispatch counts: Y 23,914, unchanged.
 the real block-(0,0) dispatch sits 7 setup stages and 10,716 bits further downstream than either
 descriptor's own refill call
 
@@ -1554,6 +1558,8 @@ why N_A and N_B use a different halving factor at all.]** Full detail:
 `scratchpad/bink_d10_and_bit1757_trace_2026-10-09.md` Part 2.
 
 ### 5.3i Primary case 1's full 7-way secondary payload grammar, all values 0-6, closing Team B's own named blocker (2026-10-10)
+
+**PARTLY RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0). The secondary=1/4 and 2 examples and every footprint are unchanged. **CORRECTED literal values (word 0):** the secondary=3 example's fill byte is **0x19 (25)**, not 0x99. The secondary=6 example's source bytes are **25,25,26,25,25,26,26,26** (not 153...), and pixel = byte with no +128. The secondary=5 and primary 6/8/9 literal values likewise come from §5.3ag; all differ in every cell between the two words, and FFmpeg matches the word-0 values.
 
 **Scope and why this is its own subsection, not folded into 5.3c.** 5.3c/5.3d/5.3g/5.3h establish the
 entropy *pre-stage* that supplies the primary and secondary case-selector bytes themselves (descriptors
@@ -1659,7 +1665,7 @@ NOT secondary=2's "no bias" rule** — makes sense structurally since secondary=
 literal bytes with zero dequant/IDCT in between, same as secondary=3's flat fill. Checked
 numerically against real ffmpeg pixels at the same location: raw byte 153→signed −103→+128=25
 matches exactly; 154→26, 158→30, 159→31 all match too, across the full 16x16 block, no exceptions.
-Rule: `pixel = (int8_t)raw_byte + 128`. secondary=0 remains a confirmed negative — scanned ~110
+~~Rule: `pixel = (int8_t)raw_byte + 128`.~~ **[SUPERSEDED 2026-10-12, see §5.3af "Literal-colour byte rule (SETTLED)": the block bodies copy bytes verbatim. The value depends on which colour pre-stage produced them. For bytes `s` from the `0x100195b0` path (what a port that implemented §5.3aa produces), the true pixel is `s ^ 0x80` when `s >= 0x80` and `256 - s` when `s < 0x80` (`s == 0x80` is genuinely ambiguous: both `r = 0` and `r = 128` produce it. The `0x100195b0` path loses that distinction, which is one more reason the real decoder choice matters. The value to use there is OPEN). Bytes from the `0x10019850` path are used unmodified. The old `+128` is only the first half of this mapping. ~~Which pre-stage the real game selects (flag `0x8000`) stays OPEN, so a port on the `0x100195b0` path should apply this exact inverse, not switch decoders.~~ **RESOLVED the same day (§5.3af OPEN (2)): the selector is handle `+0x20`, set from the file signature's 4th byte. All 17 shipped `.bik` files are BIKi, so `0x8000` is never set and the game ALWAYS uses `0x10019850`, whose bytes are the pixels with no transform. The inverse above applies only to BIKf/g/h files, which this game does not ship.]** **[Later 2026-10-12: that OPEN is now closed. All shipped files are `BIKi`, so the real decoder takes the `0x10019850` path, and pixel = byte (§5.3af, OPEN (2)). Ports should switch to that decoder.]** secondary=0 remains a confirmed negative — scanned ~110
 frames across 5 files total (`main_menu_bg.bik`, `logo_amd_hd.bik`, `logo_thq_and_voli_hd.bik`,
 `kinzie_typing.bik`, `01_crawl.bik`), zero `(primary=1,secondary=0)` dispatch events anywhere.
 Script: `probe_sub6_live.py` in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
@@ -2289,6 +2295,8 @@ level≤1 (level=1 for block (0,0)'s own real decode, confirmed live) — see th
 below.**]**
 
 ### 5.3w Golden-trace worked example: the AC-tree's Gate A/Gate B bit mechanism, full 17-bit trace for frame 0/Y-plane/block (0,0) — resolves Team B's top video-decode blocker (2026-10-11)
+
+**RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0).
 
 **Scope.** Direct follow-up to the Part 2 correction above. Team B independently confirmed dequant
 and IDCT bit-exact against §5.3v's own published values; the remaining bug was entirely inside
@@ -3113,6 +3121,8 @@ the frame.]** Full detail/scripts:
 
 ### 5.3t `0x10019d10`'s own output grammar, worked example: frame 0/Y-plane/row 0's first call (2026-10-11)
 
+**RE-VALIDATED under real flags 2026-10-12 (by equivalence):** its `0x10019d10` bytes are identical (§5.3ad). Any value this section takes from the `0x100195b0` colour path is superseded by §5.3ag.
+
 **Scope.** Same thread, the other sibling named in §5.3r (2,981-bit cost). Full disassembly
 (`dump_19d10_full.py`, 183 lines) plus live Unicorn capture, same method as §5.3s.
 
@@ -3380,6 +3390,8 @@ black-box oracle. HIGH CONFIDENCE — no colorspace conversion inside this DLL. 
 
 ### 5.3v Golden-trace worked example: AC-decode → dequant → IDCT, full stage-by-stage capture for frame 0/Y-plane/block (0,0), orchestrator-routed to localize Team B's 141-vs-24 pixel divergence (2026-10-11)
 
+**RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0). Block (0,0) DC=118, nibble=2: unchanged.
+
 **Scope.** Team B fixed the DC boundary for this block (DC now exactly 118, matching the 8
 ground-truth ordinates), but the final decoded pixel still came out 141 against a reference value
 of 24 — meaning a remaining bug somewhere in AC decode, dequantization, or the IDCT. This section
@@ -3473,6 +3485,8 @@ re-verification: `scratchpad/bink_block00_ac_dequant_idct_capture_2026-10-11/`.]
 
 ### 5.3x Compact worked examples, first block-row: Y dispatch indices 1-4 plus chroma block (0,0) — validates Team B's fix beyond a single block (2026-10-11)
 
+**PARTLY RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0). The secondary=2 rows (idx3, idx4, chroma DC=1056 nibble 0) are unchanged. **CORRECTED literal values:** idx1/idx2 secondary=3 fill = **25 (0x19)**, not 153 (0x99), so their core row is `[25]x8`. ChromaA block (0,0) secondary=5 value = **132**, not 124 (FFmpeg V = 132). The old values came from the BIKh colour path.
+
 **Scope.** Orchestrator-routed follow-up so video decode doesn't stall on another round-trip:
 compact (not full §5.3v/§5.3w-depth) captures for the 4 Y-plane blocks immediately following
 §5.3v/§5.3w's own block (0,0) in dispatch order, plus chroma block (0,0) of both planes, same
@@ -3542,8 +3556,14 @@ skip-coded for frame 0 (no real content, by design, not a bug); (b) the test har
 Scripts: `probe_chromaB_stall_2026-10-12.py`, `probe_a530_detail2.py` in
 `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
 
-**SETTLED, 2026-10-12 [orchestrator's own cheap ground-truth check]: verdict is (a), legitimate
-skip-coding, not a harness gap.** Decoded frame0 with the project's own ffmpeg build
+**[SUPERSEDED 2026-10-12 by §5.3af Q3: the verdict below is WRONG. It checked FFmpeg V, but chromaB
+is U. ChromaB is real content: it decodes 8,158/8,160 cells against U once the harness pads plane
+heights to 16 and raises the instruction cap. The 0 dispatches came from a mis-derived chromaB start
+cursor, which is chromaA's end cursor. The "ZERO calls" claim above is also wrong: 0x10019360 is
+called for chromaB (seen with an entry hook). The earlier grouping by descriptor address could not
+tell the planes apart, because the descriptor lives in the same stack frame for every plane.]**
+~~SETTLED, 2026-10-12 [orchestrator's own cheap ground-truth check]: verdict is (a), legitimate
+skip-coding, not a harness gap.~~ Decoded frame0 with the project's own ffmpeg build
 (`tools/ffmpeg_dl`) to raw `yuv420p` and inspected the real V (chroma-B) plane: the `(0,0)` 16×16
 block is pixel values 132-133 throughout (a 1-unit range across all 256 pixels) — effectively
 flat. The whole V plane is a slowly-varying near-uniform hue (range 123-187, mean ~135, local
@@ -3572,6 +3592,8 @@ content (only `(0,0)` and the aggregate plane stats were checked this pass).
 ---
 
 ### 5.3y Bit-position/stream-source trace, Y row 0 dispatch idx 0-4 — orchestrator-routed to test the "wrong bitstream source" hypothesis for the still-wrong end-to-end decode (2026-10-11)
+
+**RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0).
 
 **Scope.** Team B has every individual decode stage proven correct in isolation (AC-tree
 Gate A/Gate B, dequant, IDCT, flat-fill, chroma dequant) yet their end-to-end decode is still
@@ -4026,6 +4048,8 @@ Full detail/scripts:
 
 ### 5.3ab `0x10019d10` and `0x10019f00`'s own consumers and per-symbol structure — closes the "measured-total skip" trap for two more of the 23-call pre-stage siblings, orchestrator-routed after `0x100195b0`'s own version of this trap (§5.3z/§5.3aa) (2026-10-11)
 
+**RE-VALIDATED under real flags 2026-10-12 (by equivalence, not re-run):** the `0x10019d10` output is identical (§5.3ad) and the dispatch sequence is identical (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0), so the same consumer code reads the same bytes.
+
 **Scope.** Direct follow-up, same thread as §5.3aa: Team B still pays `0x10019d10` (528 bytes,
 2981 bits, §5.3t) as a bit-cost-only skip — the exact trap `0x100195b0` was in until §5.3z found
 its real output feeds flat-fill. Two questions, both answered by live Unicorn capture (memory-read
@@ -4194,6 +4218,8 @@ Full detail/scripts:
 ---
 
 ### 5.3ac Full Gate A/Gate B/Phase-1-BFS/Gate-B-defer bit trace for two Phase-1-exercising blocks, dispatch idx3 and idx4 — both bit counts and both full coefficient lists reproduce the published ground truth EXACTLY (2026-10-11)
+
+**RE-VALIDATED under real flags 2026-10-12** (`probe_revalidate_2026-10-12.py old|real` + `reval_diff_2026-10-12.py`: frame 0, heights padded to 16; dispatch sequence, main bit-reader state at every dispatch, and every secondary=2 DC/nibble/IDCT input identical between the old word and word 0). idx3 DC=199 and idx4 DC=212, nibble 0: unchanged.
 
 **Scope.** Direct follow-up to §5.3j Part 2 and §5.3w. §5.3w's own 17-bit worked example for block
 (0,0) never left Phase 2's small-tree mirror (`A=1`) — Team B's reported idx3/idx4 divergence
@@ -4419,8 +4445,725 @@ Single-line hex (for direct diffing):
 ```
 0f010000000080fff3e3e3f1f08000000080808150c3b8fa00000000003f7fff100080e0e0e1c1c0ff00000000bfcfe700000000183c7cfc000000e0f8f8fcfcf1f1f9f1c0f03004e0c00040c086f3f8c0c0c0c0c0e0b03070303070e0000000001001038268eefc0000000003c0feffe0c0c08083c7c7e7010103030303cf7f0000c0188c1301880000001000000031ff07030000000000fdff0f9f00c08000030100000000000089c9038090326242f1010101008efefe01817f0000000000000000000400c0ffffffe3c0c0c060301f0f0703030101c1f8fcfeff030000001f0f0f070707031e0000183f3f0301013f1f0c00000000003060400000003e7fffc3010000000100c2e0e4440c1830f00000000000070f0ff8fc9c0103028efec0000080203cdbf3be9f3f10070000003d3c383830000000f2f8fcf0f8908000000010181c0f0f031f9e8e8ec7c36130fbf3f1f1f0f080000001211f0f0f0700ffffc000000000c08080c0c0c08f3ffff80000c0f0f0e0e00000f8feffff07011008ffff7f7f0000130e000000000000df10ff11f0ec8400cd0623b0e693077f00000000f0f8fcfc868c98b8b13307230f070707061fc7ec3838301000000001000000000000101900000000000001017838181830e000000000405c0e0b7f3f6040000000000000206464c48484868e183d3f3f3e000000f8686040c08000000104fcfcfcf00000000001010101034f
 ```
+**RE-CAPTURED under the real flags (word 0, alpha argument 0), 2026-10-12: IDENTICAL.** Same entry state (cache `0x11210`, 17 bits, next dword at stream `+0x314`), the same 528 bytes and the same exit state (`probe_19850_real_2026-10-12.py`). This vector is valid for the shipped game, and no 5.3ad-R is needed.
+
 **Use:** byte-diff a reimplementation of `0x10019d10` against this. The first differing offset
 localizes the divergence. Nobody has diffed it against Team B's implementation yet.
+
+### 5.3ae 0x10019d10 output construction — answers to Team B's byte-diff (2026-10-12, FINAL)
+
+**Method.** Full instruction read of `0x10019d10`-`0x10019ef6` (183 instructions,
+`dump_19d10_full.txt`) plus a per-step Unicorn trace of the same call as §5.3ad (hooks on the count
+read `0x10019d89`, the four LUT loads `0x10019dcf`/`0x10019e13`/`0x10019e51`/`0x10019e7f`, the byte
+store `0x10019ec4` and `ret`). An independent pure-Python reimplementation of the pseudocode below
+reproduces **all 528 bytes exactly and costs exactly 2981 bits**. Scripts:
+`probe_19d10_trace_2026-10-12.py` (+`_out.txt`), `reimpl_19d10_2026-10-12.py`, same folder as §5.3ad.
+
+**Bit reader.** LSB-first: a 32-bit cache plus a count of valid bits. Refill ORs the next little-endian
+dword in above the valid bits. Peek n = the low n bits; consume n = shift the cache right by n.
+At entry for this call: cache `0x00011210`, 17 valid bits, next dword at stream byte `0x314`.
+
+**Pseudocode (reproduces the whole vector):**
+```
+N = read_bits(ctx.width28)                 # width = 12 here; N = 528. This is the ONLY pre-loop read.
+if N == 0 or N > ctx.bound2c: fail          # bound = 2432
+out = ctx.out_base                          # 0x303f9210
+repeat N times:
+    e  = LUT[peek(A)]   ; consume(e >> 4)   # A = 6: peek 6 bits, consume code length (1..6)
+    lo = translate16[e & 0xF]
+    e  = LUT[peek(A)]   ; consume(e >> 4)
+    hi = translate16[e & 0xF]
+    *out++ = (hi << 4) | lo                 # FIRST decoded symbol -> LOW nibble
+```
+Nothing else: no sign, no run lengths, no delta, no 0x80 bias, no class carry. Two symbols per byte,
+each one LUT lookup followed by one translate16 lookup.
+
+**Trace, bytes 0..15** (idx = the 6 peeked bits; L = code length = LUT high nibble; s = LUT low nibble;
+t = translate16[s]):
+
+| byte | lo idx | L | s | t | hi idx | L | s | t | out |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | 17 | 3 | 1 | f | 26 | 1 | 0 | 0 | 0f |
+| 1 | 13 | 4 | 3 | 1 | 0 | 1 | 0 | 0 | 01 |
+| 2 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 00 |
+| 3 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 00 |
+| 4 | 32 | 1 | 0 | 0 | 16 | 1 | 0 | 0 | 00 |
+| 5 | 40 | 1 | 0 | 0 | 20 | 1 | 0 | 0 | 00 |
+| 6 | 42 | 1 | 0 | 0 | 21 | 4 | 2 | 8 | 80 |
+| 7 | 9 | 3 | 1 | f | 25 | 3 | 1 | f | ff |
+| 8 | 35 | 5 | 4 | 3 | 25 | 3 | 1 | f | f3 |
+| 9 | 35 | 5 | 4 | 3 | 43 | 5 | 6 | e | e3 |
+| 10 | 35 | 5 | 4 | 3 | 43 | 5 | 6 | e | e3 |
+| 11 | 29 | 4 | 3 | 1 | 17 | 3 | 1 | f | f1 |
+| 12 | 34 | 1 | 0 | 0 | 17 | 3 | 1 | f | f0 |
+| 13 | 10 | 1 | 0 | 0 | 5 | 4 | 2 | 8 | 80 |
+| 14 | 0 | 1 | 0 | 0 | 0 | 1 | 0 | 0 | 00 |
+| 15 | 32 | 1 | 0 | 0 | 16 | 1 | 0 | 0 | 00 |
+
+The emulator trace and the reimplementation agree on every idx and LUT byte. Bytes 0-7 match the
+real `0f 01 00 00 00 00 80 ff`.
+
+**Answers:**
+1. **Byte construction:** each byte holds two Huffman symbols. Each symbol is one LUT_A lookup:
+   peek 6 bits, take the packed byte, consume its high nibble (the code length). Its low nibble then
+   goes through `translate16` (`ctx+0x10`). The first symbol is the LOW nibble and the second is the
+   HIGH nibble: `byte = (t2<<4)|t1`. Team B's `56 86 55 ...` looks like untranslated symbols and/or a
+   wrong nibble order. Their raw symbols for byte 0 would be s=1, s=0. Both translate16 and
+   first-symbol-low are required.
+2. **Where LUT_A enters:** at every symbol. Index = the low A=6 bits of the cache (refilling first when
+   fewer than 6 bits are valid: the slow paths `0x10019e13`/`0x10019e7f`). The consume length is
+   `LUT[idx] >> 4`, never A. The fast paths are `0x10019dcf` (low nibble) and `0x10019e51` (high
+   nibble). They are the same lookup and differ only in refill bookkeeping.
+3. **eax=0x64 is NOT this function's return value.** It is the outer `call_bink_cb` return printed
+   by the harness (`return eax=0x64 final eip=0xbadc0de`). At this function's own `ret`, eax is the
+   bit reader's valid-bit count, written back to the reader at `+8` (= **12** for this call). The
+   output count is N=528 bytes (1056 symbols), read from the 12-bit pre-loop field.
+4. **Downstream footprint:** the live read-watch (§5.3ab, `find_19d10_consumer_out.txt`) shows only
+   two readers. Primary case 8 (`0x1001c675`-`0x1001c960`) reads **8 consecutive bytes per block**.
+   Secondary=5 / giant2 (`0x1001b5a3`-`0x1001b90e`) reads **8 bytes per block**, as two 4-byte groups.
+   **Secondary=6 (`0x1001ba40`-`0x1001be6a`) never reads this buffer.** No reader instruction falls
+   in its range, so neither 64 nor 32 is right: its raw bytes come from elsewhere (§5.3a/§1653
+   region), not from this function.
+
+**Bit discrepancy, 2995 vs 2981:** the real total is 12 (count field) + 2969 (code lengths summed over
+1056 symbols) = **2981**. There is no extra pre-loop field or sign bit. Team B's +14 does not match any
+structural field (the width is 12, not 14). Most likely their per-symbol consume differs, for example
+consuming A on some escape, or a mis-built LUT. Their own trace must be diffed against the idx/L
+columns above to settle it. The first divergent row localizes it. The vector differs at byte 0, so
+the nibble/translate fix must come first. This is NOT confirmed without their code.
+
+### 5.3af Block grid advance, secondary=6 byte count, and chroma planes (2026-10-12, FINAL)
+
+**Method.** Disassembly of the per-row loop tail (`0x1001acc9`-`0x1001ad58`), the primary=1 entry
+(`0x1001ad5d`-`0x1001ad9f`), the shared skip/scaled epilogue (`0x1001be70`-`0x1001beac`), the
+secondary=6 body (`0x1001ba40`-`0x1001bb6d`) and the secondary=3 body (`0x1001b3d8`-). Plus a full
+frame-0 Unicorn run of `main_menu_bg.bik` that hooks every dispatch and logs (plane, row, col,
+primary, secondary, and the column delta to the next dispatch): 29,956 dispatch events. Scripts:
+`probe_grid_advance_2026-10-12.py` (+`_out.txt`, `.pkl`), `analyze_grid_2026-10-12.py`,
+`dump_af_2026-10-12.py` (+`dump_af_out.txt`), all in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
+#### Q1. secondary=6 consumes exactly 64 source bytes (Team B's 64 is right; 32 is wrong)
+
+The body reads its source from the same byte-stream cursor that secondary=3 uses for its fill byte
+(the cursor at frame offset `-0x38`, with the same "past bound, jump to next chunk +4" fix-up at
+`0x1001ba61`). It does **not** read the `0x10019d10` output (§5.3ae answer 4).
+
+```
+# unaligned path 0x1001ba90-0x1001bb67 (src pointer not 4-aligned)
+for r in 0..7:                       # loop counter starts at 8
+    for k in 0..7:                   # 4 dwords, each built from 2 source bytes
+        d[2r][2k] = d[2r][2k+1] = d[2r+1][2k] = d[2r+1][2k+1] = src[8r+k]
+    src += 8 ; dest += 2*pitch
+# total consumed = 8 * 8 = 64 bytes; writes 16x16
+# aligned path 0x1001bb72-: same output, reads words, loop count 2 (unrolled), also 64 bytes
+```
+Each source byte becomes a 2x2 pixel group (the 2x2 NN rule from the §5.3i footprint table).
+
+**Live confirmation:** all 250 secondary=6 events in frame 0 advance the source cursor by exactly
+64 (`Counter({64: 250})`), 188 of them on the unaligned path and 62 on the aligned path. First
+event: Y (row 0, col 224), cursor `0x303f9bb7` to `0x303f9bf7`, the same block as the
+§5.3i addendum. Dest rows 0 and 1 are identical, as are rows 2 and 3.
+
+#### Q2. Grid advance
+
+The underlying grid is **8x8 cells**: rows are processed in 8-pixel stripes, columns in 8-pixel steps.
+Primary=1 (the "scaled" family, all secondaries) covers a 2x2 group of cells (16x16) and is
+dispatched only from an even stripe.
+
+| Dispatch | Stripe parity | Bytes read from type streams | Pixels written | Column advance |
+|---|---|---|---|---|
+| primary 0 (copy) | any | primary byte | 8x8 copy from the co-located previous-frame pointer (body `0x1001ac02`) | 8 |
+| primary 5/6/8/9 (and other non-1 types) | any | primary byte + own payload | 8x8 | 8 |
+| primary 1, any secondary 2/3/5/6 (0 assumed) | even | primary + secondary byte + payload | **16x16** (2/3/5/6 all confirmed) | **16** |
+| primary 1 | odd | primary byte only, **no secondary byte** (`test [row],8` then jump to the epilogue) | none (the cells were already written by the even stripe) | **16** |
+| primary 1, secondary 1/4 | even | primary + secondary | none, skip flags set | 16 |
+| primary 1, but fewer than 16 rows or 16 columns remain (bound checks at `0x1001ad5d` / each body's `[+0x10]-row >= 16`) | any | primary (+ secondary if the column check passed) | **none** | **8** (generic tail `0x1001acc9`) |
+
+Live counts confirm this. Every primary 5/6/8/9 dispatch advances 8. Primary 1 advances 16 in
+10,286 cases. It advances 8 in 39 cases (with heights padded to 16, 0 cases; see "Partial-edge cells" below), and all of those are in the partial last stripe: chroma row
+528, which has 12 rows left, and Y row 1072, which has 8 rows left. Y uses 135 stripes (rows 0-1072)
+and chroma uses 67 (rows 0-528). The largest primary=1 column is Y 1904 and chroma 944 (width - 16).
+In the odd stripes, every primary=1 shows secondary=None (Y 4243, chromaA 979).
+
+**Secondary=3 is 16x16, not 8x8.** Its body stores 4 dwords per row across 16 rows, and the column
+advances 16. Team B's 8x8 write is a bug.
+
+```
+for row in 0, 8, 16, ... while row < plane_h:            # stripe loop, [+0x10] = plane height
+    col = 0; remaining = plane_w
+    run per-stripe pre-stages (0x10019360 x2, callback, 0x10019d10, ...)  # once per stripe, §5.3ae
+    while remaining != 0:
+        t = next(type_stream)
+        if t == 1:
+            if remaining < 16: adv = 8                      # partial edge: nothing written
+            elif row & 8: mark_flags(col); adv = 16         # odd stripe: continuation
+            else:
+                s = next(sub_stream)
+                if plane_h - row < 16: adv = 8               # partial last stripe: nothing written
+                else: decode_scaled(s) (16x16); mark_flags(col); adv = 16
+        else:
+            decode_8x8(t); adv = 8
+        dest += adv; prev += adv; col += adv; remaining -= adv
+    dest += 8*pitch - plane_w; prev += same                  # [frame -0x244]
+```
+`mark_flags` (`0x1001be76`) writes 1 into a per-column byte array at index `col/2` and `(col+step)/2`.
+The array pointer advances by one row stride only after odd stripes.
+
+**Partial-edge cells: CLOSED (follow-up, same day). They are a harness artifact, and no fill pass
+exists.** The 39 "advance 8, nothing written" cases happen only because the harness gave the plane
+heights as 1080/540. With the heights in the plane record rounded up to a multiple of 16 (1088/544),
+as a real 16-aligned allocation would be (`probe_cb_padh_2026-10-12.py`), primary 1 **never**
+advances 8 (0 events). Scaled blocks in the last stripe then write their full 16 rows into the
+padding rows. The visible rows match FFmpeg: chromaA rows 528-539 have 240/240 cells matching,
+where the unpadded run left 200 cells sentinel. So the decoder neither copies these cells from the
+previous frame nor fills them in a later pass. The height check exists only to keep writes inside
+the buffer. **Implementers: allocate planes with 16-aligned height and width, and crop on output.**
+
+#### Q3. Chroma planes
+
+| Item | Finding | Status |
+|---|---|---|
+| Plane order in stream | Y, then chromaA, then chromaB: three per-plane row-orchestrator (`0x1001a530`) calls with bases `+0x1000`/`+0x400000`/`+0x480000`, dims 1920x1080, 960x540, 960x540 | CONFIRMED live |
+| Plane identity | chromaA = **V (Cr)**: 32,884/72,778 sampled pixels within ±2 of FFmpeg V, against 814 for U. chromaB = U (Cb) by elimination | CONFIRMED (A), HIGH (B) |
+| Grammar | Identical. The same orchestrator and dispatch switch run with the same primary/secondary set, and the dequant is shared (§5.3x). ChromaA frame 0 uses primary 1 (sec 2/3/5/6), 5, 6 and 8 | CONFIRMED (chromaA) |
+| Resolution / block size | Half resolution with the same 8x8 cells, 16x16 scaled blocks and stripe/parity rules as Y, applied to the 960x540 plane | CONFIRMED (chromaA) |
+| Per-plane sub-streams | Each plane runs its own per-stripe pre-stage set (separate descriptor groups: Y and chromaA each have 271 calls to `0x10019360`) | CONFIRMED (Y, chromaA) |
+| Secondary types | No chroma-only types and no excluded types were observed | CONFIRMED (chromaA, frame 0) |
+| Skip / copy blocks | Primary 0 copies 8x8 from the previous-frame pointer at the same position, which advances in lockstep with dest. It is a copy, not a constant. Frame 0 has no primary-0 events | CONFIRMED by disassembly. Not live-exercised (needs an inter frame) |
+| chromaB (U), frame 0 | **CLOSED: it was a harness bug, not skip-coding.** It decodes fully once the heights are padded to 16 and the emulation instruction cap is raised from 40M to 400M (that cap had been cutting the run short inside chromaB). Result: 6,688 chromaB dispatches with the same grammar and types (primary 1 with sec 2/3/5/6, plus 5, 6 and 8). **8,158 of 8,160 8x8 cells match FFmpeg U** (chromaA: 8,160/8,160 against V). Root cause of the earlier 0 dispatches: chromaB's bit cursor is not stored in the stream. It is the value 0x1001a530 returns for chromaA (the end cursor; see the plane-layout note below). In the unpadded run, the bailed last-stripe blocks skipped their main-bitstream reads (secondary=2's AC bits), so chromaA's end cursor came out wrong and chromaB's pre-stage read garbage (type-stream cursor 4 bytes past its own end, so every cell bailed) | CONFIRMED |
+| Plane layout in the frame | dword 0 = byte offset of the chroma data (`0x20f74` here; Y ends exactly there). Y starts at +4. chromaA starts at frame + that offset (`0x1001cd37`-`0x1001cd3d`, or directly when flag `0x8000` is set). **chromaB starts wherever chromaA's decode ends** (`0x1001cdfb` takes the cursor returned by the chromaA call). There is no per-plane length for chromaB | CONFIRMED |
+| Whole-plane skip (FINAL 2026-10-12) | No skip-coded plane occurs: all three planes of frame 0 decode. The only plane-level skips are caller flags: `0x200` bypasses the luma call and `0x20000` bypasses both chroma calls (`0x1001cd41`). **Live check** (`probe_fill_scan_2026-10-12.py 2 bypass`): decode main_menu_bg frame 0 with word 0, then frame 1. With `0x200` the Y buffer is byte-identical to frame 0 while CA/CB change. With `0x20000` CA and CB are byte-identical to frame 0 while Y changes. A normal frame 1 changes all planes. So a bypassed plane is simply not written: the buffer keeps whatever it held, with no constant fill. **The game never sets these bits.** `_BinkDoFrame@4` (`0x100116f0`) calls `BinkDoFramePlane` with plane mask `0x303` (§2.1); bits 0 and 1 are both set, so neither `0x200` (set when bit 0 is clear, `0x100113c2`) nor `0x20000` (set when bit 1 is clear, `0x100113cc`) is ever added. All planes are decoded every frame. Which buffer the harness's single-buffer setup corresponds to under the DLL's real buffer rotation was not modelled, and it is irrelevant for the game | CONFIRMED |
+| Literal-colour byte rule (SETTLED 2026-10-12, controlled re-check, `probe_litbytes_2026-10-12.py`) | Measured three values side by side. **(a)** the byte at the block body's source cursor: this is the **output of the per-stripe colour pre-stage, not raw file bytes**. **(b)** the bytes the DLL writes. **(c)** FFmpeg's pixel. Secondary=3, Y (0,16), flag word `0x108200`: a=153, b=153 (x256), c=25. Same block with `0x8000` cleared (`0x100200`): a=25, b=25, c=25. Secondary=6, Y (0,224): first source bytes with `0x108200` are 153,153,154,153,153,154,154,154 and the DLL writes them 2x2-replicated (153 153 153 153 154 154 ...); FFmpeg has 25 25 25 25 26 26 .... With `0x100200` the source bytes are 25,25,26,25,25,26,26,26 and the output is exact. **So (b) == (a) always: the block bodies copy bytes verbatim, with no bias anywhere in them.** Flag `0x8000` chooses which colour pre-stage runs: `0x100195b0` when set, `0x10019850` when clear (`0x1001a5b0`-`0x1001a60b`). That changes (a), and therefore (b), for the SAME bitstream bits. **Port rule:** pixel = the byte produced by the `0x10019850` colour decoder, unmodified. Equivalently, the `0x100195b0` output `s` maps to the true value as `r=s^0x80` for `r<0x80` and `s=256-r` for `r>=0x80`. The earlier `(int8)raw+128` / `raw^0x80` rule is correct only for the first half (`r<0x80`, i.e. dark luma), which is why it raised Team B's match from 15% to about 50% but no further. It is wrong for `r>=0x80`; for chroma near 132 it gives 256-r. Team B should drop the +128 and decode colours the way `0x10019850` does. That decoder was not re-specified here | CONFIRMED for both blocks (exact). (1) ~~a full spec of `0x10019850`~~ **CLOSED: see §5.3ag.** (2) **CLOSED 2026-10-12: the shipped game takes `0x10019850` (no `0x8000`) for every shipped video.** Where the flag word comes from: `0x1001cb00`'s caller (`0x10011679` and `0x1001143d`, in `BinkDoFramePlane`) passes **handle `+0x20`** as the flag word. It only ORs in `0x200` (luma bypass, when bit 0 of the plane-mask argument is clear) and `0x20000` (chroma bypass, bit 1 clear), and clears `0x100000`. It passes **handle `+0x24`** as the separate alpha-presence argument (tested for `0x100000` at `0x1001cc3c`). Handle `+0x20` is written once by the `BinkOpen` worker (staging slot `+0x180` = handle `+0x20`, since the staging base `+0x160` holds width at handle `+0`): **`0x8000` is set only when the signature is `BIKh`, and `0x18000` for `BIKf`/`BIKg`** (`0x1000f6cb`-`0x1000f6f3`, §1.4). The game's open flags never supply it. **All 17 shipped `.bik` files are `BIKi`**, so `0x8000` is always clear. Live check with the derived values (flag word `0`, alpha argument `0` = header `+0x24`, which is 0 here; luma through the normal luma call, `probe_realflags_2026-10-12.py`): secondary=3 (0,16) and secondary=6 (0,224) match FFmpeg exactly in (a), (b) and (c), and **chromaB is 8,040/8,040 cells exact against FFmpeg U with no transform**. The old harness word `0x108200` with alpha argument `0x100000` was wrong in two ways that cancelled for layout: it decoded Y through the alpha slot and used the `BIKh`-style colour pre-stage and chroma-offset path. **Implementers: for `BIKi`, use the `0x10019850` colour path and the length-prefixed chroma start; the `s`-inverse above is only needed for `BIKf/g/h`.** |
+| Residual mismatch | 173 Y cells (all primary 9) match 36-58 of 64 pixels: near misses, probably the same sign-mode artifact acting on deltas | OPEN (minor) |
+
+
+### 5.3ag `0x10019850`: the BIKi colour pre-stage the game actually runs (2026-10-12, FINAL)
+
+**Method.** Full instruction read of `0x10019850`-`0x10019aed` (`dump_19850.txt`). A live Unicorn capture
+under the REAL decoder flags (word `0`, alpha argument `0`; §5.3af OPEN (2)) snapshots the entry state,
+the tables and the output of the first call in each plane, frame 0 row 0
+(`probe_19850_real_2026-10-12.py` -> `.pkl`). An independent pure-Python reimplementation
+(`reimpl_19850_2026-10-12.py`) reproduces all three byte-for-byte and bit-for-bit:
+
+| Plane (row 0, first call) | N bytes | Bits consumed | Byte match | Final class |
+|---|---|---|---|---|
+| Y | 650 (starts `19 19 19 19 19 19 19 19 19 1a 19 19 1a 1a 1a 19`) | **3384** | exact | 1 |
+| chromaA (V) | 516 (starts `84 85 84 85 84 87 84 86 ...`) | 2235 | exact | 8 |
+| chromaB (U) | 691 (starts `91 92 9a 93 9c 94 9b 95 ...`) | 3592 | exact | 9 |
+
+Y's 3384 bits is exactly §5.3aa's golden bit cost for the same call on the `0x100195b0` path: **the
+two functions consume identical bits**. They differ only in how the output byte is built. The Y bytes
+(`0x19` = 25) are FFmpeg's pixel values directly (§5.3af).
+
+**Arguments.** `(desc, bitreader, class_set, stream_end)`.
+- `desc` is the same output-descriptor layout as `0x10019d10`: `+0x00` cursor, `+0x04` end,
+  `+0x10` translate16 for the low nibble, `+0x20` low-nibble LUT width `A_lo`, `+0x24` low-nibble LUT
+  pointer, `+0x28` count width, `+0x2c` count bound, `+0x30` output base.
+- `class_set`: `+0x000` 16x16 translate table (row = class), `+0x100` 16 per-class LUT widths
+  (here `4,6,6,6,6,5,5,5,5,5,5,5,5,5,6,4`, the same as §5.3g), `+0x140` 16 per-class LUT pointers,
+  `+0x180` the running class (carried across calls).
+- `bitreader`: `{cache, next-dword pointer, valid-bit count}`, LSB-first. Peek n = low n bits;
+  consume = shift right. The refill ORs the next dword in above the valid bits. It is the same reader
+  as §5.3ae.
+
+**Pseudocode (reproduces all three calls):**
+```
+if desc.cursor != desc.end: return                  # idle: previous range not yet drained
+N = read_bits(desc.count_width)                     # 14 bits here (Y); bound 15872
+if N == 0 or N > desc.count_bound:
+    desc.cursor = desc.base + 4; desc.end = desc.base   # "empty/invalid" marker
+    return
+desc.cursor = desc.base; desc.end = desc.base + N
+fill = read_bits(1)                                 # 1 = one symbol, replicated N times
+cls  = class_set.class
+for i in range(1 if fill else N):
+    e  = class_set.lut[cls][peek(class_set.A[cls])]; consume(e >> 4)
+    hi = class_set.translate[cls][e & 0xF]          # per-class tree -> HIGH nibble
+    e  = desc.lut[peek(desc.A_lo)];                 consume(e >> 4)
+    lo = desc.translate16[e & 0xF]                  # descriptor's own tree -> LOW nibble
+    out[i] = (hi << 4) | lo                         # NO sign / bias step
+    cls = hi                                        # next symbol's class = this HIGH nibble
+if fill and N > 1: memset(out, out[0], N)           # 0x10019a93-0x10019aa8
+class_set.class = cls                               # written back once at exit
+```
+
+**Differences from `0x100195b0` (§5.3aa), all from the disassembly:**
+
+| Aspect | `0x100195b0` (BIKf/g/h) | `0x10019850` (BIKi) |
+|---|---|---|
+| Output byte | sign-magnitude transform of `(nib1<<4)|nib2`, then -128 | `(hi<<4)|lo` raw |
+| Second (low) nibble tree | class-0 slot of the class set | the descriptor's own `+0x20`/`+0x24` LUT and `+0x10` translate16 (in this Y call: `A_lo=4`, a flat 16-entry LUT `0x40..0x4f` and an identity translate, so 4 raw bits) |
+| Class update | `cls = nib1` | `cls = hi` (same rule) |
+| Fill flag | none (per §5.3aa) | 1 bit after N. When it is 1, one symbol is decoded and replicated N times |
+| Bits per call (Y row 0) | 3384 | 3384 |
+
+**Confidence.** CONFIRMED for the non-fill path (3 planes, exact bytes, exact bits, exact final class).
+**The fill path (`fill=1`) is now CONFIRMED live (2026-10-12, FINAL)** (`probe_fill_scan_2026-10-12.py`, `reimpl_19850_fill_2026-10-12.py`). A scan of frames 0-1 of all 17 shipped files under word 0 found fill=1 calls in 9 files (01_crawl 10, logo_amd_hd 20, logo_thq_and_voli_hd 10, 22_choice 10, GenkiTutorial_v1 10, kinzie_typing 4, 09_out_tv 3, 15_in_supercomputer_matt 2, 14_in_laptop 1, 22_out2_mars 1), all in frame 0, with N between 80 and 4096; main_menu_bg has none. First hit, 01_crawl frame 0: N=560, all 560 output bytes = `0x10`. The reimplementation reproduces it exactly: one symbol replicated N times, **20 bits total for the whole call**, final class 1 (matches the DLL). OPEN:
+whether `0x100195b0` really lacks the fill bit, or §5.3aa folded it into its "leading magnitude".
+That is irrelevant to shipped BIKi files.
+
+### 5.3ah Expected-output test vectors — per-frame plane checksums (2026-10-12, FINAL)
+
+**Recipe (real `binkw32.dll` under Unicorn, isolated, no game process).** Script:
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/make_test_vectors_2026-10-12.py` (output
+`test_vectors_2026-10-12.txt`). FFmpeg cross-check: `ffmpeg_md5_check_2026-10-12.py`.
+- Call `0x1001cb00` once per frame, frames 0-4 in order. Decoder flag word **0** and alpha argument **0**
+  (what `BinkOpen` builds for a `BIKi` file with header flags 0; §5.3af OPEN (2)). The plane-mask
+  bits are not set, so all three planes are decoded.
+- Frame input = the frame-table blob with each audio track's `u32 size + data` stripped first.
+- Planes are allocated **16-aligned**: luma `ceil16(W) x ceil16(H)`, chroma half of that, pitch =
+  allocated width. Two buffer sets live in the plane record at stride `0x30` (set k: `+0x1c+0x30k` Y,
+  `+0x20` Y pitch, `+0x28` chromaA, `+0x2c` pitch, `+0x34` chromaB, `+0x38` pitch). Record `+0x04/+0x08` hold the
+  allocated W/H and `+0x0c/+0x10` the chroma W/H.
+- **Buffer rotation (live-confirmed):** with record `+0x14 = i`, the decoder **reads the previous frame
+  from set i** (the hidden EDX at `0x1001a530`) and **writes set i^1** (the first stack argument). The
+  harness sets `+0x14 = frame & 1`, so frame k's output is in set `(k&1)^1`. Initial buffers: Y = 0x00,
+  chroma = 0x80 (frame 0 is intra and never reads them).
+- **Output = crop** to `W x H` (Y) and `ceil(W/2) x ceil(H/2)` (U, V). **chromaA = V, chromaB = U.**
+  The bytes are written exactly as decoded; no post-processing.
+
+**Cross-check:** every one of the 45 planes (3 files x 5 frames x Y/U/V) is **byte-identical to FFmpeg 9.0.2**
+(`-pix_fmt yuv420p`), not just frame 0. Each plane's MD5 below is therefore also FFmpeg's.
+
+| File | Frame | Plane | WxH | CRC32 | MD5 | Row 0, first 16 bytes |
+|---|---|---|---|---|---|---|
+| main_menu_bg.bik | 0 | Y | 1920x1080 | `c862f507` | `1591cf106cc25699406af1ff8d4408ba` | `18 18 18 18 18 18 18 18 18 18 18 18 18 18 18 18` |
+| main_menu_bg.bik | 0 | U | 960x540 | `9a3956ed` | `b5d96dbca6737a67a09f18f269090834` | `8f 8f 8f 8f 8e 8e 90 90 90 90 8f 8f 90 90 90 90` |
+| main_menu_bg.bik | 0 | V | 960x540 | `6fc9b22f` | `38d34859f65edc04cb3c094700be4c3d` | `84 84 84 84 84 84 84 84 84 84 84 84 84 84 84 84` |
+| main_menu_bg.bik | 1 | Y | 1920x1080 | `8dff6a21` | `5f39150384b7f9007364fb057e957815` | `18 18 18 18 18 18 18 18 18 18 18 18 18 18 18 18` |
+| main_menu_bg.bik | 1 | U | 960x540 | `2002d316` | `12131951288a9fe2106c78ad985ea829` | `90 90 90 90 90 90 90 90 90 90 8f 8f 90 90 90 90` |
+| main_menu_bg.bik | 1 | V | 960x540 | `d147bc72` | `cac8b2509d0661af3efa2c4fff650262` | `84 84 84 84 84 84 84 84 84 84 84 84 84 84 84 84` |
+| main_menu_bg.bik | 2 | Y | 1920x1080 | `72161688` | `072c7f052b87eff66a027b64e7f56ab1` | `18 18 18 18 19 19 19 19 19 19 18 18 18 18 18 18` |
+| main_menu_bg.bik | 2 | U | 960x540 | `2ab1a1d9` | `a81556fd44ebb1728f89a44e0c93be62` | `90 90 90 90 90 90 90 90 90 90 8f 8f 90 90 90 90` |
+| main_menu_bg.bik | 2 | V | 960x540 | `6577996c` | `5fa1eb4e881b46fb99c08202a533f1db` | `84 84 84 84 84 84 84 84 84 84 84 84 84 84 84 84` |
+| main_menu_bg.bik | 3 | Y | 1920x1080 | `290f1dd7` | `13c6e822ff9771d07668af4f69f75aa2` | `18 18 18 18 19 19 19 19 19 19 19 19 19 19 18 18` |
+| main_menu_bg.bik | 3 | U | 960x540 | `44b01566` | `18200915aeea820ac66b6f35606cff29` | `8f 8f 90 90 90 90 8f 8f 8f 8f 90 90 90 90 90 90` |
+| main_menu_bg.bik | 3 | V | 960x540 | `8a5e1c33` | `f2aa5232f4a989abc18b5e044c151c2f` | `84 84 84 84 84 84 84 84 84 84 84 84 84 84 84 84` |
+| main_menu_bg.bik | 4 | Y | 1920x1080 | `9faf102d` | `c691ea724b1a0a4909d5be34ff087ffe` | `18 18 18 18 19 19 19 19 19 19 19 19 19 19 18 18` |
+| main_menu_bg.bik | 4 | U | 960x540 | `032db9bf` | `1e744f0b0576fa174714a1cf2928558a` | `8e 8e 8f 8f 8f 8f 8f 8f 8f 8f 90 90 90 90 90 90` |
+| main_menu_bg.bik | 4 | V | 960x540 | `b8b805d0` | `6b5d7faf4bb54b1b8c5c230524efb541` | `84 84 84 84 84 84 84 84 84 84 84 84 84 84 84 84` |
+| 01_crawl.bik | 0 | Y | 1280x720 | `44934f92` | `b6078b5cf996511d66745732d4c96a12` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| 01_crawl.bik | 0 | U | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 0 | V | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 1 | Y | 1280x720 | `44934f92` | `b6078b5cf996511d66745732d4c96a12` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| 01_crawl.bik | 1 | U | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 1 | V | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 2 | Y | 1280x720 | `44934f92` | `b6078b5cf996511d66745732d4c96a12` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| 01_crawl.bik | 2 | U | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 2 | V | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 3 | Y | 1280x720 | `44934f92` | `b6078b5cf996511d66745732d4c96a12` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| 01_crawl.bik | 3 | U | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 3 | V | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 4 | Y | 1280x720 | `44934f92` | `b6078b5cf996511d66745732d4c96a12` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| 01_crawl.bik | 4 | U | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| 01_crawl.bik | 4 | V | 640x360 | `ba1e7456` | `42042972967b1dc9b9c18ea1eae21fdf` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 0 | Y | 1920x1080 | `fc25989b` | `c962cae3ee8c1cf5bd949ff73f83049e` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| logo_amd_hd.bik | 0 | U | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 0 | V | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 1 | Y | 1920x1080 | `fc25989b` | `c962cae3ee8c1cf5bd949ff73f83049e` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| logo_amd_hd.bik | 1 | U | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 1 | V | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 2 | Y | 1920x1080 | `fc25989b` | `c962cae3ee8c1cf5bd949ff73f83049e` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| logo_amd_hd.bik | 2 | U | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 2 | V | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 3 | Y | 1920x1080 | `fc25989b` | `c962cae3ee8c1cf5bd949ff73f83049e` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| logo_amd_hd.bik | 3 | U | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 3 | V | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 4 | Y | 1920x1080 | `fc25989b` | `c962cae3ee8c1cf5bd949ff73f83049e` | `10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10` |
+| logo_amd_hd.bik | 4 | U | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+| logo_amd_hd.bik | 4 | V | 960x540 | `e0960173` | `6882f5e92ba7611fc730118d19b241f6` | `80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80` |
+
+Note: `01_crawl` and `logo_amd_hd` frame 0 chroma (and `logo_amd_hd` Y) open on uniform black, so their U/V
+checksums coincide (all 0x80). The early frames of these files are still a useful smoke test of the
+fill path (§5.3ag), which they exercise.
+
+> **HARNESS-VALIDITY WARNING (2026-10-12, §5.3af OPEN (2)).** Every emulation capture in this document made with the old harness flag word (`0x108200`, alpha argument `0x100000`) ran a decode path the shipped game NEVER takes: luma through the alpha slot, and the BIKh colour pre-stage `0x100195b0`. The game's real word for every shipped (BIKi) file is `0` with alpha argument `0`. Ground truth captured under the old word must be re-validated before ports rely on it. That includes the `0x100195b0` flat-fill sections (§5.3s/§5.3aa) as the colour path, possibly the §5.3ad `0x10019d10` test vector, and the +128 / chroma notes. Structural findings (grammar, grid, dispatch) are unaffected wherever the same code runs under both words.
+>
+> **Re-validation status (2026-10-12, word 0):** RE-VALIDATED: §5.3ad, §5.3ae, §5.3ag, §5.3v, §5.3w, §5.3y, §5.3ac, §5.3h, §5.3b, §5.3ab/§5.3t (by equivalence), the bit structure of §5.3aa/§5.3s/§5.3g, and §5.3af. In those sections only the literal-colour VALUES change: §5.3i and §5.3x carry corrected value blocks (secondary=3 fill 0x99 -> 0x19; chromaA (0,0) 124 -> 132; secondary=6 bytes). The old-word and word-0 runs have the same dispatch sequence and the same main bit-reader state at every one of 36,724 dispatches, and identical secondary=2 DC/nibble/IDCT inputs. §5.3af grid under word 0 with padded heights: Y 23,914 / CA 6,122 / CB 6,688 dispatches, primary 1 always advances 16, others 8, and 0 partial bails. STILL NEEDED: nothing of high value. Low value, not done: a literal-colour re-capture for §5.3s/§5.3z text that quotes `0x100195b0` output bytes (superseded wholesale by §5.3ag).
+
+### 5.3ai Team B frame-0 mismatch answers (2026-10-13)
+
+**Method.** Live Unicorn run of the real `binkw32.dll` (DLL only, no game process), `main_menu_bg.bik`
+frame 0, real flags (word 0, alpha argument 0), heights padded to 16. Hooks: the dispatch (`0x1001abfb`),
+the secondary byte (`0x1001ad9f`), both AC-tree call sites (secondary=2 `0x1001b348`, primary=5
+`0x1001c36a`) and their returns, both quant-nibble join points (`0x1001b3b5`, `0x1001c3d7`), primary=8's
+two loads (`0x1001c616`, `0x1001c675`), the last table build inside `0x10019300` (`0x10019344`) and the
+colour pre-stage entry (`0x10019850`). Main bit-reader position = next-dword pointer x 8 minus valid
+bits (reader at frame `-0x204`/`-0x200`/`-0x1fc`). Plus disassembly of `0x1001a9b1`-`0x1001abfb`,
+`0x10019300`-`0x10019359`, `0x1001b2ff`-`0x1001b348`, `0x1001c321`-`0x1001c3da` and
+`0x1001c608`-`0x1001c960`. Scripts: `probe_ai_2026-10-13.py` (+`probe_ai_out_2026-10-13.txt`, `.pkl`) and
+`dump_ai_2026-10-13.py` (+`dump_ai_out*.txt`) in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
+**Which blocks the mismatches are.** Team B's "column 6" and "column 8" are 8-pixel cell columns: pixel
+x=48 and x=64 of stripe 0. Both are **primary=1/secondary=2** blocks (16x16), the 2nd and 3rd
+secondary=2 blocks of the frame. FFmpeg and the DLL both give 24 at row 0 of each.
+
+Y stripe 0, first dispatches (live). "DC slot" = word index on the DC cursor below. Main-reader bits
+are relative to the start of dispatch (0,0).
+
+| Cell x | Prim/sec | Main bit at entry | DC (slot) | AC-tree bits | Nibble (4 bits) |
+|---|---|---|---|---|---|
+| 0 | 1/2 | 0 | 118 (0) | 17 | 2 |
+| 16, 32 | 1/3 | 21 | - | - | - |
+| **48** | **1/2** | **21** | **199 (1)** | **83** | **0** |
+| **64** | **1/2** | **108** | **212 (2)** | **136** | **0** |
+| 80 | 5 | 248 | 51 (3) | 32 | 6 |
+| 88 | 5 | 284 | 25 (4) | 13 | 9 |
+| 96 | 1/2 | 301 | 118 (5) | 12 | 2 |
+| 112 | 1/2 | 317 | 119 (6) | 11 | 2 |
+| 128 | 1/3 | 332 | - | - | - |
+| 144 | 6 | 332 | - | - | - |
+| 152 | 5 | 332 | 26 (7) | 13 | 9 |
+| 160 | 5 | 349 | 51 (8) | 28 | 6 |
+
+Each entry position equals the previous entry plus AC plus 4, so nothing else in these blocks reads
+the main reader.
+
+**Answers:**
+
+1. **AC-tree length on the second secondary=2 block (x=48): 83 bits. Team B's 83 is CORRECT; the
+   "~54" expectation is wrong.** Live: AC-tree entry to return = 83 bits, then the nibble = 4 bits
+   (87 bits for the block; the next block starts 87 bits later). The third secondary=2 block (x=64)
+   costs **136** AC bits. Non-zero coefficients after the tree (index = row-major k, DC at k=0):
+   - x=48: `(0,199) (1,-2) (2,3) (3,-2) (4,-1) (8,-3) (9,3) (10,-2) (11,1) (13,-1) (16,1) (17,-2) (18,1) (20,-1) (25,-1) (26,1) (27,-1) (32,-1) (33,1) (34,-1) (43,1)`, nibble 0
+   - x=64: `(0,212) (1,-5) (2,-5) (3,3) (5,3) (6,-2) (8,-2) (9,-5) (10,-3) (11,1) (12,1) (13,1) (14,1) (16,1) (17,2) (18,-1) (19,-1) (21,1) (23,1) (25,1) (26,2) (27,1) (28,-1) (32,-1) (33,-1) (34,-1) (35,1) (36,1) (38,-1) (42,-1) (45,1)`, nibble 0
+
+   Expected 8x8 cores (before the 2x2 upsample; DLL output = FFmpeg):
+   ```
+   x=48: 24 25 24 23 24 25 24 24 | 24 25 25 24 24 24 25 25 | 25 25 25 25 25 25 24 24 | 25 25 25 25 25 24 23 22
+         24 25 26 25 24 23 24 26 | 25 25 25 24 23 24 27 29 | 25 25 25 24 24 26 29 29 | 24 25 26 25 24 26 28 28
+   x=64: 24 22 25 29 29 28 29 24 | 24 24 26 27 28 28 28 26 | 23 23 25 29 28 28 28 26 | 23 23 23 28 29 28 28 26
+         26 26 23 25 27 28 28 26 | 28 29 26 25 25 27 28 26 | 28 28 29 28 26 26 28 25 | 27 28 27 29 28 25 27 25
+   ```
+   Evidence: live trace. **FINAL.**
+
+2. **primary=8 pixel layout: a two-colour 1-bit pattern.** Disassembly (`0x1001c608`-`0x1001c960`):
+   - Two colour bytes come from the colour cursor (frame `-0x38`, the `0x10019850` output, with the
+     same "past end, jump to base+4" fix-up): `c0` = first byte, `c1` = second byte.
+   - Then it reads 8 consecutive bytes `m[0..7]` from the `0x10019d10` output cursor (frame `-0x6c`).
+     Byte `m[r]` is pixel row `r` (row stride = pitch).
+   - Pixel `(r, x)` = `c1` if bit `x` of `m[r]` is set, else `c0`. Bit 0 (LSB) is the leftmost pixel.
+     The low nibble covers x=0-3 and the high nibble x=4-7. The DLL does it with two 16-entry dword
+     mask tables (`0x1003c180` = bytes 0xFF where a bit is set, `0x1003c1c0` = its complement):
+     `dword = (MASK[n] & c1x4) | (~MASK[n] & c0x4)`.
+   - 8x8 output, no upsample. Column advance 8. It reads no main-reader bits.
+
+   Live check: all three primary=8 blocks of Y stripe 0 match this formula on all 64 pixels.
+   (0,296): c0=25, c1=32, m=`0f 01 00 00 00 00 80 ff`, the first 8 bytes of the §5.3ad vector,
+   so row 0 = `32 32 32 32 25 25 25 25`. (0,312): m = vector bytes 8-15. (0,448): c0=35, c1=26,
+   m = bytes 0x18-0x1f; bytes 0x10-0x17 went to a secondary=5 block in between, so the cursor is shared.
+   Evidence: disassembly + live trace. **FINAL.**
+
+3. **primary=5's DC reader: the SAME 16-bit-word DC cursor that secondary=2 uses**, not the main bit
+   reader and not a separate primary=5 stream. Disassembly: both `0x1001c333`-`0x1001c350` (primary 5)
+   and `0x1001b311`-`0x1001b342` (secondary 2) read `word [cursor]`, cursor += 2, from the descriptor at
+   frame `-0x13c` (end `-0x138`, base `-0x10c`; past end, the read uses base+4). That descriptor is
+   filled once per stripe by the **first `0x1001a160` call** (`0x1001ab74`, the DPCM DC pre-stage,
+   §5.3d), after the colour, `0x10019d10` and two `0x10019f00` pre-stages. Live: the DC slot runs
+   0,1,2 (sec2) then 3,4 (prim5) then 5,6 (sec2) then 7,8 (prim5): **one cursor shared in raster
+   dispatch order across both block types.** Team B's shared `dcNext++` is the right model. The rest of
+   primary=5: AC tree on the main reader, then a 4-bit nibble on the main reader, then the 8x8 intra
+   IDCT. Evidence: disassembly + live trace. **FINAL.**
+
+4. **`0x10019850`'s "desc" is NOT `tables[0]`. It is the descriptor at frame `-0x38`, and its tree is
+   built by the 17th call inside `0x10019300`.** Disassembly: `0x10019300(desc=-0x38, reader, class_set)`
+   first builds the 16 class trees (`class_set+0x140`/`+0x100`/`+16k`), then makes ONE more `0x10018ca0`
+   call into `desc+0x24`/`+0x20`/`+0x10` (`0x10019333`-`0x10019344`). In Team B's 0-indexed numbering
+   of the 23 per-stripe builds (0=A, 1=B, 2-17=classes), that is **build index 18**. Index 19 is
+   `0x10019d10`'s tree (frame `-0x6c`, `0x1001aa2a`), which agrees with Team B's verified "idx 19".
+   Team B's bank captures only 2-17 and drops 18. Live: the `0x10019344` build target and the
+   `0x10019850` first argument are the same address (`0x303f5068`) on every call. The trees differ:
+   in Y stripe 0 they happen to coincide (both A=4 with a flat LUT and identity translate), which is
+   why Y matched, but in chromaA stripe 0 desc has A=5 and translate `5 6 4 7 1 2 3 8 9 10 11 12 0 13 14 15`
+   while class 0 has A=6 (`probe_19850_real_2026-10-12.pkl`). **Also from the same disassembly:**
+   `0x10019300` ends with `class_set+0x180 = 0` (`0x10019351`; the loop counter is 0 there), so the
+   running class is **reset to 0 at the start of every stripe**, before the colour call. It is carried
+   only within a stripe. Evidence: disassembly + live trace. **FINAL.**
+
+**Where 32 and 226 come from (OPEN on Team B's side).** The DLL's inputs for both blocks are settled
+above. The bit length, DC slot and nibble agree with Team B's model (83 bits; DCs 199/212 at slots 1/2;
+nibble 0 for both). So the error is after the read, in the coefficient values, their placement, the
+nibble-0 dequant row, or the IDCT/store. One thing stands out: **both failing blocks use nibble 0, and
+the passing secondary=2 blocks use nibble 2.** 226 is 256-30, which looks like an unsaturated
+negative result wrapped to a byte. Team B should diff their coefficient list and 8x8 core for x=48/x=64
+against the vectors in answer 1. Note that secondary=2 runs its own IDCT engine (`0x100247d0`, §5.3i),
+not the primary=5 one (`0x100244c0`). The first differing stage settles it. This is not confirmed
+without running their code.
+
+### 5.3aj primary=6 block (2026-10-13)
+
+**Status: FINAL (pixel-exact vs FFmpeg).**
+
+**What it is: a solid 8x8 fill.** primary=6 is one colour byte from the colour cursor, written to all
+64 pixels of an 8x8 cell. No upsample, no DCT, no pattern.
+
+**Method.** Dispatch table at `0x1001cab8` (jump at `0x1001abfb`, index = primary). Entry 6 = `0x1001c3f5`.
+Capstone disassembly of `0x1001c3f5`-`0x1001c4b1`, plus a live Unicorn run of the real `binkw32.dll`
+(DLL only), `main_menu_bg.bik` frame 0, real flags (word 0, alpha 0), heights padded to 16. Hooks were at
+the dispatch, at the colour-byte load (`0x1001c415`) and at the handler exit (`0x1001c4b1`). The output
+was compared with FFmpeg 9.0.2 frame 0 (yuv420p Y). Scripts: `dis_aj_2026-10-13.py`, `probe_aj_2026-10-13.py`
+(+`probe_aj_out_2026-10-13.txt`) in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
+**Bit and byte consumption:**
+- Main bit reader: **0 bits**. The position is unchanged across every primary=6 block (x=144: 332 to 332).
+- DC word cursor, `0x10019d10` pattern cursor, AC tree, nibble: **not touched**.
+- Colour cursor (the `0x10019850` output, frame `-0x38`, the same cursor primary=8 and the 16x16 fill
+  blocks use): **exactly 1 byte**, cursor += 1. On entry the dispatcher has the cursor in a register. If
+  cursor >= end (`-0x34`), it is first reset to base (`-8`) + 4, which is the same past-end fix-up as primary=8.
+- It sets the per-cell "block written" flag byte (`flags[cellIndex >> 1] = 1`, the same store every
+  handler makes). Column advance: 8, as for the other 8x8 primaries.
+
+**Pixel layout.** The byte `c` is replicated into a dword (`c * 0x01010101`). Two dword stores per row
+(offsets 0 and 4) for 8 rows at the plane pitch. Pixel `(r, x) = c` for r, x in 0..7.
+
+**Pseudocode:**
+```
+case 6:
+    if colCur >= colEnd: colCur = colBase + 4
+    c = *colCur++
+    for r in 0..7: for x in 0..7: dst[r*pitch + x] = c
+    markCellWritten(); advance 8 pixels
+```
+
+**The colour cursor is shared in raster dispatch order.** Live offsets into the colour stream for Y
+stripe 0: the 16x16 blocks at x=16, x=32 and x=128 each consume 1 byte (offsets 0, 1, 2), so x=144 reads
+**offset 3**. Next comes x=168 at offset 4, then x=192 at offset 6 (the 16x16 block at x=176 consumed 5).
+primary=8 consumes 2 per block. One block in the range x=224-239 consumed 64 bytes (offsets 7 to 71).
+
+**Test vector (frame 0, Y, stripe 0, cell column 18 = pixel x=144, dispatch index 10):**
+- Main-reader bit position at entry: 332 (relative to dispatch (0,0), the §5.3ai convention). At exit: 332.
+- Colour cursor offset at entry: 3 (relative to the colour-stream base). Byte = **25** (0x19). Offset at exit: 4.
+- Output 8x8 (rows 0-7): all 64 pixels = 25.
+  `25 25 25 25 25 25 25 25` x 8 rows. The DLL output equals FFmpeg's.
+- Next block (x=152, primary=5) starts at main bit 332 with DC slot 7, as in the §5.3ai table.
+
+**Wider check.** All 35 primary=6 blocks among the first 120 dispatches of Y stripe 0 (x=144 to x=1240)
+match FFmpeg on all 64 pixels, and each consumed exactly one colour byte. Values seen: 25-31.
+Evidence: disassembly + live trace + FFmpeg compare. **FINAL.**
+
+### 5.3ak primary=1/secondary=5 literal-byte source (2026-10-14, Team B question)
+
+**Question (Team B, col 50):** do secondary=5's two literal bytes come from the colour pre-stage cursor
+with no bias, like primary=6/8? **Answer: yes, both of them, and the 8 control bytes come from the
+`0x10019d10` cursor.**
+
+**Method.** Secondary jump table at `0x1001cae0` (jump at `0x1001ad9f`, index = secondary). Entry 5 =
+`0x1001b51b`. Capstone disassembly of `0x1001b51b`-`0x1001b5aa`, compared against secondary=3
+(`0x1001b3d8`) and primary=6 (`0x1001c3f5`). Script: `dis_sec5_2026-10-14.py` in
+`scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
+**Byte consumption, in order:**
+1. Row guard: if fewer than 16 rows remain in the plane, the block is skipped to the dispatcher's
+   fallback (`0x1001acc9`). This is the same guard secondary=3 uses.
+2. Colour cursor (frame `-0x38`, the `0x10019850` output; the cursor is already in a register on
+   entry). If cursor >= end (`-0x34`), it is first reset to base (`-8`) + 4, the same fix-up as
+   primary=6/8. The fix-up is checked **once**, before the first byte only.
+3. `lit1` = byte at cursor, cursor += 1. `lit2` = next byte, cursor += 1. **No bias, no transform:**
+   each is zero-extended and replicated to all 4 bytes of a dword (`b * 0x01010101`). `lit1` stays in a
+   register; `lit2` is stored in frame `-0x1f0`. The cursor is written back (+2 total).
+4. Pattern cursor (frame `-0x6c`, the `0x10019d10` output, end `-0x68`). If cursor >= end, it reads
+   from base (`-0x3c`) + 4 instead. Then the engine at `0x1001b5a3` reads **8 bytes**, cursor += 1 each.
+   This is the same cursor primary=8 reads its 8 row masks from, which is why §5.3ai answer 2 saw
+   pattern bytes 0x10-0x17 go to a secondary=5 block between two primary=8 blocks.
+5. Main bit reader, DC word cursor, AC tree, nibble: not touched.
+
+**Naming vs §5.3.** "literal1"/"literal2" in the §5.3 TwoLiteralPattern paragraph (example `0x9b`, `0x9c`)
+are in read order: literal1 = first colour-cursor byte, literal2 = second. The blend formula, 16x16
+footprint and 2-bit control fields there are unchanged; only the sources were unstated. **Correction:**
+§5.3 calls the 8 control bytes "raw control bytes" as if they were inline. They are not inline in the
+main stream. They come from the shared `0x10019d10` pattern cursor.
+
+**Pseudocode:**
+```
+case primary 1 / secondary 5:
+    if rowsLeft < 16: goto fallback
+    if colCur >= colEnd: colCur = colBase + 4
+    lit1 = *colCur++; lit2 = *colCur++          # no bias
+    if patCur >= patEnd: patCur = patBase + 4
+    ctrl[0..7] = 8 bytes from patCur (patCur += 8)
+    16x16 two-colour pattern per §5.3 (TABLE1/TABLE2 at 0x1003c130/0x1003c200)
+```
+
+Evidence: disassembly. The §5.3 live trace (`main_menu_bg.bik`) agrees with the byte counts. Team B
+can confirm by checking that cell column 50 consumes colour-cursor offsets k, k+1 and 8 pattern bytes.
+**FINAL** for the sources and order; not re-run live this pass.
+
+### 5.3al primary=5 dequant and AC index mapping, live vector (2026-10-14)
+
+**Status: FINAL (all 8,292 primary=5 blocks of Y frame 0 reproduced pixel-exact by the re-derivation below, and all 8,292 equal FFmpeg).**
+
+**Method.** Capstone disassembly of the primary=5 body (`0x1001c321`-`0x1001c3f0`), the AC-tree decoder's
+epilogue (`0x10025762`-`0x100258a8`) and `0x100244c0`-`0x100247ce`. Live Unicorn run of the real
+`binkw32.dll` (DLL only), `main_menu_bg.bik` frame 0, real flags (word 0, alpha 0), heights padded to 16,
+stopped at the end of the Y plane (23,914 dispatches). Hooks: dispatch (`0x1001abfb`), primary=5 AC call
+(`0x1001c36a`) and return (`0x1001c36f`), nibble join (`0x1001c3d7`), IDCT call (`0x1001c3e8`) and return
+(`0x1001c3ed`), secondary=2 AC call (`0x1001b348`, for DC slot counting), and the AC-tree's pre-permutation
+point (`0x10025762`). Every primary=5 block was recomputed in Python from the captured coefficients and
+compared with the DLL's output and with FFmpeg 9.0.2. Scripts: `probe_al_2026-10-14b.py`
+(+`probe_al_out_2026-10-14b.txt`, `.pkl`) and `probe_al_scan_2026-10-14b.py` (+`probe_al_scan_out_2026-10-14b.txt`)
+in `scratchpad/bink_entropy_prestage_algorithm_2026-10-08/`.
+
+**Results:** primary=5 blocks in Y = 8,292. Python re-derivation == DLL: 8,292. DLL == FFmpeg: 8,292.
+AC-tree calls checked for the scan permutation (primary=5 + secondary=2, Y): 10,301 of 10,301.
+
+#### 1. Dequant table
+
+- Table: **`intra_quant` at `0x10037cc0`**, 16 rows x 64 little-endian int32, 256 bytes per row
+  (raw hex in `spec-bink-static-tables.md`). Row pointer = `0x10037cc0 + nibble*0x100`
+  (`0x1001c3d7`: `shl edx,8; add edx,0x10037cc0`). primary=5 always uses this intra table.
+- **Indexing: by 8x8 position, not by coefficient order.** `q[k]` with k = row*8 + col (column pass reads
+  `[q + r*0x20 + c*4]`). The table is already in natural position order. Do not index it by the Bink
+  scan index t (FFmpeg does that with its own table; the DLL's table is pre-permuted).
+- **DC uses the same table entry `q[0]`, no separate DC scale and no bias.** The DC word is stored
+  as a signed 16-bit value (`mov word [ebp-0x310],dx`) and read back with `movsx`.
+- **Dequant: `deq[k] = (coef[k] * q[k]) >> 11`**, 32-bit signed multiply, arithmetic shift, no rounding add.
+  It is applied inside the column pass, per term.
+- The nibble is 4 bits from the main reader, LSB-first (first bit read = bit 0), read after the AC tree.
+
+Nibble 0, `0x10037cc0` (row r = 8x8 row, 8 values = columns 0-7):
+```
+ 65536  90901  85627  91511  65536  61146  48768  24862
+124989 173365 192998 160332 147714  98203  67644  42322
+144495 200421 181800 163616 139144 121939  83993  42819
+130042 180374 169909 147250 163757 128663  88625  38536
+118784 164758 144495 130042 151552 109419  75369  36163
+102983 129450 121939 143800 119074  88499  60959  30189
+ 77586 122988 115852 104264  84236  66184  57585  29357
+ 51984  72104  85638  74415  63285  61265  42200  25879
+```
+Nibble 6, `0x100382c0` (used by the vector below):
+```
+262144 363604 342508 366045 262144 244584 195073  99447
+499956 693459 771992 641330 590857 392813 270574 169287
+577982 801684 727200 654463 556575 487756 335972 171277
+520170 721496 679635 589001 655029 514653 354499 154145
+475136 659033 577982 520170 606208 437676 301477 144651
+411930 517799 487756 575200 476295 353994 243835 120755
+310344 491953 463410 417058 336944 264736 230341 117427
+207935 288415 342554 297660 253139 245061 168801 103514
+```
+Nibbles used by primary=5 in Y frame 0: 2 (2 blocks), 3 (31), 4 (308), 5 (1016), 6 (1349), 7 (1920), 8 (1917),
+9 (1199), 10 (384), 11 (103), 12 (37), 13 (16), 14 (9), 15 (1). **Nibble 0 is never used by primary=5 in
+frame 0**; it occurs in secondary=2 blocks (§5.3ai x=48/x=64), which index the same table the same way.
+Full decimal rows for all 16 nibbles are in `probe_al_out_2026-10-14b.txt` (nibbles 2-15) and
+`probe_al_scan_out_2026-10-14b.txt` (nibbles 0-1). Row 0, column 0 is `65536 * s` with
+s = 1, 4/3, 5/3, 2, 8/3, 7/2, 4, 5, 6, 8, ... for nibbles 0, 1, 2, ..., but the other entries are not exact
+multiples of nibble 0, so use the table, not a scale factor.
+
+#### 2. AC index mapping (scan)
+
+**There is no scan table in memory.** `0x10024eb0` decodes into a local list `L[t]` (64 int16 at its own
+`ebp-0x14c`, t = Bink coefficient order, zeroed on entry) and then copies it into the caller's struct
+with 32 hard-coded moves (`0x10025762`-`0x1002589c`): `L[1]` as a word to struct word 1, then 31 dword
+moves, each carrying the pair (t, t+1) to (k, k+1). The struct's word 0 (DC) is not touched. The
+resulting mapping, t to k = row*8 + col:
+```
+t  0- 7:  0  1  8  9  2  3 10 11
+t  8-15:  4  5 12 13  6  7 14 15
+t 16-23: 20 21 28 29 22 23 30 31
+t 24-31: 16 17 24 25 32 33 40 41
+t 32-39: 34 35 42 43 48 49 56 57
+t 40-47: 50 51 58 59 18 19 26 27
+t 48-55: 36 37 44 45 38 39 46 47
+t 56-63: 52 53 60 61 54 55 62 63
+```
+`struct[SCAN[t]] = L[t]`. This is the same permutation as FFmpeg's `bink_scan`. Live check: 10,301 of 10,301
+AC-tree calls in Y (primary=5 and secondary=2) satisfy it for t = 1..63. The tree's initial worklist
+(`0x10024f68`-`0x10024f88`: bytes `0x10 0x60 0xb0 0x07 0x0b 0x0f` = (t=4,mode 0) (24,0) (44,0) (1,3) (2,3) (3,3))
+works in t. **The coefficient lists in §5.3ai and in this section are already in k (position) order**,
+read from the struct after the copy. Do not apply the scan to them a second time.
+
+#### 3. IDCT `0x100244c0`
+
+Class: separable fixed-point 8-point butterfly IDCT (AAN/LLM-style factorisation), columns first, then rows, exactly as in §5.3j
+Part 1 (constants `0xb50`, `0x8a9`, `0xec8`, `-0x14e8`; every `>>11` is a plain arithmetic shift).
+Calling convention from primary=5: `eax` = coefficient struct (frame `-0x310`, 64 int16, row-major),
+`edx` = quant row, stack `[+8]` = dest (`edi`), `[+0xc]` = pitch (`esi`).
+- Column pass: for each column c, a column whose rows 1-7 are all zero takes a fast path that writes
+  `(coef[c]*q[c])>>11` to all 8 rows. This gives the same result as the general path, so a port may skip it.
+- Row pass: `pixel = (v + 0x7f) >> 8` (arithmetic), **stored as the low byte with no clamp and no
+  saturation** (`mov byte [ecx+n], bl`). Out-of-range values wrap mod 256. **No +128 bias**: the DC is the
+  unsigned-domain level directly: a DC-only block gives pixel ((DC*q[0]>>11) + 0x7f) >> 8, e.g. DC 52 at nibble 6 gives 6656, then 26.
+- No upsample: 8x8 output, column advance 8.
+- In frame 0 no primary=5 block has a pre-store value outside 0..255 (0 of 8,292), so the missing clamp is
+  not visible here. FFmpeg clamps, the DLL wraps; follow the DLL.
+
+Reference implementation (re-derivation, equal to the DLL on all 8,292 blocks):
+```
+def bfly(x):
+    b0=x[0]+x[4]; d0=x[0]-x[4]; s1=x[2]+x[6]; d1=x[2]-x[6]
+    e0=((d1*2896)>>11)-s1
+    A=s1+b0; B=b0-s1; C=e0+d0; D=d0-e0
+    P=x[3]+x[5]; M=x[5]-x[3]; Q=x[1]+x[7]; R=x[1]-x[7]
+    U=P+Q; V=Q-P; H=((R+M)*3784)>>11
+    F3=((M*-5352)>>11)-U+H; G2=((R*2217)>>11)-H; I2=((V*2896)>>11)-F3; G3=G2+I2
+    return [U+A, F3+C, I2+D, B-G3, G3+B, D-I2, C-F3, A-U]
+deq[k] = (coef[k]*q[k]) >> 11                       # k = r*8+c
+tmp[.][c] = bfly([deq[r*8+c] for r in 0..7])        # column pass
+pix[r][.] = [((v+0x7f)>>8) & 0xff for v in bfly(tmp[r])]   # row pass
+```
+
+#### 4. Live vector: Y stripe 1, cell column 10
+
+**Convention:** stripes are 8 pixel rows and cell columns are 8 pixels (§5.3af Q2). Team B's "row 1, col 10"
+= **pixel y=8, x=80**. Stripe 1 is odd, so the primary=1 blocks at x=0-64 are continuations that read no
+bits. This primary=5 block is the first block in the stripe that reads the main reader.
+
+Stripe 1 dispatches up to x=96: x=0/16/32/48/64 primary 1 (odd-stripe, no reads); **x=80 primary 5**;
+x=88 primary 5 (entry bit +37 in the stripe, DC 26, slot 1, AC 19 bits, nibble 9); x=96 primary 1.
+
+| Item | Value |
+|---|---|
+| Main-reader bit at entry | **3331** relative to Y dispatch (0,0) (the §5.3ai convention: Y (0,0) is at bit 13619 of the frame-0 packet, file offset `0x290c`; this block is at bit 16950). Equals the stripe-1 start, since x=0-64 read nothing |
+| DC | word cursor **slot 0** of stripe 1 (the cursor is per stripe), **value 52** (the DC stream is rebuilt per stripe, §5.3ai answer 3, so the slot restarts at 0) |
+| AC tree | bits 16950-16982 = **33 bits**, read order (LSB-first per dword): `010000010011001001011010001110011` |
+| Nibble | bits `0110` (read order) = **6**, ends at bit 16987 (block total 37 bits) |
+| Quant row | `0x100382c0` |
+| Coefficients (k = row*8+col, non-zero) | `(0,52) (1,2) (2,1) (8,3) (9,-1) (10,-1) (16,1) (17,-1)` |
+| Same in Bink order t | `(1,2) (2,3) (3,-1) (4,1) (6,-1) (24,1) (25,-1)` |
+
+Dequantised 8x8 (`(coef*q)>>11`):
+```
+6656  355  167 0 0 0 0 0
+ 732 -339 -377 0 0 0 0 0
+ 282 -392    0 0 0 0 0 0
+   0    0    0 0 0 0 0 0      (rows 3-7 all zero)
+```
+DLL output 8x8 at (y=8, x=80) = FFmpeg (exact):
+```
+28 28 29 30 31 31 31 31
+28 28 29 29 30 29 29 29
+28 28 28 28 27 27 26 26
+28 28 27 26 25 24 23 23
+28 27 26 24 23 22 22 22
+28 27 25 23 22 22 22 23
+28 26 24 22 22 22 23 24
+28 26 24 22 22 23 24 25
+```
+
+Second vector, stripe 0 x=80 (§5.3ai row "80"): entry bit 248, DC 51 (slot 3), AC 32 bits
+`01000001111110101100101100110010`, nibble 6, coefficients `(0,51) (1,-3) (2,-1) (8,-3) (9,1) (10,1) (17,1)`,
+dequant row 0 `6528 -533 -168`, row 1 `-733 338 376`, row 2 `0 391`. Output rows 0-7:
+`24 24 23 22 22 22 22 23 | 23 23 23 22 23 23 24 24 | 22 22 23 23 24 25 26 26 | 21 22 23 25 26 27 28 28 |
+21 22 24 26 28 29 29 29 | 22 24 26 28 29 30 29 29 | 23 25 27 29 30 30 29 29 | 24 26 28 30 31 30 29 28` (= FFmpeg).
+
+**Likely Team B causes, in order of the stages above:** (a) quant indexed by t instead of k, or by FFmpeg's
+table and shift (`(c*q+0x40)>>7`) instead of the DLL's `>>11` table; (b) the scan applied twice or not at
+all; (c) a DC bias or a separate DC scale (there is neither); (d) the per-stripe DC slot (resets to 0 at
+each stripe, shared with secondary=2). Diff the vector stage by stage; the first differing stage is the bug.
+Evidence: disassembly + live trace + FFmpeg compare. **FINAL.**
+
+**AC-tree provenance flag (Team B, 2026-10-12) — CLOSED 2026-10-14.** Team B's AC-tree shape ("one persistent
+multi-level worklist") was written from prior Bink-format knowledge and flagged for a clean-room check. It is
+now covered by direct observation of the shipped DLL:
+- the bit cost of every AC-tree call was measured live, with no reference to outside sources: 83/136 bits in
+  §5.3ai, and all 10,301 Y-plane AC-tree calls of frame 0 in this section's scan check;
+- the coefficient lists the DLL itself writes were captured;
+- this section's re-derivation reproduces all 8,292 primary=5 blocks pixel-exact against the DLL.
+
+A port that matches these per-call bit costs and coefficient lists is DLL-equivalent, whatever its source. The
+spec's authority for the tree is these live measurements, not the outside format knowledge. Team B should
+keep the tree only as long as it reproduces the §5.3ai/§5.3al vectors.
 
 ## 6. The audio decode core (`0x1001e1d0`–`0x100260d4`)
 

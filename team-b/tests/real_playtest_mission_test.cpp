@@ -202,7 +202,10 @@ int main(int argc, char** argv) {
                        stdoutPath.string().c_str());
             ok = false;
         }
-        if (!fileContainsLinePrefix(stdoutPath, "mission  : --mission=mm_p_03 thread 'mm_p_03_start' errored on resume")) {
+        // 2026-10-13: mm_p_03's former '#CLOSEST_PLAYER#' OPEN is answered (Sec4.13.0), so the coroutine may now
+        // run on to a later suspension instead of erroring; either line proves the per-frame drive resumed it.
+        if (!fileContainsLinePrefix(stdoutPath, "mission  : --mission=mm_p_03 thread 'mm_p_03_start' errored on resume") &&
+            !fileContainsLinePrefix(stdoutPath, "mission  : --mission=mm_p_03 script thread 'mm_p_03_start' (id 1) still suspended at")) {
             std::printf("FAIL(A): stdout never printed the real per-frame scheduler-pass error line - the "
                        "per-frame drive (runScriptThreadSchedulerPass) never actually resumed the suspended "
                        "coroutine (see %s)\n",

@@ -1,0 +1,3466 @@
+# Live OPEN markers, ranked by Team B impact (generated 2026-10-12 by tools/scratchpad/open_index.py; heuristic filter, re-run after edits)
+
+
+## spec-lua-api-behaviour.md (weight 10, 868 live)
+
+- L64: C API shape the rest of this list matches cleanly. ~~**[OPEN — the pair's exact real-API identity
+- L119: value in the visible decompilation — ~~**[OPEN — the decompiler shows only 1 explicit argument at
+- L137: re-derived from the executable): argument count/types, body control flow, and the previously-OPEN
+- L203: trigger name re-interns a new callback name versus silently keeping the old one. **[OPEN — `+0xa8`'s
+- L213: opaque flag. Still OPEN: who writes it (presumably the zone-load-time `triggers.xtbl` patch step
+- L223: (from `0x00a56cb0`'s own body) rather than inferred. OPEN — `+0xa8`'s own writer(s), see Body.]**
+- L232: OPEN in the Body, but does not block the Lua-visible behaviour documented here — cleared for
+- L263: 6920`, `0x00db06e0`, `0x00604740`, `0x00604500`, and `0x007ee110`): the six-argument shape, the resolver/fallback chain, and the previously-OPEN localization-fallback global gate are all confirmed; one real mischaracterization corrected (`0x00db06e0` is a narrow-to-wide widening copy, not a `sprintf`-style formatter); `0x007ee11
+- L377: disassembly; the real-world event that arms these two timers was not traced, genuinely new OPEN
+- L455: i.e. a second, adjacent per-trigger pending-state dword dedicated to the exit path. ~~**[OPEN — desk
+- L549: Residual, non-blocking OPEN items: the human-readable meaning of mission phase codes 6/7; the contents
+- L562: narrow, non-blocking residual OPEN items recorded in Side effects.**
+- L657: exists, so `"#PLAYER#"`/follower sentinels cannot be targeted. No OPEN items remain — **cleared for
+- L663: trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger metho
+- L673: representation, exact field meanings **[OPEN]** (cf. §4.2: `0x00a455a0` is the shared name→world-position lookup, so the 12-byte record is plausibly the resolved position — not independently confirmed). **[Partly resolved: `0x00a455a0`'s shape
+- L681: OPEN — the exact contents of the two records `0x00a455a0` produces~~, and why the containment test
+- L686: **Review status (2026-09-30): NEEDS-EXE: argument roles probably swapped (arg 1 trigger, arg 2 object); record OPEN partly closed (text fixes applied) — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation.**
+- L690: ition from arg 2 as the point, exactly as predicted — arg 1 = trigger, arg 2 = object is now CONFIRMED, not just HIGH CONFIDENCE. Remaining OPEN items (the 36-byte record's field layout; the box/sphere/cylinder shape-code names) are unrelated to the argument-order question and stay open.
+- L703: ots `0`/`1` sharing one registration function (`0x00a56cb0`, §1.2/§1.7 — a named-hook-slot-array writer, §20.12; the `+0xa8` question stays OPEN, §1.2). No function in this
+- L715: several of this section's OPEN items — the door-handle `+0xc8` field's real meaning, the two
+- L725: `spec-zone-data-format.md` §13.3) had left OPEN: the trigger handle's full field layout, the real
+- L745: rather than a steady poll — its exact real-world role was not pinned down, flagged OPEN. The
+- L765: consumer. **Still OPEN, the single largest remaining gap in this cluster: the native function that
+- L771: argument. The native dispatch site is still OPEN (above), so this comes from the shipped scripts.
+- L782: **[HIGH CONFIDENCE — script evidence. The exact native argument types (string vs. handle-converted name) are OPEN until the dispatch site is found, but every script use is a string compare or name lookup.]**
+- L809: compare; the alloc-failure sentinel is `0`, not `-1`. **Unchased, honestly flagged OPEN:** readers
+- L857: exhausted here. OPEN: `0x00a29e40`'s own caller (now a live-capture-only question); the
+- L912: shared by every class, not a `Trigger_Volume`-specific tail property. **Still genuinely OPEN:**
+- L948: rehashed/reinterpreted per action-type before any native handler sees it, is OPEN.
+- L974: direct `lua_call` is ever found at the fire site. **`0x00a29e40`'s own caller remains OPEN,
+- L1050: supersedes everything in this bullet that says arg 3 is not interned or is OPEN.]** ~~**So the "structurally the exact same decoupled dispatch shape as
+- L1053: chain and remains genuinely OPEN, per §13.3's own negative-result wording.~~ **Actionable answer
+- L1072: HONESTLY OPEN, not resolvable by further static analysis: who calls `0x00a29e40`; whether the
+- L1356: encoding (resolving the "scan-code shift, extended bit" OPEN item): if `key_code` (unsigned) is `>
+- L1373: previously-flagged "real bound of the `MENU_INVALID_MOUSE` branch" OPEN item is moot for
+- L1388: overall call chain, the `GetKeyNameTextW` call, and the re-encoding step; OPEN for the exact branch
+- L1391: al but confirmed UNREACHABLE from this specific binding, which settles (by making moot) the "real bound of the `MENU_INVALID_MOUSE` branch" OPEN note. The explicit `return 1;` is now confirmed directly from raw bytes, not just inferred from call shape — cleared for implementation.**
+- L1414: this document's §3 front matter already documents (settling the previously-unnamed-resolver OPEN
+- L1453: three previously-OPEN points, by direct disassembly of `0x00a3cb00`, independently cross-checked
+- L1482: executable: `0x00a3cb00` directly disassembled in full, cross-checked against Ghidra's own raw listing and stack-slot tracking): all three OPEN items are settled — the mismatch path genuinely returns 2 Lua values, the fallback position source is confirmed as `0x0117f808`/`0x0117f80c` with no real conflict against §2.11, and the 
+- L1494: purely for its presence/type, with no observable further consumption. [OPEN — this argument's real
+- L1531: (§2.4) uses. ~~[OPEN — in this decompiled body, the local output slot this dispatch chain is meant to
+- L1556: resolve→gate→dispatch call chain, and the return-value derivation; no OPEN items remain.]**
+- L1564: refuting the "always yields 0" OPEN note — cleared for implementation.**
+- L1579: `0x0141250d` anywhere in the binary is this function's own read~~; **[OPEN — writer not located; does
+- L1612: reference anywhere in the binary, the read inside `0x005bc5d0` itself — the no-direct-writer finding is reconfirmed, not just repeated. No OPEN part remains in this unit.
+- L1740: the completion native (`Screen_fade_transition_complete`) and the per-frame routine 0x0059fe70 are now CONFIRMED — disassembly (§26.24); no OPEN part remains in this unit.]**
+- L1742: argument reading and both defaults, the colour setter, both bit gates and their exact helper-call argument shapes. No discrepancy found; no OPEN item exists anywhere in this entry's own body (the prior pass's own words already said so). The absence of a formal clearance line was a bookkeeping gap only — cleared for implementatio
+- L1752: ~~that first attempts to queue an internal UI-command-queue message **[OPEN — desk review 2026-09-30: by analogy with §8.13's host-gated opcode-`0x53` record (§2.9), the opcode-`0x51` path is most likely a network record behind a host gate rather than a UI-queue message, and
+- L1793: disassembly for the full argument reading and dual queue/direct dispatch structure; ~~OPEN for the exact
+- L1801: ceiver at `0x006df33a` is the global `0x014e9ad0` and the argument is the id, CONFIRMED; the two dispatch paths are independently gated. No OPEN part remains in this unit except `0x014e9ad0`'s own object-kind identity.
+- L1803: `"mission_conv"` record/channel-type handle set up once at module init, not a per-instance game object (see the Body correction above). No OPEN part remains in this unit — cleared for implementation.**
+- L1807: **A shared "current position" field pair recurs across the whole audio half of this cluster.** **[OPEN — desk review 2026-09-30: this paragraph conflicts with §2.4, which gives `0x0117f808`/`0x0117f80c` (not `+8`/`+0xc` off `L`) as §2.4's fallback, and then itself keeps that global pair as the real fa
+- L1818: fallback pair — **[OPEN — `0x0117f808`/`0x0117f80c`'s own real semantics, since re-examination ruled
+- L1841: dispatch ever yields a non-zero handle in practice) would settle this section's remaining OPEN items
+- L1849: 5, 3.17; 3.4 and 3.17 were DESK-PASS-WITH-FIXES in the review, but their AI-data sub-object fix is not established by the specs and is left OPEN). A desk pass does NOT clear an entry: clearing needs re-derivation against the executable. Every entry, including the desk passes, stays uncleared until that re-derivation (bridge job 
+- L1989: om `+0x54` skipping `+0x5c`, the slot check, no session → false. HIGH CONFIDENCE — field meanings (head, local/host member records, count). OPEN — the meaning of the client-side gate fields `+0xf4`/`+0xf8`/`+0xfd`/`+0x224`. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — `+0xf4`/`+0xf8` are the current/target
+- L1991: screpancy found. Combined with the two prior 2026-10-01 jobs' own field-meaning resolution (already on record above), there is no remaining OPEN item in this entry — cleared for implementation.**
+- L2061: **HYPOTHESIS REFUTED, OPEN item answered (2026-10-07, direct disassembly of `0x00a280c0` and its
+- L2074: exactly the OPEN item's own parenthetical guess: the generic branch is only ever reachable with
+- L2077: mechanism question. **Narrower residual OPEN item:** which consumer actually reads hook slot 18
+- L2088: refuting the earlier kind-agnostic hypothesis (see Body, above); OPEN, narrower than before — the
+- L2133: reviver handle remains OPEN. For Team B: implement the equivalent field defaulting to "no
+- L2272: reached"). Leaving this OPEN is the correct call per this task's own instruction not to force an
+- L2282: OPEN item remains OPEN (two independent passes, using two different methods, have now failed to
+- L2285: data. This OPEN item does not block implementation, since the native's own observable behavior is
+- L2349: *Single-player resolution of the double gate (added 2026-10-03, following up a Team B blocker report naming this idiom their single largest OPEN-state item, 10 missions): in single player, with no co-op session installed (§26.28), the call always takes the direct-flip branch — gate 1 (`0x008ae480`) resolves true, gate 2 (`0x0088
+- L2391: reached" OPEN note — `+0x70` produces the instance, the setter is then called directly on it,
+- L2538: (OPEN, low priority, adds no new enum value). This matches `spec-player-runtime.md` §7.2/§7.3/
+- L2560: (§3.7's own OPEN note is left exactly as written — out of scope here):** `+0x70` at this call site is
+- L2581: the handle comparison, and the double-push behaviour; ~~OPEN — the exact meaning of the vtable
+- L2674: OPEN items — the exact `+0x4fd` bit mapping (arg 3→`0x04`, arg 4→`0x08`, merge not overwrite) and the
+- L2676: identical lookup idiom, §3.9); OPEN — the real per-kind
+- L2681: kind name is still not independently derived). This remaining OPEN item is a resolver-identity
+- L2688: earlier this session (three movement-style globals, not two — see Body) stands. Both remaining OPEN
+- L2694: merely narrowed. One narrower, non-blocking item remains OPEN (the destination resolver's exact
+- L2712: fallback path: `lea ecx,[esi+0xf8]; ...; mov [esp+0x14],0xd; call 0x005e4660`). ~~OPEN — why the two
+- L2721: like from the outside; there is no deeper, hidden semantic split to explain. This closes the OPEN
+- L2754: registration callees receive. ~~OPEN — the real identity of the fourth resolver's object
+- L2756: resolver, §9.21; the `+0x20`/`+0x24` array is that kind's, §14.6 — no OPEN items remain.]**
+- L2758: m in Arguments/Return/Body/Side-effects is confirmed exactly as written, including all four slot literals and all four sub-record bases. No OPEN items remain — cleared for implementation.
+- L2799: existing claim holds exactly as written. No OPEN items — **cleared for implementation.**
+- L2836: cross-checked state-enum agreement with §3.5; OPEN — the precise intended meaning of arg 2's flag
+- L2877: No OPEN items — **cleared for implementation.**
+- L2900: `0x004e0cf0` in full, including both gate checks and the direct-flip branch. The sole prior OPEN
+- L2902: absolute character `+0x2b8`); resolver address also now pinned (`0x00a28150`). No OPEN items
+- L2955: ### 4.1 Shared primitives — direct decompilation, upgrading  five items in the Method section above and resolving its one OPEN item
+- L2959: labelled  five of them HIGH CONFIDENCE, leaving the flag/number-extractor pair OPEN. This subsection
+- L3039: y checked against other specs; only `0x00a455a0`'s own call graph past its first two branches remains untraced (already flagged in place as OPEN, not a blocker).
+- L3079: s stored position (`+0x40`/`+0x44`/`+0x48`) is read, an orientation is built from its `+0x4c` record via `0x00da4130` (this settles the old OPEN note — `+0x4c` is the orientation record, not an unused position field), and the three optional numeric offsets (args 5-7) are added to the position. Arg 1 (the thing being moved) is re
+- L3111: `''` reported as "OPEN state"):**
+- L3159: OPEN, narrow and non-blocking — the real-world meaning of the group's own `+0x3a` bit `0x2` flag that
+- L3163: ed group's own member list (see the Body correction below), calling the same vtable-slot-`+0x5c` release method all three tiers share. Both OPEN items (why tier 1 "ignores" the object; a category label for each resolver) are resolved — cleared for implementation.**
+- L3182: same "inherited default is provably not the real target" contradiction applies here too is OPEN).
+- L3217: `0x00b231f0`, and `0x00b23070`. No OPEN items remain.]**
+- L3219: text's "bit `0x40` in the suppress setter, bit `0x20` in the allow setter" is wrong — both setters touch both bits together (see Body). No OPEN items remain.
+- L3225: mission-coverage sweep's OPEN backlog.
+- L3229: was not independently re-derived, OPEN but moot in practice). Resolves via `0x00a281e0`, computes
+- L3275: layout's own field names) — the mechanism itself has no remaining OPEN item.]**
+- L3277: -undocumented silent-no-op outcome, added above, matching the equivalent case independently found in `vehicle_suppress_npc_exit`, §4.5). No OPEN items remain.
+- L3294: and the table-scan structure; OPEN — the exact meaning of the boolean argument, read only from the
+- L3307: `0x40@+9` (the bit §15.28 ties to parachutes). CONFIRMED — disassembly for `0x00853b30`; the `0x005ec5a0` call site was not re-dumped.]** **OPEN, re-confirmed by a deeper direct-disassembly pass, 2026-10-07:** `0x005ec5a0`'s full
+- L3315: OPEN and still cannot be settled this way: both are reached purely through a vtable pointer
+- L3325: 20261001T021707-team-a-jxxz`): descriptor-bit-by-index test, `0x1e` = bit `0x40@+9` — CONFIRMED. The vtable `+0x58`/`+0x5c` identities stay OPEN; NOT yet cleared for implementation.
+- L3327: orced-`+0x58` `0x00853b30(handle,0x1e)` test, the newly-read vtable-`+0x68`/`+0x70` entity gate/release step). **One item remains genuinely OPEN and is not force-closed:** the plain-English identity of vtable slots `+0x58`/`+0x5c` — this depends on which concrete entity class is live in the region's spawn list at call time, fixe
+- L3364: every default value, and the table write/activate structure; OPEN — the concrete real-world meaning
+- L3534: OPEN item: which payload field discriminates add vs. remove given the shared opcode `0x41` — not
+- L3571: and the `+0x68`/`+0x6c` notify-context fields `0x005e4660` reads remain OPEN for plain-English
+- L3582: the recurring "named-object resolution … is OPEN" reports from mission sweeps (m04, m06, m07, m08,
+- L3605: `0x005eab60` (bit `0x20`@`+0xa`) — plus `0x00a280c0` itself and both call sites the original OPEN
+- L3647: above in each function's own subsection — flagged OPEN throughout rather than guessed, per this
+- L3665: several of this section's OPEN items fastest: the plain-English category label for each of the five
+- L3722: a plausible-looking wrong answer rather than a real one. **OPEN, same reason as
+- L3765: task's scope.** Subsystem: none — a dead/no-op binding. **[CONFIRMED — disassembly for the function's own body and the shared-address fact; OPEN — why the linker folded these particular bindings together, and whether `0x00a1fa10` is a real additional registrar.]** **[Resolved (second question): `spec-lua-bindings.md` §13.6 — `0x
+- L3775: stem: notoriety/gang state, extending the same family §3.6 traced. **[CONFIRMED — disassembly for the full resolve/range-check/write chain; OPEN — the role of `0x00d21db0`, and which 24 real names populate the group table beyond the confirmed first entry `"police"`.]**
+- L3795: mily, not a new mechanism. **[CONFIRMED — disassembly for the name format, the shared resolver/liveness-check reuse, and the bitmask write; OPEN — `0x00a6dd70`'s own internal behaviour was not decompiled past its call site.]**
+- L3805: onfirmed absence of the failure-sentinel guard that §6.3/§6.16 both have — a real, checked asymmetry within this family, not an assumption; OPEN — what, if anything, occupies track-array slot 5.]**
+- L3815: [CONFIRMED — disassembly for the resolve/liveness/position-read chain; HIGH CONFIDENCE — inferred for the real-world "guardian angel" role; OPEN — `0x00627290`'s own internal behaviour.]**
+- L3875: hat arg 1 is passed to the gate function the same way §1.5 already confirmed for its sibling, not re-verified by raw disassembly this pass; OPEN — `0x00d21db0`-style unidentified internals are not present here, but the exact real-world meaning of the leading `1`/trailing `0` literals versus whatever literals `mission_end_failure
+- L3885: sassembly, including the raw-instruction-level slot-index-`1` confirmation and the direct read of `0x0090fa60`'s own dual-array inspection; OPEN — the real-world identity of the other 7 tracked category slots in each array.]**
+- L3925: k-replicated on the `0x40`-opcode path. **[CONFIRMED — disassembly for the mode-value branch structure and the record-and-replicate opcode; OPEN — the exact real-world distinction between the two removal paths, and `0x007d6dc0`'s own internal behaviour.]**
+- L3945: orial/HUD-hint scripting. **[CONFIRMED — disassembly for the resolver, the two display-style branches, and the record-and-replicate opcode; OPEN — the precise real-world meaning of args 2-5 and of several internal per-entry flag bits and threshold constants (e.g. a repeated `0xbc` split between two id ranges) were not independen
+- L4056: / `+0x10` / not touched by the dumped code / OPEN /
+- L4060: / `+0x20` / not touched by the dumped code / OPEN /
+- L4072: `0x00717363`. **[OPEN — what state 3 means. HYPOTHESIS: displayed, waiting for the player to finish the
+- L4127: `0x0088cf70`, `4`=`0x007ad410` (identity still OPEN), `5`=`0x007041b0`, `7`=`0x00bdc120`,
+- L4151: 7. A = 76 and the byte `0x0141250d` is zero → A becomes 73. **[OPEN — meaning.]**
+- L4165: 5, 6 and 7 are OPEN as marked.]** The "repeated `0xbc` split" above is the boundary between 188
+- L4168: der; host-only `0x54` replication. HIGH CONFIDENCE — the names of bits `0x04`/`0x08`/`0x10`. HYPOTHESIS — state 3 = waiting for the player. OPEN — what state 3 means and who sets it; the globals in steps 2, 5, 6, 7; where `0x00715850` gets the descriptors. Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the f
+- L4178: on with `mission_end_failure`/`mission_end_success`. **[CONFIRMED — disassembly for the full resolve/gate chain and the position-pair copy; OPEN — `0x006da7b0`'s own internal behaviour.]**
+- L4188: `teleport` (§4.3) reads off its own destination object but — per §4.3's own text — never visibly uses again afterward, leaving its purpose OPEN there. This function's own use of the identical field, on an object resolved through the SAME shared resolver family member (`0x005982e0`), is independent corroborating evidence that the
+- L4190: warp state. **[CONFIRMED — disassembly for the full branch structure, the shared resolver/liveness-check reuse, and the `+0x4c` field read; OPEN — `0x006d0210`'s own internal behaviour, and the exact real-world roles of the two arguments (e.g. "from"/"to") relative to each other.]**
+- L4332: hook-array reuse; OPEN — the real-world meaning of hook-codes `1`/`3`/`5`, same open item as
+- L4361: NaN guard, and both setters' shared fields; the 5th resolver's real object kind is OPEN, consistent
+- L4403: a live trace; OPEN — the real role of the global handle at `0x0263ae3c`.]**
+- L4464: OPEN — the vtable `+0x68` predicate's real meaning and why one Lua-visible setter maintains two
+- L4467: argument-count mismatch), identity still OPEN, dynamic analysis recommended.]**
+- L4470: OPEN):**
+- L4484: s reproduces the evident intent of every shipped call site (mission scripts call it on hostile NPCs, e.g. dlc2_m01) and never fails, so no "OPEN state" error should be raised for this native.
+- L4504: `0x01116910` — neither decompiled this pass, OPEN), then unconditionally calls the shared setter
+- L4514: structure and both gates; OPEN — arg 3's real role (`0x004aac40`/`0x004b7d50` not decompiled), and
+- L4541: reuse and the cross-checked `+0x1cac` field; OPEN — the vehicle/4th-kind paths' own numeric encoding,
+- L4589: OPEN — `0x009968c0`/`0x008ccb90`/`0x00941f40`'s own roles, none decompiled this pass.]**
+- L4604: disassembly for the call structure and shared array reuse; OPEN — the object kind's real identity,
+- L4692: OPEN — `0x00487e80`/`0x00957080`/`0x009e3200`'s own bodies, and action-slot id `0x1da1`'s real
+- L4715: call sequence; OPEN — the real role of /`0x00db8680`/`0x005bbf60`/
+- L4736: zero-filled, which was not independently traced (same caveat as §34.5's `+0xe3` finding). Treating OPEN
+- L4757: the vtable query; OPEN — `0x009d55c0`'s own role, and why the slot is written twice.]**
+- L4814: second predicate, `0x009a1dc0`, is truthy (not decompiled — OPEN). Otherwise, if the object's
+- L4828: — disassembly for the full predicate chain; OPEN — `0x009a1dc0`/`0x00ad3820`/`0x004d47e0`'s own
+- L4883: path, and the full name-table/diagnostic-print mechanism; OPEN — `0x004f4b30`/`0x004f4ae0`'s own
+- L4899: real target, identity OPEN); the vehicle resolver
+- L4917: path dispatches to `0x00a31390` with the rounded value (not decompiled — OPEN).
+- L4921: dispatch bodies and the cross-checked cap-field read/write; OPEN — `0x00a31390` (not decompiled), and
+- L5055: call chain; OPEN — `0x006df0b0`'s own body was not opened this pass, so the exact meaning of mode
+- L5102: the scan and branch structure; OPEN — the exact distinguishing condition between the two playing-state
+- L5122: OPEN — `0x0094c9e0`/`0x0046afd0`'s own bodies were not opened this pass.]**
+- L5144: resolver chain, the host-gate, and the opcode/tag; OPEN — `0x006de720`'s own contribution to the
+- L5189: `0x0117e8c4` — the same field-pair role already flagged OPEN by §2.11 for an unrelated pair of
+- L5197: dispatch family; OPEN — the globals at `0x0117e8c0`/`0x0117e8c4`'s own real meaning, and whether this
+- L5276: difference; OPEN — the exact identity of the per-frame slot list at `0x03171a64` and
+- L5360: OPEN item) — carrying the duration (16 bits) and a flags byte (8 bits) via the bit-granularity writer
+- L5366: **this resolves §2.9's own explicitly-OPEN "opcode-`0x53`'s downstream effect was not traced further"
+- L5429: globals, since neither was independently traced past this call site; OPEN — arg 2's real consumption
+- L5486: **`0x009df3d0` IDENTIFIED above (2026-10-02); OPEN — `0x00867830`'s own identity.**]**
+- L5556: opcode/local-refresh identity match with §8.15; OPEN — `0x00a1fcc0`'s own name-table's full role and
+- L5596: ion (CONFIRMED — disassembly); promotion `0x00720410` has the single caller `0x007258a0` (HIGH CONFIDENCE: the cutscene load step; its body OPEN), completion `0x007285c0` runs from the per-frame cutscene state machine `0x0072d660`, and the table is the parsed `cutscene.xtbl` (capacity 200) — all CONFIRMED — disassembly except wh
+- L5640: addresses, cross-cited directly against `spec-tables-ui-controls.md` §4.1/§4.2; OPEN — the exact
+- L5727: shared singleton identity with §2.8; OPEN — the screen-stack singleton's own class identity beyond its
+- L5756: inputs" remain OPEN, per §3.1's own already-recorded caution against asserting a field's meaning from
+- L5762: session at all is OPEN (§26.28).]** **[2026-10-01, job `20261001T114716-team-a-fvfp`: the function dksj took for the session
+- L5765: session, and so whether this function is true in single player, remains OPEN; implement false. Teardown
+- L5769: (`0x00905ec0`/`0x00905ea0`). It has no caller in defined code, so the single-player answer stays OPEN;
+- L5775: installs a session, this function is true there. Whether single player installs one is still OPEN; implement false.
+- L5801: ue iff a session exists and `+0x5c` = `+0x58`; no session → false. HIGH CONFIDENCE — `+0x5c`/`+0x58` are the local and host member records. OPEN — whether single-player startup installs a one-member session, which decides this function's single-player answer (§26.28). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFI
+- L5831: independently confirms §2.9's own explicitly-flagged-OPEN opcode `0x53` (`fade_out`'s own bit-`0x2`
+- L5833: OPEN item to "a fade duration+flags broadcast, plausible co-op fade-timing replication," not
+- L5856: behavioural oracle would settle several of this cluster's remaining OPEN items fastest — whether
+- L5862: functions whose behaviour bottoms out in live per-object/per-frame state the way most of this OPEN list
+- L5976: both flag-bit branches; OPEN — the exact real-world meaning of the literal `1` middle argument
+- L5984: one of its own arguments — **[OPEN, same caveat as §2.5.]** Arg 2 (string, mandatory) — a
+- L6021: routine; OPEN — arg 1's real purpose, the position-offset vector's exact source for arg 6, and
+- L6048: record before being written; **[OPEN — the individual bit-to-argument mapping inside that packed
+- L6064: record-and-replicate opcode on the "already chasing" path, and the occupant-notify loop; OPEN —
+- L6102: the sub-record field written; OPEN — the exact meaning of sub-record bit `0x10` at offset `+0xa`
+- L6125: argument shape, the two-path resolver chain, and the shared conversion constant; OPEN —
+- L6156: `vehicle_is_destroyed` documents; OPEN — the two literal tuning constants' real-world meaning
+- L6224: existing family, and the overall call shape; OPEN — the base-object class and hence the true
+- L6281: nal (no such branch writes the bit), a distinct failure code, and any timer/timeout (none in `0x00b4ea00`/`0x00b2e720`/`0x00b405b0`). Still OPEN: the exact semantics of the return value of `0x00b38f10` (distance-like scalar), and what `+0x1c` bit 0 / mode 2 mean at the Lua level.
+- L6321: remote-cache lookup, and the occupant-clearing loop; OPEN — the exact meaning of destination
+- L6409: not claimed to be the identical mechanism, only the same general class of gap. **[OPEN.]**
+- L6414: corroborating `door_open`'s own OPEN reading of that field. Subsystem: world/interactive-object
+- L6417: lock-mechanism forward; OPEN — the exact pushed return value's source, per above, and the two
+- L6475: structure and opcode with the show counterpart (§9.17), and the type-row-gated notify; OPEN —
+- L6528: structure, and the waypoint resolver/gate/associate chain; OPEN — the exact real-world role of
+- L6563: call sites, so it could not be pinned to a specific literal this pass, **[OPEN]**) before
+- L6568: function's own call sites and were not independently traced. **[OPEN — `0x00600720`'s own deep
+- L6585: `0xd`-`0x16` themselves remain OPEN. Full detail:
+- L6594: OPEN — `0x00600720`'s own deep internals, per above.]**
+- L6631: identity with `inv_item_equip`; OPEN — the flag value's remaining bits and the exact real-world
+- L6740: scope):** a behavioural oracle would settle several of this section's remaining OPEN items
+- L6835: `0x005fa820` (writes 1) and `0x00820cd0` (writes 0); ~~the conditions of the last two are OPEN, they were
+- L6845: disassembly. Their game-level triggers are OPEN: `0x005fa820` is called from `0x0080e2f0` and two undefined
+- L6905: Lua-reachable is OPEN (one defined caller, `0x0080e2f0`, not yet read)~~ **[2026-10-01, job `20261001T124128-team-a-jfue`: their callers
+- L6909: 5fa820`, `0x00820cd0`); the early-out on equal mode; sub-state 8/10. HIGH CONFIDENCE — "vehicle-store UI in an active mode" as the meaning. OPEN — . Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the bodies and preconditions of `0x005fa820` and `0x00820cd0`. OPEN — . Updated 2026-10-01 (job `20261001T121532-
+- L6937: reproduces the existing text exactly — no session → `false`; session exists → `true` iff `+0x5c` ≠ `+0x58` — with no discrepancy found. No OPEN item exists anywhere in this entry's own body; the absence of a formal clearance line was a bookkeeping gap only — cleared for implementation.**
+- L6976: control flow and the shared `0x009da4e0` accessor identity; OPEN — `0x007f2650`'s own internal
+- L6980: e current-local-player accessor `0x009da4e0`, conditional call to `0x007f2650`, always `return 0`. Narrowed (not resolved) the one existing OPEN item: `0x007f2650` is confirmed to be a substantial, exception-frame-protected routine that walks an indexed inventory-slot table and performs at least one current-vs-previous compariso
+- L7021: tem initialiser: its first action is the table fill `0x007178c0` (§26.28) and it then creates the handle. CONFIRMED — xref; when it runs is OPEN.]** **[2026-10-01, job `20261001T124128-team-a-jfue`: `0x00715f20` loads
+- L7029: OPEN — whether the named scope this function opens is genuine telemetry, a different kind of
+- L7032: reached anywhere in this body.]** **[2026-10-01, job `20261001T020213-team-a-dksj`: the OPEN item is narrowed to
+- L7035: h process; the message is built and dispatched as described. HYPOTHESIS — it is a named UI event for the tutorial UI document `0x0151d5a8`. OPEN —  what state 3 means and who sets it. Narrowed by job `20261001T114716-team-a-fvfp`: no defined function writes the literal 3; the generic setter `0x007163e0` reaches only entries 189–
+- L7037: text's single "bounds/state check" sentence implied; the observable result (`false`, no side effect) is unchanged either way. The remaining OPEN item ("who writes state 3") is a provenance question about shared engine state upstream of this binding, already chased to a structurally-exhausted static dead end across 5 dated passes
+- L7099: directly from raw disassembly, not from either census file); OPEN — `0x00807930`'s exact
+- L7143: flag arguments and the non-zero float default) and the resolve/dispatch chain; OPEN — the three
+- L7291: OPEN rather than assumed generic.
+- L7420: document, not a dead computation. **[OPEN — the hash results' actual destination was not
+- L7450: directly observed; the deeper asset-reload chain's own bodies were not opened this pass); OPEN — the
+- L7484: **[OPEN — the exact domain this table tracks (per-item, per-body-part, or per-LOD streaming
+- L7497: helpers' own bodies; OPEN — which specific asset class (mesh/texture/morph) each check tracks.]**
+- L7535: mechanism, not the `AK::SoundEngine`-backed chain the persona-audio family uses. **[OPEN — the two
+- L7562: flagged OPEN to independently settle.]** **[Stale label: the correction in this section's body already records the hash-identity question as settled (two inlined copies of one formula, not caller/callee).]**
+- L7583: argument shape and the full math chain; OPEN — which of the snapshot helper's 3 output values is
+- L7613: target" singleton §11.3-§11.5 use; OPEN — the exact per-field meaning of the preset table's
+- L7621: — **OPEN**) AND two flag globals (one must be currently unset, the other currently set); if all
+- L7629: real effect; OPEN — the thunked predicate's real target and the exact identity of the gating
+- L7656: shape and staging/dialog-raise chain; OPEN — the real target of the `0x007c2060` gate, the exact
+- L7727: ale-handle-clear mechanism with the timer/bar-widget family (§8.14-§8.20). **[CONFIRMED — disassembly for the call structure and tag value; OPEN — `0x006d0dc0`'s own internal behaviour.]**
+- L7737: on mechanism to a new record kind. **[CONFIRMED — disassembly for the full argument chain and the shared-primitive reuse with kind tag `1`; OPEN — `0x00a38f30`'s own record layout/allocation and the exact real-world roles of each argument beyond "identifier"/"two callbacks."]**
+- L7756: ing to the local player if no name given). Subsystem: inventory/character state. **[CONFIRMED — disassembly for the resolve+dispatch chain; OPEN — `0x00602b80`'s own internal behaviour and whether the literal `0` selects a mode (e.g. "including equipped weapons").]**
+- L7766: ter skydiving/parachute state. **[CONFIRMED — disassembly for the full argument chain, resolver reuse, and the class-descriptor bit/offset; OPEN — `0x009aee20`/`0x009e09b0`'s own internal behaviour, the numeric state-code enumeration, and the real-world meaning of bit `0x2`@`+0xa`.]**
+- L7776: identity; HIGH CONFIDENCE — inferred that the walked list is "attached items/weapons," not independently confirmed via a third data point; OPEN — real-world meaning of bit `0x8`@`+6`.]** **Incomplete, flagged by adversarial review, same day: the shared primitive `0x008ccb90` also has a network-replicate branch (opcode `0x45`) th
+- L7786: e and fire visual-state flags independently. Subsystem: vehicle damage/visual-effects state. **[CONFIRMED — disassembly for the full chain; OPEN — `0x00aa3f90`'s own internal behaviour and the two trailing literal arguments' role.]**
+- L7796: erception flag on the resolved target. Subsystem: AI perception/detection state. **[CONFIRMED — disassembly for the resolve+dispatch shape; OPEN — `0x004dfc80`'s own hidden-argument convention and internal behaviour.]**
+- L7806: g `inv_weapon_disable_slot` (§12.16 below) except for the terminal call and arg 2's default. **[CONFIRMED — disassembly for the full chain; OPEN — `0x007f4650`'s own internal behaviour and sentinel `0xff`'s real effect.]**
+- L7816: tem: character/vehicle association lookup. **[CONFIRMED — disassembly for the full resolve/lookup/validate/liveness chain and return shape; OPEN — `0x00458230`'s lookup-table semantics, `0x00a3a140`'s exact extraction behaviour, and bit `0x80`@`+6`'s real-world meaning.]**
+- L7826: ixed-singleton calling convention, `0x00a45800`'s real argument, `0x00b71950`'s real argument, the vtable`+0x6c` fallback's real argument); OPEN — `0x00a45800`/`0x00b71950`/`0x00ab2b20`/`0x00ab26d0`/`0x00a48af0`'s own internal behaviour, and independent confirmation of `0x005982e0`'s fixed-singleton reading against `door_open`/`
+- L7836: FIRMED — disassembly for the argument count/types, the destination-resolve/fallback structure, and the debug-string-confirmed command name; OPEN — the exact real-world role of most individual arguments beyond structural position, and the internals of `0x00ad31a0`/`0x00ab5070`/`0x00b34c80`/`0x00a3b860`/`0x00b3fda0`.]**
+- L7846: e instance attaches to. **[CONFIRMED — disassembly, including the fixed-singleton resolver confirmation and the bone-name resolution chain; OPEN — `0x00487e80`/`0x004be170`/`0x00a48af0`'s own internal behaviour.]**
+- L7856: single setter (`0x009aee20`). Subsystem: character skydiving/parachute state. **[CONFIRMED — disassembly for the resolve+two-way dispatch; OPEN — `0x009ae810`/`0x009ae150`'s own internal behaviour.]**
+- L7866: boolean). Subsystem: vehicle occupancy query. **[CONFIRMED — disassembly for the full chain and the two new push-primitive identifications; OPEN — the boolean's exact real-world distinction, and `0x00ab5100`/`0x00ab50c0`/`0x00a353d0`'s own internal behaviour.]**
+- L7876: s `on_vehicle_enter`'s framing exactly, and does not obviously reconcile with §10.8's own description of that address's parameter roles. **[OPEN — flagged per this task's own "actively check for cross-section inconsistency" steer — not resolved here; a future pass should decompile `0x005e4660`'s own body against BOTH calling sha
+- L7878: nt-notification, the direct counterpart to `on_vehicle_enter` (§4.12). **[CONFIRMED — disassembly for the three-way branch and event codes; OPEN — the `0x005e4660` identity tension above, and the concrete real-world meaning of event codes `0x17`/`0x18`/`6`.]**
+- L7888: eapon-slot state, the direct sibling of §12.8. **[CONFIRMED — disassembly, including the confirmed default-boolean asymmetry against §12.8; OPEN — `0x007f4460`'s own internal behaviour.]**
+- L7898: r (`guardian_angel_register_script_group`/`guardian_angel_unregister_script_group`, §6.6/§6.8). **[CONFIRMED — disassembly, full body read; OPEN — `0x00626b10`'s own internal behaviour and which specific "current" guardian-angel context it advances.]**
+- L7908: th a scaled secondary effect (e.g. a fade-in duration). Subsystem: vehicle spawn/visibility. **[CONFIRMED — disassembly for the full chain; OPEN — `0x00a87780`/`0x00a77d70`'s own internal behaviour and the real unit of the scale constant.]**
+- L7918: system: traffic/world trigger state. **[CONFIRMED — disassembly for the resolve+dispatch chain and the shared-primitive identity with §6.4; OPEN — `0x00a6dd70`'s own internal behaviour (the same open item §6.4 already flags) and the real meaning of the trailing literal `1` here vs. whatever §6.4's own call passes.]**
+- L7928: n. Subsystem: vehicle audio/radio. **[CONFIRMED — disassembly for the two-tier resolve chain and the confirmed field-pair reuse with §12.9; OPEN — `0x00556680`'s own internal behaviour, and whether `0x004dcf00`/`0x00458230` share one underlying lookup table.]** **[Resolved (second question): yes, one shared table, §18.31 #1.]**
+- L7948: hip with `0x00a7a830`/`0x00a7a9a0` from address adjacency alone, same evidentiary basis §6.14/§7.30 already use elsewhere in this document; OPEN — `0x00a7ab10`'s own internal behaviour.]**
+- L7958: d the shared opcode identity; HIGH CONFIDENCE — inferred "except for this viewer" reading of arg 3, from the local-player comparison alone; OPEN — `0x0057a950`/`0x0057ab80`/`0x0057aca0`/`0x00a3de90`'s vtable methods' own internal behaviour, and whether `0x0087ba20` being called here with two literal-zero arguments it cannot cons
+- L7964: on_*` functions (§12.10/§12.12) use, though here at least one success path overwrites it with a plain `0.0` rather than a meaningful id — **OPEN whether this return value is ever a real "waypoint id," or only ever a fixed status code.**
+- L7968: m: waypoint/HUD-navigation state. **[CONFIRMED — disassembly for the full resolver-priority chain and the confirmed absence of replication; OPEN — the real-world meaning of the numeric return value, and `0x007dd420`/`0x007d70e0`'s own internal behaviour.]**
+- L7978: th kind. Subsystem: character/vehicle health-state query. **[CONFIRMED — disassembly for all five branches and their distinct data sources; OPEN — the character-resolver path's own vtable`+0x70` target (HIGH CONFIDENCE "current mount," not confirmed), and `0x00a77e10`'s own real-world meaning for the vehicle path.]**
+- L7988: effects/subsystem:** freezes/unfreezes a vehicle in place. Subsystem: vehicle physics state. **[CONFIRMED — disassembly for the full chain; OPEN — `0x00abe510`'s own internal behaviour.]**
+- L7998: ules. **[CONFIRMED — disassembly for the resolve+dispatch chain and the polarity inversion, same evidentiary basis §3.16/§6.18 already use; OPEN — `0x009e0280`'s own internal behaviour.]**
+- L8008: achute equipment state. **[CONFIRMED — disassembly for the resolver anomaly, the gate branch, and the opcode/commit-variant identification; OPEN — `0x008addb0`'s own real-world meaning/polarity (i.e. which branch corresponds to "am I the network host"), and `0x009daeb0`'s own internal behaviour.]**
+- L8018: r `persona_override_persona_*` family not otherwise documented in this spec yet. **[CONFIRMED — disassembly for the resolve+dispatch chain; OPEN — `0x0070cb40`'s own internal behaviour, and whether a `persona_override_persona_start`-style sibling exists elsewhere in the registrar.]** **[Resolved (second question): sibling `perso
+- L8063: assembly for the resolve chain, liveness gate, and the two-id-store shape; HIGH CONFIDENCE — inferred for arg 2/arg 3's icon-vs-text roles; OPEN — `0x008f4ef0`/`0x008f76e0`'s own bodies, and the exact target/meaning of the `0x00d9e140(20000)` call (see cross-cutting note below; most plausibly a 20-second "next allowed refresh" c
+- L8073: group record's own delay field, by the established hidden-`this` pattern and immediate context, not individually raw-disassembly-confirmed; OPEN — the exact field offset targeted.]**
+- L8166: r the argument shape, the hash-not-resolve distinction, `0x00619110`'s own full branch structure, and the four trailing `0x00a007d0` calls; OPEN — the exact distinction between the bit-`0x1` and bit-`0x2` branches (the latter's second call target's real argument count is unresolved), and `0x005ee8e0`/`0x0093ca20`'s own roles.]**
+- L8186: icated record. **[CONFIRMED — disassembly, including the full absence of any argument use and the fixed-literal-`3` both-branches behavior; OPEN — the real-world meaning of `0x0262d0d8` and record tag `0x23`.]**
+- L8196: resolver reuse and the two-branch structure; HIGH CONFIDENCE — inferred that this is an "animation/action tag currently matches" predicate; OPEN — the exact real-world meaning of the individual byte fields and the `0x012e1c64` lookup table, not independently traced past their own gating role.]**
+- L8234: ointer — or `0` on no match — into a per-slot array `0x013ef578` indexed by... a caller-supplied slot index, not visible at this call site, OPEN). Bit `0x2` → opens a network record, opcode `0x43`, tag `0x2b` (43), plus a further 1-byte and 4-byte payload field (via the established `0x00881110`/`0x004d46e0`/`0x00881040` writers)
+- L8236: isassembly for the hash-based key resolution, the dual-bit branch structure matching the established convention, and the record opcode/tag; OPEN — `0x0059f760`'s destination slot index (which caller-supplied context selects it), and the real-world meaning of "situation."]**
+- L8246: um (§3.5/§7.13), now with two new consumer call sites. **[CONFIRMED — disassembly for the resolve chain and both branch predicates/targets; OPEN — the exact internal differences between `0x009a7c90` and `0x009a78d0`'s own bodies, not decompiled this pass.]**
+- L8256: ntains a combined visibility/layout-mode summary. Subsystem: HUD timer widgets. **[CONFIRMED — disassembly, full body of the delegate read; OPEN — the real-world meaning of the layout-mode values `2`/`4`.]**
+- L8266: itical-timer widget. **[CONFIRMED — disassembly for the full call chain including `0x00a29920`'s own real argument shape at this call site; OPEN — `0x006d06a0`'s own body, and the exact real-world role of the secondary key.]**
+- L8276: me precisely. **[CONFIRMED — disassembly for the resolve chain, the two predicates' call structure, and the handle-comparison/return shape; OPEN — the exact bit/offset semantics inside `0x009aa260`'s own duplicated branches.]**
+- L8286: mera/screen-shake effects. **[CONFIRMED — disassembly for the local-apply call, the record opcode/tag recovery, and the string-field write; OPEN — the two boolean payload fields' individual meanings.]**
+- L8296: tant cut, not independently confirmed. Subsystem: camera state. **[CONFIRMED — disassembly for the full call sequence and record structure; OPEN — the individual roles of `0x0056cc30`/`0x00564910`/`0x007f1070`/`0x00567280`, none decompiled this pass.]**
+- L8306: t_ped_density`/`set_traffic_density` (§6.9/§6.14). Subsystem: AI action-node navigation system. **[CONFIRMED — disassembly, full body read; OPEN — `0x008c74a0`'s own role.]**
+- L8326: ains) kept in sync. Subsystem: vehicle damage-state. **[CONFIRMED — disassembly for the vtable dispatch shape and `0x00a80710`'s full body; OPEN — what the vtable-side representation actually is, not traced past the dispatch itself.]**
+- L8336: ainly used here as the same local-authority override, not as part of the 16-bit encoding math itself; its exact role in this branch remains OPEN — not independently re-disassembled this pass)** plus the raw 4-byte requested value. **This whole not-authoritative branch is unreached in single player, where the character is always 
+- L8340: th-trigger path, from field/state-machine consistency with §3.5/§3.15, not independently re-confirmed by decompiling it directly this pass; OPEN — the `+0xb4` third-path field's real meaning and why that path skips the ratio logic entirely.]**
+- L8352: file-byte read for 2 of the 11 table string literals. The slot-name enumeration table's contents are now fully resolved, closing the prior OPEN item.]**
+- L8362: ts/HUD notification UI. **[CONFIRMED — disassembly for the hash-based lookup, the toast-queue mechanism, and the completion-equality check; OPEN — `0x007108a0`/`0x00711b60`'s own bodies, and the exact bit-to-behavior mapping of arg 4 beyond the two already-established default-active bits.]**
+- L8370: ima stopping/finalizing predicate (§3.7's correction), not an encoder. Its exact role alongside `0x008add70` in this record-opening call is OPEN (not independently re-disassembled this pass), but per §6.19's cross-cutting finding it is very likely the same local-authority override used by the other "damage setter" callers. Not r
+- L8372: ONFIRMED — disassembly for the resolve chain, the degrees-to-radians conversion (numerically verified), and the authoritative-write target; OPEN — the two literal header field values `20`/`8`'s exact roles.]**
+- L8386: `, not `0x0101b4f0`, as the Body correction above details; `0x005ee900` is the one that calls the stub and writes the global. CONFIRMED. No OPEN part remains in this unit.
+- L8396: regardless. **[CONFIRMED — disassembly for the resolve chain, the always-both record shape, and the full ring-buffer read/overwrite logic; OPEN — the exact real-world meaning of the 8-byte value copied from the resolved destination's own `+0x40`/`+0x44` fields.]**
+- L8406: . **[CONFIRMED — disassembly for the full dispatch cascade and the reuse of the established `is_dead` predicate and class-descriptor table; OPEN — the individual reason codes' real-world meanings, and `0x00759d80`'s/the `0x009dd8*0` family's own bodies, none decompiled this pass.]**
+- L8414: ss — returns a combined hash-plus-slot-index value, or a fixed fallback slot `0x14` (20) on no match (real behavior, not asserted further — OPEN). If the character resolved AND the profile lookup did not literally fail with a byte value equal to a global sentinel constant `0x011177e5` (compared twice, once against the direct loo
+- L8416: personality/behavior configuration. **[CONFIRMED — disassembly for the resolve chain, the record/write shape, and both literal debug tags; OPEN — the exact selection semantics of `0x00507e60`'s own table scan against its implicit context argument, and the real meaning of the two-field fallback chain gated on `0x011177e5`.]**
+- L8476: nd, when set, a per-actor local-authority test (`0x008addb0` — a check this document has not previously attributed to a specific subsystem; OPEN), the pairing is applied either locally (`0x0095f8d0`: cross-writes each actor's own position-pair reference into the other, `+0xdb0`/`+0xdb4`, sets a paired-state byte at `+0xdb9`, and
+- L8478: cter_is_dead`-predicate reuse, the local/replicate branch structure, and (2026-10-02) the corrected `0x0095da50` name-lookup reading above; OPEN — the hidden opcode value, and `0x008addb0`'s exact real-world identity/subsystem.]**
+- L8528: e (`0x00a1fcc0`) if non-empty, notify (`0x00a29920`, leading kind-tag `0`). **This directly resolves this document's own previously-flagged OPEN item** (§3.18/§10.10: "a 3rd unidentified kind" hook-slot array at `+0x20`/`+0x24`) — it belongs to the mover/trigger-placed-object kind reached via `0x006434a0`, not to characters or v
+- L8530: med-hook-slot-array family. **[CONFIRMED — disassembly for the resolver, slot number, and the array-base identification resolving the prior OPEN item; the array base's delivery into `0x00a56d00` is via the family's established hidden-argument pattern, not independently re-verified by raw disassembly this pass.]**
+- L8550: on/reward state. **[CONFIRMED — disassembly for the gating globals/literal, the descriptor bit, the dedup-append mechanism, and the opcode; OPEN —  (resolved: CRC-32 name hash, §11.8/§13.29) and `0x00bd9cb0`'s own role.]**
+- L8558: nal pair `0x008ae480`/`0x008837a0` and the host-check singleton `0x0087ba20`'s `+0x5c`==`+0x58` test; not shown to be either of those here (OPEN).** When that gate passes, network-replicates (opcode `0x43`, already established §9.21, extended here) tag `7` carrying the mover handle. Unconditionally (regardless of the gate), a vi
+- L8560: dcast. Mesh-mover/world-object state. **[CONFIRMED — disassembly for argument shape, return convention, opcode, and both status-bit writes; OPEN — the exact identity of the `0x027038c0` gate and the vtable-`+0x68` predicate (this is the
+- L8562: independently re-traced for this kind, so OPEN rather than assumed-same).]**
+- L8572: the health-finalize path. **[CONFIRMED — disassembly for argument shape, resolver, the two-path branch, and the health-finalize semantics; OPEN — the scripted-kill path's own vtable-`+0x80` method internals and the meaning of its index-derived first argument.]**
+- L8592: ays-run UI-refresh tail, and both opcodes; HIGH CONFIDENCE for the "primary vs. network-roster representation" reading of arg 5's two bits; OPEN — `0x00825010`'s own deep internals and the precise real-world meaning of the four UI-refresh bits.]**
+- L8612: arg 2) — **the opcode argument itself was not visible in this decompile** (the same instrumentation-related gap as §14.1's own record call; OPEN rather than guessed).
+- L8614: ehicle. Vehicle physics. **[CONFIRMED — disassembly for argument shape, the hardcoded name special-case, and the always-replicated boolean; OPEN — the hidden opcode, and `0x00abe510`/`0x00abadc0`'s own deep internals.]**
+- L8624: ty. **[CONFIRMED — disassembly for the argument shape/default, the always-hide-main-body behavior, and the optional attachment-hiding loop; OPEN — the real-world identity of descriptor bit `0x80`/`+6`, and `0x008cc4d0`/`0x00a85180`'s own roles inside `0x00a87780`.]**
+- L8634: named persona. Character/persona (NPC identity-template) subsystem. **[CONFIRMED — disassembly for argument shape and resolver identities; OPEN — `0x00941c50`/`0x0094f690`/`0x0070c450`'s own deep internals, including the derived byte tag's exact meaning.]**
+- L8644: dentical operation to both whenever both exist. **[CONFIRMED — disassembly for the zero-argument shape and the dual-representation dismiss; OPEN — `0x0097e410`'s own roster-walk internals and its exact skip condition.]**
+- L8654: RMED — disassembly for argument shape/defaults, the spread mechanic, and the drive-mode-gate asymmetry against `helicopter_shoot_navpoint`; OPEN — `0x00da0e90`'s exact statistical distribution.]**
+- L8672: own position (`+0x40`/`+0x44`/`+0x48`) plus two further fields (`+0x64`, and a pair at `+0x68`/`+0x6c` — role not independently confirmed, OPEN) and two default direction/color globals (`0x0117f8f0`/`0x0117f8f4`). If the relative-to argument is given and resolves through a newly fully-decompiled "try every known resolver" fallba
+- L8674: e resolver chain (including the fully-traced `0x00a29200` fallback), the relative-position conversion, the host-check gate, and the opcode; OPEN — the `+0x64`/`+0x68`/`+0x6c` field roles, the 3-slot table's real-world meaning, and `0x006fc590`'s own internals.]** Note: on a total resolution failure for the primary location, the 
+- L8684: are for. Camera subsystem. **[CONFIRMED — disassembly for argument shape, the conversion constant, the three-way dispatch, and the opcode; OPEN — the exact identity of the fixed camera-restriction record this function targets.]**
+- L8697: active flag (`0x00877dc0`) is OPEN", e.g. mm_m16_5 with slot 2):**
+- L8739: LAYER#`-then-`#FOLLOWER#` chain, §7.1): first tests whether the name indexes a GROUP (`0x00a26010`/`0x00a26110` — not independently traced, OPEN) **[Resolved: `0x00a26010`/`0x00a26110` are the `#FOLLOWER#`/`#FOLLOWERn#` companion-list lookup, §3 front matter]**, falling back to the plain character resolver (`0x005e4dd0`) plus li
+- L8745: -group "can't flee" AI flag (bit 5 of status byte `+0xa`). AI/character behavior. **[CONFIRMED — disassembly for the shape/opcode/tags/bit; OPEN — the exact group-vs-character semantics of `0x00a26010`/`0x00a26110`.]** **[Resolved: companion-list (`#FOLLOWER#`) lookup, §3 front matter.]**
+- L8755: bly for argument shape, the name-table resolver, and the two-path branch structure; HIGH CONFIDENCE for the "AI-driven vs. simple" reading; OPEN — the exact real-world identity of the behavior-set index table beyond its own address/stride.]**
+- L8794: ception-handling instrumentation that appears to interfere with the decompiler's own argument recovery at exactly that call site) — flagged OPEN, not guessed; a follow-up pass reading the raw instruction stream at those two specific call sites would likely resolve both.
+- L8808: 0x5c`==`+0x58` test (§8.27/§6.22/§10.9, itself re-confirmed a further time this pass in `debris_flow_set_active`'s own `0x006fce90`). Real, OPEN: which subsystem/object `0x027038c0` belongs to.
+- L8820: fects, as detailed per-item above; several named internals (vtable-dispatched methods, a handful of unidentified helper functions) remain **OPEN** exactly where flagged, rather than guessed.
+- L8846: disassembly for the full branch structure, the resolver, the shared gate on the three tail dispatchers, and the record-and-replicate shape; OPEN — the concrete real-world meaning of the two literal flag constants `0x1d4c`/`0x200000`.]**
+- L8856: gh a virtual dispatch on the resolved object. AI pathing/action-nodes. **[CONFIRMED — disassembly for the resolver, gate, and record shape; OPEN — the vtable `+0x58` method's own identity and the exact semantics of `0x00bc0970`'s final apply.]**
+- L8866: FIRMED — disassembly for the resolver, the hidden-`this`/offset (raw disassembly), and the event-call argument shape (corrected per §44.6); OPEN — `0x004df990`'s own internal write and AI event `0x26`'s exact meaning were not independently traced.]**
+- L8886: hine. **[CONFIRMED — disassembly for the outer loop, the refcount-release helper, and the cross-link to the `hud_display_*` slot mechanism; OPEN — the deep internals of the many parallel `0x014b01xx` QTE-context arrays inside `0x0060c3f0` were not traced field-by-field.]**
+- L8936: nce id. HUD/UI messaging. **[CONFIRMED — disassembly for the argument shape, both dispatch paths, and the return-count via raw disassembly; OPEN — the exact created-object's later lifecycle/removal path was not found in this batch.]**
+- L8966: none (pure query). Character state. **[CONFIRMED — disassembly for the resolver, gate-free always-push shape, and the exact exclusion test; OPEN — this is an exclusion test (not-`0`-and-not-`6`), not a positive equality test against a known "ragdolled" enum value, so the exact state-enum value(s) that specifically mean "ragdolle
+- L9002: speed value, default the same shared global float constant `vehicle_anim_start` (§15.2) also uses as its own arg-4 default, `0x012a2d54` **[OPEN — §15.2 gives that default as `0x01117a4c`; which address is right needs a re-read]**. **Note: the optionality test here is a bare stack-depth check (is there at least 1 argument at all
+- L9018: t `+0xac`. Vehicle/occupancy. **[CONFIRMED — disassembly, including the shared-byte-offset bit extension and the mirrored sub-object write; OPEN — the linked sub-object's own identity/purpose.]**
+- L9048: HIGH CONFIDENCE for the hidden-`this` argument into `0x004e7db0` (inferred by shape, not independently raw-disassembly-verified this pass); OPEN — the concrete real-world identity of the `0x00a3de90`/`0x00a3dfb0`-resolved object kinds.]**
+- L9058: a local finalize when running as host/offline. Mission state. **[CONFIRMED — disassembly for the full body and the inverted-polarity check; OPEN — the exact meaning of the two global mission-flags bits (`0x4` unconditional, `0x10` argument-mirrored) beyond "a mission-end-mode word."]**
+- L9088: chievement/stat hooks. **[CONFIRMED — disassembly for the full chain, both special-cased indices, and the three-gate check on `0x00bd83c0`; OPEN — the real narrative identity of choice indices `0`/`1` was not independently corroborated (mechanism only, not meaning).]**
+- L9098: tracking. **[CONFIRMED — disassembly, full body; the array's own reader/consumer was not located in this batch — flagged as a real, narrow OPEN item.]** **[Resolved: the reader is `dlc_achievement_counter_get`, §20.25.]**
+- L9108: ate. **[CONFIRMED — disassembly, full body, including the reused deadline-helper cross-reference and the inert trivial-stub identification; OPEN — the linked object's own identity at handle `+0x1c`.]**
+- L9191: ever consumed inside the callee. **[CONFIRMED — disassembly for both the call site's explicit push and the callee's own parameterless body; OPEN — why the caller computes and passes an argument the callee ignores. Not necessarily a bug: possibly a shared calling convention with another, unlocated call site that DOES read it.]** 
+- L9192: disassembly, both call sites' single explicit push, cross-checked against `0x009da4e0`'s well-established zero-argument shape elsewhere.] [OPEN — flagging for cross-check against §3/§11's own citations (not §4.13, which doesn't mention this address at all — see correction above) rather than asserting a resolution: either `0x009d
+- L9244: ted** table (loaded once real character-customization data is loaded), not evidence the whole style-apply path is unreachable — flagging as OPEN/inferred, explicitly not asserting "dead code" from a static zero, per the exact caution `WALLS.md` already records for a structurally identical situation elsewhere in this project.
+- L9258: the hidden-AL-register argument at all 3 call sites and the callee's own body; HIGH CONFIDENCE that this is an sRGB gamma-correction step; OPEN — `0x00ea4300`'s own body was not decompiled this pass, so the exact final transform and where its result is written back to is not resolved.]**
+- L9260: e shared-list-primitive identification, and the hidden-AL-argument color helper; HIGH CONFIDENCE for individual field/table semantic roles; OPEN for `0x00821740`/`0x008245f0`/`0x00825010`'s own exact internal bodies, and for `0x00ea4300`.]** **[Resolved for `0x00825010`: §19.12.]**
+- L9272: **Producers of `+0xa41`/`+0xa40`, RESOLVED (2026-10-02, player-gender initial-state investigation — previously OPEN):** the character constructor `0x00954340` writes the literal "unspecified" sentinels `+0xa41` := 3, `+0xa40` := 5 (outside both lookup tables above, by design — they are the exact results the engine
+- L9294: ently-decompiled signature); HIGH CONFIDENCE for the overall "network/session disconnect teardown for an open dialog box" characterization; OPEN for several of the individual flag/global roles inside `0x007c20a0`, not traced further this pass.]**
+- L9334: also loaded into a register immediately before the call but was not found to be read anywhere in `0x007dfff0`'s own visible logic — flagged OPEN rather than asserted either way. **[CONFIRMED — disassembly, the hidden-EAX category argument and its match against the callee's own EAX read; OPEN — the loaded-but-seemingly-unread CL/
+- L9379: , nor `pcr_change_hair`'s category-mapping table `0x01300cf4`, were found written by anything decompiled this pass — their producers remain OPEN.
+- L9382: e2440` called with 1 explicit argument in `game_award_respect` against an independently-decompiled 3-parameter signature elsewhere) is left OPEN rather than guessed at, consistent with `WALLS.md`'s standing caution against asserting a bitfield/argument's meaning from position alone without independent confirmation.
+- L9407: **Side effects / subsystem:** per-vehicle "erratic/crazy driving" AI flag. **[CONFIRMED — disassembly for the resolve/dispatch shape; OPEN — `0x00b23f60`'s own body, so the exact storage location of the flag is not resolved.]**
+- L9427: l loop/branch structure and field offsets; HIGH CONFIDENCE — inferred for "civilian" as the category-`7` meaning and for arg 2's real role; OPEN — `0x00a27100`/`0x006fc2b0`/`0x009060e0`'s own bodies, and the exact real-world identity of the global tracked-object array at `0x03171a64`.]**
+- L9435: written. For any other object only the local bit is written. Do not raise an "OPEN state" error.]**
+- L9446: the real target function is a genuine, hard OPEN contradiction, not an unidentified-but-plausible
+- L9469: remains OPEN, and the recommended next step is a single live breakpoint on a real spawned NPC/player at
+- L9506: a separate scripted-entry routine not covered in this pass. **[CONFIRMED — disassembly for both dispatch paths and both setters' gate/tags; OPEN — why the two writes are not gated together, and the real consumer of the two resulting global fields.]**
+- L9514: 6e956c`) that is **not written anywhere inside this function's own body** — plausibly a caller/script-context identity populated elsewhere (OPEN, not traced this pass), hook slot `0xb`, and a boolean indicating whether the filter resolved to a valid type id. `0x00a29920` itself opens a network record, opcode `0x43`, carrying the
+- L9516: `/`4`/`6`/`8`/`12`/`13`/`18`; §7.4 added `1`/`3`/`5`; §7.23 added `9`). **[CONFIRMED — disassembly for the clear/resolve/register sequence; OPEN — the real identity of the `0x026e9568`/`0x026e956c` global pair, and why this ONE `on_*` function takes only a filter string rather than the usual (callback name, target name) pair.]**
+- L9534: n `0x00a281a0`. The persona-name string is converted through a thunk to `0x0046fd00` (a name→id lookup/hash, not independently decompiled — OPEN). Confirmed at the instruction level: the resolved character is loaded into ECX as the implicit `this` for a `__thiscall` to `0x0094e120`, with three explicit stack arguments pushed in 
+- L9536: rough two independent record paths. **[CONFIRMED — disassembly for the hidden-`this` call, the argument values, and the gate/tag structure; OPEN — `0x0046fd00`/`0x0070dbf0`/`0x0070a570`/`0x00831970`'s own bodies, and the real relationship between the two parallel record paths.]**
+- L9566: e full argument extraction, the duration/impulse-threshold branch, and the source-resolve path (cross-referencing the 5th resolver family); OPEN — the exact physics constants and `0x009a5520`/`0x009a48e0`/`0x0077c610`'s own bodies.]**
+- L9576: stem:** creates and attaches a new worn/held prop object to the named character. **[CONFIRMED — disassembly for the overall dispatch shape; OPEN — the mesh/network-session bookkeeping calls' own bodies (`0x006cf0c0`/`0x00904c10`/`0x008ff850`/`0x004bc7d0`/`0x00456e30`/`0x009215b0`), none independently decompiled this pass.]**
+- L9586: e from every character/vehicle per-object record documented in §1-§14. **[CONFIRMED — disassembly, including the recovered subtype integer; OPEN — `0x0086fd40`/`0x00db8990`'s own bodies.]**
+- L9606: already fully document, not a separate mechanism. **[CONFIRMED — disassembly for the branch structure and the cross-referenced primitives; OPEN — `0x00a3de90`/`0x00a3def0`'s exact real-world category, consistent with the family's other unidentified members.]**
+- L9626: array, conditionally network-replicated in coordinated co-op sessions only. **[CONFIRMED — disassembly for the lookup/write/gate structure; OPEN — the shared tutorial-name table's own row count/contents beyond this pass's own use, and `0x007157c0`/`0x00711560`'s own bodies.]**
+- L9656: -value state), network-replicated only in coordinated co-op. **[CONFIRMED — disassembly for the range check, global write, and gate/opcode; OPEN — the real-world meaning of the 9 enum values.]**
+- L9666: **Side effects / subsystem:** global active-DLC-bundle-for-personas state. **[CONFIRMED — disassembly for the change-detection/gate/opcode; OPEN — `0x0070a700`'s own body and the real DLC-bundle enum values; the `0x009da4e0` call's argument is flagged as likely spurious, not independently resolved.]**
+- L9676: adcasts a network record regardless of whether the save itself proceeds. **[CONFIRMED — disassembly for the record-open and the gate chain; OPEN — `0x00b96230`'s own body (the real save entry point) and the exact meaning of each of the five suppress-flag globals.]**
+- L9686: k-replicated only in coordinated co-op. **[CONFIRMED — disassembly for the resolve/apply/linked-list structure and the dead third argument; OPEN — `0x00a2ebf0`'s own body.]**
+- L9694: resolves through the ordinary registry-name path rather than the sentinel fast path, since it is not an exact byte match for `"#PLAYER#"`; OPEN, not independently traced). On success, dispatches to `0x00602530(itemName, 0, 0)` — **corrected after adversarial review: the implicit `this` is NOT the raw resolved target, but a compu
+- L9696: l, network-replicated via a raw string-tagged opcode-`0x41` record. **[CONFIRMED — disassembly for the resolve/dispatch/gate/tag structure; OPEN — `0x00602020`'s own body, and whether `"#PLAYER1#"` is independently handled anywhere else.]**
+- L9726: a "retreat" behaviour transition, network-replicated. **[CONFIRMED — disassembly for the mode checks, gate, and state-transition sequence; OPEN — `0x00d1de80`/`0x00b44d90`'s own bodies and the exact real-world meaning of AI-mode values `2`-`5`.]**
+- L9746: ocally applied and/or network-broadcast per the caller-selected bitmask. **[CONFIRMED — disassembly for the bitmask split and both actions; OPEN — the DLC-availability sentinel's own broader role beyond this one gate.]**
+- L9767: bucketed table — distinct from the already-documented CRC-32 (`0x00d9e790`) and multiply-33/XOR (`0x00dab330`) hashes. Real table identity OPEN.
+- L9786: irmed, since `0x0094d920` is a depth-1 callee outside this pass's raw-disassembly budget (which covered the 30 targets themselves only) — **OPEN**.
+- L9788: t. Subsystem: player economy/HUD. **[CONFIRMED — disassembly for the resolve chain, the clamp helper, and the double-gate branch structure; OPEN — `0x0094a800`'s own body, and the `0x00710cb0` call-shape discrepancy above.]**
+- L9796: nconditionally writes the boolean straight to a single global (`0x005e5af0`, a one-line setter, no resolver, no gate, no record at all). **[OPEN — `0x005e5af0` is a function entry (a one-line setter), not the global itself; the written global is one hop further in, inside that setter's body, and has not been de-referenced yet (s
+- L9798: a future pass (**[Covered later: cheats_stop §24.1, get_cheat §28.24, cheats_start §28.25]**). **[CONFIRMED — disassembly, full body read; OPEN — where the global is consumed.]**
+- L9808: or the whole resolve/branch structure, cross-checked against raw disassembly at the target level with no hidden-argument discrepancy found; OPEN — `0x00a3dfb0`'s own resolved-kind identity, unchanged from §15.30.]**
+- L9828: n/animation state. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly, including both per-character branches; OPEN — the real-world meaning of the shared "elapsed time" tag `0x1d54` beyond its own gating role.]**
+- L9838: d population/spawn control. **[CONFIRMED — disassembly for the whole chain, raw disassembly at the target level matches pseudocode exactly; OPEN — `0x00a017c0`'s own body (**[Resolved: identity-serializer, §15.10]**), and whether the `+7`/`0x40` descriptor bit has already been seen under a different citation elsewhere in the doc
+- L9858: ion blend onto the new set. Subsystem: character animation. **[CONFIRMED — disassembly for the full chain including the recursive re-apply; OPEN — `0x004b1630`/`0x004b2280`'s own internal per-state semantics.]**
+- L9870: system: player combat/human-shield state. **[CONFIRMED — disassembly for the full authority/branch structure and the state-byte transition; OPEN — `0x009ad200`'s own body (**[Resolved: §22.26]**), and the exact real-world meaning of shield-state value `4`.]**
+- L9880: isassembly, full raw-disassembly read matches pseudocode exactly for both resolve paths.]** This is also the pass that resolved an existing OPEN item — see cross-function note below on `0x004dcf00`/`0x00458230`.
+- L9900: identified — presumably per-notoriety-tier or per-region) notoriety-controller objects at once. **[CONFIRMED — disassembly, full body read; OPEN — the six objects' own identities.]**
+- L9928: **Body:** writes the boolean straight to a single global (`0x008d73d0`, one-line setter). No resolver, no gate, no record. **[OPEN — `0x008d73d0` is a function entry (a one-line setter), not the global itself; the written global is one hop further in, inside that setter's body, and has not been de-referenced yet (see `WALLS.md`'
+- L9956: pdating the radius field even when clearing the flag. **[CONFIRMED — disassembly for the branch structure and the squared-vs-raw asymmetry; OPEN — confirmation of the receiving side's own handling.]**
+- L9976: real asymmetry against most of this batch's setters. **[CONFIRMED — disassembly for the whole chain including `0x00a281e0`'s own internals; OPEN — the six-team-id table's own real-world team-name mapping.]**
+- L10032: der one specific unidentified game-mode/difficulty code (`5`), fires an extra call. **[CONFIRMED — disassembly for the top-level structure; OPEN — `0x00706ab0`/`0x007f5f40`/`0x007f6090`'s own bodies (depth-2, outside this pass's budget) and the meaning of mode code `5`.]**
+- L10078: 1. **`0x004dcf00`/`0x00458230` relationship RESOLVED — a genuine open item closed.** An earlier section (`radio_block`, §12.20) flagged as OPEN "whether `0x004dcf00`/`0x00458230` share one underlying lookup table." This pass fully decompiled `0x004dcf00`'s own body (as a callee of both item 10 and item 20's own resolver `0x00a28
+- L10090: actly except for the one genuine, now-documented discrepancy at item 29. Named internals not independently decompiled this pass are flagged OPEN exactly where noted above, not guessed.
+- L10100: _camera_pos` (0x00830670) forwards to using the area descriptor's own name string; calls an unidentified per-category notifier (0x009f3590, OPEN); releases the area descriptor (0x00821df0); and caches both descriptor pointers into two globals, 0x022ffd4c (area) and 0x022ffd48 (category) — 0x022ffd4c is read again by item 12 belo
+- L10102: s the active area+category, resets a "default sub-slot" flag, repositions the preview camera. **[CONFIRMED — disassembly for the full body; OPEN — 0x00821fe0/0x00821df0/0x009f3590's own bodies, and the exact meaning of area/category descriptor fields beyond the name string.]** **[Partly resolved: §26.14/§26.23.]**
+- L10110: clear the preview marker," not merely "clear a marker." **[CONFIRMED — disassembly for the whole body and the 0x01300c6c read/write chain; OPEN — 0x0082b470's own full internal semantics beyond the slot-validation loop already summarized.]**
+- L10124: (0x02654328, 0x44-byte stride) counting rows matching the target category AND passing an unresolved per-row validity predicate (0x0045b3a0, OPEN); picks a uniformly-random eligible row via an RNG call (0x00dab5e0, HIGH CONFIDENCE a [0,1) generator, not independently confirmed) scaled by the eligible count and rounded; if the tar
+- L10126: ntrol flow, category resolver, and shared-list reuse; HIGH CONFIDENCE for the RNG helper's role and the color/intensity flag-bit semantics; OPEN — 0x0045b3a0's own body.]**
+- L10132: worn-item slot) — flagged as a genuine finding, not asserted beyond what's confirmed:** the literal `4`'s exact real-world slot identity is OPEN.
+- L10134: rd-and-replicate idiom — a distinct, un-traced mechanism, most plausibly a generic UI/event-reporting builder rather than a network record. OPEN — not decompiled this pass, given time budget; flagged rather than guessed.**
+- L10136: isassembly for the category resolver, the shared per-category table reuse, and the raw-disassembly-confirmed 3-argument call to 0x00821740; OPEN — the full 0x00e0xxxx event-family semantics and 0x0045b3a0.]** **[Resolved for the 0x00e0xxxx family: §26.23 — a generic "call a named Lua callback with N arguments" mechanism.]**
+- L10152: vignette) with two numeric parameters and an optional force flag. **[CONFIRMED — disassembly for the full argument shape and call sequence; OPEN — 0x007ac500/0x007ac6d0/0x007ac830/0x007ac460's own bodies, not decompiled this pass.]**
+- L10166: **Side effects/subsystem:** none (pure query). Reports whether the current/pending session is starting as a co-op game — OPEN which of the two flags corresponds to "host requested" vs. "client requested"/similar, not independently resolved.
+- L10174: vehicle-paint-apply primitive (0x00a999f0/0x00a99b70) — consistent with "push the reverted color onto the live vehicle's paint material." **OPEN — 0x00a999f0/0x00a99b70's own exact per-channel behavior, not decompiled.**
+- L10184: evant asset data for each of up to 4 slot categories. **[CONFIRMED — disassembly for the full control flow and all 9 hidden-EDI call sites; OPEN — the exact per-mode/per-slot field semantics of the 6 `0x022cfxxx` global clusters, and 0x00819480/0x0081bc60/0x0081bd50's own bodies.]**
+- L10190: 2e2d0 — walks up to 10 passes over 24 categories via 0x00821740/0x00821630/0x00825010/0x00824950, the SAME `0x00825010` §16.7 already flags OPEN, now with a real caller and internal shape newly resolved) when the category is `0x13` (19), or the SAME validator/sync routine item 2 calls (0x0082b470) otherwise, this time with a rea
+- L10192: [CONFIRMED — disassembly for the overall control flow and both cross-references to items 1/2/4/5; genuinely resolves 0x00825010, previously OPEN at §16.7, as a real "apply a resolved record into a slot" primitive with a 6-argument shape; HIGH CONFIDENCE for the exact optional-argument boundary given the function's size.]**
+- L10200: ized by the SAME sRGB byte-scale constant §16.7/item 4 use); a count of "owned" matching sub-items (scanned via 0x00822a60/0x00822a30, both OPEN); a second variant-name-or-id pair; and finally 2 fixed literal-double pushes (the same `0x012a3038` constant used as the whole-function fallback return) plus a resolved integer and a f
+- L10202: [CONFIRMED — disassembly for the overall resolve-then-push shape and the shared 0x00821740/0x00746750/0x00746770 reuse with items 2/4/5/12; OPEN — several individual pushed fields' exact real-world meaning (0x00822a60/0x00822a30/0x0080e740's own bodies), consistent with this document's own practice of not chasing every field on 
+- L10212: of this exact convention this pass, alongside item 11's 0x008194f0 calls), the real 4-string table contents, and the full branch structure; OPEN — 0x01300d90's own writer(s) elsewhere, not traced.]**
+- L10222: ons confirmed touching that exact mechanism, alongside items 4/5). **[CONFIRMED — disassembly, full body of both 0x00834780 and its caller; OPEN — 0x009f9990/0x009fa370's own exact per-field semantics.]**
+- L10234: mization-state functions. Item 5's own record/event mechanism (0x00e0xxxx family) is a genuinely different, unidentified mechanism, flagged OPEN rather than assumed to be the same idiom. **[Resolved: §26.23.]**
+- L10262: a fractional argument, propagating to its sub-components, plus a record-and-replicate step. **[CONFIRMED — disassembly for the whole chain; OPEN — 0x00a9f4f0's own full internals (a depth-2 callee outside this pass's raw-disassembly budget) and 0x007553b0's identity.]**
+- L10282: **Side effects/subsystem:** bare global "tutorial vehicle-controls enabled" flag. **[CONFIRMED — disassembly, full body read; OPEN — where the global is consumed.]**
+- L10294: e 3 is the "active" state by this function's registered name `tutorial_active`. HYPOTHESIS — active = displayed and waiting for the player. OPEN — who writes 3 (§26.28).**
+- L10322: ly for the whole chain; HIGH CONFIDENCE — inferred for 0x008ade30/0x008ade50's acquire/release roles, corroborated independently by item 9; OPEN — the 0x0130a8e4/0x0262d3b8/0x0130a8e8 globals' full real-world semantics beyond what's described.]**
+- L10352: Authoritative branch: populates a shared per-slot QTE-context array family already flagged OPEN at §15.6/§15.30/§15.29 ("the many parallel 0x014b01xx arrays... not mapped field-by-field") — stores the QTE-type code and a session id into per-slot fields, then resolves up to 4 further named "part
+- L10354: he resolver chain, and 0x0060dd60's top-level branch/opcode structure; HIGH CONFIDENCE — inferred for the participant-array/HUD-slot roles; OPEN — the 0x014b01xx array family's own full field layout (unchanged from §15.30), and 0x005e4660's preset slot 0x18's exact real-world callback meaning.]**
+- L10374: t persona lines" counter, not a simple flag — supports nested suppress/unsuppress calls safely. **[CONFIRMED — disassembly, full body read; OPEN — where the counter is consumed.]**
+- L10424: up, plus (on the authoritative host) a local-only notification. **[CONFIRMED — disassembly for the whole chain including the hidden-`this`; OPEN — 0x00a017c0's own body and 0x00a2ebf0's own per-child effect, both still-open per §18.6/this pass.]** **[Resolved for 0x00a017c0: identity-serializer, §15.10.]**
+- L10458: THIS SPECIFIC named item currently in the equip slot" query). **[CONFIRMED — disassembly for the argument extraction and the hidden-`this`; OPEN — 0x008dcb10/0x005feaa0's own internals.]**
+- L10478: e global backpack instance. Purely cosmetic — no gameplay state, no record, no replication. **[CONFIRMED — disassembly for the whole chain; OPEN — the exact real-world role of the type-0x1e object.]**
+- L10490: it directly (with an optional forced duration) locally, or network-replicating the request. **[CONFIRMED — disassembly for the whole chain; OPEN — 0x00973d40's own predicate identity.]**
+- L10595: poses directly to Lua. **[CONFIRMED — disassembly for the top-level structure, the fixed-12-slot array, and the cross-reference to item 32; OPEN — most of the deep internal gating predicates' own individual real-world meanings, given the function's size.]**
+- L10607: ll body read for 0x009aa260, extending §18.9's field family with +0x1898/+0x189c, +0x1890/+0x1894, and the +0x18dc/+0x18dd exempt-bit pair; OPEN — 0x009aa130's own resolution logic beyond "returns the partner handle.]**
+- L10631: ath-trigger entry points for two distinct callers, or one of them is a wrapper around the other; not independently reconciled this pass — **OPEN**, worth a future cross-check.
+- L10633: t extraction (including the distinct no-rounding numeric sub-idiom), the record/opcode structure, the HP-field and ignite cross-references; OPEN — the 0x00963530-vs-0x0096f8c0 death-trigger reconciliation flagged above, and most of the ~30 individual damage-modifier gates' own precise real-world meanings, given the function's si
+- L10697: icle-fallback branch's callee/hook-code was WRONG in the original write-up and is corrected above per independent raw-disassembly re-check; OPEN — the plain-English identity of the +0x1f00 sub-record beyond "a hook-slot array," and whether the vehicle +0xb0 anchor is truly the same sub-record §21.19's own door case uses.]**
+- L10707: ning the "no gate, always both" idiom family, §7.17/§7.32/§17.15/§17.26) opcode-0x43 network record. **[CONFIRMED — disassembly throughout; OPEN — the real-world meaning of 0x00861ec0's own predicate and why the pushed boolean ignores the computed +0x16a byte.]**
+- L10715: he same 24-entry table for a pointer match, and — only if found — calls a broadcast 0x00606840(track, index) (not independently decompiled, OPEN). This is a "host-only conditional broadcast keyed by table index," a fourth distinct network-replication shape alongside the double-gate/single-gate/no-gate families already catalogued
+- L10717: IRMED — disassembly for the field writes and host-check gate; HIGH CONFIDENCE — the 24-entry name table's identity with §6.2's group table; OPEN — 0x00606840's own body.]**
+- L10723: and, if found, applies removal via 0x00602020 (the item-definition record plus two further arguments) — **this closes part of §17.25's own OPEN item**: 0x00602020 (left undecompiled there) is now confirmed to take a resolved item-definition record, not a name, as its first argument.
+- L10733: fixed category singleton 0x012e8b98 and a fixed category tag; returns -1 on failure — a broader named-resource lookup, not effect-specific, OPEN beyond this shape). If BOTH the object resolved and the effect id is valid (!= -1): dispatches to 0x0093d8e0 with **the resolved arg-1 object as the hidden `this`** (confirmed via raw d
+- L10735: lied locally per the caller-selected mask. **[CONFIRMED — disassembly for the hidden-`this` correction, the gate chain, and the opcode/tag; OPEN — 0x0093b750/0x0093d0e0's own bodies and the plain-English category of the 0x005e4e30 resolver.]**
+- L10743: is set: if the screen's own +0x30 field equals 0x29 (41), sets a global (via 0x00821ee0("Planet_Saints"), a literal `.rdata` string — role OPEN, plausibly a customization-store submenu id) as a side effect; then calls the SAME singleton's own "push" method, 0x007b4640. That method is a real stack-based screen manager, confirmed 
+- L10745: main, different registrar, different address; do not conflate the two. **[CONFIRMED — disassembly for the resolve/dispatch/stack mechanics; OPEN — 0x00821ee0/"Planet_Saints"'s own role and 0x007b3c00/0x007b3f40/0x007b4300's own bodies.]**
+- L10755: spec-tables-*` side: `continuous_explosions.xtbl`). **[CONFIRMED — disassembly throughout, including the two-hop linked-object indirection; OPEN — the plain-English identity of the resolved record's own linked-object relationship.]**
+- L10807: , and that sub-object's own +0x64 (0x64=100) field. **[CONFIRMED — disassembly for both this function and its 0x00a76030 progress accessor; OPEN — the plain-English identity of the linked anim-state sub-object.]**
+- L10831: e-insensitive scan over a runtime-sized global table (0x004cce70; count/base globals not diffed against any other already-documented table, OPEN).
+- L10837: assignment; unconditional network broadcast. **[CONFIRMED — disassembly, including the hidden-`this` correction on the second update site; OPEN — 0x004b21a0's own body and the real-world meaning of the group-id table.]**
+- L10905: true instead: fetches a global "current" object via a zero-argument accessor 0x00643a80's sibling 0x00a53f60 (not independently decompiled, OPEN) and, only if arg 7 (the deadline) is less than that object's own +0x33c field, computes an anchor via 0x00930e90 — **confirmed via raw disassembly that this call passes arg 7's rounded
+- L10907: nferred for the returned id's "action id for later polling" role, by analogy with `action_play_is_finished`'s own id-based pattern (§7.21); OPEN — 0x0095acb0/0x00a3bae0/0x006f62b0/0x00993630/0x0098f250's own bodies and the real-world meaning of move-mode values 1/2/3.]**
+- L10913: f sibling lookup/apply calls (0x005fec20/0x005ff220/0x005ff480/0x005ff680/0x005ff7a0/0x005ff950/0x004f0400, none independently decompiled — OPEN); an ordinary slot id falls into the `default` case, resolved the same way item 21.4's own "already applying" branch resolves a slot: 0x005fec20(slotOrSelector). The dispatcher's tail c
+- L10915: pcode chain and the slot-name↔selector-code cross-reference; the dispatcher's OWN deep internals (the ~12 special-selector case bodies) are OPEN, consistent with this document's practice of not exhaustively tracing every case of a large shared routine outside a task's specific scope.]**
+- L10917: 10000000`). See §9.19's own note for the full writeup; not re-duplicated here. Cases `0xd`-`0x16` (the five "best-weapon" selectors) remain OPEN.
+- L10980: n_unload` (§17.29) already establishes, now confirmed a second time. **[CONFIRMED — disassembly for the full mask/record/local-write chain; OPEN — the real-world meaning of "slot 0" (whether there are other slots this Lua entry point simply never targets) and 0x00976b70's callers beyond this one.]**
+- L10988: ays of asking "who is in the driver's seat specifically," was not resolved this pass** (none of the three bodies were decompiled) — flagged OPEN rather than asserted, given the function's own name implies only one seat role should matter.
+- L10990: **Side effects / subsystem:** none (pure query). **[CONFIRMED — disassembly for the full resolve/hash/gate/compare chain; OPEN — the exact real-world category the 0x031d152c tag selects, and whether the three seat-accessors are redundant or distinct.]**
+- L10998: eld from the one actually written below (+0xa5, a byte) — the exact relationship between the two fields was not resolved this pass, flagged OPEN rather than assumed** — and only if THAT reads 0: writes the team code into the mission context's own +0xa5 byte (fetched fresh via 0x006cf0e0, a trivial accessor for the same 0x014c846
+- L11000: — no character/vehicle resolve of any kind, no network record of any kind. **[CONFIRMED — disassembly for the full gate/write/notify chain; OPEN — the exact relationship between the +0xa0 one-shot gate field and the +0xa5 team-code field it appears to gate independently of its own value.]**
+- L11020: **This resolves the "human-readable meaning of mission phase codes 6/7" OPEN item this document previously flagged**: 6 = ending locally without a pending network transaction; 7 = failed-and-retry-pending. **It also resolves which literal argument reaches phase 8**, previousl
+- L11024: d through phase 8, not a separate resume path) are likewise now fully decompiled, closing the prior partial-identification caveat for both. OPEN — `0x006d2630`'s own internal body (treated as a black-box "transition stage" query); the exact real-world identity of mission-type values 0/1/2/3 read from the pointed-to object's own 
+- L11056: `0x006d6870` again, and calls a further, not-decoded function `0x006d9470` (OPEN) before resetting two
+- L11062: `0x00710e40`: `6` on success, `7` on failure (own body not opened, OPEN).
+- L11092: touches offset `+0x88` on any object. **OPEN, the single largest remaining gap in this area.**~~
+- L11150: re-opened). OPEN: the function containing `0x006da687`'s own full bounds; `0x006dac44`'s own caller;
+- L11176: *new* one was not found inside this function — **OPEN**, not guessed. Retry (cross-referencing
+- L11193: traced end-to-end, flagged **OPEN**.
+- L11222: Each result is forwarded respectively to 0x004bcd80 and 0x004bcd40 (two distinct one-argument appliers, neither independently decompiled — OPEN). Finally, if the target's own class-descriptor bit (0x02cc9900 row, offset +0xa, bit 0x2 — **the SAME bit `action_play_is_finished` already documents at this exact offset, §7.21/§7.33's
+- L11224: ty bit `action_play_is_finished` reads. **[CONFIRMED — disassembly, including the genuine two-call argument-count difference on 0x00487e80; OPEN — 0x00487e80/0x004bcd80/0x004bcd40/0x009e3200's own bodies, and why the two 0x00487e80 calls differ in argument count despite an identical receiver.]**
+- L11232: shape for this exact function). On success, dispatches to 0x00ac0f60(vehicle, &positionBuffer, arg3, arg4) (not independently decompiled — OPEN). **Note:** the shared float constant both optional arguments default to (0x012a2d54) is the SAME address `character_ragdoll` (§17.12) already cites as its own "impulse-magnitude scale" 
+- L11234: hicle skydiving move-to-position action. **[CONFIRMED — disassembly for the resolve/dispatch chain and the shared-constant cross-reference; OPEN — 0x00ac0f60's own body and the real meaning of the two -1.0-defaulted numeric arguments.]**
+- L11244: g, network-replicated. **[CONFIRMED — disassembly for the hidden-`this` shape (raw vehicle vs. sub-record) and the full gate/tag/bit chain; OPEN — the apparent truncation in the recovered debug-tag string.]**
+- L11268: e of the 30 functions, plus depth-1 callees; a follow-up Ghidra pass additionally read the raw bytes of every constant address that came up OPEN, landing most as CONFIRMED numeric/string values rather than unresolved citations. None of the 30 resolved addresses land inside the registrar-builder's own body range (0x00a20840-0x00a
+- L11278: resolver chain, and the record/dispatch structure, cross-checked target-level raw disassembly against pseudocode with no discrepancy found; OPEN — 0x00b4f150's own code-byte-7 branch internals and 0x00b2e510's own body.]**
+- L11288: m: vehicle lifecycle/wreck management. **[CONFIRMED — disassembly for the full chain, the list-migration structure, and the argument shape; OPEN — 0x00a7f850/0x00aa2be0/0x00abb580/0x00b19140/0x00aa3b90's own bodies, and every 0x00d9e140 call's own hidden destination field.]**
+- L11315: this function tests is mode `Hijack` in the 44-value mode enum, so the check is "currently in, and not pending a switch out of, `Hijack`." OPEN — 0x009b95c0's own full internal role beyond its own already-decoded branch structure.]**
+- L11325: RMED — disassembly for the resolve chain, the singleton-object finding, the radians-to-degrees conversion, and the dual-dispatch structure; OPEN — 0x00da1b00/0x00da5aa0/0x004e39b0/0x00861aa0's own internal bodies.]**
+- L11335: IRMED — disassembly for the full chain including the shared-singleton confirmation and the +0x2880/+0x2884 player-vehicle-cache field pair; OPEN — 0x00a78b60's own role.]**
+- L11375: em: party/follower management. **[CONFIRMED — disassembly for the full chain including the stack-reuse quirk and the new tag-prefix family; OPEN — 0x008ae3a0's own sync-id-resolution role beyond its already-established shape.]**
+- L11395: usibly vehicle-specific given the name. **[CONFIRMED — disassembly, including the hidden-sub-record `this` and the mode-0/mode-2 asymmetry; OPEN — 0x00a204d0's own role.]**
+- L11435: d/status-code checks, and all three 0x009e3200 hidden-`this` sites; HIGH CONFIDENCE for the movement-style codes' exact real-world meaning; OPEN — 0x00993630/0x00971cf0/0x0098f250/0x00a3bae0's own internal bodies.]**
+- L11453: gers. **[CONFIRMED — disassembly for the resolve chain, the new singleton-object confirmation, and the delegate's bitmask branch structure; OPEN — 0x0087ba20's own extra-argument call shape here, and 0x0093b750/0x0093d0e0's own bodies.]**
+- L11463: t categories). Subsystem: group/squad management. **[CONFIRMED — disassembly for the resolve chain and 0x00a2afc0's own two-list structure; OPEN — the exact absolute byte offsets of the two per-member flag/field accesses inside 0x00a2afc0, since its own body wasn't independently raw-disassembly-checked this pass (only target-lev
+- L11524: system: debris/particle-flow simulation. **[CONFIRMED — disassembly for the resolve chain, argument shapes, and the local-only record path; OPEN — 0x006fca10's own real apply-body and 0x006fbd80's auto-create role.]**
+- L11534: to flag bytes. Subsystem: AI reaction state. **[CONFIRMED — disassembly for the full chain including the double-call-to-0x004e3830 pattern; OPEN — the exact real-world meaning of the +0x4a5/+0x4a6 packed bits.]**
+- L11558: job `20261001T170909-team-a-nbjm`):** both `0x00a42b30` and `0x005eae60` dumped directly; body matches exactly as described. CONFIRMED. No OPEN part remains in this unit.
+- L11578: value. Subsystem: combat/human-shield state. **[CONFIRMED — disassembly for the whole branch structure and all three delegates' own bodies; OPEN — the exact bit-to-node-flag mapping inside 0x009ad200's attached-object walk.]**
+- L11588: up. Subsystem: boss-battle scripted encounter setup. **[CONFIRMED — disassembly for the full chain and all six literal marker-name strings; OPEN — 0x005e41b0's own teardown body and the density parameter's exact real-world meaning.]**
+- L11598: 0x0086f110.** Subsystem: base-jumping diversion activity. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly; OPEN — 0x006a3ad0's own body.]**
+- L11608: argument list, the resolver chain, the two distinct failure sentinels, the byte-confirmed constants, and the mission-specific special case; OPEN — 0x00eaa178's own two-flag-table role and 0x00a275e0's own internal body.]**
+- L11618: bly, full raw-disassembly read matches pseudocode exactly, including the normalize-helper's own full body and all byte-confirmed constants; OPEN — 0x005aa3c0's own body.]**
+- L11633: decompiler-rendering quirk with no behavioral effect was also flagged (item 22.29). Deep internals of un-named depth-2+ helpers are flagged OPEN exactly where noted per-item, not guessed.
+- L11649: her immediately plays or persists the player's voice profile. **[CONFIRMED — disassembly for full control flow and both resolver addresses; OPEN — 0x0094e120/0x0070dd10/0x0070dcf0/0x00bd8360's own internal bodies.]**
+- L11667: he argument shape, the hidden-arg fix, the cross-family/shared-list reuse, and the corrected append-list/dropped-boolean-argument findings; OPEN — the exact per-entry secondary tag field and the full 0x00e0xxxx event-family semantics (shared OPEN item with §19.5).]**
+- L11675: e facial/body morphs for a resolved morph category. **[CONFIRMED — disassembly for the full control flow, clean argument counts throughout; OPEN — 0x00831650's own resolution logic and the exact semantic role of the +4/+0xc record fields.]**
+- L11687: field into 0x01300d98 (matching §19.14's field, though without that section's +0xf3 literal offset — a minor structural difference, flagged OPEN rather than resolved).
+- L11689: ndependently reconfirming §19.14's finding at the SAME callee), the tracker-transition structure, and the anomalous 0x009da4e0 call shapes; OPEN — 0x00945bd0/0x0094b070/0x00987410's own exact bodies.]**
+- L11713: x (2nd confirmation of the §19.5 finding), the new 0x026535b0 variant-byte field, and the new alpha-byte/intensity sub-field on 0x026534b0; OPEN — the exact per-category-definition +0x24 flag's meaning and the full name-matching branch's real-world purpose.]**
+- L11723: — disassembly for the hidden-ECX argument, the clean 8-argument apply call, and the 0x0082e2d0 category-id cross-reference with item 23.2; OPEN — 0x00836d90/0x00838cc0/0x00838d10/0x00d9e7e0's own internal bodies.]**
+- L11735: . **[CONFIRMED — disassembly for the full control flow and both shared-primitive reuses (0x02cc9900 bit 0x80@+6, liveness gate 0x00853b10); OPEN — 0x00a9bbe0's own cost-computation body.]**
+- L11743: . Direct counterpart of the letterbox fade-in sibling implied by this cluster's own naming (not independently confirmed this pass — flagged OPEN).
+- L11755: ew status (2026-10-01, job `20261001T170909-team-a-nbjm`):** `0x008428e0` dumped directly; body matches exactly as described. CONFIRMED. No OPEN part remains in this unit.
+- L11771: ed, surfaces a "DLC Parsing" notice dialog. **[CONFIRMED — disassembly for the full control flow and both literal localization-key strings; OPEN — 0x00841ba0/0x0084a1b0/0x007c3e60/0x00e0ceb0's own internal bodies.]**
+- L11785: on. **[CONFIRMED — disassembly for the full argument shape, the hidden-ECX argument, and the THIRD sighting of the open 0x009da4e0 anomaly; OPEN — 0x00960160/0x0094d920/0x006cede0's own internal bodies.]**
+- L11801: er expects. **[CONFIRMED — disassembly for the full argument shape (including the always-mandatory 3rd read) and the self-consistency gate; OPEN — 0x007c1c80's own internal body.]**
+- L11811: as a garage containing at least one vehicle of the given type. **[CONFIRMED — disassembly for the full control flow and the hidden-ECX fix; OPEN — 0x005f0f90/0x005facf0/0x005f7560's own internal bodies.]**
+- L11815: a 1-line flag read; this one calls out to 0x00720900, not independently decompiled this pass, so it MAY still just read a flag internally — OPEN).
+- L11819: al sibling of item 23.20 (adjacent function addresses, 0x00720900/0x00720910 — plausibly a small family of completion-screen state queries; OPEN whether they share a common underlying flag block).
+- L11853: ter to idle. Subsystem: boss-battle scripted encounter. **[CONFIRMED — disassembly, full body of both the Lua entry point and its delegate; OPEN — 0x005e5bb0/0x007f1e30's own internals.]**
+- L11873: 0x005aa3f0 for `_clear`), not by anything in the record payload itself. **[CONFIRMED — disassembly, full body, matches pseudocode exactly; OPEN — 0x005aa3f0's own internals.]**
+- L11890: haracter AI movement/wander. **[CONFIRMED — disassembly for the whole chain including both hidden-`this` findings on 0x004e7d10/0x004e3d90; OPEN — 0x004e3d90/0x00da38e0/0x004e4130's own full internals, and the exact real-world meaning of character+0x2f0/+0x501/+0x2b0.]**
+- L11902: spotlight. **[CONFIRMED — disassembly for the whole chain, including the dead-argument-read finding and the distinct 0x024433a8 singleton; OPEN — the +0xa44 sub-object's own full layout and the 0x011800e0/0x011800e4 globals' real-world meaning beyond "neutral default."]**
+- L11934: ns a resolved vehicle's "smoke active" (bit 1) and "fire active" (bit 7) state, in that push order. **[CONFIRMED — disassembly, full chain; OPEN — the exact real-world meaning of bit 2 of the same dword, which this entry point never surfaces to Lua.]**
+- L11987: capability bit, plus a local-only notification. **[CONFIRMED — disassembly for the whole chain including the vtable hidden-`this` finding; OPEN — the vtable+0x78 method's own real class/body (unresolved without a concrete derived-class trace) and the exact role of its 2nd boolean.]**
+- L12039: ngle" values, converting from degrees to radians. **[CONFIRMED — disassembly, full chain, including the byte-confirmed conversion constant; OPEN — where 0x012e28c0/0x012e28c4 are consumed.]**
+- L12061: al to a resolved/hashed id derived from the named newsbreak. **[CONFIRMED — disassembly for the Lua entry point and its immediate delegate; OPEN — 0x00462960's own internals. Noted in passing: the registrar's own name-adjacent sibling `radio_newsbreak_clear` exists at a neighboring table slot but was NOT part of this tranche's a
+- L12105: ecifically-named character (base +0xf8, slot 0x11). **[CONFIRMED — disassembly for the whole branch structure and both hidden-`this` bases; OPEN — the exact real-world meaning of the resolver's out-flag (which "kind" of match it signals).]**
+- L12117: d to one of 4 category-specific handlers. **[CONFIRMED — disassembly for the whole chain, including the tail-jump dropped-argument finding; OPEN — the 4 category handlers' own internals and the selector's real-world category meanings.]**
+- L12173: ub-object, presumably triggering a best-weapon unholster action. **[CONFIRMED — disassembly for the resolver and the hidden-`this` finding; OPEN — 0x00600720's own internals and the exact real-world meaning of its 4 literal arguments.]** **[Partly resolved: selector 0xd = `"best"` per §21.23's name table.]**
+- L12183: resolver, no record — the same shape as the already-established `tutorial_vehicle_controls_enabled`. **[CONFIRMED — disassembly, full body; OPEN — where the global is consumed.]**
+- L12191: t-flag through it, which the caller then branches on to choose between two different hook bases. The out-flag's exact real-world meaning is OPEN.
+- L12211: ve chain and the corrected hidden-`this`; newly-identified primitive 0x008edfb0 (thiscall: this=group record, enable flag, source buffer) — OPEN, its own internal field-offset writes were not further decompiled past the call shape.]**
+- L12231: stem: mission/store state. **[CONFIRMED — disassembly for the argument shape (no hidden `this`, no other side effects at this outer layer); OPEN — 0x00a015f0's own internal read/write semantics.]**
+- L12241: global. Subsystem: mission state. **[CONFIRMED — disassembly for the full chain including the new singleton-`this` sighting on 0x005f4c30; OPEN — 0x006cfd80's own internal behaviour, and the exact real-world meaning of the 0x011239d0 gate.]**
+- L12251: ining `debris_flow_create` (§25.21) below in this tranche. Subsystem: HUD/message queue. **[CONFIRMED — disassembly for the argument shape; OPEN — 0x007ff290's own internal behaviour and the exact meaning of the literal 1.]**
+- L12261: bly for the full type-dispatch structure and all three corrected hidden-`this` sites, plus the new singleton-`this` sighting on 0x006434a0; OPEN — 0x0064a1f0/0x008cb380/0x008cb400's own internal field writes.]**
+- L12271: rld-object state. **[CONFIRMED — disassembly for the resolve chain, the new singleton-`this` sighting, and the vtable-call argument shapes; OPEN — the vtable +0x68/+0x70 slots' own internal bodies and 0x008ccb90 (this is the item/pickup-
+- L12283: uipped item a firearm. Subsystem: inventory. **[CONFIRMED — disassembly for the resolver/default-sentinel shape, no hidden arguments found; OPEN — 0x009ba7e0's own internal check.]**
+- L12293: the resolved character object. Subsystem: human/character weapon state. **[CONFIRMED — disassembly, including the corrected hidden-`this`; OPEN — 0x00946470's own internal field write.]**
+- L12303: , joining §15.4/§21.21. Subsystem: human/character AI-data state. **[CONFIRMED — disassembly, including the corrected hidden-`this`/offset; OPEN — 0x004e2650's own internal field write.]**
+- L12313: ference, gated by a predicate. Subsystem: human/vehicle-riding interaction. **[CONFIRMED — disassembly for the resolve/gate/dispatch chain; OPEN — 0x009a8430/0x009a84b0's own internal bodies.]**
+- L12323: or the record shape, the decompiler-artifact correction on the `lua_gettop` call, and the hidden-`this` confirmations on the field writers; OPEN — 0x007f01b0's own role.]**
+- L12333: — returns the remaining time on a global "critical" HUD countdown timer. Subsystem: HUD. **[CONFIRMED — disassembly for the argument shape; OPEN — 0x006cf080's own internal state source.]**
+- L12343: AI/pathfinding (helicopter). **[CONFIRMED — disassembly for the full 4-tier fallback structure and the two new singleton-`this` sightings; OPEN — 0x00a26010/0x00a26110/0x00b38280's own internal bodies.]**
+- L12353: ion command for a qualifying helicopter. Subsystem: vehicle AI/pathfinding. **[CONFIRMED — disassembly for the resolve/gate/dispatch chain; OPEN — 0x00b37050's own internal behaviour.]**
+- L12363: ambient scripting (escort/backup groups). **[CONFIRMED — disassembly, including the corrected hidden-`this` and the new singleton sighting; OPEN — 0x00679db0/0x00a2b490's own internal bodies.]**
+- L12371: this is a vehicle-instance-resolver handle, a different wrapper type, and the fields' real content was not independently confirmed; flagged OPEN rather than assumed. If 0x00ab6360 yields a live result (passing a second validity check, 0x009b91e0), the occupant record is converted to a name string via 0x00a353d0 and pushed via `l
+- L12373: r nil. Subsystem: vehicle occupancy. **[CONFIRMED — disassembly for the argument shapes (no hidden `this` found anywhere in this function); OPEN — the real content of the vehicle handle's own +8/+0xc fields, and 0x00ab6360/0x009b91e0/0x00a353d0's own internal bodies.]**
+- L12383: current state of a numbered "game choice" entry. Subsystem: player-choice/dialog state. **[CONFIRMED — disassembly for the argument shape; OPEN — 0x00a1f9f0's own internal state source.]**
+- L12393: completion. Subsystem: AI scripted-action state. **[CONFIRMED — disassembly for the resolve/lookup/clear chain, no hidden arguments found; OPEN — the exact polarity of 0x006f63c0's return value, flagged as a real unresolved cross-reference tension against §7.28's own description, not a re-derivation.]**
+- L12403: ystem:** destroys a debris-flow instance by id. Subsystem: debris-flow/particle effects. **[CONFIRMED — disassembly for the argument shape; OPEN — 0x006fbfb0's own internal behaviour.]**
+- L12413: ew debris-flow instance id. Subsystem: debris-flow/particle effects. **[CONFIRMED — disassembly for the confirmed zero-real-argument shape; OPEN — 0x006fbe60's own internal allocation.]**
+- L12423: system: debris-flow/particle effects. **[CONFIRMED — disassembly for the resolve chain, the new singleton sighting, and the argument shape; OPEN — 0x006fc100's own internal behaviour.]**
+- L12433: cts. **[CONFIRMED — disassembly for the resolve chain, the liveness check's real location, the handle-pair correction, and the 2-entry cap; OPEN — what the follow-target list actually drives, and what the start routine `0x005eb6c0` writes as the start count.]**
+- L12453: the confirmed hidden-`this` on the record-field writers and the confirmed genuine (non-hidden) character argument on the local-apply path; OPEN — 0x00943960's own internal write.]**
+- L12463: /character AI-data state. **[CONFIRMED — disassembly, including the corrected hidden-`this`/offset and the confirmed negated-sense storage; OPEN — 0x004e09f0's own internal field write.]**
+- L12473: ly playing a scripted "combat move" animation. Subsystem: AI/combat animation. **[CONFIRMED — disassembly for the resolve/query/push chain; OPEN — 0x009634f0's own internal check.]**
+- L12483: ystem: character AI/ownership state. **[CONFIRMED — disassembly for the resolve/liveness/query/push chain, plus the new singleton sighting; OPEN — the exact real-world meaning of the vtable +0x70 slot on this object kind.]**
+- L12516: ion's own name (`pcr_strip_clothing`), "mark everything as needing reapply/dirty" fits at least as well as "clear" — the exact role is left OPEN rather than asserted, per the review's own recommendation.
+- L12518: 7 documents; the exact name at index 5 was not independently re-read this pass to avoid guessing the table's internal left/right ordering — OPEN), flags 0. This is a genuine instance of the exact hidden-argument check this tranche's brief called out as highest-value, just via stack-slot reuse rather than a register — and, per th
+- L12520: **Side effects/subsystem:** character customization — calls 0x009f0cf0(player+0x2088, 1) (role OPEN, plausibly "mark composite items dirty/needing reapply" rather than "clear," see above) and clears one specific category (id 5) from the shared per-character list via the established reset/notify pri
+- L12544: sassembly, full body and the shared +0xc2 field cross-reference to §26.4; HIGH CONFIDENCE for the "leading byte 0 = remote" flag semantics; OPEN — no independent confirmation of that flag's writer.]**
+- L12552: a that thiscall — most plausibly "close the completion dialog if a co-op session is active." Not exhaustively decompiled beyond this shape (OPEN for 0x007bfa70/0x007b4790's own exact roles).
+- L12554: I-transition lifecycle. **[CONFIRMED — disassembly, full body, the callback target's own real-function status, and its own top-level shape; OPEN — the predicate/close-call's full internals.]**
+- L12562: the ownership-branch structure, the 1-argument grant call, and the literal achievement opcode; HIGH CONFIDENCE for 0x00816f00's exact role; OPEN — 0x005ee650/0x00816f00's own full internals.]**
+- L12605: checked exhaustively, not merely unsearched); the real world-pickup path is OPEN, not traced this
+- L12621: unlocated, and so does the world weapon/ammo pickup path — both stay OPEN.**
+- L12641: T114101-team-a-mnao`: 0x0059fb60 = `sfx_faded_in` and 0x005a0110 = `Screen_fade_transition_complete`, both CONFIRMED — disassembly; nothing OPEN in this unit.]**
+- L12649: tes — a fade-to-black-then-quit sequence, matching the name precisely. Not decompiled past this shape (0x00554270/0x00877410/0x00707880 all OPEN).
+- L12653: t order and the helper's behaviour; not re-derived — the callback target 0x007e0450 and its callees (0x00554270/0x00877410/0x00707880 still OPEN).**
+- L12669: ackpacks-area template byte. **[CONFIRMED — disassembly, full body; HIGH CONFIDENCE for 0x00822a00/0x009dd4a0's exact field-semantic roles; OPEN — their own bodies, not decompiled this pass.]**
+- L12688: of that area's own categories (walking its own +0x20/+0x24 category-pointer-array/count fields — **this newly resolves part of §19.1's own OPEN item about the area descriptor's fields**), if the category's own +0x2c item-count is positive OR the area's own +0x28 byte flag is set, opens the named target via the SAME builder famil
+- L12690: his pass newly resolves the area descriptor's +0x20/+0x24/+0x28 fields and the category descriptor's +0x2c/+4 fields, extending §19.1's own OPEN item on this exact question.]**
+- L12724: he dropped argument, the hidden-`this` argument, and the full branch structure; HIGH CONFIDENCE for slot 12's specific real-world identity (OPEN); the always-1.0 fallback for invalid/8-11 indices is CONFIRMED.]**
+- L12740: decompiled in full but not exhaustively raw-disasm-checked given size, matching this document's own house style for its largest functions; OPEN — 0x0059f8a0/0x0084a1b0/0x008450d0's own bodies.]**
+- L12756: led; not exhaustively raw-disasm-checked call-by-call given its size, matching house style for this batch's largest/most branchy functions; OPEN — 0x00ac1840/0x00bc1250/0x005eebd0's own exact field semantics.]**
+- L12760: - **Major new shared-primitive resolution: the 0x00e0xxxx "builder/named-callback" family, previously left OPEN at §19.5 as "a distinct, un-traced mechanism, most plausibly a generic UI/event-reporting builder rather than a network record."** This pass fully decompiled 8 of its members (0x00e1a1b0, 0x00e0ca80,
+- L12767: - **Newly resolves part of §19.1's own OPEN item** ("the exact meaning of area/category descriptor fields beyond the name string") — this pass's `pcu_get_categories_in_area`/`pcu_get_areas` decompiles directly confirm: area descriptor +0x20/+0
+- L12772: llets above re-derived from the executable (job `20261001T020200-team-a-nzxf`): CONFIRMED — helper signature, globals, the 0x00e1a1b0 role; OPEN — 0x00e0cba0 (the dispatch's inner call). The other bullets were not re-derived in this job.**
+- L12921: may-leave predicate is false). OPEN: which mode is 4 (no dump names the modes).
+- L12933: passes is still unread for nine of the ten sites. ~~OPEN (narrowed): which mode is 4, and whether mode 5 — the loading-screen
+- L12935: last valid slot of this same registrar's `< 0xb` (11-slot, 0-10) range, consistent with the existing bound, not a conflict with it. **Still OPEN: which mode is 4, and the identity of the other eight call sites** (`0x005d3ac0`, `0x00707840`, `0x00bdc120`, `0x007041b0`, `0x007ad410`, `0x007af0f0`, `0x007b06f0`, `0x007e1d10`, `0x00
+- L13003: **OPEN — next dump**  **[list replaced
+- L13029: the per-frame update; OPEN — the name and full body of 0x005a0110, the body of 0x0059fe70.**~~
+- L13037: counter's meaning; OPEN — mode 4 of the mode stack, the callers of the per-frame routine.**~~
+- L13047: meaning, 0x007a82c0 as the loading-screen callback; OPEN — which mode is 4, the body of
+- L13059: native, 0x0149365c as a shipping-mode byte,  **0x007a82c0 as mode 8's own per-frame handler (CONFIRMED, not the loading screen)**; OPEN
+- L13067: still OPEN, but now has a concrete (weak) HYPOTHESIS candidate**: an object field (`0x024e4860+0x27c`)
+- L13158: (**OPEN**).~~ **[added, job `20261001T122853-team-a-nnlt`; constructor body read, job
+- L13169: written only at run time (**OPEN**: which routine writes each one).
+- L13190: state := 2 in 0x007285c0, which also sets 0x0153b534. **OPEN**: who calls them. Candidates from the
+- L13202: 2026-10-02, `mm_p_01` zscene-promotion investigation, re-derived from the executable — this was wrong for the first driver, and settles the OPEN item below about `0x00703c00`'s own body):** the engine keeps a table of up to 11 **game states** at `0x01503bc0` (`0x24` bytes each, registered by `0x00706a40`); the frame function `0x
+- L13218: it down through this SAME routine: a cascade release for a paired resource. OPEN (narrower): which
+- L13269: 5. ~~Who fills the scene table is **OPEN**. The only writers of its base and count are 0x007231e0,
+- L13316: marker routine 0x00707410 (HYPOTHESIS: a profiling scope). OPEN: the writers of 1, 9, 12, 14 and
+- L13335: **OPEN — next dump**  **[list replaced
+- L13354: variant, cutscene guard; OPEN — load start and completion drivers, table source.**~~
+- L13362: guard, the transition stream's nature, 0x0153b534's nature; OPEN — the promoter's caller
+- L13375: purpose; OPEN — the entry constructor and unlisted fields, the loading/playback helper bodies, the
+- L13394: the marker routine, the parser option bytes' original intended purpose; OPEN — remaining unlisted entry
+- L13470: x87 operand order is ambiguous). ~~**OPEN**: the two constants; only their low dwords appear in the dump,
+- L13471: and 0x0116dfc0's matches a widened 0.1f.**OPEN**: the two
+- L13489: **OPEN — next dump:** **[list replaced from the interpretation of job `20261001T114101-team-a-mnao`; the struck
+- L13507: safe-frame edge meaning; OPEN — display-mode values, the two scale constants.**~~
+- L13514: OPEN — the record's writers, the two scale constants.**~~
+- L13523: handler; OPEN — what triggers a resolution change.**~~
+- L13533: layout index 0x0132c0ac; HYPOTHESIS — multi-monitor meaning of the mode; OPEN — what calls
+- L13565: `include` is unchanged (`spec-lua-bindings.md` §16.3; its re-read is still OPEN).
+- L13803: scheduler, and so **how often a yielded thread is resumed, is OPEN** (HYPOTHESIS: once per frame).~~
+- L13844: OPEN list (the exact value the 4 pause-push/pop sites pass into the exempt list beyond the state pointer itself, HIGH CONFIDENCE not literally read; who sets thread-record flag bit 0x08 for object-bound t
+- L13872: dozens of 0x00e0cd00 callers) was not completed this pass — OPEN, lower priority now that the
+- L13932: a thread record; the top-level entry that pushes the first record is **OPEN**. A host should give
+- L13949: One number. The id assignment policy is **OPEN**; 65535 means "no thread".
+- L13955: thread resumes is **OPEN**, because the runner resumes with the record's original argument count each
+- L14008: - ~~**OPEN — seeding and filling.** The only writer of the ring's contents in the reference list is
+- L14027: object type (**OPEN**).
+- L14034: - **OPEN:** the generator algorithm (0x00dab3c0, 0x00dab370), the seeds the three callers pass, and
+- L14041: ~~**OPEN — the remaining bodies.** The job did not dump the other 18 natives of the roster, and the
+- L14042: following are therefore OPEN:~~
+- L14051: bad argument as 0. The ring fill/seed and 0x00fccb70 are OPEN as well. All of these are settled in the
+- L14057: **OPEN:** re-read of `include` (0x00e0f010; desk-level description in `spec-lua-bindings.md` §16.3) —
+- L14066: opens the stock libraries. OPEN — ring seeding, the 18 undumped bodies and the `include` re-read
+- L14081: HYPOTHESIS — missing-argument behaviour. OPEN — the generator and its seeds; `thread_yield`'s value on resumption; the `include` re-read. ~~thread scheduling cadence
+- L14097: references at `0x0087c341`/`0x0087c359` sit in undefined code and may be further writers **[OPEN]**.~~
+- L14106: CONFIDENCE — by elimination; OPEN until that code is disassembled]**.~~
+- L14118: themselves undefined code and **when it runs is OPEN**. The best places to look are the undefined
+- L14169: disassembly and xref for all of the above; when any of these callers runs on a single-player start is OPEN.]** What
+- L14174: **What single-player startup leaves it as: OPEN.** The executable starts at 0, but whether starting a
+- L14205: player uses an offline session is HYPOTHESIS]**. `game_get_is_host` in single player stays OPEN. The HYPOTHESIS above (single player keeps a one-member host session) stays a hypothesis **[2026-10-01, job
+- L14208: but a join or a host migration moves the host pointer. Whether it installs one is OPEN, so implementations keep the
+- L14214: wrapper function, `0x0088cd40`, which turned out to be exactly the "installer's only caller" this unit's own OPEN item
+- L14232: when that runs is OPEN.~~ **[Corrected 2026-10-01, job `20261001T114716-team-a-fvfp`.]** The 210-entry table at `0x0151d600`
+- L14241: `0x00715f20` runs is OPEN.~~ **[2026-10-01, job `20261001T124128-team-a-jfue`:]** which then loads the UI document named `tutorial` in the
+- L14261: OPEN.]** No code read so far writes 3. The only unread direct references to the state field are in
+- L14263: **Who writes state 3 is OPEN.**~~
+- L14315: `0x00717780` returns and the per-entry state table at `0x0151d600` uses. **[CONFIRMED — disassembly (static data) for 209 names; index 176 OPEN.]** These are functional identifiers that scripts pass to `tutorial_start`/`tutorial_advance` and that the engine resolves by name (owner's content ruling, 2026-10-01).
+- L14395: is false on a fresh process; store flag 0 at startup; names at indices 0 and 1. HYPOTHESIS — single player keeps a one-member host session. OPEN —  ; the full tutorial name list (job `20261001T114802-team-a-kyoi`);  (merged into the item above). Updated 2026-10-01 (job `20261001T114716-team-a-fvfp`): CONFIRMED — the three resolv
+- L14401: 27.17, 27.22, 27.23, 27.24, 27.25), **12 CORRECTED** (27.2, 27.5, 27.7, 27.8, 27.11, 27.13, 27.14, 27.18, 27.19, 27.20, 27.21, 27.26), **0 OPEN** at entry level. Every entry is now cleared for implementation; the sub-items an entry still marks OPEN are not. Main corrections: 0x00a525a0 is one function registered under two names 
+- L14411: 34) via 0x0086f1b0. [CONFIRMED — disassembly for the field writes and the call chain; HIGH CONFIDENCE for the 'message to session' reading; OPEN — meaning of values 1/2.] [2026-10-01, jobs pwgq/jxxz] **[2026-10-01, job 20261001T165637-team-a-tabs, Q8.1 — CONFIRMED — xref (46 uses, 9 functions, complete).** `0x014c2d10` is writte
+- L14415: m-a-jxxz; 0x014c2d10 writer/clearer confirmed by job 20261001T165637-team-a-tabs, Q8.1): CONFIRMED — cleared for implementation, except the OPEN items still listed in this entry (meaning of the +0xe0 values 1/2; the singleton's creator body), which are not cleared.
+- L14449: one byte-sized state argument at every site; §2.10's call therefore also carries a hidden `this` (what that object is at 0x00a3c9d0 remains OPEN until that site is dumped). CONFIRMED — disassembly for the signature.]** **[2026-10-01, job 20261001T165637-team-a-tabs, Q1.2: that object at 0x00a3c9d0's call site (reached from `audi
+- L14451: disassembly for both calls; HYPOTHESIS for member byte +0x0 (1 = the local member, 0 = a connected remote member) and for the event-4 name; OPEN — who subscribes to the conversation context's +0x24 slots.]**
+- L14453: §9.2/§9.15/§10.6 census) — CORRECTED, disassembly of both bodies (the per-member send primitives `0x00874290`/`0x008741c0` themselves stay OPEN). This entry's own and this document's other §27/§28 uses of `0x0086f1b0`/`0x0086f110` (items 27.1, 28.1, 28.11, 28.15, 28.19) already match the corrected direction and need no change; f
+- L14469: [+0xc]` through `0x004cd810`/`0x004cd740`) and the final apply call `0x00568de0`(&P, &vec1, &vec2, flags, E`[+0x14]`, "is Standard") stay **OPEN** (the apply call is HIGH CONFIDENCE as the placement proper). The third parameter of `0x00a9b080` is confirmed never read, matching this entry's own "stale-slot zeros" reading above.]*
+- L14473: tandard"`. **[CONFIRMED — disassembly for the full control flow, both hidden/stale-slot argument findings, and the shared-primitive reuses; OPEN —  the positioning math in 0x00a9b080 (0x00812e40 and 0x00d9e8b0 are settled above) [2026-10-01, jobs pwgq/jxxz], and  (polarity resolved above).]**
+- L14477: x1c; 0x00a9afd0 returns a row of a separate global camera table, not a field of the +0xbf4 record) — cleared for implementation, except the OPEN items still listed in this entry (the look-at/up vectors and the final apply call 0x00568de0), which are not cleared.
+- L14523: veness test `0x00853b10` used throughout this document ("non-zero for a dead handle") is HIGH CONFIDENCE a read of these same `+0x33` bits. OPEN — the category-tag identities (`0x22`/`0x24`) and `0x00884760`'s answer.]**
+- L14527: 707-team-a-jxxz; 0x00853ea0 raised to CONFIRMED by job 20261001T165637-team-a-tabs, Q4): CONFIRMED — cleared for implementation, except the OPEN items still listed in this entry (the category-tag identities and 0x00884760's answer), which are not cleared.
+- L14535: 00, §8.13/§26.23) but is a distinct address not independently decompiled this pass — plausibly a further sibling of that family, flagged as OPEN rather than asserted. **[CONFIRMED — disassembly, full body, clean 4-argument call;  0x005a0580(a, b, c, f) calls 0x005a0270(a, b, c, f), then 0x00722090(1), then 0x0059f8c0(a, 0, b) — 
+- L14553: a second list anchor the slot gets moved onto when closed, most plausibly a closed/free pool; exact roles not exhaustively traced, flagged OPEN), handling the single-node and now-empty-list edge cases explicitly.
+- L14555: 0`. `0x007c18a0`/`0x007c2ac0` (body text / buttons) and `0x00e22a30` (the zero-byte-safe UTF-16 encoder) are also now bodied — see §27.20's OPEN note below, which this closes. CONFIRMED — disassembly.]**]**
+- L14559: 37-team-a-tabs, Q7.2): CORRECTED (+0x114 field, predicate roles, Lua-state accessor naming, +0x13c origin) — cleared for implementation; no OPEN items remain in this entry.
+- L14563: consult; set by `0x006f98e0`, written by `0x006f9a20` — this entry's "no mission is active" gloss is HYPOTHESIS pending those two bodies (**OPEN — 0x006f8370's identity**). `0x00b94ff0`() performs or defers: returns at once if `0x0290cedc` is set or `0x0290ceca == 1 && 0x0290cecb` or `0x0290ceda` is set; otherwise, only if the S
+- L14567: ff0 bodies and the three gate globals confirmed by job 20261001T165637-team-a-tabs, Q5): CONFIRMED — cleared for implementation, except the OPEN items still listed in this entry (0x006f8370's identity; 0x0229a317's name), which are not cleared.
+- L14575: ly when the session is offline (settings byte `+0x4e` bit `0x40`). A 15-second throttle table (`0x024e4bd0`, Q2.2) is armed on every queue. OPEN — the invite send `0x0086ff70` and the filler of R`+0x88` (`0x007c9470`/`0x007c9710`).]**]**
+- L14579: xxz; 0x0088e690 closed by job 20261001T165637-team-a-tabs, Q2.1): CORRECTED (0x00d34dd0 is a stub) — cleared for implementation, except the OPEN items still listed in this entry (0x0086ff70; R+0x88's filler), which are not cleared.
+- L14591: team-a-jxxz; 0x0088dfd0 closed by job 20261001T165637-team-a-tabs, Q2.2): CORRECTED (0x0101b530 is a stub) — cleared for implementation; no OPEN items remain in this entry.
+- L14669: 1T165637-team-a-tabs, Q7.2/Q7.3): CORRECTED (no callback is registered; the string is a Lua callback name) — cleared for implementation; no OPEN items remain in this entry.
+- L14683: 1T021707-team-a-jxxz; 0x00870810 closed by job 20261001T165637-team-a-tabs, Q2.4): CORRECTED (family note) — cleared for implementation; no OPEN items remain in this entry.
+- L14689: **Body:** attempts to join via 0x007c9410(slot) (capturing its boolean result), THEN calls  the `return 1` stub 0x0101b4f0 (closes §13.24's OPEN on it: inert) [2026-10-01, jobs pwgq/jxxz], THEN pushes the earlier-captured boolean. Note the platform-helper call happens AFTER the join attempt here, the reverse order from item 27.2
+- L14691: (byte `0x024e4b96`), if R is null, or if R`+0x88` lacks presence bits `0x4` or `0x2` (which bit is "online" and which is "in a game" stays OPEN); otherwise tail-jumps to `0x0088dd80`(R), which queries the friends interface for the friend's current game, requires the answer's app id to equal `0xd7be` (55230, this game's Steam app
+- L14695: 0261001T021707-team-a-jxxz; 0x0088e040 closed by job 20261001T165637-team-a-tabs, Q2.3): CONFIRMED — cleared for implementation, except the OPEN items still listed in this entry (0x00870700; the presence-bit meanings), which are not cleared.
+- L14739: is` —  0x008788e0 is a thiscall at every site, so §2.10's call also carries a hidden `this`; only what that object is at 0x00a3c9d0 remains OPEN (§27.4). [2026-10-01, jobs pwgq/jxxz]
+- L14751: 28.15, 28.18, 28.21, 28.22, 28.24, 28.25), **11 CORRECTED** (28.2, 28.3, 28.5, 28.9, 28.11, 28.16, 28.17, 28.19, 28.20, 28.23, 28.26), **0 OPEN** at entry level; no registered name or address was wrong. Every entry is now cleared for implementation; the sub-items an entry still marks OPEN are not. Main corrections: `effect_play_
+- L14763: discarded) and simply returns `vehicle + 0x100`, so this entry's "bit 0x8 of byte +2 of the vehicle's AI record" is vehicle byte `+0x102`. OPEN — what that bit means.] [2026-10-01, job 20261001T165637-team-a-tabs, Q16, refining the resolver chain above, CONFIRMED — disassembly: `0x00a280c0`(name, &found)'s second argument is a "
+- L14767: tter closed and the resolver chain refined by job 20261001T165637-team-a-tabs, Q15/Q16): CONFIRMED — cleared for implementation, except the OPEN items still listed in this entry (the meaning of vehicle byte +0x102's bit 0x8; the death-spiral reading stays HYPOTHESIS), which are not cleared.
+- L14788: range `0`-`6` — **OPEN which classes occupy `1`/`5`/`6`.** **Spawn-time default: OPEN** — no write to
+- L14802: the vehicle's own `+0x398` (the `+0x4b0` gate), `+0x298` (the bit `0x2` byte) and `+0x530`..`+0x538` (the vector) — not a separate record. OPEN — what those offsets mean and which axis the third orientation row is.]
+- L14806: ressed as vehicle +0x398/+0x298/+0x530..+0x538 by job 20261001T165637-team-a-tabs, Q15): CORRECTED — cleared for implementation, except the OPEN items still listed in this entry (the meaning of +0x398/+0x298/+0x530..+0x538 and the axis of the third orientation row), which are not cleared.
+- L14830: x57d) on the object 0x00614cb0() returns: 0x00626210 calls 0x006d2910 (through 0x00614d00) and proceeds only if it returns 3 (a mode check, OPEN), then calls 0x00614cb0() and, if non-null, calls the stub 0x00d34d40() and writes the boolean byte to that object's +0x57d [CONFIRMED — disassembly for the structure] [2026-10-01, jobs
+- L14834: 14cb0/0x00d34d40 bodies added by job 20261001T165637-team-a-tabs, Q12): CONFIRMED (target refined) — cleared for implementation, except the OPEN items still listed in this entry (the mission's +0x164 sub-object identity; the object two hops below 0x014b2ddc), which are not cleared.
+- L14874: (§18.14), and this native is a READ. **OPEN, genuinely unlocated (not blocking for m05 — none of
+- L14895: filled by the receiver's own loader (not dumped) — its real-world meaning cannot be read from code; it is table content, not instructions. OPEN — the matrix's source and the receiver object's identity (consistent with, but not proof of, "human").]** On a pass, increments a counter; the final count is pushed as the Lua return val
+- L14897: of a category-filtered set of nearby objects ( category id 47, tested through 0x00778bc0 against each candidate type's +0x1c code; meaning OPEN [2026-10-01, jobs pwgq/jxxz]) fall inside a resolved trigger volume, via a genuine hidden-`this` containment test on the trigger itself. Subsystem: trigger volume / occupancy query. **[C
+- L14901: hanism confirmed by job 20261001T165637-team-a-tabs, Q10): CONFIRMED (callee named; details added) — cleared for implementation, except the OPEN items still listed in this entry (meaning of category 47 and code 0xc0069; the matrix's source and the receiver's identity), which are not cleared.
+- L14915: 61001T021707-team-a-jxxz; 0x00ad3b40/0x00ad3c50 closed by job 20261001T165637-team-a-tabs, Q11): CONFIRMED — cleared for implementation; no OPEN items remain in this entry.
+- L14919: iteral dword value 3, not any float encoding, into that slot). Arg 3 is rounded via 0x00ea2596 and stored into the request's +0x6c (meaning OPEN); arg 2 is kept as a float. [2026-10-01, jobs pwgq/jxxz]
+- L14933: r animation. **[CONFIRMED — disassembly for the whole chain, the float-mistyping correction, and all five dropped/hidden-argument findings; OPEN —  the meaning of request +0x6c (arg 3). [2026-10-01, jobs pwgq/jxxz]]**
+- L14937: am-a-pwgq / 20261001T021707-team-a-jxxz): CORRECTED (argument role, return value, effect identity) — cleared for implementation, except the OPEN items still listed in this entry (meaning of request +0x6c), which are not cleared.
+- L14961: d the object drops out of the flow instead. CONFIRMED — disassembly; the vehicle helpers' own identities and `0x006fcb00`/`0x006fcc80` stay OPEN. **So "recycle" = respawn on the flow's entry annulus, not return to a pool; the entry itself stays in the row's list throughout.**] Subsystem: debris-flow/particle effects. **[CONFIRME
+- L14965: 9 — it respawns the object on the flow's entry annulus, it is not a pool return): CORRECTED (role) — cleared for implementation, except the OPEN items still listed in this entry (0x006fcb00, 0x006fcc80, and the vehicle-helper identities), which are not cleared.
+- L15015: /jxxz] **[2026-10-01, job 20261001T165637-team-a-tabs, Q14 — CONFIRMED — disassembly (structure) for six of the helper identities; residual OPEN narrowed below.**
+- L15019: door-attached-object list (class bit `0x8`@`+0x9`) — `0x008d6ba0`'s polarity (does flag 1 lock or unlock the gang's exterior doors?) stays OPEN.
+- L15020: deactivate** (collateral confirmation for §1.9 `city_zone_swap`, outside this entry — the inner `0x0084a6c0`/`0x0084a710`/`0x0084a7f0` stay OPEN), re-targets the trigger/door group via `0x005f1450`, and replicates opcode `0x45` **sub-type 3** (level change: `+0x140`+1, `+0x144`+1) broadcast to the session.
+- L15024: So **opcode `0x45`'s sub-types are 2 = unlock, 3 = level change, `0x1d` = owned-object notice.** Residual OPEN, exactly as the job leaves them: `0x00bd2950`, `0x00bd3510` (HYPOTHESIS: the host-side save-row writer paralleling `0x00b98d00`), `0x00710910` (HYPOTHESIS: an achievement/unlock notice, id 44, fired
+- L15028: lpers' bodies added by job 20261001T165637-team-a-tabs, Q14): CONFIRMED (body of 0x005f1cc0 added) — cleared for implementation, except the OPEN items still listed in this entry (0x00bd2950, 0x00bd3510, 0x00710910, 0x005e8b30, 0x008d6ba0's polarity, 0x008da510/0x008da550, 0x004d47e0, 0x006055d0, 0x0084a6c0/0x0084a710/0x0084a7f0,
+- L15044: s the position (through 0x00da38e0) to the 16-byte global 0x012ec950, sets 0x012ec960 = -1, then 0x012ec964 = 1. [CONFIRMED — disassembly.] OPEN — the meaning of the globals 0x012ec8f4/0x012ec908/0x012ec960 the start resets. [2026-10-01, jobs pwgq/jxxz]]**
+- L15048: -pwgq / 20261001T021707-team-a-jxxz): CORRECTED (semantics; the 'definition vs instance' question) — cleared for implementation, except the OPEN items still listed in this entry (meaning of 0x012ec8f4/0x012ec908/0x012ec960), which are not cleared.
+- L15060: sassembly.] [2026-10-01, jobs pwgq/jxxz] **[CONFIRMED — disassembly for the entire dispatch structure and all seven hidden-`this` findings; OPEN —  whether +0x90 here is §21.19's door base (depends on the door kind having descriptor bit 0x1@+0xb, not checked). [2026-10-01, jobs pwgq/jxxz]]**
+- L15064: m-a-pwgq / 20261001T021707-team-a-jxxz): CORRECTED (getter roles); dispatch and wrappers CONFIRMED — cleared for implementation, except the OPEN items still listed in this entry (whether +0x90 is §21.19's door base), which are not cleared.
+- L15074: one_swap` setter (§1.9). **[CONFIRMED — disassembly, full chain, including the new hidden 4th-argument/output-buffer finding on 0x00d9e8b0; OPEN —  0x0084a7c0's internals (settled above), and still OPEN: [2026-10-01, jobs pwgq/jxxz] whether §1.9's own call site shares the same 4th argument.]**
+- L15078: ble (jobs 20261001T021703-team-a-pwgq / 20261001T021707-team-a-jxxz): CONFIRMED (lookup described) — cleared for implementation, except the OPEN items still listed in this entry (whether §1.9's call site shares the output buffer), which are not cleared.
+- L15130: plus a fixed trailing 0. Subsystem: character/vehicle interaction. **[CONFIRMED — disassembly, full chain, no hidden-argument corrections; OPEN — 0x00af3e10's own internal meaning of the negated argument and the trailing literal.]**
+- L15144: 00000`) is set, so an already-playing instance of "Cell Phone Answer" restarts in place rather than becoming the controller's current pair. OPEN shrinks to `0x004bce30`, `0x009ba300`, `0x00d9e1e0`.]**]**
+- L15148: 43a20 and 0x004b1b90 bodied by job 20261001T165637-team-a-tabs, Q13): CORRECTED (argument meaning) — cleared for implementation, except the OPEN items still listed in this entry (0x004bce30, 0x009ba300, 0x00d9e1e0), which are not cleared.
+- L15228: efs, §3 front matter's sentinel-inventory closure). How a second local co-op player is ever addressed, if by a name-like literal at all, is OPEN, not `#PLAYER2#`.]**
+- L15240: Side effects: clears a character's current combat movement; the three trailing calls read as action/animation requests with a 0.2 s blend. OPEN: the identities of `0x0095d720`, `0x0095f250`, `0x00967f60`, `0x00957ee0`, and what the three ids name.
+- L15246: body.rig"/"PLYM", host writes 0 to `0x012ec740`. **Returns false after a successful restore** — the Lua return is NOT a plain success flag. OPEN: most callees not dumped at depth 1; the role of bit 0 of `0x0268d2d0` (also touched by several unrelated sites).
+- L15254: x0045f000` (pause) or `0x0045f0d0` (resume), then a trailing `0x00562ff0(2/3)` (HYPOTHESIS: a state/notification code). No match → nothing. OPEN: the three callee bodies; only the first list match is acted on.
+- L15264: y test); if not under local authority, forwards via `0x004f4830(character, 1, index, 3000)` (HYPOTHESIS: network forward, 3000 ms timeout). OPEN: how/whether the AI later commits or discards a staged suggestion.
+- L15278: ere `d` is the **horizontal-only** distance (X/Z, Y dropped) and `R` is float global `0x0278cad4`. **Not clamped — negative beyond range.** OPEN: `R`'s own source (only writer `0x00a906b0`).
+- L15282: an, true if ≥1 character got an exit request. For each resolving character in state 3, builds an exit request and hands it to `0x00af3cd0` (OPEN, not dumped); remembers the first vehicle found; calls `0x00a7bdc0(arg3)` on it — **or with a NULL `this` when no vehicle was found** (confirmed from the listing, `XOR ECX,ECX`) — OPEN 
+- L15286: alls `0x00b2b140(vehicle, points, count, arg3, 0, arg4, -1.0f, id)`; a 0 result releases the id; either way pushes the integer as a number. OPEN: `0x00b2b140`'s own semantics/return meaning, what arg 3/4 select.
+- L15296: y: target unresolved → nothing. Vehicle via character path has no extra gate; vehicle-name path is **refused when `(+0xbf8)+0xa8` is ≥ 0** (OPEN: meaning; applies only to the vehicle-name path). Stops the vehicle (`0x00abe510`, shared with `vehicle_stop_do`), detaches all seats, builds the target's 4×4 pose, offsets/rotates it p
+- L15298: of 4. Both names resolve through `0x0094cc60` (unknown name → id 9 — a crash-shaped edge if that indexes past an 8×8 relation-matrix block, OPEN, not confirmed). `0x009b7130(id1, id2, 1, true)` writes the relation symmetrically, then a local-only opcode-`0x43` record. **Refines §20.6's "team 5" note**: the two "auxiliary arrays"
+- L15304: 26-10-02):** all 25 names in tranche 03 resolved and written up (§30.1-§30.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items are each tied to a specific undumped callee (depth-1 cap), not guessed past.
+- L15350: condition) replicates network opcode `0x45` sub-type `0x1d` for the member's id pair at `+0x08`/`+0x0c`. **This settles §28.15 Q14.6's own OPEN note on `0x005e8b30`'s per-object effect** (cross-referenced there). **[CONFIRMED — disassembly, for the bit writes and the opcode; HIGH CONFIDENCE for the "owned" reading.]** The member
+- L15366: 026-10-02):** fully resolved; the "stag" naming question (whether it echoes a story faction name) is cosmetic and left HYPOTHESIS. Residual OPEN: the member object's own kind and the meaning of its weight `+0x3c`; the selected zone's `+0x54` and the value written into the `pause_map_stag_completion` hook record's `+0x14`; the bo
+- L15374: (runtime-only). 7 direct references, all reads but this setter — written through a pointer or as a struct field (not traced). **[CONFIRMED; OPEN — the writer; HYPOTHESIS — "store" names the in-game shop UI.]**
+- L15382: bit `0x10` clear, in which case a secondary override check (`0x00da38e0`/`0x00a11e10`, record-copy + predicate call, field-level semantics OPEN) can still admit it; `0x013092f0 < dist²` → too far, unconditionally rejected, no override. So `0x013092ec`/`0x013092f0` together form the min/max radius of an annulus around each player
+- L15384: nordered compare) — a no-op. Sole reader `0x009106c0`. **[CONFIRMED; HIGH CONFIDENCE — a 0..1 ambient-pedestrian density override fraction; OPEN — how the reader applies it.]**
+- L15386: nctions, all in the `0x007d9xxx`-`0x007dfxxx` pause-map UI module §31 covers. **[CONFIRMED; HIGH CONFIDENCE — pause-map tutorial-mode flag; OPEN — what the 7 readers change in tutorial mode.]**
+- L15390: ller fields, plays an exit sound via the established voice-associate/start pair). **[CONFIRMED for the selector bits and gate/record split; OPEN — most of the teardown callees' exact roles.]**
+- L15398: ed name still does). Setter `0x009486f0` writes **bit `0x1` of `+0x1c9c`**; tags `"human"`/`"human_force_flagstrailing_aim"`. **[CONFIRMED; OPEN — what "trailing aim" changes.]**
+- L15404: he literal arguments, the record and the authority split; HIGH CONFIDENCE that `relocate` places the revived player at a nearby valid spot; OPEN — most named callees.]**
+- L15406: not resolved this pass — HYPOTHESIS). **[CONFIRMED; HYPOTHESIS — stops the engine teleporting a player who swims too far out back to shore; OPEN — whether `+0x28ad` is valid on a non-player character, since the resolver doesn't restrict to players.]**
+- L15408: ments; any other stage is a local no-op (record still sent). **[CONFIRMED; HIGH CONFIDENCE — mission-18 cargo-plane/tank bailout set piece; OPEN — most named callees.]**
+- L15410: stored in the slot. **[CONFIRMED for the slot walk and comparisons; HIGH CONFIDENCE — one slot per co-op player, five participant id pairs; OPEN — whether these are the same slots §15.6 `qte_cleanup` tears down.]**
+- L15414: the 5-slot overflow, the per-follower closest-player fallback and the overall control flow; HYPOTHESIS for several internal gate meanings; OPEN — several named callees.]**
+- L15416: false for one leader-kind bit, else the (non-dumped) result of a party-record lookup `0x005088c0`. **[CONFIRMED for the resolution/gating; OPEN — `0x005088c0`'s body; HYPOTHESIS — "in party" means "has any party leader," not specifically the local player's party.]**
+- L15418: ag` entry already applies. **[CONFIRMED; HIGH CONFIDENCE — `+0x510` holds current AI orders/targets and `+0x504` is the AI action-state id; OPEN — the refusal rule inside the state setter and the meaning of state `0x22`.]**
+- L15422: itself (replication, if any, is inside the virtual). **[CONFIRMED; HIGH CONFIDENCE — the virtual is the object's own destroy/remove method; OPEN — the virtual's per-kind body.]**
+- L15424: * — it loops asking an indicator-lookup for an entry and removing it until none remain. **[CONFIRMED including the loop-until-none removal; OPEN — the indicator-list internals.]**
+- L15426: hes reachable from a Lua script argument**, not merely a theoretical bound issue. **[CONFIRMED for the routing and the missing range check; OPEN — the two un-dumped middle table entries' exact behavior, though their general shape (local-only / replicate-only) is HIGH CONFIDENCE from the 1/2/3 mask convention.]**
+- L15432: ty virtual. The registrar slot immediately before this one is very likely `item_hide` (name not read this pass — HYPOTHESIS). **[CONFIRMED; OPEN — the meaning of the setter's "extra" argument, hardcoded to 1 here.]**
+- L15434: d/loop vs. play-once); neither resolving is a no-op. **[CONFIRMED for the argument order and branch rule; HYPOTHESIS for the flag meanings; OPEN — the layer-slot internals.]**
+- L15438: ion listing rather than the decompile (which shows it unassigned). **[CONFIRMED including the always-sent record and the register argument; OPEN — the internal station-attach/detach routines.]**
+- L15440: e** (z drawn uniformly in [−1,1], angle drawn separately, x/y from cos/sin scaled by √(1−z²)) — this settles this document's own previously-OPEN question about that helper's exact distribution. The shared dispatcher itself has three confirmed oddities: its own return value is invisible in the decompiled view (only visible in the
+- L15446: 26-10-02):** all 25 names in tranche 04 resolved and written up (§32.1-§32.7); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above.
+- L15458: `0x8` is clear. So **ready = `+0x3b` bit 0 clear AND `+0x3a` bit 0 clear AND `+0x33` bit `0x8` set**; the meanings of the two low bits are OPEN, but `+0x33` bit `0x8` cross-links to the kneecapper setter below (same bit, "vehicle object fully set up," HIGH CONFIDENCE).
+- L15460: vehicle byte `+0x1d7b` bit `0x1`; else an opcode-`0x46` record tagged `"vehicle"`/`"m_force_flagsnever_flatten_tires"`. Reader not traced (OPEN).
+- L15466: learing the deferred bit if that's all there was). No replication at this level. Whether the deferred bit is later honored automatically is OPEN.
+- L15470: ultiplies by the mph→m/s factor 0.44704 first; so the two take different units into the identical setter. Mode 6/sub-mode 0x11's meaning is OPEN.
+- L15480: target** (HYPOTHESIS: "leave cover"/idle; sibling of this document's existing scripted-take-cover entry, action 8). Meaning of action 13 is OPEN.
+- L15482: ode-50 request. Makes an NPC face/attend to a world position once (copied, not tracked). What the mode-7-vs-3 variant changes internally is OPEN (HYPOTHESIS: head-only vs. whole-body facing).
+- L15488: tion to, not instead of, playing locally with the anchor's transform if one was given. What a null actor does inside the final play call is OPEN.
+- L15492: dcasts an opcode-`0x49` record with a single byte, value 2. HYPOTHESIS: "sequence" = an in-engine scripted cutscene; several callees remain OPEN.
+- L15500: r currently has a valid, non-0xff slot in the global **"mission_conv"** per-session channel — **this settles this document's own previously-OPEN identity question for that channel global** (created by a dedicated helper against the session object, named literally "mission_conv"). The same per-member 5-byte-slot layout this docum
+- L15504: it active. Also looks up the character literally named **"Matt"** and, if found and alive, sets bit `0x4000` of its dword `+0xec` (meaning OPEN). Pairs with this document's existing Matt-boss cheat-stop entries. No replication.
+- L15508: ept via an untraced third writer, so after one real display, a second show can silently skip the display branch if that writer never runs — OPEN.
+- L15512: e §14.1 `0x0095da50` correction (applied in place above) and the `0x014e9ad0`/"mission_conv" identification (§33.4) both resolve previously-OPEN items. New force-flag bits: vehicle `+0x1d7b` bit `0x1` (never_flatten_tires), `+0x1d7e` bit `0x4` (weapons_disabled), vehicle-AI sub-byte `+5` bit `0x1` (no_chase, shared with the exis
+- L15514: 26-10-02):** all 25 names in tranche 05 resolved and written up (§33.1-§33.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: scripted actions 13 and 22's exact meaning, the VTOL `+0x5e8` state values, vehicle-AI mode 6/0x11, bit `0x4000`@`+0xec` on "Matt", and the untraced writer t
+- L15530: it is NOT a fixed per-character value without reproducing the PRNG draw and current story stage. The loaders of the two stage tables remain OPEN.** The multiplier M is 1.0 unless class test `0x00853b30(character, 0x22)` holds, in which case it is a float field (`+0x20` or `+0x1c`, selected by a further test) of the object `0x005
+- L15532: . Downgrading "the character's `character_definitions.xtbl` preset" to "the character's resolved preset object (exact runtime type/identity OPEN)" until `0x00be3360` and its registry-entry builder are read directly.
+- L15540: ewritten by `0x009d7480` itself. Whether it is refilled to match a `script_npc_hp` override that differs from the table value is HYPOTHESIS/OPEN (would need `0x009d7480`'s trailing helpers `0x0096e6e0`/`0x00943cc0`/`0x009659f0` opened).
+- L15552: x), `script_npc_char_scale`, and `script_npc_items`/`script_npc_loots` — none of those further properties were traced for effect this pass (OPEN). In-memory producers found by this pass (`commando_spawn`'s builder `0x00a33b80`; the script-NPC's own spawn routine `0x00a34f00`) never set `script_npc_hp` or an `ignore_ai` flag. The
+- L15556: efault-value chain; the data-table formula and the script-NPC override path are both traced to their respective record properties. Residual OPEN (all code-only, collected from the investigation): `0x0096e830`'s own level-choice logic; the multiplier block `0x005f4a50`; confirming preset `+0x28` from the `character_definitions.xt
+- L15579: lt is HIGH CONFIDENCE (absence of any write in the traced spawn chain, not a positive confirmation of the allocator's zero-fill behaviour — OPEN if that matters to a specific failing mission). The zone-independence finding is CONFIRMED for both fields against §34.1–§34.4's own already-traced override surface.
+- L15611: rections applied in place to §4.3, §15.17 (and its own §15.30 cross-reference), §22.4, §22.15, §26.24, and `spec-world-streaming.md` §11.3. OPEN: class-row `+0xa` bit `0x2` as "player class" is HIGH CONFIDENCE from three consistent uses, not read from a built descriptor row;  **RESOLVED (2026-10-10): `0x029443bc` is the machinim
+- L15615: -side and Lua-VM-side string-construction mechanism for how a mission's start function is even named, leaving the real invocation mechanism OPEN. This section resolves it (cross-referenced from `spec-lua-bindings.md` §14.11, which carries the narrative of why the prior searches came back negative — not duplicated here).
+- L15619: , but no zone or other placement bytes of any kind were opened.** Which carrier actually holds a given mission's record is therefore itself OPEN, not narrowed to one candidate: **HYPOTHESIS** candidates are the zone's `0x2234` placement stream (the same parked `.czn_pc` interior §29 stops at for Killbane), a mission package/tabl
+- L15621: **Data-side advance, 2026-10-08 (narrows, does not close, this OPEN item):** for mission 1 specifically, a real-data read of its own per-mission zone (`sr3_city~fm01.czn_pc`, `spec-zone-data-format.md` §11's own correction paragraph) confirmed by hash that neither `s
+- L15630: / `0x006d9310` (undefined code; the enter handler of one game-mode state, table slot `0x012f473c` — which numbered state is OPEN) / A mission with no pre-start phone call, or any restart / Whatever the current-checkpoint-name global (§36.3) already holds /
+- L15642: n-thread-id global, not a binary-wide census of every `0x00e0ca80` caller — see `spec-lua-bindings.md` §14.11 for the exact census method). OPEN: which game-mode state `0x006d9310` enters; the `silent_mission_start` sibling's own argument shape; `0x006d7120`'s remaining callers (whether any passes a checkpoint name other than th
+- L15662: annot be the cause of a stuck mission delay; they exist for a different, object-bound thread category whose own flag-setter was not traced (OPEN).
+- L15668: (no native delay), the two-clock census, the pause-site census and reason-code independence, and the resume-veto hooks' object-bound scope. OPEN: the exact Lua text and loop order of the real `game_lib.lua` delay (parked mode-a container, not opened); the full meaning of pause reasons `0x02`/`0x05`/`0x0b`/`0x0e`/`0x12`; who sets
+- L15688: recked vehicles on the list overruns the stack frame. A real, confirmed missing bound; whether the list can reach 49 entries in practice is OPEN.
+- L15700: , a straggler that never reaches `+0x16d4==3` for this exact vehicle has **no recovery path** and the check spins forever. **[CONFIRMED.]** OPEN: the exact semantic meaning of state `0x501==0x26`; the bodies of `0x009b9160`/`0x009b91e0` (gate only which stragglers get re-ordered, not the core completion predicate). Full detail: 
+- L15744: olor` (unchecked color index; the shared `+0xbd0` hazard), `vcust_purchase_wheels` (two unchecked committed-preview pointers — reachability OPEN), `store_weapon_change_weapon` (unchecked item index into global arrays; unchecked local player), `tutorial_get_case`/`store_weapon_change_weapon` (CRT invalid-parameter exposure on a n
+- L15746: 26-10-02):** all 25 names in tranche 06 resolved and written up (§38.1-§38.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the vehicle-class enum `0x00ad2f80`'s own value meanings; the relation matrix's true row count; several occupancy/eligibility helper bodies not opened at thi
+- L15750: _pushcclosure`/`lua_setfield`-to-globals pair directly; who calls each of these seven registrars (and into which Lua state) was not traced (OPEN). All 25 resolved. Addresses below are CONFIRMED — disassembly unless marked otherwise.
+- L15756: n integer argument is bounds-checked (`< 8` unsigned, so the default −1 is always skipped) before use in two further calls whose meaning is OPEN; a global float (`0x0262d160`) must lie in `[0, 90]` for an immediate rappel to proceed (meaning OPEN). Both create/reuse a "ga_cable" attached object.
+- L15776: no replication, no host reset found anywhere** — a negative value is accepted with no check on whether it inverts the comparison sensibly (OPEN).
+- L15778: nd-trip exactly through the Lua double, which would make `roadblock_destroy` silently miss it — whether real handles ever get that large is OPEN.
+- L15816: **`store_clothing_get_store_id` (`0x0080db90`).** No arguments. Returns 1 number, the result of an un-opened callee (`0x0080d810`, OPEN).
+- L15826: 26-10-02):** all 25 names in tranche 07 resolved and written up (§39.1-§39.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: who calls the seven screen-local registrars; several rappel/skydive argument meanings; the save-system's own record-write/mode-2 internals; whether the sessi
+- L15834: zero — otherwise it silently falls back to a different, unrelated getter and the override is ignored. `0x007044f0`'s own value meanings are OPEN (it also gates §40.2's sing-along flag).
+- L15862: 26-10-02):** all 25 names in tranche 08 resolved and written up (§40.1-§40.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: `0x007044f0`'s own mode values and who reads the sprint getters; the mission-scoped-variable mechanism's persistence/replication semantics; several PCU slot/
+- L15866: `) that is **not** reached through `0x008430f0` at all — it hangs off a different call chain (`0x008489e0` ← `0x005d2400`); its own role is OPEN. **Alias:** `get_current_difficulty`'s handler is also registered in the gameplay registrar under the name `difficulty_get_level` — the same function, two names. Addresses below are CON
+- L15870: any failure** — a real, confirmed return-arity irregularity. Sets/clears one specific bit of a mesh-mover sub-object field; who reads it is OPEN.
+- L15880: 007c9ed0`).** 1 boolean. No return. Stores it as a byte; the sole reader selects between two further UI dispatch codes (10 vs. 11, meanings OPEN).
+- L15884: friends interface's overlay-activation virtual method, if the interface pointer resolves. What Steam does with a null string wasn't traced (OPEN).
+- L15886: ool and builds a fresh one (a 64-entry ring of fixed-size server records). The Lua name of the stop counterpart was not resolved this pass (OPEN).
+- L15894: ck that index against the backing pointer array, or check the array entry for null** before dereferencing the resulting record — HYPOTHESIS/OPEN whether a non-player character can actually reach this path, but the missing checks themselves are CONFIRMED.
+- L15906: is null or lacks one specific kind-flag bit, both show and hide crash. Reachability (whether shipped group data ever has such a member) is OPEN, but the missing guard itself is CONFIRMED from the disassembly.
+- L15914: _player` (`0x00a4d2e0`).** 1 character name. Returns 1 boolean: one bit of a character dword, false on a failed lookup. Who sets the bit is OPEN.
+- L15918: resolution tiers). Returns 1 integer speed, 0 if nothing resolves. Reads the vehicle's velocity magnitude through a scale/bias pair (units OPEN) only when the vehicle's body is fully active. **On the third resolution tier, the result of a virtual call is dereferenced with no null check** — the sibling group code (§41.5) null-che
+- L15932: (unbounded index → wild indirect call); `group_show_do`/`group_hide_do` (null member object reaches an unguarded dereference — reachability OPEN); `get_vehicle_speed` tier 3 (unchecked virtual result — reachability OPEN); `inv_item_get_weapon_upgrades` (unchecked player-slot index and array entry — HYPOTHESIS reachability). Non-
+- L15934: 26-10-02):** all 25 names in tranche 11 resolved and written up (§41.1-§41.7); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the separate registrar `0x00845aa0`'s own role and callers; several Lua names for sibling setter functions not independently resolved this pass; co-op menu t
+- L15942: ** — reading the fixed-size scheme record immediately *before* the array base (reachability of an empty set while the pause menu is open is OPEN, the arithmetic itself is CONFIRMED).
+- L15956: a55300`).** Character + bare boolean (default false). **Silently a no-op while a specific global byte is set** — its meaning and writer are OPEN.
+- L15966: t the generic chain's own first tier matches never gets a mount hook from this function at all; which concrete object kinds that affects is OPEN. `on_m21_player_choice` is a hand-inlined registration against a GLOBAL hook record (not an object), shared with several clothing-store UI call sites — HIGH CONFIDENCE it is a general p
+- L15980: Both this function and its sibling `mission_help_clear` return immediately while a specific game-mode global is in a 4-value range (meaning OPEN). Resolves its text key through a localization lookup, falling back to a secondary hashed help-text table, falling back to showing the raw key text. **A real logic quirk: an unknown key
+- L15990: ed with argument `-1`); it can never report *which* option was chosen. Whether every dialog-close path passes `-1`, or only cancel does, is OPEN — if choosing an option passes its index instead, a script waiting for "not -2" after a choice waits forever, which is the same stuck-poll hazard as the open call failing, just triggere
+- L15998: reachability HYPOTHESIS for the remove case); `pause_menu_change_control_scheme` (negative-index read on an empty scheme set — reachability OPEN).
+- L16000: 26-10-02):** all 25 names in tranche 10 resolved and written up (§42.1-§42.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: which concrete object kinds trigger `on_mount`'s exclusion; the collectible table's real writer and field meanings; several `mission_help_table_do` record-fi
+- L16006: ### 43.1 Lua-callback coroutine mechanism settled (closes a tranche-08 OPEN item)
+- L16008: nche treats that as "skip this element," except `pcu_get_items_in_category` mode 2 (§43.2), which hangs instead.** This closes tranche 08's OPEN question about a nil callback name (handled, null result) and upgrades two of §26.27's HIGH CONFIDENCE items (the 256-count compare, the null-out on release) to CONFIRMED. §19.5/§23.3/§
+- L16018: t outfit just forgets the saved entry. Whether two saved entries can share one player-created record (leaving one dangling after delete) is OPEN.
+- L16022: able to the store, then queues two jobs (kinds 6/7) on a job queue — a full queue silently drops the job; the jobs' own consumer/meaning is OPEN.
+- L16054: nished the creator" handshake on two ready-flag globals plus a byte (`0x024e97d2`, HYPOTHESIS: "remote player still in the creator," writer OPEN) that gates a wait. When not ready, opens a waiting dialog from a fixed dialog pool — **if the pool is exhausted, the allocator returns null and the caller dereferences it unchecked.** 
+- L16058: a valid region/preset pair with no local player crashes. The written field (player `+0x2090`) and the morph-apply helpers' own meanings are OPEN.
+- L16060: tent, HYPOTHESIS); destructive if any shipped script calls it on an established character (Team B reports 2 call sites in 2 scripts; which, OPEN). No player null check on the final store read.
+- L16068: 26-10-02):** all 25 names in tranche 09 resolved and written up (§43.1-§43.3); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: queued job kinds 6/7's consumer; player fields `+0x2090`/`+0x5c` bit meanings; the byte `0x024e97d2`'s writer and the co-op "done" flags' reset path; whether
+- L16076: 70`, which unconditionally returns false (this executable is the DX9 build; whether a separate DX11 executable binds a different handler is OPEN). `game_show_party_ui` and `game_show_community_sessions_ui` resolve to the existing shared no-op stub `0x007c9f50` (§6.1/§24.2/§27.17). Console-overlay/recording features with no PC im
+- L16080: block, dword `+8`) published to matchmaking, rate-limited. Getter `game_get_coop_join_type` reads global `0x012f44fc`; meaning of 0/1/2 is OPEN.
+- L16086: yer count) tested as **"not zero" rather than "greater than zero,"** so a negative count (more players than capacity) passes — reachability OPEN — plus several session-state field tests whose meanings are OPEN.
+- L16096: ays whatever it was before, which is -1 on a fresh boot.** Whether a horde start with an uncommitted (-1) map breaks anything downstream is OPEN.
+- L16115: `game_difficulty_select` (`0x007e18a0`, sub-registrar `0x007e18e0`) — **this resolves tranche 11's §41.2 OPEN item** ("`get_current_difficulty`'s real setter, reached via a sibling UI handler, Lua name not resolved that pass"): it is this function, which stores the value only when it is below 3 (unsigned com
+- L16123: o §15.4's call queues AI event `0x26` on the character — not an effect. HIGH CONFIDENCE (the event-type identity `0x26`'s own meaning stays OPEN).
+- L16127: elper `0x007c3e60` is another caller with a smaller buffer — a full audit of every caller of `0x00db0510` against its actual buffer size is OPEN and worth doing as its own pass. The UI string encoder/decoder pair (`0x00e22a30` encode, `0x00e22ac0` decode, §44.4) is confirmed two-way, and the decoder's silent-failure-on-bad-input
+- L16129: coop_partner_gamercard` (unchecked `SteamFriends()` result); `game_is_joinable` ("≠0" free-slot test admits a negative count — reachability OPEN); `game_join_syslink_game` (8-bit index wraparound); `game_lobby_set_horde_mode_data` (spurious restart warning plus an uncommitted-map start on an out-of-range index).
+- L16131: 26-10-02):** all 25 names in tranche 12 resolved and written up (§44.1-§44.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: join-type/session-field meanings (§44.2/§44.5); whether horde can actually start with an uncommitted (-1) map; machinima state 3 and game-play-mode stack val
+- L16147: n co-op with the default mask, each machine both applies locally and sends to the other, with no de-duplication traced on the receive side (OPEN). Crash shapes: no local player with mask bit 0 reads through null `+0xf4`/`+0xd24`; an unknown rig name (both lookups fail) still indexes through to a null `+0x50` read.
+- L16164: etwork module is up, **unconditionally broadcast** (opcode `0x43`/`0x10`) with no host check — either machine can send it. Readers/receiver OPEN.
+- L16178: `dialog_box_set_current_option`: writes the option index into `+0x11c` with **no range check** (consumer unknown, OPEN). `dialog_option_accept_kbd_input`/`dialog_option_end_kbd_input`: start/end text-entry editing on a dialog option (cursor capped at 191 UTF-16 units, key-state table flushed on start, committed text
+- L16188: anup at all, because the flag it gates on has already been cleared.** Whether any shipped mission script actually triggers this ordering is OPEN.
+- L16200: 26-10-02):** all 25 names in tranche 13 resolved and written up (§45.1-§45.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the flee-order flag bits and byte constants (§45.1); who reads `+0x1c9c` bit 9, dialog `+0x11c`, and `0x013c9382`; the cellphone activity-record state-machin
+- L16225: found** — a clean negative result. **OPEN:** whether the pointer table at `0x014f6eb0` is the
+- L16260: icle `+0x1d7a` (no shift). **§3.7 was right; §20.1's "bit `0x8`" was the error**, now corrected there (and in §20.1's own cross-referencing OPEN notes and the §12.21/§12.22 entries that cite the same primitive). The sibling `0x00a7a9a0` (the "always apply player damage" flag) writes bit `0x02` of the same byte. Ten vehicle force
+- L16306: 26-10-02):** all 25 names in tranche 14 resolved and written up (§46.1-§46.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the writer of the action-sequence "busy" byte and what releases its control-lock slot in normal play; several AI-state branch meanings in `ai_force_team_idle
+- L16318: global hook record, not a per-object one) — for a mission "item drop" event, broadcast on every call rather than only on an actual change. OPEN: the receiving side's handling of the opcode-`0x43` record, and which mission script(s), if any, actually call this (zero observed call sites in Team B's corpus).
+- L16326: **Source.** Investigation for a new Team B mission blocker: `dlc3_m01`, `m19` and 2 other missions stop on the clock's hour byte being OPEN. Full write-up in `review/exe-notes-2026-10-01/interp_game_clock.md`. Addresses below are CONFIRMED — disassembly unless marked otherwise.
+- L16339: a `0x006fe480` — **HIGH CONFIDENCE this is the actual mechanism by which `dlc3_m01`/`m19` get a defined hour**; which missions carry one is OPEN (it's in their override data, not the executable).
+- L16389: ther than writing, when neither gate passes and no owner exists) — worth re-checking tranche 13's own `0x009493e0` against the same branch (OPEN, not done this pass).
+- L16401: 26-10-03):** all 25 names in tranche 16 resolved and written up (§49.1-§49.4); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: who consumes the `"os_boat"`/`"os_parking"` replicated bytes and several other engine-side readers named throughout; the identity of HUD screen `0x39` and pl
+- L16423: already on the stack.** Whether that bit can be clear while the pause map is open on PC (e.g. with a gamepad as the active input device) is OPEN; a reimplementation should zero the deltas unconditionally before this call regardless.
+- L16429: g up the requested display mode for telemetry, and a non-negative width's mode lookup is divided by a denominator whose zero-case safety is OPEN.
+- L16435: _stricmp` with no check — in the stock release CRT this terminates the process outright (whether SR3 installs a handler that survives it is OPEN). Separately, and confirmed regardless of that: **an unknown or misspelled track name returns zero Lua values, not nil or zero** — a script that does arithmetic on the result crashes in
+- L16455: 26-10-03):** all 25 names in tranche 18 resolved and written up (§50.1-§50.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: which dialog-close paths pass `-1` to `open_vint_dialog_do`'s completion callback (decides whether its stuck-poll hazard can trigger from a normal choice, no
+- L16469: flag clears) happens **before** the asynchronous delete job is known to have actually succeeded; whether a failed job gets this repaired is OPEN. `save_system_set_operation` writes to a global nothing reads — another confirmed-dead write.
+- L16489: record to the session with no host gate at all** — any machine, host or client, sends it; consequence on a client receiving its own echo is OPEN. `pause_menu_horde_mode_retry`: the same underlying mission-end routine, but preserves three state dwords across the reset that `_new` discards.
+- L16500: warded to that player's own owning machine. No crash shape found; whether re-enabling an already-active controller is separately guarded is OPEN.
+- L16508: 26-10-03):** all 25 names in tranche 17 resolved and written up (§51.1-§51.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: what the two diversion managers' cross-clearing helper functions do to each other's active-contract state beyond "clear it"; whether a client receiving `paus
+- L16524: p-corruption shape, not just a crash, since what sits there in practice (heap metadata, an adjacent allocation) is unexamined and genuinely OPEN.
+- L16530: ce per named component on the vehicle — fatal under the stock invalid-parameter handler (whether SR3 installs its own survivable handler is OPEN, the same open question this exact hazard keeps raising across several tranches now). **`vehicle_component_shatter_glass` is not glass-specific at all — it applies the "shattered" bit a
+- L16546: 26-10-03):** all 25 names in tranche 15 resolved and written up (§52.1-§52.3); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the exact contents of the 60 bytes read before `vcust_purchase_component`'s item array (decides whether the out-of-bounds charge/write is observable in pract
+- L16550: 8-row gang-customization registrar `0x0083a900`. No function-pointer-before-name registrar this tranche. Also resolved tranche 16 §49's own OPEN item (`0x005f87c0` is `garage_can_customize`) and corrected §27.9's description of the garage entry-pointer array (above). Addresses below are CONFIRMED — disassembly unless marked othe
+- L16568: d the same unchecked base-object dereference pattern `guardian_angel_start_zone_pinning` shares with its siblings (shape-only, reachability OPEN).
+- L16590: 26-10-03):** all 25 names in tranche 20 resolved and written up (§53.1-§53.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: what reads the helicopter "large dspiral" and "don't move in combat" flag bits; whether the gang-customization catalogue's fixed 256-entry per-item tables ca
+- L16642: 26-10-03):** all 25 names in tranche 19 resolved and written up (§54.1-§54.4); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: whether every object the generic resolver can return actually carries the kind bit `los_check_do`'s request creator requires (decides real-world reachability
+- L16652: ile state 5 or 6 is on top and no switch to state 2 is queued; which concrete states 2/5/6 name (front end / loading screen, HYPOTHESIS) is OPEN. **Latent defect:** the projection routine replays the queued push/pop requests into a 16-dword stack buffer with no bound and no de-dup, unlike the real state pump it mirrors (which re
+- L16656: **`game_get_coop_ping`** reads the first non-local session member's machine record `+0xb200` (meaning/units OPEN) as an **unsigned** 32-bit value; with no session (single player, §8.27/§26.28) or no other machine it returns **0**.
+- L16662: ssage, but the writes that clear the diversion singleton are unconditional, so if its own abort call happens to clear that singleton first (OPEN whether it does), the message-writing step then writes through a stale pointer at offsets `0x8`/`0x9`/`0xc`. **Every other type** opens a "cancel?" confirmation dialog instead (mission/
+- L16666: ites to offset `0x118` and reads offset `0x12c` with the dialog register never set; whether such types (e.g. 2) occur in shipped content is OPEN.
+- L16668: Each call also takes a game-pause reference before the dialog exists, with no confirmed release path on either confirm/cancel (OPEN — the result callback itself was not dumped). **Fix template:** test the mission pointer and the dialog pointer before use, and treat an unrecognized type like −1 (do nothing).
+- L16676: racter to have a throwable item equipped/held; it is null-safe throughout. **[Port rule, 2026-10-12, FINAL (sh04 reported this check as an "OPEN state"):**
+- L16681: ent or equipped inventory item is a `thrown`-class weapon, or when it is holding a throwable prop. `0x00b88610`'s own extra condition stays OPEN (it is the same secondary predicate §4.10 cites).
+- L16713: 26-10-03):** all 25 names in tranche 22 resolved and written up (§55.1-§55.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the meaning of game states 2/5/6 and the four play-mode enter/leave callbacks; what the diversion singleton's own abort call does to the pointer `game_cancel
+- L16723: vtable. Every mode-1 call crashes, full stop — the clearest crash in the tranche (whether the shipped script ever actually passes mode 1 is OPEN; Team B's own call-site data can settle it).
+- L16769: 26-10-03):** all 25 names in tranche 21 resolved and written up (§56.1-§56.6); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: whether the shipped script ever calls `select_gang_sign` with mode 1; what object the mode-1 pointer was meant to hold; the declared size of the sign positio
+- L16944: is still genuinely OPEN** — see `spec-bink-boundary.md`'s own OPEN item 4/§6.4 and `spec-lua-bindings.md`
+- L16964: "pointer to the scene-table entry" was not independently re-traced by its own write-site census). OPEN:
+- L17016: engine's own dialog opener, which inserts by descending priority — a low-priority script dialog can pre-empt an engine notice (consequence OPEN).
+- L17020: 26-10-03):** all 25 names in tranche 23 resolved and written up (§57.1-§57.5); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: whether the shipped Lua wrapper polls `cutscene_play_check_done` immediately after starting a cutscene; where (if anywhere) a non-host crib purchase marks th
+- L17028: both reach: if the shared 32-record element pool is already exhausted, the set-up reads a null creation result with no check (reachability OPEN).
+- L17032: e new request's own callback is installed and then overwritten with null by this same unconditional clear, silently losing it (reachability OPEN — depends on which native callbacks ever request a fade from inside a completion callback).
+- L17038: view status (2026-10-03):** all 4 names in tranche 25 resolved and written up; none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the meaning of indicator types 7/8 and the indicator "value" argument; whether every vehicle has the sub-record `airplane_fly_to_do`'s type check reads; whet
+- L17090: 26-10-03):** all 25 names in tranche 24 resolved and written up (§59.1-§59.7); none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: what fills the cheat-tag string table and the master-cheat-table's own record count relative to the 200-slot unlocked array; the opcode-`0x45` sub-code `0x16
+- L17100: with no null test** — any single-player call that reaches this third step faults (whether the shipped script reaches it in single player is OPEN; the one call site sits past this project's clean-room boundary). `customization_creation_is_open` has a **real logic defect: it always returns true in single player.** One of its four 
+- L17116: (§7.18), `mesh_mover_hide` (§9.16), `party_dismiss_all` (§14.17), and `sidewalk_disable_nodes` (§15.3) are all re-verified with their prior OPEN items closed (full detail in the interp note) and no corrections needed beyond that.
+- L17120: s at a file-backed constant `1`; its one writer and all three readers are now identified, though the semantic meaning of values 0/1/2 stays OPEN. **The `zscene_prep` blocker** is now correctly identified as reading cutscene state `0x0153b520` (not `0x0153b530`, already closed separately) — both the state and its manager pointer 
+- L17126: **Crash-shaped findings, summary (CONFIRMED structure unless marked OPEN):** `customization_create_character` (no-session read at a session-pointer-derived `+0x60`, reachability OPEN for single player); `vint_internal_dataresponder_request` (16-slot trailing-argument over
+- L17128: l 9 OPEN_STATE items (except the explicitly out-of-scope `Killbane`) resolved; none failed. CONFIRMED unless individually marked HYPOTHESIS/OPEN above. Residual OPEN items: the per-frame consumer of the mip-streaming pause bitfield; whether the shipped single-player script ever actually reaches `customization_create_character`'s
+- L17132: **Source.** `scratchpad/ui_lua_native_coverage_2026-10-09.md` §7's 28-name UI-layer OPEN backlog
+- L17232: OPEN).
+- L17281: re-traced to `0x00a02ce0`'s own body this pass (OPEN).
+- L17322: .33, §14.3–11.5→§14.3–§14.5, §16.8→§16.11, §8.31/§16.30 in §22.3, placeholder "item N"/"D.N" refs in §11/§20, §23.7→§23.1); marked 47 stale OPEN/"unidentified"/"not traced" items resolved in place with pointers (extractor pair §4.1, `0x006434a0` §9.21/§14.6, `0x00a017c0` §15.10, 0x00e0xxxx family §26.23, `0x00d9e8b0` CRC-32, §2.
+- L17324: f50 §6.1/§24.2, bit 0x40@+9 §15.28, 0x005c50b0, 0x00d9e8b0 out-buffer; stub-reading qualifications on the 0x0101bxxx/0xd34xxx notes); added OPEN markers at 11 NEEDS-EXE claims plus 4 unstated details (§27.8 wrapper, §27.16 default, §28.3 conversion, §28.6 gate bit).
+- L17325: §2.5, §3.13, §3.18); added §10.8's `+0x1f00`/`+0xf8` hook sub-record bases to §3.2/§3.3/§3.12/§3.13 and `0x0094cc60`'s role to §3.6; added OPEN markers at every NEEDS-EXE claim; noted the §5 recomputations (hash initial value 0, not stated in `spec-texture-format.md` §8.2). Old text struck or annotated in place.
+- L17327: re-derivation from bridge job `20261001T020218-team-a-bgcx`, with sibling `20261001T021641-team-a-yduu`): §4.1 — the `0x00ea2596` rounding OPEN is settled as truncation toward zero (struck the round-to-nearest/round-half-correcting/banker's descriptions in the front matter, §2's primitive note, §3's preamble and §3.9); added §26
+- L17328: references in §6.22, §17.18 and §20.5; added §26.28 (startup state for a single-player host; one-member session and the tutorial name list OPEN, follow-up jobs `20261001T114716-team-a-fvfp` and `20261001T114802-team-a-kyoi`). Old text struck or annotated in place.
+- L17329: ial name table from the static pointer table `0x012f5930` (209 names resolved; index 176's string at `0x01124348` not resolved by the dump, OPEN). ** RESOLVED 2026-10-10 (second promotion sweep, agent `a9b8eb2f3b9590b91`, citing a side-finding already on record in `interp_qohu.md` that was never promoted): index 176 = `"dlc"` — 
+- L17330: no resolved code installs a session, so the installer is, by elimination, the undefined code at `0x0087c341`/`0x0087c359` (HIGH CONFIDENCE; OPEN until read); single player stays "no session, all three queries false"; added the idle predicate `0x0059fbe0` and the two-slot pool; tutorial table filled by `0x007178c0` → `0x00715850`
+- L17331: plus `coroutine` only (no `math` table), the 2^-32 constant raised to CONFIRMED, a host paragraph and a new review status; `include` stays OPEN. Old text struck or annotated in place.
+- L17332: ote amended. §26.25 — state codes 0/1/2 CONFIRMED; promotion 0x00720410 (single caller 0x007258a0, HIGH CONFIDENCE cutscene load step, body OPEN); completion from the cutscene state machine 0x0072d660; table = parsed `cutscene.xtbl` (cap 200); 0x0153b556 = `skip_all_cutscenes`; transition-stream globals. §26.26 — display-mode la
+- L17333: s the host answer as global flag 4, CONFIRMED; no caller in defined code, so when it runs and whether single player installs a session stay OPEN); network module init `0x008675c0` / shutdown `0x008676f0` described (CONFIRMED; never create a session); host-session constructor `0x0087d1d0` (HIGH CONFIDENCE); offline-session bit `+
+- L17334: summary under each heading and a 2026-10-01 review status to every entry (CONFIRMED/CORRECTED entries cleared for implementation, residual OPEN sub-items not). Collateral corrections at §1.12, §2.6, §2.10, §4.7, §8.12, §13.24, §20.14, §22.24 and §23.13 not applied. Old text struck or annotated in place.
+- L17335: ; §8.12/§13.24/§22.24 — 0x00d2f540, 0x0101b4f0, 0x0101b570 are inert `return 1` stubs (§13.24's call site not in the stub's reference list, OPEN); §22.24 reconciled with §28.16 (one global continuous-explosion flag 0x012ec964); §4.7 — 0x00853b30 is a descriptor-bit-by-index test, 0x1e = bit 0x40@+9; §2.10 — 0x008788e0 is a thisc
+- L17336: m-a/ghidra/jobs/jfue-followup.json`): §26.28 — the installer `0x0087c340` has no reference anywhere (CONFIRMED negative; when it runs stays OPEN); `0x0087d1d0` is the session constructor, a default session is one-member, offline, capacity 1, local = host, single call site in `0x0087f1b0` (CONFIRMED); host pointer reassigned only
+- L17337: k 0x007a82c0 while mode 5 is stacked); init runs from the front-end bring-up 0x005d2400; mode-stack pump 0x00706be0 mechanics (mode 4 still OPEN); none of the six callers requests a fade, the engine-side requesters are 0x00725df0 and cutscene state 0x13. §26.25 — the promoter 0x007258a0 read: a bare Lua `zscene_prep` is promoted
+- L17341: - 2026-10-01 (local, folding in bridge job `20261001T165637-team-a-tabs`'s §27/§28 residual-OPEN-item interpretation, 16 questions/42 sub-items across all 55 of the job's dumped addresses): closed §27.11's two Steam-invite query entries (`0x0088e690`/`0x0088dfd0`/`0x0088e040`, friends-list recor
+- L17342: d subtype-tag byte `3` then the id; the direct `0x008788e0` dispatch's hidden `this` is the global `0x014e9ad0` (object-kind identity still OPEN) and its argument is genuinely the conversation id; the two dispatch paths are independently gated, not co-conditional. §13.24 — `0x00a42c60` calls a setter wrapper, `0x005ee900(bool)`,
+- L17343: xed name (e.g. `'Killbane'`) is that `ctg_object_name` property on its placed-object record inside the parked `.czn_pc` `0x2234` interior — OPEN, pending the project owner's own direct word; no `.czn_pc` bytes were opened or requested for this section.
+- L17344: 6.24 — the mode-gate's registrar `0x00706a40` fully decompiled (one 9-dword record per mode index, bounds `< 0xb`); mode 4/5 identity stays OPEN (`xref 0x00706a40` and its ten callers were not part of this job); the "fade settled" predicate `0x0059fa10` resolved (`state == 3`, the same test `fade_is_fully_faded_out` wraps). §26.
+- L17345: - 2026-10-02 (local, resolving the thread-table section's long-standing "which caller is the per-frame scheduler" OPEN item, for a new Team B mission blocker — 39 of 49 real missions never resumed their script thread after `thread_yield()` inside a `fade_out_block`/`fade_in_block` poll — full trace in `review/exe-not
+- L17347: ter-creator families under UI sub-registrars `0x00830230`/`0x008377d0`); settled the Lua-callback coroutine mechanism (closing a tranche-08 OPEN item, upgrading two §26.27 HIGH CONFIDENCE items to CONFIRMED); found a real infinite-loop hang in `pcu_get_items_in_category` mode 2, a null-write crash in `pcu_create_outfit`, an unbo
+- L17348: mmitted-map logic defect in `game_lobby_set_horde_mode_data`, and a wrong-arity return in `fov_check_xz_plane`; resolved tranche 11 §41.2's OPEN setter (`game_difficulty_select`); corrected §15.4's `set_always_cower_flag` entry (its `0x004f5dd0` call queues an AI event, not a VFX cue — the "position pair" is a 64-bit object hand
+- L17352: - 2026-10-03 (local, new Team B mission blocker — `dlc3_m01`/`m19`/2 others stop on the clock hour byte being OPEN, `review/exe-notes-2026-10-01/interp_game_clock.md`): added §48 — the clock is a full 20-byte calendar struct, not just hour/minute (year/month/day/weekday/moon counter plus an authoritative fixed-po
+- L17354: check; corrected §48.2 (single player is CONFIRMED to always keep 10:00:00, never the random key, resolving what §48 had wrongly called an OPEN fork) and §49.1 (the stronghold upgrade is CONFIRMED to charge cash and never upgrade in single player — a real bug, not evidence of a session) in place, and added a reconciliation note 
+- L17381: sweep should check plain `OPEN`/`HYPOTHESIS` instead. Full detail:
+- L17386: project — it just never got folded back into §34.2's own body text**, which still read as if the level-index and multiplier sub-steps were OPEN/HYPOTHESIS after they were closed the next day (only a one-line summary at §60.4 ever reflected the closure). Re-verified the central step fresh this pass via a full 1,113-line disassemb
+- L17388: y by name-specific handlers and one by the per-tick driver — all 9 phases enumerated with their real transitions. **Resolves two previously-OPEN items: the human-readable meaning of phase codes 6 (local non-networked ending) and 7 (failed/retry, resolving via the same parameterised "begin mission" entry `spec-lua-bindings.md` §3
+- L17445: stays genuinely OPEN — calibrated as "likely related, not proven identical." Largest remaining
+- L17480: asymmetry, presentation driven by something else reading the announcement globals later (OPEN).
+- L17491: document, 0 REGISTERED-ONLY, exactly 1 genuinely OPEN: `thread_close`** (1 call, called exactly
+- L17522: native names union-wide — 712 SPECCED (98.6%), 1 REGISTERED-ONLY (0.1%), 9 genuinely OPEN (1.2%).**
+- L17523: The 9 OPEN natives (full per-mission call counts in the report): `thread_close` (already flagged),
+- L17540: distance test. Bonus: dumping the shared reader `0x00931980` (previously flagged OPEN at both
+- L17567: REGISTERED-ONLY, 0 OPEN.** Side activities add zero new entries to the OPEN backlog — every native
+- L17569: 226, deduplicated): 754 distinct natives — 744 SPECCED (98.7%), 1 REGISTERED-ONLY (0.1%), 9 OPEN
+- L17570: (1.2%)**, OPEN set unchanged from the missions-only pass, zero classification conflicts between the
+- L17599: unreachable with the mission's actual shipped data. **This closes all 9 OPEN + 1 REGISTERED-ONLY
+- L17627: REGISTERED-ONLY (8.1%), 28 OPEN (6.5%)**, with a new parsing-artifact class found and excluded
+- L17631: REGISTERED-ONLY, 37 OPEN**, zero classification conflicts across all three passes. `thread_close`
+- L17634: (§26.27 above); it remains this project's one standing OPEN native, now ruled out of every
+- L17684: calls it the "reviver handle" — no combat/damage-side writer was found, left genuinely OPEN. Full
+- L17692: valid elsewhere; `1`/`5`/`6` OPEN). No writer found anywhere — HIGH CONFIDENCE static per-type
+- L17705: function's own previously-OPEN state-byte-meaning tag. Full detail:
+- L17714: other `group_*` native writes it; only reads. OPEN, non-blocking: the actual ring-insertion
+- L17725: was still OPEN despite `interp_qohu.md` already having the answer on record as an unpromoted
+- L17751: helper" alongside `0x008add70` — it isn't a compression helper, its exact role there is OPEN. Four
+- L17752: `teleport` citations (§35.3-§35.6) that already avoided the wrong label but left the role OPEN are
+- L17782: the generic placed-object record head, not a class-specific property. Still OPEN: the cylinder's
+- L17886: - 2026-10-11 — §4.2 (`get_dist`)'s stale OPEN note RECONCILED against §20.24's later, deeper
+- L17992: is OPEN, not disproven. Checked for the `items_inventory` slot writer directly (same ask): came
+- L17996: world-pickup path both stay OPEN. Cleanroom self-check: strict regex 0 hits,
+
+## spec-player-runtime.md (weight 9, 222 live)
+
+- L4: U3 locomotion bridge, U4 follow camera, …) are expected to be appended here as further sections. **U2 was added as §3 on 2026-10-03** (the OPEN items and clean-room check moved to §4 and §5). **U4 was added as §4 on 2026-10-03** (the OPEN items and clean-room check moved to §5 and §6). **U3 was added as §5 on 2026-10-03** (the O
+- L8: FIDENCE** (follows from structure, call shape or a vocabulary match, but not traced end to end); **HYPOTHESIS** (plausible, unconfirmed); **OPEN** (collected in §14, with a next step where one exists).
+- L137: - The dead-zone and threshold *values* are written by engine-library code outside the poll that this pass did not locate (§14, OPEN 1).
+- L193: FIRMED here). Note that the runtime tables are **not** the 20-byte/40-byte save-format tables; `spec-tables-ui-controls.md` §2.2's narrowed OPEN (which reader builds the save table) is untouched by this unit.
+- L231: x30` in file order. **CONFIRMED.** This incidentally confirms the field pairing that `spec-tables-ui-controls.md` §2.3 left as a data-check OPEN: `Key_Pos` feeds the positive half, `Key_Neg` the negative half (§1.9.2).
+- L235: `+0x1c`). **CONFIRMED** (writer). No reader of this table was found by absolute-address scan; a context-relative reader cannot be excluded (OPEN 4).
+- L380: there as "unread" are now specified (§1.7.2); they and `0x005c1f70` touch only the runtime tables, consistent with that section's narrowed OPEN (the save-table builder is still among the other readers). **§2.3**: the `Key_Pos`/`Key_Neg` pairing is confirmed by the runtime consumer, not only the loader's store order (§1.7.4). **§
+- L487: re CONFIRMED; that mode 7 is only ever pushed above mode 5, never entered with mode 5 absent, was not traced through every mode-push site — OPEN 9). The tail hooks' −1 tests are defensive. When the value is 1 (a full-screen UI), row 1 of the profile table is empty, so no pre-hook, camera hook or movement hook runs.
+- L558: it 4 gates `CBA_GAC_RECRUIT_DISMISS` in `0x005ad830` and is also read at `0x0083d8aa`; bit 2 has no reader found by displacement scan (§14, OPEN 14) /
+- L613: 0000` / — / not attributed: whole-word readers at `0x005ae777`, `0x005aead5`, `0x005b6eac`, `0x005b7018` were not resolved bit by bit (§14, OPEN 14) /
+- L636: ### 3.4 The look slot `0x005ab6a0` (64 instructions) — and U0 OPEN 2
+- L645: ur: those options are horizontal and vertical look inversion, one pair per device family** (the options-menu labels are still unread — §12, OPEN 2).
+- L674: xtbl` with fields `Control_delay_on_foot`, `Random_input_amount_foot`, `Random_input_switch_time`, …; HIGH for the field-to-global mapping, OPEN 17). It (a) refreshes a random sign at `0x0262585c` on timer `0x0130a0f8` (`0x009750e0`); (b) passes (A, B) through a **90-entry time-stamped delay line** (`0x005aa900` on `0x02625c68`,
+- L708: lready expired. **While s > 0.8, timer `+0x206c` alternates each frame between "started now" and "unset"** (`0x005aef9f`…`0x005aefb3`; §14, OPEN 12). `+0xd1c` (current speed, `spec-anim-runtime.md` §4.2 row 20) > 0.7 (float) → `+0x2068` = now + 500 ms.
+- L732: 13. **Animation requests** (ids are animation actions/states, names OPEN 11; "end" is `0x004b41b0`, §3.4):
+- L770: d then writes `+0x2048` = `+0xa50` · `+0xa60` (or zero under controller flag `0x10`) — HYPOTHESIS: the network-driven remote-player update (OPEN 18).
+- L822: Read in full; the per-branch truth table is HIGH (traced once, not tabulated exhaustively — OPEN 20). Runs only with `+0x2078` bit `0x4` on foot, or in a vehicle with `+0x207c` bit `0x10000` and a vehicle; otherwise it leaves scope view and fine aim and clears the latch `+0x1d95` bit `0x40`. Inp
+- L838: , `0x04`, `0x08` / outside U2 (writers `0x009e45e7`/`0x009e626f`; `0x006da520`/`0x009e71f0`; `0x009e2919`/`0x009e9351`; `0x009da1b2`) / — / OPEN 15 /
+- L843: / / `0x80` / cleared on aim entry/exit / `0x005ad9a0`, `0x009e65fe` / OPEN 15 /
+- L844: / / `0x04`, `0x08`, `0x20` / outside U2 (`0x00afba3f`; `0x009e892f`; `0x009dce73`/`0x009dce9a`/`0x005adc6b`) / — / OPEN 15 /
+- L852: / / `0x01`, `0x02`, `0x04`, `0x40`, `0x80` / outside U2 (`0x01` is set by about 20 sites in `0x00824000`…`0x00893400`) / — / OPEN 15 /
+- L897: e manual-look hold values at `+0x6dc`…`+0x6e4`; the three camera-angle sets at `+0x628`…`+0x687` are **not** referenced by the camera band (OPEN 28).
+- L917: / 12 / `0x0057e740` / `0x0057e740` / — / — / stub / set-base by `0x0057e7d0` / UI-band fixed camera / OPEN 25 /
+- L925: find — HYPOTHESIS: a debug command, `0x029cdb88` being a development switch (233 readers; written only by `0x00d9f250`). This advances §12 OPEN 6.
+- L998: creen registry `0x012fced8` (`0x007b3ba0`/`0x007b3c50` tests; `0x007bd710` covers `0x35`–`0x37`). Which screens these are was not resolved (OPEN 26).
+- L1049: 5bfc`, `0x02625c34`), scaled by `0x0130a0b4` for the mouse when it is not 1, times `0x009785a0()` (HYPOTHESIS: the look-sensitivity option; OPEN 27).
+- L1069: T: return. Re-add last frame's lateral offset `0x013c8a60` to the working position and clear it (only intermediate reads see this; purpose OPEN 29). `0x005723e0`, `0x00920680(T)`.
+- L1073: 3ae0(V)` (skipped when `0x00ad3270` and `0x00ab4790`/`0x00ab47e0` hold) or `+0x6a4` when `0x00ad3b10(V)`; `0x0056d390` can set sub-state 2 (OPEN 28). Without V: a pending request `0x013c8a48` = 2 re-targets (`0x005735b0`, zeroing `+0x24`), = 1 sets `0x013c8a40`, and either returns to sub-state 0; with no request, sub-state 5 whe
+- L1074: 6d310` (via `0x0056d390`); 3 and 4 by `0x00574b30` (vehicle interaction); any by `0x005753e0`. Their bodies were listed for structure only (OPEN 30).
+- L1077: r update; phase += real frame time (`0x0132a0b0`) · 1.0. Large amplitudes cancel the look-at assist. The amplitude writers were not traced (OPEN 31).
+- L1080: sway or the submode blend stops it (handle reset to the "none" value `0x0111ab70`). Starters and the meaning of the object were not traced (OPEN 32).
+- L1088: man target (descriptor `+0xa` bit 1, `+0x33` bit 8) → the human chooser `0x005745c0` (370 instructions; read for structure, not tabulated — OPEN 30); a vehicle target → `0x00573110(P, V)`; any other existing object → `spectator` (15); none → 62 (out of range, "no submode").
+- L1112: e camera target and the local player's vehicle (`0x009445b0`, `0x009b9210`, `0x009b9230`) — HYPOTHESIS that it excludes them from blocking; OPEN 33). Hits on the local player's own vehicle of kinds 1, 4 and 8 are skipped. With no blocking hit, out = *to*; at the first blocking hit, out = **the hit's sweep position** (`+0x10`; no
+- L1153: t referenced anywhere in the camera band**, and the core's two preset blocks `+0x688`/`+0x6a4` (passed to `0x0056d390`) lie just past them (OPEN 28). So scoping OPEN 8 is only partly answered.
+- L1168: - **`spec-render-pipeline.md` §11** (view-matrix OPEN): its inputs are the committed set (`0x013c8740`, `0x013c8760`/`0x013c8770`/`0x013c8780`, FOV `0x013c87c0` in degrees), right/up/forward rows as above.
+- L1170: - **This file, §2.7 / §14 OPEN 6:** control state 7's camera is debug mode 3, entered only through `0x0057b660`, gated by `0x029cdb88` (§4.1).
+- L1232: / a rate-limited follower updated by `0x00956970`, called from the animation job (`0x00994a3d`); its link to U2's `+0xa68` was not traced / OPEN 37 /
+- L1234: `+0x58`/`+0x64` from  `0x004b6530` (§5.4.1 step 3), `+0xd04`…`+0xd1c` from the proxy (§5.6.6); the movement flags `+0xd40` were not traced (OPEN 38). **[Corrected by `spec-anim-runtime.md` §9.7 (U5), 2026-10-07: `0x004b6530` writes the orientation axes only inside an authored correction window; see §5.4.5's note below.]**
+- L1258: ngine's layer-post API, **not** copied from `Anim_Movement` (CONFIRMED by listing; full account in "Step 3 in detail" below, which resolves OPEN 39 in part). If `0x009987d0(&E)` holds — a state test, or (not free-falling, not jumping) \/E.y\/ > 1e‑4 — controller `+0x1a4` /= `0x80` ("the animation drives the vertical", read by th
+- L1314: ### 5.5 The locomotion-state update `0x00985df0(human, sprint, stopped, flag)` (409 instructions) — CONFIRMED by full listing; resolves OPEN 19
+- L1316: `0x005b4171` (§3.5.1 step 9), `0x005b4424`, `0x005b0b9c`, `0x005ad5f2`, the locked per-frame `0x005b21eb`, and the remote-player routine of OPEN 18 (`0x008a408a`).
+- L1352: ired, and the constructor arms it at 0 ms with no other writer (displacement sweep), so as read **this second branch never engages** (HIGH; OPEN 41). (c) `+0xec` bit `0x08` (a warp request, consumed): `0x007a4a40` moves the proxy to `+0x40` (or the attachment `+0xb30`'s point). (d) **Swimming:** `0x009b5c50(human, &+0x1cec)` adj
+- L1361: **The pass functions, read in full (closes OPEN 36, 2026-10-07, unit W-U2).** The custom proxy's own cast-and-solve machinery composes into one lock-step cycle, each stage a genuinely separate function: **seed** (`0x0079bb00`: snapshot phantom tra
+- L1365: **Thread safety (resolves `spec-physics-runtime.md` §11 OPEN item 22 beyond its own "likely but unverified" hedge, and the thread-safety half of OPEN 36).** `MyCharacterListener`'s three callbacks (§5.8) and the phantom-listener fan-out both fire only from ins
+- L1383: a literal world-space ray length in the same units as the rest of the struct; may be a flags/mode/iteration-count integer instead. Flagged OPEN, not silently carried forward as settled.
+- L1397: real Havok shape is registered in the broadphase. Which file registers that shape for bare open-world street pavement specifically remains OPEN, now narrower: `.clmesh_pc`/`.glmesh_pc` is ruled out (confirmed furniture/props only), `0x2244`'s own confirmed callers are ruled out (gameplay consumers, not Havok code, on the two ope
+- L1472: above) — no longer OPEN.]** Full detail:
+- L1508: knock-downs (`0x009a48e0`, `0x00966d20`) and ragdoll impulses (`0x00780040`, `0x00781b80`); their individual roles beyond `0x00961d70` are OPEN 42. Both counts are then zeroed.
+- L1510: - The sprint query is **not gated on "is the local player"**: any human with `+0x1c9c` bit `0x80000` would read the local pad (OPEN 43).
+- L1543: r\/ after `0x00985df0`, k = `+0xa64`. §3.8 item 4's suggestion to drive a controller from `+0x203c` is what the game itself does (times k). OPEN 19 resolved; OPEN 18 advanced.
+- L1568: 8 and 9** (`cannot_exit_vehicles`, `cannot_exit_rc_vehicle`) against the human's active-vehicle pair `+0x16d8`/`+0x16dc`. This answers the OPEN item "who reads `+0x1c9c` bit 9" in `spec-lua-api-behaviour.md` §45.1 and its §45 review status (§6.3.2).
+- L1638: handle, null by default; written by some callers (`0x0051ec70`, `0x00b24cc0`, `0x00b3d7e0`, `0x00b62120`). Its reader is not in this unit (OPEN). /
+- L1647: / `+0x30` bit 4 / `vehicle_exit_do` arg 4; also set by `0x0063e610` and `0x006b7780`. Read by U6.7 (OPEN). /
+- L1648: / `+0x30` bits 5, 6 / set by the vehicle-band callers (`0x20`, or `0x60`). Bit 5 also stops `0x15`'s despawn-the-dead branch. Read by U6.7 (OPEN). /
+- L1649: / `+0x30` bit 7 / set by the player's exit prompt `0x009e5e80`. Read by U6.7 (OPEN). /
+- L1736: **The answer to the OPEN item in `spec-lua-api-behaviour.md` §28.22 (`character_evacuate_from_all_vehicles` calls it with a negated boolean and 0):** the negated argument is the replicate flag (set-enter's flag / request `+0
+- L1873: 2. **Local player:** `0x00574e30(0.0, 0)` (camera band). Also `0x007f0140(1)` (§14, OPEN 5), and `0x009dcf10` when in fine aim (`0x009da830`).
+- L1896: - else **slot 3 occupied** → switch to slot 5 as well (CONFIRMED as written; whether this is intended is OPEN);
+- L1930: 95, 0.2, 0, −1, 0)` is the animation API's play call (`spec-anim-runtime.md` §6). This is not an `Element` lookup; state `0x1d95`'s name is OPEN.
+- L1962: `+0xa60` is re-multiplied by `+0xa64` when positive**: a double scaling if `+0xa60` already carried the factor; behaviour CONFIRMED, intent OPEN.
+- L1982: A port must keep the saved-`+0x10` condition (OPEN: that field's meaning is U6.0's/U6.1's).
+- L2036: - The OPEN item on `0x00af3e10`'s negated argument and trailing 0 (the evacuate native, §21) is answered in §6.4.1.
+- L2037: - The §45 OPEN "who reads `+0x1c9c` bit 9" is answered by `0x00b0b170` (§6.3.2), which also reads bit 8 (`cannot_exit_vehicles`).
+- L2055: numbered states with handlers — **enter 7, exit `0x18` and exit `0x1c`** — have **no static producer** anywhere except the network applier (OPEN 60). This agrees with §6.0 item 5 and OPEN 52 for `0x18`, and answers OPEN 58: `0x1a` and `0x20` cannot be held, and `0x1c` has no producer.
+- L2175: 3. Refuse if `+0x16d8` or `+0x16dc` is non-zero — the same unnamed "busy/pending" pair already flagged OPEN (§7.3/§13.0 item 2); this is a second confirmed reader with identical polarity, strengthening (not resolving) that open item.
+- L2178: efuse via a generic, non-vehicle-specific interaction-lock helper (`0x009562d0`, widely reused elsewhere — shape confirmed, exact semantics OPEN, hinges on a `+0x1b78`-indirected sub-object and two unidentified hash constants `0x1d56`/`0x1d7e`); refuse if mid jump/dive pose (`+0xccd == 4`); refuse if mid climb pose (`+0xccd == 6
+- L2186: ` calls neither of the two obstruction-gate functions (§13.6's `0x00b0da10`/`0x00b0dc20`) nor their own queries (`0x0075d7e0`/`0x0075c880`, OPEN item #104) at any depth — there is no second, distinct pair of obstruction queries hiding in this function or its call tree. Any "2 obstruction queries still untraced" reference is a re
+- L2188: main table's own vehicle-enter/exit handler (`0x009e5e80`). **Checked directly, 2026-10-09 — the table is real, but the lead does NOT close OPEN item #97.** All 22 entries read directly from `.rdata`: 18 populated, 4 empty (local indices 3, 4, 14, 18, 19). Decompiling a 7-slot sample (indices 0, 1, 2, 9, 10, 15, 20) confirms eve
+- L2253: opened by any pass); `0x00b08ea0`'s half of the existing OPEN item 71 (the other ride-key-builder
+- L2277: / `0x07` / enter / `0x00af96b0` / `0x00af96fd` / `0x00affc10` / **none found** (OPEN 60) / 6.3 /
+- L2290: / `0x18` / exit / `0x00b02860` / `0x00b028af` / — / **none found** (OPEN 60) / 6.6 /
+- L2294: / `0x1c` / exit / `0x00b023f0` / `0x00b0243d` / `0x00b024f0` / **none found** (OPEN 60) / 6.7 /
+- L2399: - **OPEN 48:** slot `+0x10`/`+0x14`/`+0x18` are the per-state variant fields that U6.1's key builder reads. They are reset at states 0, 9 and every U6.6 on-entry, and their writers are U6.3/U6.5/U6.7.
+- L2400: - **OPEN 52 and 58** are answered by §7.5.
+- L2401: - **OPEN 55:** `0x00853b30(object, n)` tests bit n mod 8 of kind-row byte `+6` + n/8. So class bits `0x21`/`0x22` *are* row byte `+0xa` bits `0x02`/`0x04`: one set of bits, not two.
+- L2439: el_factor`), but only after a random `VI_reaction_delay_min_ms`…`_max_ms` delay. These six tweaks are bss with no initialiser in the image (OPEN 63).
+- L2440: ndary_Camera_Angle` (descriptor `+0x628`/`+0x668`, `+0x648`) to the camera band's `0x0056cf60`/`0x0056cd10`. **This answers the core of §14 OPEN 28 and scoping OPEN 8** (§8.6).
+- L2531: - Which predicate means which vehicle type, and the meaning of the `0x005bc5d0` variant, were not read (OPEN 62);
+- L2659: What inventory slots 0 and `0xe` are, and what `0x00600720`'s other arguments mean, are open (OPEN 64).
+- L2688: ff` (registrars `0x0071b580` for floats, `0x0071b530` for the two millisecond values). They are bss: no initialiser was found in the image (OPEN 63).
+- L2715: - These are the three sets §4.12 found unreferenced by the camera band itself (§14 OPEN 28).
+- L2728: parameters and the body-lag model with its reaction delay. Its tweak values must come from the original tweak data, which was not located (OPEN 63).
+- L2734: - **This file, §4.12 and §12 OPEN 28:** the camera-angle sets are read by the vehicle-interaction hand-off `0x00b0bc10` (§8.6). §4.12's "not referenced by the camera band" stays true of the camera band itself. **§4.8:** the hand-off'
+- L2738: - the vehicle-side callees of OPEN 53 pair with the commit's (§8.3);
+- L2781: the pointers at `0x0130e638`. The 84th dword is `0x0000ffff`, not a string, and a different string list follows it (§9.2). This settles the OPEN in `spec-tables-vehicle-world.md` §2.1.
+- L2862: / `+0xd1` / exit request `+0x31` bit 0 → `exit convertible`, `exit fast convertible`, `exit dive convertible` / not found here (OPEN 69) /
+- L2876: 64-byte `Name`. The exit path has the same quirk with any out-of-range seat. Only a non-null pointer there would be dereferenced as a set (OPEN 72).
+- L2891: 8 / Only through the override global `0x0130e5f4` (−1 in the image; 13 references, writers `0x00af9419`…`0x00af954f`, HIGH: debug commands; OPEN 68). /
+- L2957: These are dead data in the shipped build (OPEN 70).
+- L2991: e shadowed (identical `Drive Ready SM`). **Who builds the ride key, and so whether every ride `Element` is reachable, is not this unit's** (OPEN 71).
+- L3022: - **OPEN 48** — the key builder maps `+0x1c` = 2 to `vehicle` and 3 to `water`, against the hypothesis "0/1/2 = airborne/ground/water". Exit `+0x10` is the exit kind, and `0x17`/`0x18` are `exit dive`/`exit a
+- L3023: - **OPEN 47** — exit-request `+0x20`/`+0x24` are the victim's extract kind and side, written by the hijack chooser `0x00afa540` and copied to slot `+0x10`/`+0x20` by `0x00b02900`.
+- L3024: - **OPEN 58** — the handlers of `0x1a`, `0x1c` and `0x20` never reach the rule.
+- L3028: - **This file, §8 (U6.4):** ride `Element`s are chosen by `0x00b08b80`/`0x00b08aa0` (§9.6.4), which §8 does not cover (OPEN 71).
+- L3030: - **§2.1:** the "entries 2–82 OPEN until the data range is dumped" is answered by §9.2. The "no-match stores 0" rule and the 83 bound are confirmed.
+- L3112: **The queue is therefore ordered by distance from the world origin.** CONFIRMED as code; the runtime value is HIGH; **defect HYPOTHESIS** (OPEN 74).
+- L3261: A script waiting on `+0x3c` is never told that its entry completed through a resubmission (OPEN 73).
+- L3308: j is in state 5, j's entry is cancelled** (inlined set-enter 8). With an empty queue, j = −1 and slot −1's state (record `+0x5ac`) is read (OPEN 56).
+- L3327: ts `+0xccd` = 3 with `+0xcce` = `0xd`/`0xe`, and it returns false when it cannot route (it also sets `+0x1854` bit 0). Role HIGH; internals OPEN 76.
+- L3369: ### 10.8 State 7 — dead (resolves OPEN 60 for state 7)
+- L3386: s exit `0x18` and `0x1c`, which no sender carries either.** CONFIRMED for the code paths. A peer running a different build is not excluded (OPEN 60 annotated).
+- L3401: , get their **`+0x20`** timer armed to a random 250–750 ms. The commit arms `+0x24` of the same records (§8.1), and `0x0f` disarms `+0x20` (OPEN 78);
+- L3454: 3 / **walking to a vehicle entry point**; `+0xcce` `0xd`/`0xe` while the navigator runs, 0 on a remote copy / CONFIRMED (writes); resolves OPEN 40 for 3 /
+- L3509: - **This file, §14 OPEN 63:** the six ride tweaks' shipped values are in `tools/ai_base_xtbl/tweak_table.xtbl`:
+- L3533: ds to −1, and does nothing else; its per-frame `0x00b024f0` resolves and returns. Neither writes any field a later frame could read. U6.0's OPEN 60 (no local producer for `0x1c`) stands unresolved from this side too. **The four live states are `0x1b` (change seat), `0x1d` (extract), `0x1f` (exit) and `0x21` (traverse)** (§11.2–§
+- L3538: 3. **`0x00b04ae0` (783 instructions, `0x1f`'s own exit-kind chooser) resolves most of OPEN 69.** It writes slot `+0x10` = `0x15`, `0x16`, `0x17`, `0x18`, `0x1b` or `0x1c` as immediates (never `0x14`, `0x19` or `0x1a` in the traced control flow — the "register-written `0x14`/`0x19`/`0x1a`"
+- L3540: `0x00b02460` as a "fixed once" door-clear latch — the same bit position U6.1 §9.3 names as the `convertible` exit variant, a conflict left OPEN (§11.7.4); bit 5 is read only by the eject handler. `+0x32` bit 0 is a per-frame "already started" latch on `0x1f`, distinct from bit 1 (replicated) and bit 2 (vehicle may be gone) (§11.
+- L3546: was found to drive an explicit state change on this path; how the slot eventually reaches `0x19` for a non-`kill`, instantiated extract is OPEN** (§11.4.2, new OPEN item).
+- L3556: / `0x1c` / `0x00b023f0` (empty) / `0x00b024f0` (empty) / no local producer (U6.0 OPEN 60) / — /
+- L3567: n — but nothing in this unit's closure, U6.6's, or U6.0's census of every state's register-passed sources produces the value `0x1c`. U6.0's OPEN 60 is correct to leave it open.
+- L3608: call to `0x00b058f0` or `0x00b03d80` was found on this path.** How an instantiated, non-`kill` extract eventually reaches state `0x19` is **OPEN** (a new item, §11.10) — either one of these two functions drives it internally, or a later frame's check this trace did not reach does.
+- L3624: Called once, from `0x1f`'s own on-entry. It is the function OPEN 69 names, and the trace resolves almost all of it.
+- L3628: lt; on success it sets `+0x30` bit 6. **This is the first and only reader of the exit-request object handle `+0x08`/`+0x0c` found anywhere (OPEN 47), and it is HIGH: a companion human the eject trajectory is anchored to or past.**
+- L3631: e dive-room predicate `0x00b0a380` gates **kind `0x17` (`exit dive`)**, `+0x24` = `0x10`. **Bit 4 is the first reader found for this bit** (OPEN item in §6.2's table, "read by U6.7 (OPEN)"): set, it skips the room check entirely.
+- L3634: — it is the finaliser's own *state* number, pushed as a literal by the per-frame handlers (§11.5.3, §11.6), which is almost certainly what OPEN 69's "register-written `0x19`" was actually seeing. **Kind `0x1a` (`exit climb`) is read and handled by `0x1f`'s per-frame (§11.5.3) but its producer was not found in this function eithe
+- L3641: cheap predicates (`0x004d47e0`) agree, `0x00ad4b10` instantiates it. Under network authority, force-flag `0x004e4130(human, 0x19)` runs (an OPEN 62 callee, now with a confirmed call site). `0x00b0baf0(human)` runs unconditionally. **If the exit-request object handle (`+0x08`/`+0x0c`) resolves through `0x00456920` and the resolve
+- L3649: the direct kind-`0x1b` check in (c)); the shapes above are CONFIRMED as a set, the kind-to-shape pairing for the other seven is HIGH** (new OPEN item, §11.10).
+- L3655: . Sets human `+0x1a00`/`+0x1a04` = the vehicle's own handle `+0x08`/`+0x0c` (or, with no human resolved, a literal fallback — a guard-quirk OPEN item, §11.10) and `+0x1a08` = now + 1000 ms — **the exact fields and the exact timer the finaliser's own airborne landing branch uses (§6.11 step 11(a))**, set up here directly instead 
+- L3660: borne branch makes (§6.11 step 11(a))**, here inlined instead of deferred — and a shuffled copy of the same vector is written to `+0x1c60` (OPEN 45's "added to the velocity" field). A `100 ms` timer is armed at `+0x19d4`.
+- L3716: liberate bit-reuse (for example because a convertible's door never needs this clearance check) or a misreading of one of the two sites is **OPEN** — no writer of the bit was found in either unit, so which role (if either) is primary cannot be settled here. Absent that conflict, the rest of the function's shape is plain: it queri
+- L3723: s handle (HIGH: a companion the eject/guardian-angel placement is anchored to); read by `0x00b063c0`, `0x00b04ae0`, `0x00b05b90` / resolves OPEN 47 bullet 1 /
+- L3725: / exit request `+0x30` bit 4 / forces `0x1f` into `exit dive` past the room predicate `0x00b0a380` / resolves the "Read by U6.7 (OPEN)" annotation /
+- L3729: it position U6.1 §9.3 names as the `convertible` variant flag**; no writer found for either role / new; conflicts with an existing reading, OPEN /
+- L3746: 5. **The open per-frame transition for a non-`kill`, instantiated extract** (§11.4.2, OPEN item) should be guarded defensively in a port (for example, by timing out to `0x19` after the clip finishes) until the real trigger is found.
+- L3752: 2` gain the new readers/writers of §11.8; the launch-vector HYPOTHESIS (`+0x10`–`+0x1f`) is confirmed for the eject kind; the object-handle OPEN (`+0x08`/`+0x0c`) is resolved (§11.0 item 4, §11.8).
+- L3753: - OPEN item 58's "either those states are never set, or they resolve their keys elsewhere" (for `0x1a`/`0x1c`/`0x20`): **the first holds for `0x1a`/`0x20`, confirmed again from the handler side; `0x1c` reso
+- L3782: se) and the function returns. The three lean/tilt values read the **ride body-lag model's error fields** that `spec-player-runtime.md` §8.5/OPEN 63 flagged as unread ("the readers of the lag values slot `+0xe0`/`+0xe8` were not traced… HIGH: U6.8's pose driver") — **this closes that half of OPEN 63**: `0x00af4b80` is a reader of
+- L3783: ves the detail that was traced; two gates (`+0x16d4` = 1 or 2, and class-row byte `+6` bit `0x80`) are not independently named and are left OPEN.
+- L3784: 6. **`0x00af4760` is the ride-`Element` key builder, and it resolves half of `spec-player-runtime.md` OPEN item 71 directly.** OPEN 71 asks "who builds the six-token key passed to `0x00b08b80` (callers `0x00b08ea0` and `0x00af4760`)?" — `0x00af4760` is now traced in full: for a slot whose resolved phase i
+- L3907: **This closes the `0x00af4b80` half of `spec-player-runtime.md` §8.5/OPEN 63.** That OPEN item flagged "the readers of the lag values slot `+0xe0`/`+0xe8` were not traced (HIGH: U6.8's pose driver)" and asked for the registrars `0x0071b580`/`0x0071b530`'s loader. The reade
+- L3917: efore the same flag-and-impulse consequence. The two values `+0x16d4` can hold here beyond the documented "3 = seated" were not identified (OPEN, below).
+- L3921: ### 12.6 `0x00af4760(human)` — the ride-`Element` key builder (resolves half of OPEN 71)
+- L3927: `+0x1ce0`) without touching the ride tables — these codes are consumed by the caller `0x0095cbc0` and were not independently resolved here (OPEN, below). A specific subset of states (`0x15`, `0x16`, `0x1b`, `0x1d`, and `0x1f`/`0x14` under further sub-conditions on a second field) instead:
+- L3952: - **`spec-player-runtime.md` §8.5 / OPEN item 63** (not edited here — file race; flagged for the splice): the `0x00af4b80` half is closed. The readers of the ride body-lag model's **error** fields (slot `+0xe4`/`+0xec`) are now identified a
+- L3953: - **`spec-player-runtime.md` OPEN item 71** (not edited here — file race; flagged for the splice): the `0x00af4760` half is closed (§12.6 above). `0x00b08ea0`'s half is untouched and still open.
+- L3958: `0x00b0eb90` (scoping's HYPOTHESIS, settled below), and the two obstruction gates `0x00b0da10`/`0x00b0dc20`. This unit answers scoping §4.2 OPEN item 9 and confirms §5a.4 point 3's AI-sharing claim. It **ends at the submitter** `0x00af22a0`, which `spec-player-runtime.md` §7.4 (Player U6.0) already specifies in full — cited here
+- L3960: 0x00b0fdf0`). A static read of the 22-entry prompt-handler table at `0x0111f2d0` (and its sparser sibling at `0x0111f430`) resolved scoping OPEN item 9. No Ghidra project was opened or copied. No `.czn_pc` data was touched.
+- L3964: rd **`+0x2084`**. **Slot 15 is `0x009e5e80`** (CONFIRMED by a static read of the table), matching scoping's "prompt entry 15". This answers OPEN item 9: there is no per-prompt test function, only the one shared button and a per-prompt availability bit that something else inside `0x005b6af0` sets (not traced here — new OPEN item 
+- L3969: null. Either can veto the whole eligibility check. Their own query callees (`0x0075d7e0`, `0x0075c880`) were not traced — flagged as a new OPEN item, likely physics-runtime territory.
+- L3981: prompt is available this frame) was **not traced** — it is somewhere else in `0x005b6af0`'s 603 instructions, outside U6.2's root list. New OPEN item below.
+- L3983: match any field `spec-player-runtime.md` has named at that offset. HYPOTHESIS: some other in-progress interaction (busy/pending) flag. New OPEN item below.
+- L4018: oking at or standing near, carried over from an earlier frame, used to avoid flicker between two nearby vehicles. Not named elsewhere — new OPEN item below.
+- L4115: eady physically occupied"), but their internals sit outside the vehicle-interaction band and are more likely physics-runtime territory. New OPEN item below. Either function returning its "found something" case clears `0x00b0fdf0`'s accumulated success byte, refusing entry without otherwise unwinding any state.
+- L4125: w, `0x00521320`/`0x00520cd0`/`0x005213d0`/…) these two functions are themselves called from was not traced — AI-side work, flagged as a new OPEN item rather than guessed at here.
+- L4140: - **`review/scoping-player.md` §4.2 OPEN item 9:** answered — `CBA_GAC_ACTION` (§13.1). The finer-grained question of what sets bit 15 of `+0x2084` is new and unresolved (below).
+- L4326: / enter-slot `+0x18 = 4` on `0x13`'s entry (not −1) / role/consumer not found — no per-frame read of this exact value was located / new; OPEN (§U6.5.13 item 11) /
+- L4347: ngle largest open item this unit is leaving; a future pass should finish it before anyone relies on `0x13`'s exact door-handling order. New OPEN item.
+- L4348: 5.4) — the signature should read `(record, i, flag)`, with *flag* generally `0` but not always. What the flag selects was not resolved. New OPEN item.
+- L4349: `0x0153be2c`) and U6.8 §12.4 names for its eleven parameter names — but the string literals behind each of these eight were not traced. New OPEN item; a future pass with budget for a targeted string-xref scan could likely resolve all eight in one session.
+- L4383: **OPEN**, along with `0x009eb700`'s own body and whether the movement auto-steer and this selector ever
+- L4408: boundary is OPEN, with `0x00985760`'s own body as the most promising next step.
+- L4429: chased, **OPEN**, explicitly handed to whoever owns that chokepoint.
+- L4564: `0x006da400`. OPEN — as listed per subsection above.]** Full detail, every address:
+- L4569: ##             16. OPEN items
+- L4585: 009e2919`) and cleared when a self-climbability test fails (`0x009e9351`, inside the same function that drives the sprint speed-cap ramp at OPEN 45) — HIGH CONFIDENCE behaviorally (grapple/wrestle-adjacent), label not firmly confirmed. `+0x1d94` bit `0x08`'s only writer (`0x009da1b2`) is squarely inside the human object's destru
+- L4592: alone, the shipped default is the inverting one and the only code that turns it off is Avatar-boss/mission-16-specific. Residual, narrower OPEN item: whether an external (non-`.exe`) config/tweak-table default for the registered name `"mmcs"` supplies a non-inverting override before first input read — unresolvable from the execu
+- L4600: 0x0056ae20`), avatar (`0x005e6ce0`, the identical class/state test independently found gating the mission-16/Avatar reset's reachability at OPEN 22 above), downed (`0x009715d0`: a body-state field `+0xcc8 == 6`, the same field tested at 0xc/0x10 for "avatar"), plus shooting qte, leaping (a direct controller-state compare against
+- L4601: e same unidentified object's `+0x1650`/`+0x1654` progress-ratio fields that drive the look-speed/FOV keyframe interpolator left untraced by OPEN 27. No caller in either chain touches damage/impact/explosion code, refuting the "impacts and explosions" hypothesis outright. The sway amplitude is instead tied to QTE execution and ve
+- L4603: he existing "kinds 1, 4, 8" label does not match any value tested here and could not be corroborated this pass — it may belong to the still-OPEN per-candidate kind test inside the shared sweep wrapper's own helper `0x0075c250` (`spec-physics-runtime.md` §8.8), not to this filter. Residual: re-point or retract the "kinds 1, 4, 8"
+- L4604: see the body text above and `spec-zone-data-format.md`'s own water-hypothesis Changelog entry; the global box's own real coordinates remain OPEN), `0x0056ef10`, `0x0058b470` → `0x00a1f880` after the update, the shake `0x0057c930`, transition-blend type 1 `0x00580430`, the pitch return `0x0056bfe0` (uses `pitch_reset_time`), and 
+- L4610: king to a vehicle entry point," written by the move-to-entry-point navigator `0x00993e90` through `0x00986920(human, 3, 0xd or 0xe)` — this OPEN item simply hadn't been updated to reflect it. Value 2 is not independently distinguished anywhere in the executable's own dispatch logic: the master locomotion-substate setter `0x00986
+- L4613: arrier prevents bits `0x80000`/`0x100000` from being set on a non-local human if a writer ever reaches one; today none is confirmed to (see OPEN 45's exhaustive `unlockables.xtbl` check and its untraced `cheats.xtbl` "Infinite Sprint" lead — that residual now carries this item's live-risk question too: the bug is primed on the r
+- L4614: rom a queued-command flush `0x006ed2a0` and from inside the HUD/UI-screen dispatcher `0x006ee130` (registry `0x012fced8`, the same registry OPEN 26 cites). CONFIRMED by disassembly throughout; the producer that enqueues command id 10 (what actually triggers the reset) was not traced — narrower residual. No boost-setter (value > 
+- L4615: **No setter for `0x80000`/`0x100000` found 2026-10-10, but the read side narrows the item's framing.** `0x009e91c0` (the same function from OPEN 15's bit-`0x04` finding) tests bit `0x80000` to gate a decaying speed-cap ramp (two globals, `0x0263ae30`/`0x0263ae34`, decaying toward `Player_max_sprint_speed` at `0x0262e9e8` at the 
+- L4637: re or a live trace would settle it. **[§7.5 agrees from the full transition census, and finds enter 7 and exit `0x1c` in the same position (OPEN 60).]**
+- L4657: ys elsewhere. **[Answered by §7.5: `0x1a` and `0x20` have no on-entry handler and can never be held; `0x1c` has one but no static producer (OPEN 60).]** **[§9.5: none of the handlers of `0x1a`, `0x1c` or `0x20` reaches the element rule (census closure), so none of them would choose an `Element` even if held.]** **[§11.2: confirm
+- L4659: or direct handler call produces them; only the network applier `0x00af2950` could, by replaying a remote value. For `0x18` this agrees with OPEN 52. *Next step:* check the applier's received values and any computed state in the network path; otherwise treat them as dormant, like `0x10`/`0x12`/`0x1a`/`0x1e`/`0x20`.
+- L4666: 888e8`, `0x00af3630`'s packet drop (§8.2 step 2), the ownership request `0x008addd0` (§7.6), and the send conditions of §7.7. Together with OPEN 59.
+- L4668: IGH: the implicit default; `0x19` is a state number, not a kind, pushed elsewhere; `0x1a`'s (`exit climb`) producer is still not found (new OPEN item). The exit-request `+0x31` bit 0 writer is still not found either — U6.7 found a *second reader* at the same bit position (`0x00b02460`, a one-shot door-clear latch, §11.7.4) that 
+- L4760: small to be the "animation ids `0x10a`…`0x111`" fallback chain scoping's OPEN 71 already
+- L4773: located, same as the original six `VI_*` ride tweaks (`spec-player-runtime.md` OPEN 63). All
+- L4774: nine are bss with no initialiser in the image. *Next step*, same as OPEN 63: find the tweak
+- L4857: specifically. Remaining genuinely OPEN: `instance+0x128`/`0x12c`/`0x138`'s own writers; the true
+- L4929: remains genuinely OPEN — narrower than before, with a concrete next step (an xref census on the
+- L4943: - **2026-10-10 — OPEN-backlog batch 5: camera mode 11, sway amplitudes, camera collision filter,
+- L4947: OPEN 31 HYPOTHESIS REFUTED: sway amplitude is NOT driven by impacts/explosions — its only writers
+- L4949: unidentified per-object ramp system OPEN 27 already flagged (now shown to be shared between the
+- L4954: `spec-physics-runtime.md` §8.8's own open per-candidate-kind helper, or retraction. OPEN 38
+- L4961: - **2026-10-10 — OPEN-backlog batch 4: look-speed/FOV factors, lateral-offset camera quirk, vehicle
+- L4962: camera presets, remaining stance bits** (SPEC TEAM, agent `a408dcb9ae85f24bc`). OPEN 27: the
+- L4978: four remaining bits stay genuinely OPEN — no candidate addresses exist in the spec at all, and
+- L5000: - **2026-10-10 — OPEN-backlog batch 1, highest moment-to-moment-gameplay items** (SPEC TEAM, agent
+- L5002: impact rather than naming completeness. OPEN 13: `0x009573d0`'s facing-override/acceleration-shape
+- L5005: animation-driven movement lock, not an aim/strafe state; ARM-side setter still unlocated. OPEN 22:
+- L5010: file's reach. OPEN 30: the on-foot human submode chooser `0x005745c0` fully tabulated against the
+- L5023: - **2026-10-10 — OPEN-backlog batch 2: stance bits, turn-angle target, speed multiplier, sprint/jump
+- L5024: upgrade bits** (SPEC TEAM, agent `a0c88ca0b79350e79`). OPEN 15: `+0x1d94` bit `0x01` is HIGH
+- L5029: advanced (HYPOTHESIS: vehicle-exit-in-progress). OPEN 37: the turn-angle chase target is NOT
+- L5032: cover, boost, camera mode). OPEN 44: two of the three previously-listed `+0xa64` speed-multiplier
+- L5043: - **2026-10-10 — OPEN-backlog batch 3: ungated sprint reads, `+0xccd` values 2/3** (SPEC TEAM, agent
+- L5051: "walking to a vehicle entry point") — the OPEN-items list just hadn't caught up; value 2 is not
+- L5057: OPEN-backlog push's ~10-item target (batches 1-3, all spliced/cleanroom-checked/synced).
+- L5060: - **2026-10-09 — §7.4a's 4th-table follow-up on OPEN item #97: same negative result, the presumed-setter
+- L5076: - **2026-10-09 — §7.4a's own watercraft-prompt-table lead on OPEN item #97, checked directly: a real
+- L5084: producer OPEN item #97 is looking for; the item stays open, unredirected.** New, unexplored lead
+- L5098: §13.6/OPEN item #104, not a new pair hiding in this function — it calls neither of them nor the two
+- L5186: - **2026-10-08 — new §15: player combat (aim-assist, melee, death/respawn); OPEN items renumbered to
+- L5194: `+0x276C` damage-scale array's consumer inside that chokepoint is left as an honest OPEN handoff. Full
+- L5209: `spec-tables-ui-controls.md` §2.2/§2.3 and `spec-lua-api-behaviour.md` §2.6/§7.22 raised in §1.14 and §2.9 (no other spec edited). Scoping OPEN item 2 resolved (§2.8). Cleanroom self-check (strict regex + plain-substring backstop, Python `re`) run on the finished file: **regex 0 hits, backstop 0 hits**; a known-positive control 
+- L5210: -foot handler `0x005b2ca0` and children `0x005ab860`/`0x005ab930`/`0x005b29d0`/`0x005ad9a0`/`0x005abd70`, stance-byte semantics). Former §3 OPEN items and §4 clean-room check renumbered to §4 and §5 (strikethrough headings; the two in-text references to the OPEN section updated); OPEN items 11–22 appended and item 2 annotated as
+- L5211: ommitted/previous output sets (§4.10); the generic update (§4.11); and the vehicle-camera fields the follow camera reads (§4.12). Former §4 OPEN items and §5 clean-room check renumbered to §5 and §6 (strikethrough headings; the five in-text `§4, OPEN n` references and the confidence-key pointer updated to §5); OPEN items 23–34 a
+- L5212: ing and root motion only under animation-controller flag `0x100` (§5.4.4–§5.4.5); the locomotion-state update `0x00985df0` (§5.5, resolving OPEN 19); timing with no sub-step reading intent (§5.9); and the player/NPC divergences (§5.10). `spec-anim-runtime.md` §4.2 cited, not re-derived, with an offset agreement table (§5.3). For
+- L5220: U6.0 had not landed, so the slot fields used are cited by raw address in §6.1, to be reconciled with U6.0. Former §6 OPEN items and §7 clean-room check renumbered to §7 and §8 (strikethrough headings; the seven in-text `§6, OPEN n`/`§6 OPEN n` references to this file and the confidence-key pointer updated to §7; the one
+- L5221: re-characterised as a translation. New paragraph "Step 3 in detail" after step 10; step 3, step 5's first bullet and §5.0 item 4 reworded; OPEN 39 partly resolved and re-scoped. Validated against `anim_files.xtbl` (220 `Anim_Movement` rows, 4 of 790 locomotion rows) and the shipped node graphs' `loop_flag`. Cross-reference and a
+- L5226: ol`/`Collision Dir` writer and the `VI_*` body-lag model (§8.5), and the camera hand-off on top of §4, which reads the camera-angle sets of OPEN 28 (§8.6).
+- L5227: Former §7 OPEN items and §8 clean-room check renumbered to §9 and §10 (strikethrough headings; the eight in-text `§7, OPEN n`/`§7 OPEN n` references and the confidence-key pointer updated to §9); OPEN items 60–67 a
+- L5235: Former §9 OPEN items and §10 clean-room check renumbered to §10 and §11 (strikethrough headings; the 14 in-text `§9, OPEN n`/`§9 OPEN n` references and the confidence-key pointer updated to §10). OPEN items 68–72 a
+- L5240: - enter state 7 shown dead by the full local transition census and by the network applier's fixed value set, closing OPEN 60 for state 7 and extending it to exit `0x18`/`0x1c` (§10.8);
+- L5243: ause_distance`/`VI_pathfind_play_stop_dist`/`VI_on_vehicle_entry_max_y_diff` read at their shipped values, alongside the six ride tweaks of OPEN 63 (§10.2, §10.6, §10.13).
+- L5244: Former §10 OPEN items and §11 clean-room check renumbered to §11 and §12 (strikethrough headings; the 15 in-text `§10, OPEN n`/`§10 OPEN n` references and the confidence-key pointer updated to §11). OPEN items 73–79
+- L5248: hands off to one of two deep human-runtime contracts by extract kind, with no explicit state transition found for the non-`kill` case (new OPEN item);
+- L5249: - `0x1f` (exit) read in full: on-entry, the 783-instruction exit-kind chooser `0x00b04ae0` (resolving most of OPEN 69 — it writes kinds `0x15`/`0x16`/`0x17`/`0x18`/`0x1b`/`0x1c` and the named sub-variants, not `0x14`/`0x19`/`0x1a`), the 696-instruction per-frame handler (confirming the inline `0x1f → 0x21` transi
+- L5252: - a consolidated table of new and revised exit-request/slot/human fields, including the exit-request object handle `+0x08`/`+0x0c` (OPEN 47, now with three readers) and a newly found conflict between an exit-request `+0x31` bit 0 reading from this unit and U6.1's existing `convertible`-variant reading of the same bit, left OPEN 
+- L5253: Former §11 OPEN items and §12 clean-room check renumbered to §12 and §13 (strikethrough headings; the one in-text `§11, OPEN n` reference and the confidence-key pointer updated to §12). OPEN items 80–86 appended; OP
+- L5258: lds (slot `+0xe4`/`+0xec`) and three newly-named `VI_*` tweaks, two from vehicle wheelie/endo predicates — closing the `0x00af4b80` half of OPEN 63 (§12.4);
+- L5260: - `0x00af4760` reclassified as the ride-`Element` key builder, closing the `0x00af4760` half of OPEN 71 (§12.6).
+- L5261: Former §12 OPEN items and §13 clean-room check renumbered to §14 and §15 (strikethrough headings; all live in-text "§12, OPEN n"/"§12 OPEN n" cross-references elsewhere in the file updated to §14; historical Changel
+- L5263: a 22-entry handler table at `0x0111f2d0` keyed on player context word `+0x2084`, not a per-prompt test/handler pair — answers scoping §4.2 OPEN item 9 (§13.1);
+- L5269: Former §14 OPEN items and §15 clean-room check kept at §14/§15 (U6.2 lands after U6.8 in the same pass, so no further renumbering was needed). OPEN items 97–107 appended. Corrections to `review/scoping-player.md` §5
+- L5271: ract-fail pick, enter, change seat, fast) with all sixteen on-entry/per-frame roots read in full except one tail of `0x13`'s per-frame (new OPEN item); `0x10`/`0x12` confirmed dead a third way, independently of U6.0's setter-side and U6.1's key-builder-side surveys (§14.1, §14.8);
+- L5277: Former §14 OPEN items and §15 clean-room check renumbered to §15 and §16 (strikethrough headings). OPEN items 108–113 appended. No correction raised against `review/scoping-player.md` §5a.3's U6.5 row (independently
+- L5278: - **2026-10-07 — Havok W-U2 integrated (SPEC TEAM), closing OPEN 35 and OPEN 36 (the character-controller walking-slice behavioral contract, continuing Havok unit W-U1).** §5.6.5 deepened in place with `0x007a5b10`'s full internals: the per-human-kind capability g
+
+## spec-ai-runtime.md (weight 8, 81 live)
+
+- L27: not read in full); **HYPOTHESIS** (plausible, not settled); **OPEN** (collected in §8, with a concrete
+- L439: Why the request is still made is OPEN (§8).
+- L497: provided the network-read path still installs them when replicated. OPEN (§8).
+- L863: (to 1) by the transition; who clears it is OPEN (§8).
+- L881: `+0x1c54`) is OPEN; it is the natural interface between perception and the reactive modes.
+- L889: ## 8. OPEN
+- L901: kinds 46, 81 and 108 come from elsewhere and their producers remain OPEN.]** **[A3, §11.7 item 3:
+- L902: kinds 5 and 97 are consumed by `follow avoid LOF` and `follow browse`; producers OPEN.]** **[A4, §12.3:
+- L908: three is in this item's own catalogued perception-posted list, and their producers remain OPEN too,
+- L989: - in the step: the weapon upkeep `0x00600720` (still OPEN; no action routine calls it);
+- L994: family. Its pose numbers stay OPEN;
+- L999: OPEN: no action routine touches them.
+- L1017: offsets) is OPEN.
+- L1348: 0`, §9.8) is at most `Kill_Enemy/seen_in_last` (record `+0x1f4`), or `0x004dd640` holds (`+0xccd` = 9 with `+0xcce` = 15, 16 or 18; meaning OPEN). /
+- L1469: what most flag bits mean, is OPEN for unit A2 (§8). **[A2: now in §10 — 22 lists (§10.1), producers
+- L2033: setter found in the range / — / list 0: keep re-noticing at the object's true position every 300–500 ms (reader CONFIRMED; setter external, OPEN) /
+- L2465: OPEN);
+- L2535: list `0x027c2eb8`'s specific population are OPEN.]**
+- L2801: posture family. The meaning of each pose number stays OPEN.
+- L2879: note (§10, opening paragraph) and its "not read"/"OPEN" asides explicitly left out is a short, specific
+- L2981: arithmetic itself is OPEN.
+- L3053: own contract. This also closes this document's own OPEN item 19 (listed earlier in §11).
+- L3253: helper call `0x0097e9b0(…)` (its own argument shape could not be pinned down with confidence — see OPEN
+- L3575: flagged OPEN (item 3).
+- L3598: player" bit `0x21` used elsewhere in this file — close, but not provably the same test; flagged OPEN) to
+- L3666: computed every call but, at this call site, is never read back. HYPOTHESIS (OPEN item 4): whether `outB`
+- L3674: re-flips it before use, was not traced past this function and is left OPEN (item 5).
+- L3697: solve succeeds, was not fully read — see OPEN item 6). Called thiscall-style from `0x0054dce0` (`throw
+- L3830: known addresses can get past. Left OPEN.
+- L3906: ### 14.7b The real-writer search, two passes in — the count mystery is SOLVED, the presence-bit mystery is a confirmed, exhausted, STILL-OPEN contradiction (2026-10-08)
+- L4106: ype`/`cover_type` enum tables' actual named values, `navpoint_sync`'s effect, and the raw-disk `navpoint_flags` bit `0x10`'s meaning remain OPEN, with concrete addresses/offsets in `scratchpad/navpoint_covernode_realformat_2026-10-08.md` for a future unit. The `0x00b428d0` mode-dispatcher cluster is **no longer a dead end for co
+- L4128: 's own generic world-placement yaw (`0x00da3910`, the shared base-class transform) — **NOT** `cover_orient` (that property's own role stays OPEN, narrowed to "not the arc reference," likely feeding its own separate, not-yet-examined 6-way jump table).
+- L4130: over_def_angle_left` (`+0x82`) / **`cover_def_angle_right` (`+0x83` — resolves this document's own previously-unmatched 4th quantize-offset OPEN item)** — with an override that forces "exposed" (fails the test) when a separate open-cover flag is set AND the threat falls within a 30° cone of a third stored direction.
+- L4258: **OPEN, not traced this pass:** whether/how a distant (LOD) entity is ever promoted into a fully-
+- L4292: closes the OPEN item above and `spec-tables-traffic-ai.md` §18's own matching note.** Reads the exact
+- L4372: subsystem identities beyond "arms a timer" remain OPEN. Full detail:
+- L4445: **OPEN:** ~~the near-field vehicle population's own spawn-candidate algorithm and despawn-schedule
+- L4473: e selection/following — RESOLVED: a masked, lookahead-bounded forward walk of the point graph (2026-10-10, supersedes the prior "explicitly OPEN" framing)
+- L4511: caller eventually substitutes a true vehicle position here is still OPEN (below).
+- L4538: **Still OPEN, narrower than before:** whether a *moving vehicle's* live position/heading/velocity ever
+- L4741: `0x00b2bbc0` (NOT opened — a second possible write path left genuinely OPEN, not fabricated).
+- L4870: (`+0x3a` bit 0, `+0x3b` bit 0, `+0x33` bit 3) stays OPEN. When it signals bail, `0x00b2bbc0` calls
+- L4882: **OPEN:** the second handle pair's exact role (`entity+0xcc0`/`+0xcc4`); the exact geometric roles
+- L4969: **OPEN:** the exact identity of the second record passed into `0x00b47c80` (as `ECX`/`EDI` inside the
+- L5058: another closing-speed or brake-state scalar, OPEN).
+- L5145: **OPEN:** the vtable target of `0x00a78d30` (confirms/refutes "speed" framing); `0x00dab5e0`'s own
+- L5147: identity are the same kind of object — carried over from the existing OPEN note above.
+- L5208: flag 0x800. **OPEN:** the exact "player ahead" gap distance. No separate pedestrian-in-lane test was
+- L5311: bit 3, §9.9) gates the on-foot flee. **OPEN:** its reader was not located in this pass. Hijack kind
+- L5336: (§18.7.1). **OPEN:** whether mode 2 also raises the speed cap. No speed write was seen in the planner
+- L5363: **OPEN (carried):**
+- L5471: concrete trace target. OPEN — whether live vehicle state ever reaches this query, and the Havok
+- L5558: resolves `spec-tables-progression.md` §6.2's own flagged OPEN item** ("which `NotorietyLevels` set is
+- L5695: still OPEN)**;
+- L5703: New OPEN items from §19.7: the upstream notoriety-level→slot-table scheduling link (narrowed per above,
+- L5778: **What remains genuinely OPEN: the upstream notoriety→schedule link.** None of the functions above read
+- L5854: trigger-volume "think" method (its own further caller not traced, OPEN); and one is a second, previously
+- L5858: flagged honestly OPEN, HIGH CONFIDENCE it is a Lua-exposed or debug/console "request a roadblock now"
+- L5916: A null object gives no bonus. **The real-world meaning of that descriptor flag is OPEN**
+- L5941: delay is capped at 5000 ms. The identity of that mode byte is OPEN: the master tick toggles it
+- L5990: references are in the loader, so their consumer is OPEN, as in §19.5.
+- L6010: OPEN. HIGH: the `+0x14` network-stamp role, the AI-engagement meaning of the `0x00608740` callers,
+- L6011: and the `0x006069c0` sync role. OPEN: the meaning of the ×3 descriptor flag; the identity of the
+- L6182: this method can't find, or a function-boundary misidentification; flagged OPEN.
+- L6223: node-count array §17.3 already cites; `+0x08`/`+0x0c` remains uncharacterized (OPEN); `+0x20`/`+0x24` is
+- L6253: **Honest OPEN items:** `0x0051b960` (the literal per-frame "advance along segment" math) and several
+- L6335: or a different combat/threat stimulus is a real, honestly-flagged OPEN item, not assumed.
+- L6344: ### 20.5 Cross-references and summary of what remains OPEN
+- L6394: trigger stays OPEN) and bypass notoriety entirely. Exhaustive literal-reference search proves the
+- L6426: narrows §19.5's own OPEN item. Cross-references added to §15.7 (second `0x008cd1d0` consumer) and
+- L6450: long-standing OPEN item; correction to §17.5's "pool reserve/cap" framing** (SPEC TEAM, agent
+- L6478: `spec-tables-progression.md` §6.2's own flagged OPEN item (which `NotorietyLevels` set is police vs
+- L6492: steering-decision function was not reached (honest OPEN, not guessed); a 2-bit segment-"kind" field
+- L6536: clean-room check renumbered to §14.** OPEN items 24-31 appended.
+- L6579: own standing OPEN item** (SPEC TEAM, agent `ab8974ffda1933fc1`, requested so Team B could implement
+- L6595: `navpoint_sync`, and the `navpoint_flags` bit `0x10` remain OPEN (out of scope by the task's own
+- L6709: Still OPEN: whether `0x00b1ce80`/`0x00b1e5e0`'s own position parameters are themselves
+- L6745: the `0x00b4d070`→`0x00b4ad30` unconditional call all matched exactly). Left OPEN: the identity of
+- L6761: traffic-exclusive. Left OPEN: `0x00ad3820`'s brake semantics, the second handle pair's exact
+- L6775: against the live Ghidra server before splicing (matched exactly). Left OPEN: the individual
+- L6849: - 2026-10-11 — self-correction, no agent: §17.7's confidence-summary OPEN line still listed
+
+## spec-weapons-runtime.md (weight 8, 36 live)
+
+- L29: / `+6` / `0x20`, `0x01`, `0x40`; `+0xa`; `+9` / further per-type flags, combined into ≥4 boolean outcomes — individual roles OPEN /
+- L80: negative space — see §2.2a below: the gap is now far more precisely bounded but still OPEN.**
+- L111: **Net: the literal hitscan fire→damage call site remains OPEN**, but the negative space is now much
+- L162: `0x009e4dd0`'s new ammo-eligibility shape. **The literal hitscan fire→damage call site remains OPEN** —
+- L170: **Re-bounds §2.2a's/§4.4's own OPEN item, rather than closing it.** The player's own on-foot attack-input
+- L190: `[vtable+0x8c]` call — possibly the AI/NPC or vehicle-turret equivalent of this same dispatch, OPEN,
+- L199: **Net effect on the OPEN item: because the dispatch is indirect, no amount of auditing `0x0075d7e0`'s
+- L237: `item::+0x88`, OPEN); delegation into `item::+0x8c` (`0x00902760`, the base "use" implementation,
+- L293: alone, §7 — OPEN).
+- L299: (OPEN).
+- L343: useful for a clean-room port (the pool's own capacity field not read, OPEN).
+- L381: ### 2a.4 Fuse timer / impact detonation — DATA fully mapped, CODE-side consumer OPEN
+- L388: (the wrong place to look — destruction is cleanup, after any gameplay effect already fired). **OPEN
+- L402: complete, not sampled; still genuinely OPEN.** Every one of the remaining 30 slots was re-queried
+- L448: known owner/instigator." **OPEN:** `0x00b29e90`/`0x00b2a0d0`'s own exact semantics; the three hash
+- L456: projectile-shaped position-history buffer"** (resolving part of §1's own "role OPEN" note for that
+- L480: refire-delay mechanism. **OPEN:** whether `holder+0xdc → +0x374` is a cached/pre-converted copy of the
+- L512: extra validity rule. Individual case bodies not opened (OPEN). 20/20 call sites cross-checked against the
+- L558: stops at displaying stats. **Still OPEN after a dedicated follow-up pass (§2.2a):** `0x00b865f0` and its
+- L567: vtable-install site(s) for item-slot records, per §2.2b.** **OPEN, not guessed.**
+- L660: are players and game mode `0x006a3910() == 27`, × `0x006cb2a0()` (mode scalar, OPEN meaning). Then
+- L702: 9. Bail if global state `0x0153B520 ≥ 2` with `0x0153B528` set (OPEN meaning: a cutscene/transition
+- L706: a. If V is in the co-op/party roster `0x0060b530` and A is not → `dmg = 0` (OPEN which roster).
+- L718: `dmg ×= 0.1` (`0x012a2d38`; OPEN meaning — probably an "un-alerted squad" damping).
+- L745: disarm it (`full_restore_time_ms` 2000 is its likely source; its arming site is OPEN). Else, when the
+- L753: #### 4.5.6 Port checklist / OPEN
+- L758: - OPEN: the meanings of `0x0060b530`'s roster (10a), `0x012ff8ec` (12), `0x0153B520` (9), mode 27's
+- L968: flagged, not claimed identical; `0x00b6ee40`'s own identity is OPEN). After either branch, fires a
+- L981: documents); `0x009e3d0f` (a second, not-fully-characterized setter — OPEN).
+- L1026: with a new OPEN gap of its own.** `0x008cfeb0` (previously undocumented, full body read): melee's
+- L1070: **All 4 addresses opened (2026-10-09, second follow-up) — one candidate ruled out, still OPEN.**
+- L1086: remains genuinely OPEN after three passes — not forced.** New concrete leads: `0x008ce2e0` and
+- L1101: melee hit→damage hand-off remains genuinely OPEN after four passes.** Every statically-reachable
+- L1159: **OPEN:** the literal hitscan fire→damage call site (§2.2/§4.4); the melee-vs-explosion ambiguity in
+- L1312: the hitscan fire→damage call site remains OPEN but far more precisely bounded.** Fully traced
+- L1345: and the per-frame homing-update function both remain OPEN. Full detail:
+
+## spec-hud-runtime.md (weight 7, 19 live)
+
+- L51: / `0x006ee130` / unlabeled, not fully read — OPEN, doesn't change the verdict /
+- L78: either two genuine death-trigger entry points exist, or one wraps the other — OPEN.** Lua mutators:
+- L93: traced — OPEN.** 20 static call sites is consistent with "one or two central HUD-update functions," an
+- L122: **OPEN**, not guessed.
+- L133: checked. **OPEN for the exact live byte offset.**
+- L153: is suspected to work, was **not determined — OPEN**, not assumed identical to either §2's or §3's
+- L167: — **OPEN**.
+- L172: this section leaves OPEN; the two were not explicitly cross-checked field-for-field across these two
+- L192: ## 6. Minimap — live data feed traced (2026-10-08); base map + district overlay CONFIRMED, player blip still OPEN
+- L212: specific to subclass-added properties or incidental was not determined, flagged OPEN.~~ **CORRECTED
+- L259: OPEN) runs once per real rendered frame (proven by its use of the already-documented per-frame-delta
+- L291: mechanism needing its own tracing. **OPEN, narrowly scoped:** which code reads the player's live position,
+- L356: specifically the corner-minimap's own update function. OPEN: a literal player-glyph draw instruction
+- L362: ### 6.5 Mission objective text and the waypoint/GPS route target — setters fully traced, HUD-side readers OPEN (2026-10-09)
+- L475: not inferred from each other. OPEN: `0x013c8740`'s own identity (plausibly a draw/LOD-distance
+- L542: **OPEN, flagged honestly rather than guessed:** cash's exact live byte offset (§4); which of
+- L585: one call site. HUD-side render consumers for both remain OPEN, matching this file's existing gap
+- L602: - 2026-10-08: §6 (minimap) replaced in full — the live data feed left OPEN by the original dispatch is
+- L627: anchor for the minimap, left OPEN per task priority. Full detail:
+
+## spec-render-pipeline.md (weight 7, 119 live)
+
+- L9: as in prior specs): **CONFIRMED — disassembly**, **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**. **Clarification added 2026-09-25 (§17):** "CONFIRMED — empirical" is used in two senses across this document that should be read as distinct — validated against shipped/run
+- L25: ture. Camera/view/projection matrix upload and the exact catalogue of render passes are only partially reached (§11–§12, honestly scoped as OPEN/partial) — this is flagged in the task brief as expected follow-up territory and treated that way here.
+- L54: he *existence* of the fallback and the *order tried* are solid, the *exact selection condition*'s wiring is not fully traced this pass.] **[OPEN — desk review 2026-09-30: the Ex-vs-plain selection condition (the branch in `0x0047ba00` and what `0x00e98df0` tests) is still untraced; to be settled against the executable / real dat
+- L88: 2`/`+0x13`/`+0x15`/`+0x16`/`+0x23` relative to that block) come from a settings/config structure passed into this routine by its caller — **OPEN**: the exact source of that structure (a graphics-options table, a command-line override, or a saved-settings blob) was not traced this pass; it is plausibly related to the graphics-opt
+- L103: , the code calls the public `D3DPERF_SetOptions` (a documented PIX/D3DPERF instrumentation API, safe to cite by name) with argument `1`. **[OPEN — desk review 2026-09-30: what `<second pointer>` is (the Ex call's own device out-parameter, a copy of the base pointer, or a second result) and whether it equals `0x03171ac4` are not 
+- L161: ble (`0x0125a97c − 4`) decodes to the mangled type name `.?AVrl_renderer@@`. **[CONFIRMED — disassembly + RTTI structure decode.]** **Still OPEN:** the object's full field layout and its exact relationship (if any) to `0x03171ac4`/`ac8`/`b68`; see §18.10 for a real complication found while resolving this (many of the class's own
+- L163: **Review status (2026-09-30): NEEDS-EXE: method at device slot `+0x28` (public-ABI OPEN), the `+0x50`/`+0x4` addressing, and the `rl_renderer` live-vtable conflict (§21 note); calling-convention wording fixed — desk review (not re-derived from the executable).**
+- L183: ; the individual mapping of each of the 58 callers to a specific abstract "RecordXxx" operation was not exhaustively enumerated this pass — OPEN, a natural follow-up.]** At least nine distinct such producer functions were identified by their shared use of the buffer-descriptor globals (`0x004752c0`, `0x00475090`, `0x00475190`, `
+- L185: awIndexedPrimitive`). The better candidate for the *actual* generic, arbitrary-opcode record primitive is `0x00473770` (next paragraph) — **OPEN**: whether every one of the other ~50+ producer wrappers routes through `0x00473770`, through some other shared primitive, or inlines its own write directly, was not determined this pas
+- L198: er's start and its end-of-data pointer to start + length; record the current (render) thread ID into a diagnostic global (`0x02e5d658`). **[OPEN — desk review 2026-09-30: the ring array's exact base is not stated ("`0x033938a0`-adjacent"), so this step is not implementable as written; needs `0x0049dde0`; to be settled against th
+- L208: pirical for the exact count; HIGH CONFIDENCE that its role is "unused slot" given how many slots point at the identical trivial stub.]** **[OPEN — desk review 2026-09-30: only 18 of the 74 handlers are published by address and method (§7's ten rows, §20.1's eight); with the 16 filler slots, 40 remain undescribed, six of them kno
+- L214: This closes that gap for the outer frame-bracketing layer; the innermost "who finally invokes the scene-renderer's own traversal" hop stays OPEN (below).
+- L229: **Still OPEN:** the exact caller of the scene-renderer-proper's own three phase slots (`0x00490670`/`0x004924d0`/`0x00494440`, §23.4/§23.10's "role 4/5" driver) — two concrete candidates were checked directly thi
+- L231: 00`→`0x005dd910`, `0x005ddef0`→`0x00477ac0`}, the source-path string, and the `+0xf0`→`0x004752c0` hand-off into §6.2's own producer layer. OPEN — the scene-renderer phase-slot caller, narrowed by two refuted candidates.]**
+- L258: shapes, not Volition IP. **OPEN:** the path from here into the game's own `main`/`WinMain`-equivalent and
+- L278: reset `0x00af1690`). **This is the single largest remaining gap in the boot-sequence picture — OPEN.**
+- L298: and buffer (§6.1-§6.4); **no explicit cross-thread wait/semaphore between main thread and `render_thread` was identified anywhere** — still OPEN, same gap §6.5 itself already flags /
+- L302: ise "Audiolib Stream Manager" / `0x0046b850` (entry `0x0046b820`) / Deferred low-level I/O scheduling — **internals never read by any pass, OPEN** / — /
+- L327: animation steps, is NOT pinned down — OPEN. Neither audio nor render appear anywhere in this tick: audio
+- L342: where render-core bring-up and the `render_thread` spawn happen. OPEN: the exact relative boot order
+- L368: inary offset census, §Method, but not fully disassembled byte-for-byte) — safe to treat as CONFIRMED for *which opcode calls which method*, OPEN for their exact record layout. **[desk review 2026-09-30, HIGH CONFIDENCE — derived: §23.5's producer `0x00475540` writes opcode 9 with exactly 2 arguments, which under §18.2's idiom is
+- L372: g they set bit `0x80` of a dword at `0x0351f8f8+0x50+0x4` and skip the call — a device-lost/paused guard. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: which dword this is (`*(obj+0x50)+4` or `obj+0x54`) — see the matching note in §4.4; to be settled against the executable / real data.]**
+- L388: en calls one of the "Record*" wrapper functions of §6.2 to emit the opcode-42 command, was not identified. This is the second-highest-value OPEN item for follow-up (§14 item 2), and closing it would fully connect "mesh on disk" to "triangles issued to the GPU." **[Closed for one path: §18.6/§18.7 (`0x00b17000`→…→`0x004764d0`); s
+- L396: der object" bind method (`0x00474890`) to the specific "Record*" producer wrappers that emit these opcodes was **not** traced this pass — **OPEN** (§14 item 3). **Traced for one concrete producer in §22: `rl_static_material`'s own technique-select method reaches directly into the per-file shader-object's `+0x14` role-select meth
+- L400: ## 11. Camera, View and Projection Matrices — Partial, Mostly OPEN
+- L404: h for uploading view/projection matrices to shader constant registers, consistent with a standard D3D9 shader-based renderer of this era. **OPEN:** the producer-side function that computes a view/projection matrix and calls the corresponding "Record*" wrapper (to emit one of those two opcodes) was not identified this pass — this
+- L408: ## 12. Render Passes and Render Targets — Enumeration Only, Mostly OPEN
+- L416: s called with 0 arguments where the real device method needs 1 — see §4.4/§16.1; which device method sits at `+0x28` is under a desk-review OPEN note in §4.4). **All ten are REFUTED:**
+- L453: whether the two chains are genuinely parallel (e.g. different LOD tiers or geometry kinds) or reconverge somewhere neither pass reached is OPEN (§18.8), as is the alternate branch (`0x00e58a60`) `0x00b17000` can take instead of the now-closed path, and the very top of the closed chain (`0x00b17000` has no direct caller found — i
+- L455: 20.12.4: no per-draw name-hash, but register numbers are resolved once at init by `CTAB` name-hash via `0x00e49990` → `0x00d9e740`)*. Still OPEN: the literal `0x00474890` bind method's own wiring into these specific producers was not traced end-to-end. **Partially advanced in §22 (2026-09-28, a vehicle-body-material-specific tra
+- L457: erlying render-pass-identity question (what actually renders the shadow map/post-process/UI compositing, and in what order) stays genuinely OPEN, but needs a different search strategy -- this specific census is now exhausted, not merely under-checked.**
+- L459: - not linker folding, and (per §21's exhaustive whole-binary checks) not superseded by any later derived-class vtable install either. Still OPEN: why the runtime call sites that reach these slots (§9/§18.5/§20.3a) do not crash the shipped game -- most likely a gating condition that is always false for real content, not traced to
+- L462: in the same deferred command buffer, not a separate mechanism — there is no standalone "per-frame loop that calls Present" to find. **Still OPEN: which producer function decides to record the opcode-7/8 command** (§19.3) — not traced this pass, opcodes `7`/`8` being too common as plain integers for the same mechanical literal-st
+- L650: `0x0049c890` regardless of whether it produces the draw call). **[OPEN --
+- L687: genuine, independent cross-spec lead for `spec-vehicle-geometry.md`'s previously-unresolved high16 selector consumer (new §16.4); three new OPEN items added to §14 (missing `Present`/`PresentEx`, unresolved threading topology, non-uniform command granularity); a caveat added to §14 on treating §10–§12's offset-only census counts
+- L689: **Raised but not acted on this pass (recorded as still OPEN, not silently dropped):** whether `0x03171b68`'s assignment source is a trivial one-line confirm (§4.3); whether `CreateDeviceEx`'s second output pointer is provably the same value as the base pointe
+- L727: a batched sampler/texture-stage-state update. **[CONFIRMED — disassembly, all four functions and the accumulator/flush relationship.]** **[OPEN — desk review 2026-09-30: the replay-side handlers of opcodes 3, `0xA`, `0x14`, `0x15`, `0x16` and `0x17` were never read, so these record sizes are checked from the producer end only; t
+- L763: a clean resolution. **[CONFIRMED — disassembly, both calls in this loop and their exact interleaving; the target-method identity itself is OPEN for the reason given in §18.10, not simply unresolved.]** **[Resolved §20.8: a `_purecall` trap; ICF refuted.]** **[OPEN — desk review 2026-09-30: a live, three-argument call through a `
+- L771: indexes a `0x14`-byte-stride range-record array (its base read from the calling object's own `+0x3a0` field, `+8`; *desk review 2026-09-30, OPEN: whether `+8` is the array-base field inside the object `+0x3a0` points to or part of the field offset is not stated*) by the range index, matching **exactly** the draw-range record sha
+- L775: occupy in their classes; no cited literal supports `+0x28`, which is the slot number §16's introduction gives for `0x00e73e80`'s own path — OPEN pending a read of that vtable)*) and `0x00e58b70` (vtable `+0x60`, per §16.2) already sit on; which slot, and what the actual per-frame/per-visible-list walker that invokes it is, was n
+- L779: DESK-PASS, text fixes applied (strip/per-range topology backed by Team B's 549/549-mesh run; `+0x28` vs `+0x60` slot and `+0x3a0`/`+8` left OPEN) — desk review (not re-derived from the executable).**
+- L794: genuinely confusing, not a simple miss, and reported as such rather than forced into either "resolved" or a silent re-statement of the old OPEN note (§18.10). **[Resolved §20.8: `_purecall` trap; see §21/§21.1 for the remaining gate question.]**
+- L889: rd to its underlying producer — the same "generic, argument-preserving top-level entry point" shape §18.4 already established for draws. **[OPEN — desk review 2026-09-30: the record size of the single-Vector4 by-value forms (`0x00475be0`/`0x00475e10`, opcodes `0x18`/`0x1B`) was not cross-read against the replay handlers `0x0049D
+- L897: ender item — strong circumstantial confirmation this function runs in the same per-visible-item submission context §18.5 already traced. **[OPEN — desk review 2026-09-30: §18.5's `+0x10` call passes three arguments (holder, group index, range index) while this one is made on a render item, so "the same method" can only mean the 
+- L921: n; not individually decompiled this pass. **[CONFIRMED — disassembly for the producer and its callers; the caller functions' own bodies are OPEN for a future pass.]** SetSamplerState's OWN dedicated opcode (19, distinct from opcode 36's combined form) did not turn up a clean dedicated producer under this same literal-store scan 
+- L963: (inside `spec-tables-environment.md` §18's own `0x00BA8540`) is still OPEN, but the recipe to find it
+- L982: `-1` reset. **[CONFIRMED — disassembly, exhaustive whole-binary scans; `tools/scratchpad/ParamStructTrace5.java`/`7.java`/`11.java`.]** **[OPEN — desk review 2026-09-30: §23.4/§23.6 place `0x00490060` at this class's vtable `+0x10` as the sole caller of `0x00e6ce70`, most likely an init step, so its label here as "the class's ow
+- L986: **Stretch goal (which `.fxo_pc` shader is bound here) — OPEN, not reached.** No call to either `SetPixelShader`/`SetVertexShader` producer (`0x00476010`/`0x00475fb0`) or to the shader-object bind method (`0x00474890`, `spec-fxo-format.md` §6.5) appears anywher
+- L998: lects for an ordinary main-camera opaque draw is not itself re-derived here (`spec-fxo-format.md` §7.4 already leaves "what roles 0–9 mean" OPEN) — but the five passes' own declared constants make a strong CTAB-content case, offered as **HIGH CONFIDENCE — inferred, not disassembly-confirmed for the role NUMBERING itself**: pass 
+- L1020: against the full CTAB table above). **[CONFIRMED — empirical, direct bytecode read, all 10 blobs, `tools/scratchpad/d3d9_tokens.py`.]** **[OPEN — desk review 2026-09-30: the "zero collisions" and the DEF-target clusters are stated over the union of the 10 blobs; since PS `c0` is both a DEF target and `Specular_Power`'s register 
+- L1032: at init, not per frame or per draw. **[CONFIRMED — disassembly, full caller census, `tools/scratchpad/CarPaintTrace6.java`/`7.java`.]** **[OPEN — desk review 2026-09-30: four links of the end-to-end chain are not shown: (1) the engine registers the name `World_xform` against the `"rl_vis_query"` class handle while this shader's 
+- L1038: #### 20.12.5 `projTM` (view-projection) and `Object_instance_params_2` — OPEN, two real leads REFUTED, one further lead found and characterized but not closed (§20.12.10)
+- L1044: ived from the VS bytecode (how c28–c31 and c48–c50 are applied to the position) or the executable; and the `objTM`@c32 ×2,357 figure.]** **[OPEN — desk review 2026-09-30: "shaders" in the 3,398/2,357/2,203 counts is not a unit this spec defines (the library is 844 files / 7,276 blobs); the fused view-projection reading is checka
+- L1046: oads TWO 4×4 matrices through the exact same dispatcher — but it could not be confirmed or refuted before this pass's budget ran out; still OPEN, now with a sharper, disassembly-anchored description of exactly what is and isn't known. See §20.12.10 for the full trace; the two refutations above are unchanged and still stand.**
+- L1048: **`Object_instance_params_2`@36×1 (VS, passes 0–3) is also OPEN.** It is not one of the four names (`World_xform`/`Scale`/`Offset`/`Camera_velocity`) `0x00489140`'s own sibling mechanism resolves, and no other producer was identified. Given the name's shape (`_2`
+- L1050: ` semantics and register counts to be re-derived from the shipped VS bytecode/CTAB (label downgraded to HYPOTHESIS on provenance); producer OPEN — desk review (not re-derived from the executable).** **Update (2026-10-01): register assignment and counts for `projTM`@c28×4 and `IR_World2View`@c48×3 VALIDATED-BY-DATA (Team B CTAB c
+- L1061: -material buffer is sized and indexed exactly to the BOUND SHADER's own register layout, not the material author's original entry count. **[OPEN — desk review 2026-09-30: `+0xE` is used in two senses in this spec — the on-disk array-B count and, after this step, the bound shader's register span — and §22.5 gates two `rl_renderer
+- L1065: simple positional array-form `SetPixelShaderConstantF(0, buffer, registerSpan)` call somewhere in the same bind path) was not located.** **[OPEN — honest gap, not chased further within this pass's budget; the VALUE-preparation side is fully closed, only the final upload call site is missing.]**
+- L1067: **Follow-up pass (2026-09-29, §20.12.10): STILL OPEN after an exhaustive check of every plausible nearby call site** — `rl_static_material`'s entire vtable (all 27 slots), the fxo shader-object's own `+0x14` role-select method, and seven further confir
+- L1069: us (2026-09-30): DESK-PASS, text fixes applied (array-B/C layout reproduced by Team B on real records, HANDOFF §9.106; `+0xE` dual use left OPEN) — desk review (not re-derived from the executable).**
+- L1071: #### 20.12.7 Everything else declared — OPEN, not investigated this pass
+- L1102: Both remaining OPEN items above (`projTM` and the material-buffer GPU-upload call site) were revisited in a direct follow-up pass, 2026-09-29 — see §20.12.10. Both stay OPEN; the follow-up narrows each honestly rather t
+- L1108: **Scope.** Requested as a direct follow-up on §20.12.5's and §20.12.6's two OPEN items specifically (not a fresh cold start). Method: same disposable Ghidra project `tools/gp_render8`, PowerShell-only headless invocation, `tools/scratchpad/ProjTM1.java` through `ProjTM7.java`. Bu
+- L1117: race, that would explain the negative. **[CONFIRMED — empirical, exhaustive over initialized memory, `tools/scratchpad/ProjTM3.java`.]** **[OPEN — desk review 2026-09-30: a writer search is the wrong tool if `0x01350b20` is initialised image data — it is the dword immediately after the opcode table's end (§6.4, where it is calle
+- L1118: ble slots, but this was not conclusively resolved. **[CONFIRMED for the caller-census negative; the `0x0129fd50` slot's own owning class is OPEN, `tools/scratchpad/ProjTM7.java`.]**
+- L1120: **Net effect: `projTM`'s producer stays OPEN, exactly as §20.12.5 left it, with one additional named candidate (`0x00474000`) on record — structurally the best match found across two passes, but explicitly NOT claimed as confirmed**, per this p
+- L1131: **Net effect: the material-buffer GPU-upload call site stays OPEN, exactly as §20.12.6 left it.** Two narrower, concrete leads are recorded for a future pass rather than pursued further here: (a) the render-context's own first-field object's vtable `+0x60` (reached
+- L1146: d30`, not anywhere else. **[CONFIRMED NEGATIVE — exhaustive whole-binary string scan, `tools/scratchpad/CarPaintTrace12.java` Part 4.]** **[OPEN — desk review 2026-09-30: a string scan does not exclude code that compares against a precomputed 32-bit name hash held as an immediate (for `Tint_color` the project hash is `0x8F88517A
+- L1171: int_color"`/`"tint_color"` registration appears anywhere in that same >150-site census. **The real producer of vehicle `Tint_color` remains OPEN — a genuinely new search, not answered by re-checking the `objTM`-style mechanism's existing results.**
+- L1181: al — as a genuine negative, not an under-search.** **[CONFIRMED NEGATIVE — exhaustive, `tools/scratchpad/TintTrace5.java`/`_out.txt`.]** **[OPEN — desk review 2026-09-30: this spec's own census gives 8 literal-register sites, not 9 — §20.9 lists `0x0049bdb0`×5 and `0x0049bb40`×3 (both only under `0x00475be0`), and §23.6.1 maps t
+- L1195: document that needs sorting out before this lead can be pursued further. **`Tint_color`'s real producer for vehicle-body materials remains OPEN.** This is a genuine, honestly-scoped OPEN per this project's standing discipline — not a forced-fit conclusion — with a materially narrower, better-characterized remaining search space 
+- L1245: ritten on its way to the live `Base_Paint_Color`(c2)/`Tint_color`(c37) registers. Direct follow-up on `spec-vehicle-geometry.md` §7.1's own OPEN item (whether any runtime customization overwrites the authored material-record paint value) and this section's own §20.12.11's `Base_Paint_Color` mention (`0x008188b0`/`0x00818ef0`, a 
+- L1249: ter a rate-limit kill (full caller census re-queried live against the project's own Ghidra server, zero discrepancies from the first pass); OPEN for the final connecting hop.]**
+- L1253: **Review status (2026-10-09): CONFIRMED for question 1 (flat constant) and for the two mechanisms/their separation in question 2; OPEN for the final connecting hop — independently re-derived from the executable, re-verified a second time same-day.**
+- L1269: roject's own standing policy reserves for a dedicated pass, not a low-priority cleanup item). This is now a precisely-scoped, well-anchored OPEN item — a real narrowing from "why do 28 slots share an address" (closed) through "does something patch the vtable" (closed, refuted) to "why is this specific gate apparently always fals
+- L1273: **[OPEN — desk review 2026-09-30 (the `rl_renderer` live-vtable conflict): about a dozen live calls through this object's trap range carry distinct, coherent argument shapes — `+0x10` (§18.5, §20.3(a)), `+0x
+- L1291: re not identified" gap this document already recorded at §18.6/§18.8. [CONFIRMED -- disassembly for every hop; the top caller's identity is OPEN, unchanged from §18.8.]
+- L1293: y anticipated, now with a single concrete byte-parameter value to check for, rather than an open-ended "why doesn't this crash" question. **OPEN, honestly, with a materially smaller remaining surface than before this pass.**
+- L1307: exact same call shape** (`this+0x130`, vtable `+0x1c`, high16 argument, vtable `+0x24` gate) that §16.2/§16.3/§18.8 already found and left OPEN in the *separate*, previously-more-prominent `0x00e74880`/`0x00e58480` chain. Finding it called directly inside the NOW-CLOSED `0x00b16d50` chain too means `this+0x130` is shared infrast
+- L1314: count bound `0x02ac6932`), by the low-16 bits of the material index (the high two bits carry two flag bits set at registration, §22.3). **[OPEN — desk review 2026-09-30: the index width is not stated — with two high flag bits the index is 14 bits of a `u16` or 30 bits of a `u32`, and "low-16 bits" fits neither exactly; to be set
+- L1336: (<6) is the stage-suffix class and `tierB` (<4) the variant, as §22.8 already says; what `0x00e48230`/`0x00e48250` compute them from stays OPEN)*. **[CONFIRMED — disassembly for the table-index arithmetic and bound checks; HIGH CONFIDENCE, not fully traced, for what `tierA`/`tierB` semantically select.]**
+- L1348: orth folding into whatever eventually resolves §21's open gating question — not chased further here, as it is outside this task's scope. **[OPEN — desk review 2026-09-30: the `+0x54` texture binds above and these `+0x58`/`+0x5c` calls are live calls through `_purecall` slots (§21 note); and if the `+0xE` gate byte is the array-B
+- L1419: ash`, not by any single fixed default.** **[CONFIRMED — empirical, exhaustive population count, `tools/harnesses/vehshader_dump2.py`.]** **[OPEN — desk review 2026-09-30: recount: the table names 31 stems (10 ranked + `ir_sr3carglass` + 14 car-paint + 4 car-glass + `ir_sr3tanktread` + `ir_bbsimple1` = 16 paint + 6 glass + 9 othe
+- L1421: the `0x6C` entry exactly (`0x60` + 3 dwords). If `0x00e49ac0` indexes from `tableBase` rather than from the entry, the two readings agree. OPEN until `0x00e49ac0`'s base is read (the same point applies to §20.12.4's citation of `+0x68`/`+0x6c`).]**
+- L1427: .java` through `Frame11.java`. This is architecture/orchestration tracing, not per-register tracing — several leads end this pass genuinely OPEN, flagged as such rather than guessed at, per `HANDOFF.md` §36, archived §27.8.
+- L1437: / Light list (positions/colors/count) build / **CONFIRMED** (iteration mechanism + VS-side per-light payload) / **OPEN** (PS-side lighting-math upload) / `0x00e6ce70`'s register-resolution cache unchanged. The real per-frame mechanism is now found: lights are ordinary entries in the same generic per-visible-item subm
+- L1439: / G-buffer readback (`IR_GBuffer_DSF_DataSampler`) / **OPEN** / No literal `IR_GBuffer`/`GBuffer` string exists anywhere in the executable image — §23.8. /
+- L1440: / Pixel format of the 3 color + 1 depth target slots / **REFUTED (the 4 candidate writers)** / **OPEN (the real format)** / All four originally-flagged candidate writer functions were opened and none sets up a pixel format — 3 are coincidental offset collisions with an unrelated weather/environment c
+- L1452: x2f0`; a `-1` byte on a present role would fall back to T8 entry 0, and what the `+0x14` method does for an absent role is not documented — OPEN, needs `0x0048F7C0`)* — meaning this "no flag set" default state, if it were ever reached during ordinary vehicle rendering, would fail to resolve a technique for this shader entirely *
+- L1463: list rather than the whole pass — **HYPOTHESIS**, the nesting itself was not directly re-confirmed by instruction-level trace this pass. **[OPEN — desk review 2026-09-30: slot `+0x48` of `0x0351f8f8` carries two labels in this spec — a profiling marker here and an upload-shaped call in §20.12.5 — while §23.7 gives `+0x40` as the
+- L1465: ely-shared per-draw-site override toggle (plausibly a wireframe/debug/two-sided-material flag) than a frame-level pass boundary — **flagged OPEN**, not claimed as a pass-orchestration finding in the same sense as the other three.
+- L1489: ascending offset order, and this pass did not find that outer driver to check directly. **[HIGH CONFIDENCE for the shared-class structure; OPEN for the actual per-frame call sequence and its own top-level driver.]**
+- L1509: ct real shaders, consistent pattern across all 3; exact per-channel semantics (what x/y/z individually decode to) not traced, honestly left OPEN.]** The still-open writer-function check below (now further sharpened toward expecting a packed/compact parameter-shaped format, not a wide HDR accumulation format) remains the concrete
+- L1511: h-stencil surface, not a regular texture slot. Team B's own `oC1` output should hold whatever `GBUFFER_DSF_DATA` actually is (content still OPEN, §23.8), not depth.**
+- L1555: irmed sits directly upstream of a real, disassembly-confirmed `DrawIndexedPrimitive` command-buffer write (§18.6) *(desk review 2026-09-30, OPEN: not shown — §18.6's closed chain `0x00b16d50`→`0x00b13bf0` contains neither call, and §18.7 leaves the relation between the two chains open; the `+0x10` half is also a `_purecall` slot
+- L1584: RecordSetPixelShaderConstantF` producer (`0x00475d80`, §20.2). **[CONFIRMED — full decompile, `tools/scratchpad/LightList14_out.txt`.]** **[OPEN — desk review 2026-09-30: §20.2 gives the array-form producer three arguments (StartRegister, floatArrayPointer, vector4Count), so a four-argument `+0x5c` call is not its exact shape, a
+- L1660: tube_tex`) is likewise real, compiled, and wired into the identical live dispatch — but no authored-data instantiation was found this pass (OPEN: the `Lightset` parser's own `Type`-string comparison chain was not enumerated past the two already-quoted values). `ir_light_local_ambient` turns out to be its own full shader techniqu
+- L1664: **Review status (2026-10-09): CONFIRMED for both generation chains and for spot/SSAO/RAO/Ambient_Grid; OPEN for the shadow-buffer resolve consumer, tube-light authored instantiation, and the general light-probe/GI question (bounded search only) — independently re-derived from the executable.**
+- L1666: also comes up empty; a fourth, same-day follow-up closes the loop's three remaining sub-calls too, still empty; role 1's real writer stays OPEN
+- L1708: ho writes `rl_static_material`'s own `+0x8` field to `1`, and whether role 1 genuinely renders the dual-paraboloid reflection map — remains OPEN, and this pass found no further anchored candidate to check next inside this specific construction loop. Reported honestly per `HANDOFF.md` §36, archived §27.8 rather than forcing a con
+- L1712: ### 23.8 G-buffer readback (`IR_GBuffer_DSF_DataSampler`) — OPEN
+- L1720: d; the two combine exactly, not a coincidence.]** The exact per-channel CONTENT of DSF_DATA (§23.8 above) is unaffected by this and remains OPEN — this closes "which pass writes it," not "what it contains." Full detail: `scratchpad/gbuffer_render_constants_2026-10-08.md`.
+- L1761: t writers; the confirmed `CreateTexture` wrapper's complete 5-call-site graph, exhaustively traced and also not resolving to these offsets. OPEN, unchanged in substance from §23.8/§23.10: the actual creation site and real pixel format of the four named G-buffer target slots. This upgrades the investigative state from "not yet op
+- L1780: xture` call that reads this table's format field for each slot specifically was not traced this pass either — a now much narrower remaining OPEN item than before, since the format value itself is settled).
+- L1784: . Filter/address-mode values and the exact per-material resolution step that picks register 9's *value* for a DSF-consuming material remain OPEN (most likely a per-technique resolved-sampler-index cache, the analogue of the already-confirmed shader-constant-register resolution at load time, §20.12.4 — not confirmed this pass).
+- L1794: rdinary frame-end bookkeeping) — but the outer frame/thread structure is now solid, confirmed ground. **[CONFIRMED for the outer structure; OPEN, narrowed, for the exact vtable-slot hop — unchanged in substance from §23.4/§23.10, now with a concrete caller chain to resume from.]**
+- L1801: 4. **Reflection-probe render (role 1, pass 4)** — already-documented (§23.7), trigger still OPEN; runs at some point before step 3 needs its output, not precisely ordered here.
+- L1809: nd the `render_thread` top-level corroboration; HIGH CONFIDENCE/inference for the `LBUFFER_DIFFUSE`/`FINAL_RESOLVE` target identifications; OPEN, unchanged, for the vtable-slot hop and role 1's trigger — independently re-derived from the executable.**
+- L1887: from real shipped data. OPEN: the exact instruction connecting `+0x3a` bit `0x80` to the render item's
+- L1922: : fixed 7 cross-references (§7.3→§7, §12.1 above→below, 4 bare §6.6→`spec-fxo-format.md` §6.6, plus §23.4/§23.7 pointers); marked ~22 stale OPEN/HYPOTHESIS/superseded statements in place with pointers (§4.4, §9, §10, §14 items 3/6/7/12/13, §15, §16.1 ×2, §18.5 ×2, §18.8, §18.10, §20.3(c), §20.4, §20.8, §20.12.1, §20.12.4, §20.12
+- L1924: 23 → 22/24, role-10 bit `0x100` clear in `0x2f0`, §22.11 table lists 31 of 37 stems, §20.12.13 census gives 8 not 9 literal-register sites (OPEN), §14 item 6 remainder 40; derived notes: calling convention is COM `__stdcall` (§4.4, §20.7), §18.6 `0x00b13850` slot arithmetic gives `+0x60`, §22.11 `+0x60`/`+0x68` field-base reconc
+- L1927: to `0x005de100`→`0x005dd910` and the `+0xf0`→`0x004752c0` hand-off into §6.2's own `Record*` layer; scene-renderer phase-slot caller stays OPEN, two more candidates refuted). §21 gained an independent re-confirmation addendum (full 33-slot vtable dump, 0/33 vs 28/28 traps; 3 more previously-unidentified slots pinned to real func
+- L1940: d to CONFIRMED NEGATIVE with a stale-D3D9-constant-state HYPOTHESIS offered for Team B's specular-only render bug. §6.4's second 2026-09-30 OPEN note marked substantially settled. Cleanroom self-check (non-`FUN_`/`DAT_` patterns): unchanged at 3 hits, new content contributes 0.
+- L1942: 23.5 too — oC1 is DSF_DATA, not depth, real depth comes only from the separate INTZ depth-stencil surface. Content of DSF_DATA itself stays OPEN (shader bytecode not accessible this pass). **New §23.13: real per-frame deferred pass order**, an ordered backbone (G-buffer fill → lighting accumulation → forward/composite → reflecti
+- L1950: 230+ mostly-undocumented callees) whose RELATIVE order is honestly flagged OPEN; a boot-only
+- L1958: explicit OPEN items left, including the exact Lua-tick instruction offset inside `0x00702a50` and the
+- L1964: viewport constant uploader, unrelated. The real producer is still OPEN but the recipe to find it is
+- L1996: `Base_Paint_Color`/`Tint_color` registers was not found — a genuine, bounded OPEN item, with one
+- L1998: Resolves `spec-vehicle-geometry.md` §7.1's long-standing runtime-writer OPEN item. Full detail:
+
+## spec-save-format.md (weight 7, 91 live)
+
+- L9: ainer-format spec): **CONFIRMED — disassembly**, **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: `), §11.1 (indirect references to the hash routine; producer of error 5), §11.5 (placeholder substitution per pair or per element); smaller OPEN markers in §6.1 (`0x00B962E0`), §7.4 (writer rules), §7.5 (`+0x23`), §8.1 (writer `0x00881110`), §9.8 (length limit), §10.6 (weapon-bit loop bound). **Awaiting real data:** §9.3 (missio
+- L138: fy, snapshot compute); §11.1 lists the fourth as a "directory helper" at `0x00B962E0`, whose range and initial value are described nowhere. OPEN — to be settled against the executable.]** seven other routines read the same table, and every call site of every one of them lies outside the save/load code.
+- L142: — a directory that fails its hash makes *every* save invisible until it is rewritten. An empty directory (600 zero bytes) hashes to `0`. **[OPEN — desk review 2026-09-30: the text does not say that the *written* file is the normalised copy (inactive or excluded records zeroed); if it were not, a load-side recompute could not mat
+- L153: ts 16/16, every control failing (Team B); text fixes applied; the sixth call site `0x00B962E0` and the directory normalisation wording stay OPEN — desk review (not re-derived from the executable).**
+- L389: 20`; its consumer group works with account-registration/login strings — **HYPOTHESIS: online-account record**; all zero in the 3 samples; **OPEN — treat as opaque** /
+- L390: er group is the wave-survival ("horde") mode data loader — **HIGH CONFIDENCE: horde-mode persistent selection**; all zero in the samples; **OPEN — opaque** /
+- L392: / `0x21CD` / 563 bytes / tail / copied verbatim (0x8C dwords + 3 bytes); no reader found; zero in the samples; **OPEN** /
+- L400: / `+0x08` / `0x200C` / i32 / constrained to `3` or `4` (anything else becomes 3); meaning **OPEN** / 3 /
+- L409: `+0x23` / `0x2027` / u8 / **cutscene vsync** — *not* boolean-valued in real files (observed `0xF3`, `0x33`, `0x13`; low nibble always 3); **OPEN** **[OPEN — desk review 2026-09-30: a byte that is not boolean-valued in 3/3 files may not hold only this setting; its store width in the collect routine `0x008411A0` is to be settled a
+- L413: / `+0x48` / `0x204C` / i32 / audio-group item 7 (unlabelled) — **OPEN** / 1 /
+- L417: / `+0x58` / `0x205C` / i32 / mouse-group item 5 (unlabelled) — **OPEN** / 2 /
+- L418: / `+0x5C` / `0x2060` / i32 / no consumer other than the collect/apply pair — **OPEN** / 1 /
+- L433: **Review status (2026-09-30), §7.5: DESK-PASS, text fixes applied (`+0x23` store width OPEN) — desk review (not re-derived from the executable).**
+- L488: SOLVED — every field is located, and every one that can be recomputed from the snapshot matches; two live-world counters' meanings are left OPEN. Supersedes the three "Field A/B/C" rows of §2.2 (struck through there).** Agent Q pass, 2026-09-20. Field meanings marked "per §6.5" are that section's (another pass); this section add
+- L496: ws 3, 5 and 21 with the low-bits reading. The table is what the harness validated (§8.3), so this sentence, not the table, was wrong.]** **[OPEN — desk review 2026-09-30: the n-bit writer `0x00881110` was not re-read; to be settled against the executable.]** — so a field of 8 or more bits is *not* contiguous in the bit stream wh
+- L498: **Review status (2026-09-30), §8.1: DESK-PASS, text fixes applied (bit-order sentence corrected from §8.2's own table; writer `0x00881110` OPEN) — desk review (not re-derived from the executable).**
+- L507: count from a live-world list query (0–127); samples 20, 21, 2, 10 / live game state (no snapshot equivalent) / source CONFIRMED; **meaning OPEN** /
+- L509: ) of entries in a second live-world list; samples 5, 8, 6, 9, 0, 1 / live game state (no snapshot equivalent) / source CONFIRMED; **meaning OPEN** /
+- L558: agged state (plausibly "available"/UI-relevant markers), recomputed from world state each save — consistent with having no snapshot analog. OPEN: the object-type system (what type 0/3 mean, the `0x024D8534` handle's identity). **Row 4's source — CONFIRMED (disassembly), in an unexpected subsystem.** The same builder counts, into
+- L574: e marker object linked to activity *i* (60 bits used). Extent now literal: 8 bytes. / CONFIRMED — disassembly (source); meaning of the flag OPEN /
+- L575: ects** (handle + progress flag word). / CONFIRMED — disassembly (source); flag bits HIGH CONFIDENCE as progress state, individual bit names OPEN /
+- L576: bled/flag byte of the world **trigger** objects whose kind index is 12, 13 or 14. / HIGH CONFIDENCE (class); which trigger kinds 12–14 are: OPEN /
+- L578: ytes: **hitman-diversion target groups** (item count, done-count, one 3-flag byte per target). / HIGH CONFIDENCE (subsystem); flag meanings OPEN /
+- L608: 0 or **500.0** (`0x43FA0000`) in every record (84/329 are 500.0); copied through by the refresh, written by a different subsystem — meaning OPEN / 329/329 /
+- L612: / `+0x12` / `u8` / copy of a per-vehicle byte at vehicle `+0x1630`: **`0xFF` (131 records) or 1–10** / 329/329 in {1..10, 0xFF}; meaning OPEN /
+- L642: **(b) `0x2E98`–`0x2E9F`: 64-bit "marker flag" set [CONFIRMED — disassembly for the source; meaning of the flag OPEN].** For *i* in the activity list of the table above (the same order as the 60 records; loop bound = the list count, array cap `0x40` ⇒ exactly 8 bytes): bit *i* = bit 0 of the byte at `+0x7B` of the
+- L646: s "completed" is **HIGH CONFIDENCE for the ordering (marker logic + monotone counts), HYPOTHESIS for the exact words**; bits 3, 4, 5, 7 are OPEN (bits 3 and 4 occur only in one snapshot, §9.9). **[OPEN — desk review 2026-09-30: in the value list above bit 4 is set in six values (`0x15`, `0x18`, `0x54`, `0x55`, `0xD4`, `0xD5`) an
+- L679: source table via the same generic registration call. **Still genuinely OPEN:** the array of
+- L713: (bit 1 only) or `00` elsewhere; the 2026 series from 39,688 s on holds `07` (all three) for 19 targets (per group: 4, 4, 4, 3, 3, 3, 1) **[OPEN — desk review 2026-09-30: the per-group list sums to 22 (4+4+4+3+3+3+1), not 19; one of the two figures is wrong. To be settled against real data (count of `07` flag bytes per group at `
+- L715: he one with id `0x99633CAD`) in 12 snapshots, and 1 for all five in the three other-profile snapshots above — a per-shop flag whose name is OPEN.
+- L735: d cheat list (10 ids, only 3 of the 7 `dlc_*` ones), no hitman bit 0, and the only occurrences of mission-flag bits 3 and 4. The cause is **OPEN** (a different mode, an edited or reset profile, or a differently-progressed profile); it is the reason the "grows with play time" statements above are made for the date-ordered 2026 se
+- L739: **OPEN.** (1) The three per-target flags of the hitman groups and the meaning of bit 0 there; (2) which trigger kinds are 12–14 and why there are 113 of them (equal to the 113 mission objects); (3) the name
+- L776: r-record fields (`+0x20A0`). **Always 0 (16/16); no stat handler names it.** / Saved and restored beside the other two by `0x00B97C40`. / **OPEN** /
+- L777: / Field `+0x20A8`; handler type 26 (`0x00712250`, `0x00713570`, `0x00713050`), stat id 164 "stunt jumps found". Values seen: 0, 3, 4, 8. **[OPEN — 2026-10-01: that statistic 164 always equals this counter is not established. It fails on a snapshot this spec already counts: Documents `sr3save_04` (saved 2011-12-20; the §10.7 row 
+- L784: / `0x4424` / `u32` / Player-record `+0xF8` (setter `0x00942290`). **0 in 16/16.** / — / **OPEN** /
+- L786: f each of the four integers (loaded/reserve/capacity split) was **not** separated. / **CONFIRMED — disassembly + empirical** (identity) / **OPEN** (individual ammo fields) /
+- L791: (§10.2) at +0x20, `u32` **item count** at +0xB8 (≤ 19), an 8-byte value at +0xBC and a `u32` at +0xC4 (both vary between outfits, meaning **OPEN**), and 19 × `u32` at +0xC8 that are **1 for each used item slot** and 0 otherwise (purpose OPEN — a per-item weight/enable). / Filler `0x00824170` walks a circular list of user-outfit 
+- L802: `u32` count + up to `0x30` bytes / Small **selection bytes** (count 6 in 16/16; list built through `0x008342B0` per customization type) / **OPEN (meaning)** /
+- L805: layer-record `+0x2090`; a preset index `0x00834710`; `+0x2798`, `+0x279C`). Seen: `0xFFFFFFFF`/3; 3/4/12; 32/46/53/149/267; 32/210/235. / **OPEN (meaning)** /
+- L806: written through the bit-writer by `0x009FBAD0`/`0x009FA600` (only if the player has a morph controller). 41–116 of 513 bytes non-zero. / **OPEN** /
+- L807: F70C1` in the new-game save, `0xEDDF70CA` in most, `0x37BE7FB2` in two), `+0xD28` (constant 258), and the sub-object's `+0x10` (0/2/3). / **OPEN** /
+- L822: lt 1.0, raised by an unlockable). Values seen: 0 (11 saves), 12,555,613 / 12,387,613 / 13,416,215 / 455,049 (the four cheat-flag saves). **[OPEN — desk review 2026-09-30: this tally covers 15 of 16 saves (11 + 4) while §10.7 has 12 saves with cheat flag 0; the sixteenth value is to be settled against real data.]** / **CONFIRMED 
+- L863: fires on walking into an *owned* crib remains OPEN; the natural next step is to check the other
+- L889: and for both "zero hits" greps. OPEN, honestly, for both sub-questions above — neither was
+- L912: 8,0.5,0.5,0.7]`, `[0.8,1,1,0.9,1]`, `[0,0,0.5,0,0]`, `[0,0,0,0,0]`. **`0x4A48` (player `+0x276C`) is 0.0 in 16/16 and no setter writes it — OPEN.** **[CONFIRMED 2026-10-01, job `20261001T173022-team-a-qohu`, from the save-write side: the entry-13 writer `0x00B982B0` copies player `+0x276C` straight to `0x4A48` (`MOV EAX,[EDI+0x2
+- L913: / `0x4A4C` / `float32` / Player-record `+0x2770`, set by unlockable type 11. Seen 1.0 (new game), 1.5 (level 22), 2.0 (later). **Meaning OPEN.** **[Resolved: type 11 `Health` modifier, HIGH CONFIDENCE, `spec-tables-progression.md` §4.6.]** / **CONFIRMED (source) / OPEN** /
+- L915: by entry 1) / `float32` / A float clamped to `[0, 1]` (setter `0x00A9BD80` *adds* then clamps); unlockable type 14. **0.0 in 16/16; meaning OPEN.** **[Resolved: type 14 `Repair_Discount`, the vehicle-repair discount fraction, HIGH CONFIDENCE, `spec-tables-progression.md` §4.6.]** / **CONFIRMED (source) / OPEN** /
+- L919: / `0x4A68` / `float32` bits / Player-record `+0x27A8`, set by unlockable type 23. 1.0 in 16/16. **Meaning OPEN.** **[Resolved: type 23 `Firearm_Accuracy`, the firearm accuracy multiplier, HIGH CONFIDENCE, `spec-tables-progression.md` §4.6.]** / **CONFIRMED (source) / OPEN** /
+- L920: / `0x4A6C` (stored by entry 1) / byte / Flag set by unlockable type 34 (`0x22`). 0 in 16/16. **Meaning OPEN.** **[Resolved: type 34 `Vehicle_Customization`, the "vehicle customization unlocked" flag, HIGH CONFIDENCE, `spec-tables-progression.md` §4.6.]** / **CONFIRMED (source) / OPEN** /
+- L957: - **Still OPEN (honestly):**  *(identified: engine name hash, §10.2/§9.8)* the four ammo-shaped integers of the weapon record; `0x3F4`, `0x4424`, `0x4A48`, `0x4A4C`, `0x4A58`, `0x4A60`, `0x4A68`, `0x4A6C` (all are
+- L959: §10.8: DESK-PASS — desk review (not re-derived from the executable).** **Updated 2026-10-01 (job `20261001T173022-team-a-qohu`): the Still-OPEN list's non-refresh clarification for `0x4418`–`0x4420`, `0x4A58`, `0x4A5C`, `0x4A6C` is CONFIRMED — disassembly (entry-13 writer `0x00B982B0` read in full).**
+- L967: that "indirect (virtual) calls are not followed", so a vtable-reached verifier is excluded only by the structural argument of line 3.]** **[OPEN — desk review 2026-09-30: indirect / vtable references to `0x00D9E790` and to the table `0x01320DA0`; to be settled against the executable.]** A snapshot whose hash field is stale, zero
+- L990: uced on the *save* side: `1` = not enough space); `3` and `5` "file not loadable" (`3` is the reader's; `5` was not traced to a producer) *[OPEN — desk review 2026-09-30: §6.1 names a producer of 5 in the *directory* reader (`0x00B96340`, active-count recount mismatch), and the directory's 3 is its size check; whether those dire
+- L1044: the first mission of each group (its optional network broadcast is disabled by the argument the load passes). What those flag bits mean is OPEN.
+- L1056: s pair and **substitutes the placeholder pair for any slot whose second object lies beyond the base region of its table (a DLC object)** **[OPEN — desk review 2026-09-30: §12.9's level-49 / 61 % saves hold slots with a placeholder first id and a real second id (slots 1 and 3); that fits a per-pair rule only if those first ids ar
+- L1123: activity code resolves handles through, 3 state bits each (§12.4.4) / structure CONFIRMED; class description HIGH CONFIDENCE; bit meanings OPEN /
+- L1132: / 18 / `0xB320`–`0xB35F` / up to 16 radio-station ids carrying a per-station flag (§12.8.3) / structure CONFIRMED; flag meaning OPEN /
+- L1135: / 25 / `0x11D80` / **six one-bit session settings** (three named) (§12.10.2) / CONFIRMED (bits 0–2 named by the variable registry; bits 3–5 OPEN) /
+- L1136: / 23 / `0xF9E8`–`0xFAEB` / a **set of up to 64 name-hashes** (dedup'd, applied on load) (§12.10.3) / structure CONFIRMED; meaning OPEN /
+- L1137: set**, one bit per flagged record of a 0x40-byte-record table owned by the traffic-lane subsystem (§12.10.4) / structure CONFIRMED; meaning OPEN /
+- L1138: / 30 / `0xFBD9`–`0xFBDE` / that subsystem's **32-bit mask, written 1.5 times** (§12.10.4) / structure CONFIRMED; meaning OPEN /
+- L1195: ts in the samples: **0** (new game), 6, 21, 21, 22, 22, 29 (×8), 30. *[Tally (desk review 2026-09-30): these values cover 15 of 16 samples; OPEN — to be settled against real data.]*
+- L1196: entry count (16/16)**. Popcounts: 0, 4, 9, 9, 22, 22, 26, 27, 27, 29 (×6). *[Tally (desk review 2026-09-30): these cover 15 of 16 samples; OPEN — to be settled against real data.]*
+- L1230: s (36 in most). *[Tally (desk review 2026-09-30): this list accounts for 17 or 18 samples, not 16, depending on how "36, 36 (×12)" is read; OPEN — to be settled against real data.]* A store can be owned without its second bit being set (e.g. all 64 owned, 36 with bit 6) — the two bits are set by different code and are not nested
+- L1319: ### 12.9 Entry 3 — gang-customization selections `0x2B68`–`0x2B8F`  **[structure CONFIRMED; meaning partly OPEN]**
+- L1333: s them shows exactly four entries with an "unknown" silhouette when the value is the placeholder — HIGH CONFIDENCE for the four-entry list, OPEN for what each entry is).
+- L1341: to `0x7F` (= no mission).** Samples: 1, 22, 23, 32 (×6), 35 (×3), 41 (×2). *[Tally (desk review 2026-09-30): these cover 14 of 16 samples; OPEN — to be settled against real data.]* The `0x088` completion percentage in the same routine is unchanged from §6.5.
+- L1347: #### 12.10.2 Entry 25 — six one-bit session settings, `0x11D80`  `[CONFIRMED — bits 0–2 named; bits 3–5 OPEN]`
+- L1356: / 3 / toggle 0 of the byte at `0x026E7E60` (setter `0x00A20070`, network-replicated) / OPEN — a script-controlled session toggle /
+- L1357: / 4 / toggle 1 / OPEN /
+- L1358: / 5 / toggle 2 / OPEN /
+- L1364: #### 12.10.3 Entry 23 — a set of up to 64 name-hashes `0xF9E8`–`0xFAEB`  `[structure CONFIRMED; meaning OPEN]`
+- L1366: w game and second playthrough), 1, 4 (×8), 15, 15, 16 hashes, all distinct; *[tally (desk review 2026-09-30): these cover 14 of 16 samples; OPEN — to be settled against real data]* e.g. `0x1FE98073, 0xD7C4DECE, 0x89557E34, 0x51E2F33A` in the level-38 saves. The hashes are name hashes of *something the world-object classes are to
+- L1370: #### 12.10.4 Entries 12 and 30 — bit sets of the traffic-lane subsystem `0xFAEC`–`0xFBDE`  `[structure CONFIRMED; meaning OPEN]`
+- L1374: es per sample: 0, 1, 6, 6, 7, 7, 10, 12, 12, 12, 13 (×5)** (0 at new game). *[Tally (desk review 2026-09-30): these cover 15 of 16 samples; OPEN — to be settled against real data.]* The subsystem constructor that zeroes this pointer (`0x00A69730`) also builds the *traffic-lane* data table, and the object is read from ~200 places
+- L1500: screen type). **OPEN:** which menu/screen this is.
+- L1504: state-machine address range (§15.3). `0x00614800` itself has zero direct callers. **OPEN:** the
+- L1540: this one example. **[OPEN — a further pass if byte-exact ordering, not just offset agreement, is ever
+- L1551: role not determined, OPEN. **New on the save side, found incidentally:** the header's save routine
+- L1563: sets a "load finished" byte (`0x0290CEC8`) after. Purpose of all three — OPEN, not investigated.
+- L1568: each call — OPEN.
+- L1609: `ignore_on_foot`/`disabled_for_demo`. Still OPEN: the per-kind flag-bag array and the function
+- L1624: effect/flag state post-ownership — not checked this pass). Edited §9.4's own "OPEN" line and
+- L1689: runtime meaning (player-heading minimap rotation); its own runtime reader remains OPEN in both
+- L1695: entry above left OPEN. No new disassembly in this file. Full detail:
+- L1699: HYPOTHESIS, §3/§10.6) and the stats-table base `0x01517230` superseded by `0x01517228` (row-count arithmetic, §12.6.1); annotated 10 stale OPEN items as resolved (§3 rows `0x4A58`/`0x4A68`/`0x4A6C`, §6.6, §8.2 row 7, §9.5, §9.9 item 6, §10.6 four scalars, §10.8, §12.12); corrected nag-postpone "defaults" (§12.6.3); added conflic
+- L1701: c (§6.1, §11.1, §6.6, §11.8) because the walk skips indirect calls; cross-spec evidence added to the `+0x2C`/`+0x30` conflict (§10.3, still OPEN); count slips flagged OPEN after recount (§9.6 19 vs 22; §9.3 bits 3/4; seven sample tallies in §10.5, §12.4.3 ×2, §12.5, §12.10.1, §12.10.3, §12.10.4); smaller fixes: §1 file-name word
+- L1702: he 2026-09-20 save set (now 15/16 rows; 201,281 vs 201,363 non-zero bytes); the `0x3F8` row no longer implies equality with statistic 164 — OPEN pending the executable. No label raised. *(Attribution corrected the same day from Team B job `nnyi`: the drift is LocalAppData `sr3save_00`, re-saved 2026-09-25; the statistic-164 coun
+- L1703: ge-scale array, by position) — and confirms that writer does *not* refresh `0x4418`–`0x4420`, `0x4A58`, `0x4A5C` or `0x4A6C` (§10.8's Still-OPEN list narrowed accordingly, not closed).
+- L1727: Ghidra server before splicing (matched exactly). Left OPEN: the object-type semantics behind
+
+## spec-world-streaming.md (weight 7, 38 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: its are backed by a full-population run. **Awaiting the executable:** §8.2, §9.5, §10.2, §10.5, §11.1, §11.2, §11.3, §11.4, §11.5, plus the OPEN notes inside §7.2, §8.1, §9.4 (`0x27` literal) and §10.3 (cell-id composition). **Awaiting real data:** §2, §5.1, §10.2 (2× record counts), plus the OPEN notes inside §1 and §4. No cont
+- L17: ready-established mode-(b) guarantee (`spec-vpp-container.md` §3.6). **[CONFIRMED — empirical, every sample checked, zero exceptions.]** **[OPEN — desk review 2026-09-30: no full-population mode-(b) count (flags bit `0x2` of every nested `.str2_pc` in both archives) is recorded, and the entry totals 1,033 / 1,516 are not reconci
+- L23: tent bundle (`1018.asm_pc` / `1018.str2_pc`). **[CONFIRMED — empirical, 360 such coordinate pairs found in `sr3_city_0.vpp_pc` alone.]** **[OPEN — desk review 2026-09-30: 360 pairs each with an `.asm_pc` would need at least 360 manifests in `sr3_city_0`, but `spec-asm-format.md` §9 counts 331 there (405 in `sr3_city_1`); whether
+- L38: The majority of non-coordinate entries (512 of 673 "other" entries in `sr3_city_0.vpp_pc`) **[OPEN — desk review 2026-09-30: the denominator is not stated and does not fit §1's 1,033 `sr3_city_0` entries — 360 coordinate pairs (§2) + 91 `hN` + 70 + 46 `^name` entries (§3) + 673 "other" is at least
+- L40: **Review status (2026-09-30): DESK-PASS, text fixes applied (512/673 denominator flagged OPEN; `_modal` pointer to §10.8) — desk review (not re-derived from the executable).**
+- L84: simple "next section's count" separator doesn't fully account for), the preamble entry's exact field layout, and  [resolved, §10.6(e)]. **[OPEN — desk review 2026-09-30: as written the file cannot be parsed from this text alone — the preamble's length (hence the first record's offset), the bytes between sections 2→3 and 3→4, and
+- L182: different mechanism that happens to share the subsystem. **[OPEN — desk review 2026-09-30: twelve pools are listed against the 15 call sites claimed; the other three, and the pool-creation function's address, are not recorded here; to be settled against the execut
+- L187: **Review status (2026-09-30): DESK-PASS, text fixes applied (12 of 15 pool call sites listed; the other 3 OPEN for the executable) — desk review (not re-derived from the executable).**
+- L258: decompile-text replay, cross-checked by hand against raw instructions, for the rest.]** **[OPEN — desk review 2026-09-30: §8.4 gives `0x19` and `0x1E` two call sites each (placeholder and real branch), but this 14-call order shows each once (positions 5 and 9); where each id's other call site f
+- L269: **Review status (2026-09-30): DESK-PASS, text fixes applied (0x19/0x1E call-order tension flagged OPEN for the executable) — desk review (not re-derived from the executable).**
+- L303: relevant to §8.6. **[OPEN — desk review 2026-09-30: the table leaves `+0x0E`–`+0x0F` undescribed and gives no total struct size; and since id `0xFE` (§8.6) reaches the same finisher through `0x005d56b0` (§9.2), the array at `
+- L499: **OPEN** — no shared base-pointer variable was found connecting their two
+- L512: *each other* is **OPEN**: their computed sizes (`0x404000` vs `0x100000` at tier 0)
+- L772: vehicle_customization_camera" and size 0 **[spelling conflict: the table above writes `vehicle_customization_cameras`; not re-checked]** **[OPEN — desk review 2026-09-30: one read of the name literal at this registration settles the spelling; to be settled against the executable.]**.
+- L821: **Still genuinely OPEN — no recoverable size anywhere in this function, reason stated:**
+- L859: **Review status (2026-09-30): DESK-PASS, text fixes applied (`0x450000` = 4.31 MiB; `&DAT_` reworded; `0x27` spelling OPEN for the executable) — desk review (not re-derived from the executable).**
+- L875: streaming tier, most plausibly) is `OPEN / UNKNOWN` and out of this pass's scope. **[OPEN — desk review 2026-09-30: §11.4 reports this flag set to `1` at the top of the init function `0x005d1a30`; if that store is unconditional and never un
+- L894: data region rather than a byte count, so it stays **OPEN** for that one tier only,
+- L934: ses/hn1_*.py`; dumps `tools/hn1_*.txt`. Labels: CONFIRMED — disassembly / CONFIRMED — empirical / HIGH CONFIDENCE — inferred / HYPOTHESIS / OPEN. No decompiled code is reproduced; function addresses are evidence anchors, quoted strings are engine data literals.
+- L957: records; every hN-suffixed record has `container_kind` 30 `Zone (High LOD)`, every tile / `^name` record `container_kind` 29 `Zone`.]** **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9 counts 1,194 kind-29 and 1,686 kind-30 records, exactly twice the 597 (468 + 129) and 843 (422 + 421) here — plausibly because `stream_g
+- L963: review 2026-09-30: how the lower 13 bits encode the cell is not stated — it is not the `(row << 8) / col` of `sr3_city.grid_pc` (§10.6(e)); OPEN, to be settled against the executable (`0x0085c7a0`).]* **[CONFIRMED — disassembly, constructor arguments read from the instruction stream and cross-checked against the decompile.]**
+- L979: **Review status (2026-09-30): DESK-PASS, text fixes applied (stagger parity, city-extent caveat, cell-id composition OPEN); levels 0–2/5 remain §10.9 OPEN (5) — desk review (not re-derived from the executable).**
+- L995: 0x005e14a0` has exactly 3 callers in the whole binary, matching exactly these three slots (`0x00703194`, `0x007b06bb`, `0x007a8519`). Still OPEN, cosmetic: the exact mode-id values the `0x7b0650`/`0x7a84e0` slots are registered under; the precise semantics of mode ids 7/8/9 beyond "not gameplay's own id."
+- L999: how up to four resident cells fit the smaller tiers (shared meshes, tolerated allocation failure — flag `0x40` entries) was not traced. **[OPEN.]**
+- L1008: pass; a mesh spanning several sub-boxes is registered in each), and then appends a fixed list of 13 named skyline meshes (`0x00855520`). **[OPEN — desk review 2026-09-30: the append cannot be unconditional — Team B's census of tile 1018 (`team-b/HANDOFF.md` §9.132: `1018h2`/`1018h3` hold 8/12 entries) is below 13 meshes, and §10
+- L1010: he fast `.czh_pc` header, §10.7.]** *[Scope — desk review 2026-09-30: the CONFIRMED does not cover an unconditional skyline append (see the OPEN note above); and since the shipped game takes the lookup branch, this is authoring-time packing code whose outcome, not execution, the shipped data confirms (§10.6).]* Consequences that
+- L1038: nd `.fmeshx` names, `spec-terrain-format.md` §2), so mapping a record's name index to a mesh file is not possible from the header alone — **OPEN**.
+- L1071: gures from a second, independent code path (the box constructor rather than the manager's own constructor arguments).]** **[Label scope and OPEN — desk review 2026-09-30: the box routine establishes which fields are read (`+0xa4`/`+0xa8`/`+0xac`), the factor 0.5 and box = focus ± window/2; the window numbers are whatever the con
+- L1080: x008610e0` itself. Whether these are one logical per-level "hold" state read through two symbols or genuinely two independent counters is **OPEN**.
+- L1083: oad gap for any of L0/L1/L2; the anti-thrash mechanism found is request-in-flight / hold-counter debouncing, not a wider keep-radius.]** **[OPEN — desk review 2026-09-30: this negative covers only the functions read — `0x0085fdd0` (taken exactly while a request is pending, unexamined above), the optional flush in `0x008618f0` an
+- L1095: ions originally cited above, correctly identified as view-application, just misattributed to a camera-cut system). **This settles the prior OPEN note directly: the focus is written once per newly-pending teleport request, not every frame — "steady state" was never the right framing, because this call site only ever fires for an 
+- L1098: 9-30: three of the five call sites are described above; the other two (§10.4: "a game-state start routine and two others") are not listed — OPEN.]*
+- L1108: ity-tier bit reused across unrelated call sites, not something streaming-specific. **HIGH CONFIDENCE this second sort step exists and runs; OPEN what `0x0085d010` actually orders by and what `0x0149365c` semantically means.** **[OPEN — desk review 2026-09-30: if the store at `0x005d1a30` is unconditional, the flag is constant `1
+- L1110: the acquire chain read (`0x0085ee30` → `0x00dafea0`); throttling further downstream, where the I/O is actually started, was not examined — OPEN.]*
+- L1118: is likewise called by nothing statically — meaning both are reached only through some indirect/callback dispatch not located this pass. **[OPEN — desk review 2026-09-30: `0x007a8511` is described as an invocation site, i.e. an instruction inside some function, yet also as "called by nothing" — the function containing it is not i
+- L1124: `activity_types.xtbl` open items resolved by other specs (§5, §6, §10.8, §10.9); added forward pointers on §7.1/§7.2 unrecovered names and [OPEN] tags and on superseded §8.5/§8.6/§8.8 rows; fixed the wrong id in §8.4 (`0x14`→each id); added a spelling-conflict marker for category `0x27` (§9.4); reworded decompiler-shaped express
+- L1126: d labels in §7.3 (not-a-sentinel now HIGH CONFIDENCE), §10.5, §11.1, §11.4; reworded two code-shaped `DAT_` expressions (§8.2, §9.4); added OPEN markers for the executable/data (§1, §2, §4, §5.1, §7.2, §8.1, §8.2, §9.4, §9.5, §10 intro, §10.2–§10.5, §11.1–§11.5); no confidence label raised.
+
+## spec-activity-runtime.md (weight 6, 39 live)
+
+- L45: own fields → own `.xtbl` loader → own secondary setup). **OPEN:** `0x006a4010`'s own body (what the
+- L64: stub noise), only a few overridden per type (construct, tick, get-display-name). **OPEN, the honest
+- L146: valid: computes a score/style value via `0x00692340` (not opened — OPEN, best next lookup for the
+- L174: no reverse call was found either. **OPEN:** whether `activity_types.xtbl`'s registry is consulted by
+- L186: - **Actual cash/respect grant: still OPEN, hypothesis (a) now RULED OUT (2026-10-09 follow-up).**
+- L200: tick-chain side. Not guessed further — the single largest OPEN item for completion/reward. Full
+- L209: still-OPEN diversion types, not just Barnstorming. Next step for whoever picks this up: search the
+- L214: **Direct reader found (2026-10-09, WAVE 13 follow-up) — still OPEN, but the search space is now
+- L332: primitive call; reward path elsewhere, OPEN" (not reward-less — see correction above).
+- L344: OPEN" bucket as the other 9** — not a different kind of ambiguous after all. `photo_op` is the
+- L350: their own chain, real reward path still OPEN (Barnstorming, `stunt_jumping_diversion`,
+- L376: real grant path for all 10 "OPEN" types remains genuinely unlocated** — it dead-ends in shared
+- L403: in-session value is OPEN, requiring either their setters or live capture, but doesn't change
+- L451: / `barnstorming` / `0x00691f10` / no direct primitive call; reward path elsewhere (OPEN) / own constructor/tick/classifier/score-notify fully traced; no call to either primitive anywhere in the chain /
+- L452: / `stunt_jumping_diversion` / `0x006ba4e0` / no direct primitive call; reward path elsewhere (OPEN) / sole non-loader reader of its `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` triad (`0x006bbc10`, called from tick `0x006bc4b0`) is pure clamp/scale + HUD notify, no call to either primitive /
+- L453: / `base_jumping` / `0x00693cd0` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / own reward structure is a 10-tier array (`this+0x58`, stride `0xc`: Max_Distance/Respect/Cash; count at `this+0x54`); real consumer found: `0x00695d50`, reached from a separate per-a
+- L454: / `stunt_drifting` / `0x006bc970` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / score/notify `0x006bcdb0` (called from tick `0x006bd180`), re-verified by direct query — callees: `0x006a4d80`/`0x00bda0e0`/`0x006a49b0`/HUD (`0x00710cb0`,`0x00710fa0`,`0x007fc190`,`
+- L455: / `stunt_hijacking` / `0x006bd3c0` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / `0x006bd740` (mega-table-dispatched), same inert callee set (resolver `0x00458230`/`0x00853b10`, `0x006a4d80`, `0x00691e50`), no primitive calls /
+- L456: / `stunt_near_miss` / `0x006bf170` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / `0x006bf6c0` (3 tick callers: `0x006bf8d0`/`0x006bf9b0`/`0x006bfe90`, plausibly success/timeout/crash), same inert pattern, no primitive calls /
+- L457: / `stunt_back_seat_driver` / `0x006b95a0` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / `0x006b9a90` (tick `0x006b9e20`), same inert pattern, no primitive calls /
+- L458: / `stunt_oncoming` / `0x006c0070` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / `0x006c0720` (tick `0x006c0a80`), same inert pattern, no primitive calls /
+- L459: / `stunt_peel_out` / `0x006c0cf0` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / `0x006c10b0` (tick `0x006c13c0`), same inert pattern, no primitive calls /
+- L460: / `stunt_wheels` / `0x006c16a0` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / structurally different (real Shape-B constructor `0x006c1a00`, per-record triad in an array, stride `0x1c`, up to the count at `0x01139500` — multiple wheel-stunt sub-variants, like
+- L461: / `stunt_low_flying` / `0x006bd920` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / `0x006be080` (2 tick callers: `0x006be2b0`/`0x006bed60`), same inert pattern, no primitive calls /
+- L462: / `exploration_diversion` / `0x006a6250` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / real Shape-B constructor `0x006a64d0` (mega-table slot `0x01136df4`); tick `0x006a6ed0`→`0x006a6c20` + the Barnstorming-shared HUD hint dispatcher `0x00710e40`, no primitive calls /
+- L463: / `mugging_diversion` / `0x006b7900` / **no direct primitive call; reward path elsewhere (OPEN, 2026-10-11)** / real Shape-B constructor `0x006b7b40` (mega-table slot `0x011381ac`); has NO `Max_Respect`/`Max_Cash` triad at all — its own instance fields are `Default_Min_Cash`/`Default_Max_Cash`
+- L532: **OPEN, flagged honestly rather than guessed:** how an `_a_*` marker's placement data selects and
+- L544: pays these: mugging cash, stunt/exploration respect pops), so the real grant path is still OPEN,
+- L628: return to free-roam). **OPEN:** what `0x005e97a0` gates on (success vs fail, and whether the call
+- L630: function (they are not `Activity` records, so probably not). §4's "10 OPEN diversion types"
+- L721: - **OPEN (minor):** the writer of the per-hit cap `+0x5c`; the meaning of bonus slots `+0x70`,
+- L765: - **Scoring:** none. Reward per §6.1. **OPEN:** no per-type reader located (`Objectives_Needed`
+- L983: **OPEN:** whether the cash banked in-run is also paid out (HIGH CONFIDENCE not: it is the exit
+- L1004: - **2026-10-11 — §4: user-observed ground truth narrows the reward-grant search for all 10 OPEN
+- L1033: stats switch. One flag's own runtime default is OPEN (needs its setters or live capture to
+- L1085: OPEN" bucket as the other 9 types from the same-day pass below. Net project-wide count at the
+- L1130: no direct reward-primitive call in their own chain (real grant path still OPEN — wording
+- L1133: self-picked (this file's own "single largest OPEN item"), independently re-verified by direct
+- L1141: OPEN. `base_jumping`: at the time of this pass, had a richer 10-tier reward array with no
+
+## spec-lua-bindings.md (weight 6, 64 live)
+
+- L9: onfidence key** (as in prior specs): **CONFIRMED — empirical/disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L54: disassembly of that loop — a straightforward "stamp vtable, advance by stride, repeat N times" pattern). **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: §13.2 says the UI bring-up routine `0x008489e0` stamps this vtable, while §16.1's step list for that routine names no stamping step; the writers of vtable `0x01
+- L57: routine — consistent with this being shared pool-allocation infrastructure rather than something that, by itself, reveals binding names. **[OPEN / UNKNOWN — the class and its pool are real and confirmed; the actual roster of C functions exposed to Lua through it was not extracted.]** A dynamic-analysis pass (breakpointing actual
+- L67: automated scan surfaced **several dozen distinct dispatcher call targets, collectively covering several hundred individual call sites** **[OPEN — desk review 2026-09-30: §8.1 found one dispatcher (`0x00e0cef0`) with 65 direct sites; this figure is not reconciled with that census (it may have counted other functions such as `0x00
+- L80: ess`, `cmp_fail_populate`, `cmp_activity_success`, `garage_populate`, `garage_performance_stats` — are NOT Lua-hook dispatcher calls.]** **[OPEN — desk review 2026-09-30: the CONFIRMED label above covers only the names re-confirmed by the §8 method — the 5 shared with §8.2 (`screen_fade_do`, `garage_vehicle_load_begin`, `garage_
+- L140: The shared sequence, present in all seven: **[OPEN — desk review 2026-09-30: §10.1 says the three getter-shaped callers `0x00e1bc80`/`0x00e1bee0`/`0x00e1c050` call `0x00e2b7e0` (a third pool) instead of the step-4 link helpers, and the paragraph belo
+- L159: — inferred, that it is a generic gate rather than a per-name comparison; OPEN / UNKNOWN, its exact
+- L176: meaning was not traced further this pass, **[OPEN / UNKNOWN]**), then chains to two further virtual
+- L215: covering either address in the analysis state used this pass). **[OPEN / UNKNOWN.]** Concrete next step: force
+- L251: `0x00e1ce5e` and `0x00e1d76a` belong to the same containing function as each other. **[OPEN / UNKNOWN —
+- L254: , now confirmed by direct re-disassembly of the containing function. `0x00e1ce5e`'s own containing function is still unboundaried and stays OPEN. **CONFIRMED — disassembly** for `0x00e1d76a`'s containing function and its case-8 role; the mutual-identity question with `0x00e1ce5e` is unaffected.]**
+- L280: the current analysis state, and were not chased further. **[OPEN / UNKNOWN for those 15 sites' containing
+- L322: call-in mechanism that §4 described only at the "checks then treats it as callable" level. **[OPEN — desk review 2026-09-30: `spec-lua-api-behaviour.md` §26.23 describes `0x00e1a1b0` as an accessor returning one fixed global "value-list builder" singleton, while §14.1 says it returns the UI Lua st
+- L334: contexts), `"%s_init"`, `"%s_play_exit_anim"`. **[OPEN — desk review 2026-09-30: §16.2 has `0x00a1fa90` firing `"<name>_init"` and `"<name>_main"` (with `<name>` a mission/level stem) through the dispatcher; `"%s_main"` is not in this list, so either thi
+- L346: `sprintf`-equivalent callers. **OPEN — flagged for a follow-up xref search on the literal suffix strings
+- L389: callers were not enumerated this pass. **[OPEN / UNKNOWN — a concrete, bounded next step:** enumerate
+- L474: `spec-bink-boundary.md`'s own already-published OPEN item 4/§6.4 (the cutscene-xtbl→Bink-module call
+- L555: no final XOR) as data, not just structure. The 89 non-matching records all carry one single unidentified hash (always a bool-typed record; OPEN — not decoded to a name; the loader simply skips it).
+- L648: `0x00e24c40`'s mode-4 immediate-fire branch **[OPEN — desk review 2026-09-30: §7.2 step 4 says only `0x00e25540` fires immediately; whether `0x00e24c40` has a mode-4 fire path is unsettled; to be settled against the executable.]**). **All three were f
+- L674: so `+0x28` is populated by some caller-side or later step not traced this pass. **[OPEN / UNKNOWN — who
+- L708: are the two concrete remaining leads. **[OPEN / UNKNOWN — who writes `+0x28`, narrowed to: not the claim
+- L722: the literal names `"m24_killbane_on_death"` and `"m24_killbane_on_undowned"`. **[OPEN — desk review 2026-09-30: §14.1/§14.3 say these m24 call sites use the gameplay state `0x026e7e6c`, while §14.1 says `0x00e1a1b0()` returns the UI state `0x02a45450`; either this function does not us
+- L729: the static image, so its actual per-mission hook names are **OPEN / UNKNOWN** from static analysis alone.~~ **[Superseded: `0x02319570` is `game_peg_load_with_cb`'s request-slot table, not a per-mission trigger table — `spec-lua-api-behaviour.md` §8.24; see §8.5.]*
+- L743: than originally placed. **[⚠ desk review 2026-09-30: closed for argument roles only; which vtable slot of each pair is the setter is still OPEN (§9.3 vs §12.7 Group 7)]** / §9 /
+- L744: ate); §7's "callback" turns out to be a name string on the vint_callback_lua object, not a stored closure. **[⚠ who writes `+0x28` is still OPEN, §10.1]** / §10.1 /
+- L868: he host check, so this gate reads "session present and this machine is host", not "mission active"]**) and a counter-pair equality check **[OPEN — desk review 2026-09-30: whether this counter-pair check is that same `+0x58`/`+0x5c` host test; to be settled against the executable.]**, then builds the
+- L955: figures), so their real per-mission contents are OPEN/UNKNOWN from static analysis.
+- L1049: `base_funcs[]`/`co_funcs[]`, each terminated by a `{NULL,NULL}` sentinel). **[OPEN — desk review 2026-09-30: stock Lua 5.1 `base_funcs[]` has 24 entries, not 23, so either one stock entry is missing here or the count is off; dump `0x01293410` to its terminator; to be settled agains
+- L1091: rs of `0x00e0f900`~~ **[done 2026-10-01, job `20261001T020218-team-a-bgcx`; roster below]**; to be settled against the executable. **[Still OPEN 2026-10-01: the 62-site budget itself; this job shows only that the registrar contributes one call site (inside its loop) and does not list all 62.]**]**
+- L1132: **OPEN** (follow-up job `team-a/ghidra/jobs/bgcx-followup.json`). The libm name-string coincidence
+- L1161: loop, no table — 49 direct calls, one per wrapper **[OPEN — desk review 2026-09-30: 42 wrappers vs 49 calls does not match "one per wrapper"; also, `0x00845aa0` (§13.5) lies inside the 43-function range, so it may be the 43rd function; to be settled against
+- L1225: `; the "Lua's own `math` library" framing is corrected (15 of 24 are engine functions); HYPOTHESIS: `0x00fccb70` opens the stock libraries; OPEN: the 20 undumped bodies, and still NEEDS-EXE for the 42/49 wrapper count, the 43-function count and the 62-site partition.**
+- L1276: (`0x00848cbb` pushes `0x008430f0` and a Lua-state value read from a fixed global right before calling a registration-table-store routine **[OPEN — desk review 2026-09-30: §16.1 says that routine (`0x00e1e460`) itself creates the interface state, so a state value read before the call is inconsistent; disassemble `0x00848cb0`–`0x0
+- L1298: name `"game_lib.lua"`, the state and the address of `0x026e9470` (loads/runs a script file by name — a further, un-investigated mechanism, OPEN **[→ §16.2]**) **then `0x00e0d4e0`** on the state (purpose not traced, OPEN **[→ §14.10: the dynamic-globals sandbox bootstrap]**).
+- L1312: `error()` or push any result, so its real behavioural effect (a genuine assert that halts on failure, vs. a log-only/no-op diagnostic) is **OPEN** — not traced further this pass.
+- L1346: l runtime trigger that instantiates a "Mission LUA script" resource (presumably a mission package streaming in) was not traced this pass. **OPEN.** **[→ Largely resolved §14.5: the trigger is the world-streaming grid loading a mission's own `_modal` container; which specific container streams remains open.]**
+- L1354: r should not expect a dedicated mission-start/end callback among the named-hook family; if it needs one, the dynamic-globals pair (with the OPEN caveat on its own real trigger, §14.1) is the closest real mechanism on record.
+- L1372: confirmed arg contracts: **`cmp_common_screen_start`** — 1 argument, a DOUBLE, value = global `0x02282958` (real-world meaning not traced, OPEN) — and **`completion_coop_disconnected`** — 0 arguments. `m24_killbane_on_death`/`m24_killbane_on_undowned` also confirmed genuine, 0 arguments each, on the mission/gameplay state.
+- L1380: tick for active "running man" minigame instances** — the actual top-level per-frame caller of that vtable slot was not traced this pass. **OPEN.**
+- L1392: "mission active" reading of this gate is superseded (§12.5: it is the co-op/network host check), so this inference needs re-arguing.]** **[OPEN — desk review 2026-09-30: the relative order of the two paths; to be settled against the executable.]** Re-checked `spec-save-format.md`/`spec-format-inventory.md` again specifically for
+- L1403: d-negative sibling of §8.7's Bink finding, unrelated to missions), 1 goes through a generic string-resolve helper unrelated to missions. **[OPEN — desk review 2026-09-30: 10 + 5 + 2 + 1 = 18, not 15; and §16.2's `0x00a1fa90` fires `<name>_init`/`<name>_main` through the dispatcher, which this sweep (searching only `_start`/`_end
+- L1413: record's `+0x140` field is a raw, non-sprintf per-instance Lua callback name; no writer of that field was found in the functions traced. **OPEN — the setter is unlocated, but the domain (UI dialogs, not missions) is settled; do not re-chase the "activity descriptor" hypothesis.**
+- L1433: and Lua-VM-side) are now exhaustively excluded. How `<stem>_start`/`_run`/`_success` functions are ever actually invoked remains genuinely OPEN** — real possibilities include: these functions are dead/unreferenced code from an earlier design; they are invoked through a numeric/hash-based dispatch rather than a name-string mechan
+- L1441: der]**. **None passes an entry from a shared small array of alternative suffixes as either `%s` argument; none is mission-name-shaped.** **[OPEN — desk review 2026-09-30: §16.2 later found `0x00a1fa90` building `"%s%s"` + `".lua"` from a mission/level stem (the decompiler dropped the register argument), which conflicts with "non
+- L1465: already-confirmed §14.1 mission-script loader, the other a previously-undocumented sibling for a different, UI/VINT-family resource type **[OPEN — desk review 2026-09-30: §14.1 gives `0x00e0de80` only 2 callers, so the preload files of §16 (`system_lib.lua`, `game_lib.lua`, `vint_lib.lua`, the 4-entry array, the per-mission file
+- L1471: of for `<stem>_start`/`_run`/`_success` is now exhaustively excluded.]** The real invocation mechanism for `<stem>_start` remains genuinely OPEN — per §14.7's own script-side narrowing, the search should now focus on a literal, complete, per-mission `"<stem>_start"` string (e.g. `"m01_start"` as its own standalone string, not bu
+- L1485: acement bytes of any kind were opened.** Which carrier actually holds a given mission's `scripted_mission_start` record is therefore itself OPEN, not narrowed to one candidate — it could be the zone's `0x2234` placement stream (the same parked `.czn_pc` interior §29 stops at), a mission package/table, or another serialised carri
+- L1523: 0(0x00e1a1b0())` — the 113-name `game_*`/misc registrar (§13.5), confirmed called with the interface state fetched via its own accessor. **[OPEN — desk review 2026-09-30: `spec-lua-api-behaviour.md` §26.23 says `0x00e1a1b0` returns a fixed "value-list builder" singleton, not a `lua_State`; and §13.5 describes a state value read 
+- L1573: entities are HIGH CONFIDENCE; the sandbox reaching the array files is HIGH CONFIDENCE; the `0x02317b06` flag is a HYPOTHESIS. The remaining OPEN items are in the §16.4 "OPEN — next dump" note.**
+- L1579: **A real, previously-undocumented per-mission secondary script load, reached from a separate, later trigger point (not boot):** **[OPEN — desk review 2026-09-30: the chain given below ends in a "real boot path", which conflicts with "not boot"; and this load of `<name>.lua` through `0x00e0df90` is not reconciled with §14.5's loa
+- L1603: . **[⚠ also see §14.5: each `<mission>.lua` also exists as a type-32 "Mission LUA script" resource; the two loads are not reconciled (§16.2 OPEN note).]** **[2026-10-01, job `20261001T021641-team-a-yduu`: the stem comes from a different stack slot than the `_collectibles` name, and the `_init`/`_main` calls use swapped flag pair
+- L1630: *What is OPEN:*
+- L1633: - **Residue that static evidence cannot exclude (OPEN, 2026-10-01, job `20261001T021641-team-a-yduu`):**
+- L1636: ay state through `0x006cfac0` (HIGH CONFIDENCE from xref adjacency). That is a data-packaging question. The target state of `0x00e213d0` is OPEN.
+- L1641: **OPEN — next dump (from job `20261001T021641-team-a-yduu`):**
+- L1659: der semantics are also CONFIRMED, except for the HIGH CONFIDENCE items labelled in place. CLEARED for Team B implementation, apart from the OPEN residue (gameplay-side `include` of a preload, which Team B should grep for; the per-stem origin; the buffer-loader states; the cross-state drain HYPOTHESIS) and the "OPEN — next dump" 
+- L1665: eric/boolean constants. **Zero of the 62 real `lua_setfield` sites in this entire binary push a bare number or boolean under any name.** **[OPEN — desk review 2026-09-30: this partition (57 `LUA_GLOBALSINDEX` = 55 closure + 2 base-library at `0x00fcca70`, plus 5 other) conflicts with §13.2's (4 base-library sites + the `0x00e0f9
+- L1779: as traced far enough this pass to reach the literal per-property `render_mode`/`visible`/`mask` trampolines §9.3 names; that conflict stays OPEN, exactly as recorded there.
+- L1811: **Return.** Always zero Lua values, on every path including the no-op path. **[CONFIRMED — disassembly, every return path read directly; OPEN — `0x00e1e660`'s own body, and the identity of whatever creates a `data_responder_name` record in the first place (`vint_dataresponder_post` flagged as the concrete lead, not traced this p
+- L1813: RMED — disassembly for both functions' full signature, mechanism, and return semantics on every path, and for the shared name-keyed lookup; OPEN — the record-creation path and `0x00e1e660`'s own internals, flagged above, not forced to a guess.]**
+- L1820: 13.1, §6.22→`spec-lua-api-behaviour.md` §6.22, §14.1 chain naming `0x00e213d0`) and marked `spec-output.md` as unpublished; marked 11 stale OPEN/next-step items resolved in place (§6 items 1–5 status pointers, §8.4, §13.6 ×3, §14.1, §14.7 ×2); annotated stale text superseded by later sections (§2 preload array vs §16.1, §4/§12.3
+- L1822: oad files, §12.9 banner 155 again, §14.5 55/12/12 manifest split, §13.4 arithmetic and post-1490 residual); closed the §7.2/§9.2 third-hash OPEN (CRC-32 `0x00d9e740`, `spec-tables-environment.md` §1.4); marked the `0x02319570` mission-trigger reading superseded by `spec-lua-api-behaviour.md` §8.24 (§8.5, §10.2, §11, §12.7, §14.9
+- L1823: sk level (HIGH CONFIDENCE: `vint_lib`/UI preloads interface-only, `game_lib` gameplay-only, `system_lib` both; the whole-binary negative is OPEN), with exe job `teamb-request-8-preloads.json`.
+- L1826: MED — disassembly (static whole-binary negative), stock libraries settled as base + `coroutine`, host loader and `include` semantics added, OPEN residue (gameplay-side `include("vint_lib")`, Team B to grep) and an "OPEN — next dump" list added. Old text struck or annotated in place.
+
+## spec-physics-runtime.md (weight 6, 51 live)
+
+- L47: / unattributed (not Havok) / `0x00d1d570` / `0x00d4c800` / 934 / 58,776 / identity not established; zero call edges to or from Havok; still OPEN (§6 item 8) /
+- L307: in any bring-up body — **OPEN** (§6 item 1): it may happen inside Havok's own world constructor.
+- L845: controller motion, OPEN items 36/35)). Roots, per the task brief and `review/scoping-physics-vehicle.md`
+- L1347: ### 7.11 Resolution of `spec-player-runtime.md` OPEN 35 / OPEN 36
+- L1349: **OPEN 35** ("Controller motion `0x007a5b10`... the state logic between the support query and the
+- L1356: **Marginal advance**, not a resolution — OPEN 35's actual ask (the state machine in between) is
+- L1359: **OPEN 36** ("The custom proxy passes: `0x0079bb00`, `0x0079dd50` → `0x0079c5f0`, `0x0079ddc0` →
+- L1370: passes' AABB state even though it is not itself in OPEN 36's eight-item list) is now read in full
+- L1373: - The thread-safety question in OPEN 36 ("on which thread the listener callbacks run") is **not**
+- L1377: *second* listener mechanism, not just the one OPEN 36 already names.
+- L1379: In short: **this unit does not close either OPEN item**, but it removes essentially all of the
+- L1626: documents on the shared geometry asset (which asset box, if any, seeds it is OPEN). The exact point-to-box
+- L1638: edge.** `spec-ai-runtime.md` §11's own OPEN item 18 names three untraced "FOV cone/frustum geometry"
+- L1710: (`spec-player-runtime.md` §13.6 OPEN 104).
+- L1713: previously read anywhere — flagged OPEN at `spec-player-runtime.md` §4.9/§13.6 OPEN 104/33).**
+- L1723: (`spec-player-runtime.md` §13.6 OPEN 104).
+- L1727: `0x75c250` per entry with a type/kind test gating a per-candidate flag — exact semantics OPEN, not
+- L1769: cross-checked this pass (OPEN).
+- L1794: physics-domain primitive" as an explicit scope boundary (its own OPEN item 19). Traced this pass: those
+- L1822: calling the damage sink, so the literal live-fire hitscan damage call site is still OPEN (not "bullets
+- L1842: ispatch mechanism (roots `0x00c17920`/`0x00be88c0`/`0x00c16fc0`, per `review/scoping-physics-vehicle.md` §8.1), which that scoping note and OPEN item 20 both flagged as "not reachable by static call tracing" — the real per-job-type dispatch table. **That table has been found this pass.**
+- L2077: ly inside wheel-collide's friction resolver (§10.5); a vehicle-instance mode flag at `+0x164` read bit-by-bit by at least three components (OPEN: exact meaning); a byte at `+0x201` consistently selecting a "wider/padded" query variant across steering/wheel-collide/suspension.
+- L2081: -wheel sign-invert flag** — **no per-wheel Ackermann split exists anywhere in this function** (not found elsewhere in scope either, flagged OPEN rather than asserted absent project-wide). `0x00aeb0c0`'s fast path (vehicle-instance `+0x19c` flag set) is a flat multiply with no speed term at all; the normal path calls straight int
+- L2094: — HIGH: a damage/environment torque penalty. Final scale by a runtime global `0x02845af4` that reads **zero on disk** (writer not located, OPEN — something must set it at runtime or the engine never produces nonzero torque).
+- L2110: ble), a max-gear clamp, and a shift-duration timer. Manual-shift input handling is gated out entirely at the mode byte and was not located (OPEN). `0x00aecef0` (CONFIRMED) computes a torque-split-weighted average wheel RPM using the exact `60/(2π)` conversion (confirmed literals `60.0`/`0.15915493667...`), subtracts the cached r
+- L2118: ch, and a shared finalize call; a separate rotating counter advances once per call (not per wheel) for an unidentified round-robin purpose (OPEN). `0x00aeadb0`/`0x00aea850` (CONFIRMED structure) is the real friction-source: **per-wheel ground friction comes from a custom Havok body property tagged onto the struck body (preferred
+- L2163: oundary value and a per-entry multiplier). The real sampled curve values, and the constructor that populates `a1` from vehicle data, remain OPEN — a literal-displacement scan (the technique that found §10.2's engine constructor) doesn't generalize here since `a1`'s own small generic offsets are too common across the binary to na
+- L2165: regate effective-mass/friction-ellipse block) but not pinned byte-exact — narrowed to one ~250-instruction span, `0x00c64605`–`0x00c646c1`, OPEN for a future pass.
+- L2169: **The §10.5↔here splice, re-opened and sharpened (2026-10-08) — still OPEN, but materially narrower than before.** `0x00c565b0`/`0x00c57690`'s own argument construction was re-opened in full. The prior pass's two candidates: `a0[0]` is now **REFUTED** — it is confirmed to b
+- L2175: scratch note independently hit the identical gap from the other side and also left it OPEN.
+- L2201: **Genuinely left OPEN (not guessed):** who writes `instance+0x128`/`0x12c`/`0x138`; what consumes
+- L2293: compound shape on the single chassis rigid body is OPEN. Wheels use the separate point-ray system
+- L2317: per-object "currently touching" linked list (head via `0x00767500`/`0x00767fa0`, OPEN consumer —
+- L2325: closes §11 OPEN item 4 for `0x007699a0` specifically. Per drained record: re-resolves and
+- L2337: listener.** Restitution/friction coefficient SOURCING remains OPEN (§11 item 7's still-unopened
+- L2340: **The vehicle collision→damage bridge — resolves `spec-vehicle-damage-runtime.md` §3.5's own OPEN
+- L2418: **Residual OPEN, honestly incomplete:** `0x007663e0` (the `(7,5)` handler) not independently
+- L2436: ## 11. OPEN items
+- L2460: behavior would need porting alongside it. OPEN, not chased further: exact identity of
+- L2521: 21. **Unit W-U2 — the proxy's own cast/solve Havok calls** (`spec-player-runtime.md` OPEN 36's eight
+- L2635: - **§9 (W-U0, world-step job dispatch) confirms the real per-job-type dispatch table the scoping note and OPEN item 20 both flagged as unreachable by static tracing** (flat 16-byte-row array at job-queue `+0x128`, populated by exactly 4 `registerJobType` calls from one setup routine). Checked directly that th
+- L2666: contact-event queue (300×`0x290`-byte records), resolving §11 OPEN item 4 for `0x007699a0`
+- L2692: OPEN, narrower than before. Full detail: `spec-weapons-runtime.md` §2,
+- L2750: `MyCharacterListener`; substantially advances but does not close `spec-player-runtime.md` OPEN
+- L2755: two, checked directly, make no Havok calls at all). Former §6 OPEN items, §7 Corrections and §8
+- L2756: Clean-room check renumbered to §9/§10/§11; OPEN items 9-31 appended. Corrections folded in: §3.1's
+- L2770: per-job-type dispatch table OPEN item 20 and the scoping note's §8.1 both flagged as unreachable by
+- L2777: `processAllJobs`'s own loop. Former §9 OPEN items, §10 Corrections, §11 Clean-room renumbered to
+- L2800: HIGH confidence). OPEN items renumbered §10→§11; Corrections §11→§12; Clean-room §12→§13; two stale
+- L2801: cross-references in `spec-player-runtime.md` to "§10 OPEN item 22" corrected to §11. Ghidra-free
+- L2813: Where the §10.5 ground-friction coefficient specifically enters this arithmetic remains OPEN.
+
+## spec-store-runtime.md (weight 6, 14 live)
+
+- L17: exercised); OPEN (flagged honestly, with a concrete next step where one exists).
+- L89: **Still OPEN, now with one dead end ruled out and one new lead:** what actually performs the
+- L205: store-open path still OPEN; remaining lead: follow `0x00A1FE10`/`0x00E0CFB0` (kind-0 activate) and
+- L299: statically**; it needs the dynamic pass. **OPEN:** classify the tail-call sites above.
+- L361: `store_common_rotate_mouse_drag` itself remains explicitly flagged OPEN there (same wrapper as
+- L707: to an un-opened callee `0x0080d810`, still OPEN there) selects one of 6 sub-brand skins (`CRIB`,
+- L863: `store_common_rotate_mouse_drag()` (§3's already-cross-referenced, still-OPEN rotation native)
+- L1219: `store_common_rotate_mouse_drag` (§3's still-OPEN rotation native).
+- L1497: 3. **`store_common_rotate_mouse_drag`'s own body** — still OPEN from `spec-lua-api-behaviour.md`
+- L1600: only its OWN triggering condition is parked, OPEN, with a recipe recorded above for whoever
+- L1612: writers are ordinary static ctor/dtor. New lead for the still-OPEN "what fires these slots on
+- L1624: those two callback slots on player entry is still OPEN (see `spec-save-format.md` §9.4's own
+- L1758: negatively rather than left unexplored — the store-open trigger chain remains genuinely OPEN.
+- L1769: such — item stays OPEN with a narrower next step (expand the prompt's own confirm-step callees,
+
+## spec-vehicle-damage-runtime.md (weight 6, 11 live)
+
+- L33: role, different address, OPEN why two exist), then **`0x0096fa20` is called with the literal `-1.0`**
+- L58: 1. `0x00af9030` (OPEN identity), then **sets** `+0x16c8` bit `0x1` (the re-entrancy latch).
+- L59: 2. Two further notify/state calls, `0x008cc930(edi, 0x40)` and `0x00a7f850(edi)` (OPEN identity).
+- L73: gets an extra call, `0x00aa5ab0` (OPEN, plausibly motorcycle-fall-over/boat-sink). A separate check
+- L78: `0x00ab9800` (OPEN, vector/physics-shaped), and arms a **750 ms** timer at `+0x15f0` via the shared
+- L113: through `0x00a9c6f0`/`0x00a9d070`/`0x00a9dd40`/`0x00a9dbe0` (none opened — **OPEN, highest-priority
+- L127: against this runtime finding, OPEN.
+- L133: the non-Lua callers was opened to confirm the caller-side damage-amount computation — **OPEN, named**,
+- L140: project-wide (`0x00896183`, not traced — **OPEN, the most promising single lead** for pinning down the
+- L460: confirming vehicle-vs-vehicle and vehicle-vs-world collision damage share one mechanism. Still OPEN:
+- L478: **OPEN:** the literal HP-reached-zero decision instruction; `0x00a9f4f0`'s complex multi-part damage
+
+## spec-anim-runtime.md (weight 5, 36 live)
+
+- L35: or meaning was not read in full); **HYPOTHESIS** (plausible, not settled); **OPEN** (collected in §5).
+- L109: numeric rows (and only they) also carry `min_value`/`max_value`. This settles the row count left OPEN by
+- L230: the first half of the scoping note's OPEN item 2. Defaults do matter, but in the graph instance, not in the
+- L417: flags `+0xd40` were not traced there either and stay OPEN** (that file's own OPEN 38).]**
+- L515: ## 5. OPEN items, and side findings for other files
+- L517: ### 5.1 OPEN
+- L557: `0x004c6980`, which consumes f1–f3 (Q13.2's OPEN); and the held layer at instance `+0x5c`.
+- L606: **Added by U5 (§9).** U1 items 13 and 14 are answered, and item 11 is extended, by §9.13. `spec-player-runtime.md` OPEN 39 is answered except for the items below.
+- L646: - OPEN item 2: values reach the graph instance by a per-frame alias-wise copy in `0x004b0b80`; defaults are
+- L725: - **`spec-lua-api-behaviour.md` §25.6 (`mesh_mover_update_control`):** its OPEN on the internal writes of
+- L808: - **`spec-player-runtime.md` OPEN 39** is answered for the orientation step (`0x004b6530`, §9.7), `0x004b49e0`,
+- L815: ordinary locomotion is left as this file's OPEN item 35.
+- L1126: children is U0's OPEN item 4.
+- L2389: - the animation-side inputs of the velocity composer that `spec-player-runtime.md` §5.4.3 left open (its OPEN 39): who consumes X (controller `+0x70`), the speed `0x004b49e0`, the test `0x009987d0`, the controller bits `+0x1a4`, the override weight `0x004cad00`, the layer-creation call at `0x004c6ebb`, and `
+- L2834: - **`spec-player-runtime.md` OPEN 39:** answered for the orientation step (it is the correction step, §9.7), `0x004b49e0` (§9.9), `0x009987d0` (§9.9), controller `+0x1a4` (§9.10), `0x004cad00` (§9.9) and the creator at `0x004c6ebb` (
+- L2883: t/telemetry or audio-cue trigger on a state transition (plausibly airplane-mode related, given the surrounding code), not traced further. **OPEN**, see §5.1 item 40.
+- L2975: ll `+0xcd2` mode table (all six table entries plus mode 0), the compose pipeline's exact mechanics, and several `spec-anim-runtime.md` §5.1 OPEN items (14, 25, 31) that turned out to belong to this same unit.
+- L2977: ce labels follow the project's convention: CONFIRMED (read in full), HIGH (strong structural inference), HYPOTHESIS (plausible, unchecked), OPEN (collected in §11.10).
+- L3062: ### 11.4 Resolving the `+0x10` / `+0x14` OPEN item
+- L3105: **Resolving the OPEN item on matrix space.** No step anywhere in `0x004c31b0` or `0x004c36f0` multiplies by an inverse bind pose, nor references any second per-bone constant array distinct from the rig's own live bone ar
+- L3115: already processed; **not clamped below 0** — if `Σ_prior` already exceeds 1.0, the ratio goes negative and nothing clamps it back, flagged OPEN below, plausibly unreachable for authored content). Every non-additive layer's weight in the group is rescaled by `mask_scale`; every additive layer's weight is instead rescaled by the r
+- L3118: /`0x004c06b0` first) — **this selector's own source was not found** (the byte is read but never written anywhere in this function); flagged OPEN, doesn't change the LERP finding.
+- L3135: **OPEN (U4 extension):**
+- L3148: These three OPEN items were explicitly marked "U4's question" by the already-landed node-graph-runtime spec. Read in full:
+- L3251: ### 11.10 OPEN items (U4)
+- L3396: that writes `+0x1b4c` was traced in this pass, so the writer is still OPEN, but the consequence is clear:
+- L3588: ### 12.7 OPEN items (U6)
+- L3726: - §5.1 item 5 answered (§7.13); OPEN items 18–24 added; corrections to the scoping note in §5.2; side findings in
+- L3759: re-scoped as OPEN items 32–39 here; corrections to the scoping note and to `spec-player-runtime.md` in §5.2 and
+- L3760: §5.3; `spec-player-runtime.md` was edited directly for OPEN 39 and the §5.4.5 correction.
+- L3762: ions; the weapon driver and both generic secondary-rig helpers are genuinely thin wrappers. Former §10 (Cleanroom check) renumbered to §11; OPEN items 40–48 appended to §5.1. Cleanroom self-check on the entire file: 0 hits, re-run after these edits.
+- L3763: ainst the controller's own instance via `+0x10`→`+0x20` — structurally separate handles, confirmed by full listing, resolving scoping's own OPEN item). Compose's two functions fully disentangled: `0x004c31b0` is a per-slot setup/working pass (attachment ordering via a new "composed this frame" flag, the manual-override applicati
+- L3764: it's own functions: only one of four held up cleanly. Corrections folded into `review/scoping-animation.md` directly (4 annotated spots). 4 OPEN items appended (§12.7), one flagging a possible dual role for human `+0xac8` shared with U4's pose-request-queue owner field. Cleanroom self-check: 0 hits, re-run after these edits.
+- L3813: added (§11.8); 5 new OPEN items appended (§11.10 item 14). Cleanroom: 0 hits, standard regex. Synced to Team B.
+- L3816: `a9337200c21571e67`, via `spec-player-runtime.md` OPEN 38). The per-frame writer `0x0095a020`
+- L3821: Full detail kept in `spec-player-runtime.md` OPEN 38 to avoid duplicate maintenance. Cleanroom:
+
+## spec-audio-runtime.md (weight 5, 69 live)
+
+- L151: `spec-conversation-format.md`'s own flagged-OPEN "how many slots" question: **exactly 3**, base
+- L164: resolver). **OPEN, not byte-verified:** the exact `.lm_pc` `DMLV`-entry-to-in-memory-record byte mapping,
+- L165: and whether `voc_sb_line_sit.xtbl`'s own boot-load gate (already flagged OPEN, `spec-tables-audio-radio.md`
+- L661: `; `+0x1e` := 0. If byte `0x03171a5a` is set and the record never started (`+0x1f` = 0), calls `0x0045c870(record)` and ignores the result (OPEN — purpose not settled) / → state 6 (ended) /
+- L742: **Task:** resolve `review/scoping-audio.md` §6.4 U-W5's explicit OPEN item — "the actual per-block I/O
+- L747: function reads, direct disassembly); HIGH/HYPOTHESIS/OPEN called out explicitly where the read stops short
+- L922: touched — left OPEN, see below. Which concrete game subsystem supplies these four pointers (almost
+- L1463: per-kind property-parsing bodies themselves (flagged OPEN, see the companion open-items file).
+- L1649: *purpose* of the flag at `[esp+0x24]` was not traced further (OPEN).
+- L1741: analysis (single-stepping a real `LoadBank` call), which was not attempted. Flagged OPEN, not
+- L1807: ### 8.7 What this section leaves OPEN
+- L1953: which HIRC kind it indexes was **not identified this pass (OPEN)**.
+- L2115: a *different* table index from Action (`+0x320`) or Event (`+0x640`). Full semantics OPEN (§7); its
+- L2150: ### 9.6 The missing link: how an Event's action references reach an Action object — OPEN, with one real lead
+- L2201: helpers directly settles `G1`'s array fully, closing §9.2.2's own explicit OPEN item for index 0:
+- L2240: loop variant not opened further — OPEN).
+- L2271: literal call into `RegisterCodec`'s factory table** (`0x00fa44a0`/`0x00fa33e0`, §11.3.1) — OPEN.
+- L2274: `tag`-field OPEN item as a side effect.** Real bank pair `sh04.bnk_pc`/`sh04_media.bnk_pc` (cross-
+- L2884: OPEN, §10);
+- L2952: itself is not identified (OPEN, §10) — it sits 0x14 bytes past the already-known, exported
+- L3575: **OPEN, for whoever continues:** `0x00fa6dd0` (floor decode), `0x00fa72b0` (residue decode), `0x00fa7060`
+- L3769: `popcount(decode-state+0x6c)`, passed in as an explicit argument. One OPEN item: a 10-bit per-codebook
+- L3775: **MAJOR CORRECTION (2026-10-08, closes the OPEN item above and reverses this section's own
+- L4018: **Resolves prior OPEN item 48** (§11.11.3's own flagged need to confirm the per-stream setup-pointer
+- L4107: above). New OPEN items: the vtable `+0x10` call's own internal target function (`this+0x24`'s class
+- L4154: genuinely OPEN, not assumed either way.
+- L4189: camera/view-matrix source feeding into `0x005546c0` was not traced this pass (OPEN).
+- L4216: from position alone. **OPEN, honestly:** the writer of the configuration globals this reads
+- L4233: **This directly resolves this file's own flagged-OPEN "id-space question (engine serial `0x026ea798`
+- L4259: model or have their own persistent position-update path is OPEN, not assumed either way.
+- L4268: / Obstruction target (`+0xa2`) computation / **OPEN — searched for across all 10 voice-API + all 7 object-sound-core functions (~700 instructions), genuinely not found** / — /
+- L4325: §8.2.1) — genuinely OPEN: how many distinct Bus objects exist inside kind 8's own population, and
+- L4335: without further tracing, but its literal numeric cap was never read by any pass (OPEN). The
+- L4346: **OPEN, honestly flagged, not guessed:** no literal weapon-fire ("gunshot") call site was found this
+- L4348: is piggybacking on whoever resolves the still-separately-OPEN hitscan-fire-dispatch item
+- L4349: (`spec-weapons-runtime.md` §2.2b) rather than re-deriving independently. Also OPEN: the 32-slot
+- L4548: are new, narrower OPEN items, not blocking Team B's implementation (the group hashes/mechanism
+- L4563: hashes (`FOOTSTEP`/`MOVEMENT_TYPE`/`MATERIAL_TYPE`/`WALK`/`RUN`), all exact matches. OPEN: the 3
+- L4576: **Answering Team B's three questions directly (UPDATED 2026-10-11, superseding the "OPEN"
+- L4595: traced this pass (OPEN), but the footstep-side selection mechanism itself is now fully
+- L4598: mechanism (33-entry table) are now known; the table's 33 VALUES are not yet named** — see OPEN
+- L4622: ## 12. OPEN items
+- L4630: `+0x0c`: `0x004685c0` (§11a.3). **Still OPEN, searched for and genuinely not found**: the obstruction
+- L4644: **New OPEN items from this pass, 2026-10-08:** the writer of the zone/AABB-override config globals
+- L4805: OPEN list for what remains) (U-W4b).
+- L4932: narrow "the bit's meaning (unlocked? favourite? discovered?) is OPEN" to "hidden/disabled by the
+- L5006: ### 14.5 OPEN: track selection within a station
+- L5012: track index," and whether track position persists across vehicle enter/exit, remain **OPEN**, now
+- L5051: hashes remain unidentified (OPEN). Genuine negative also recorded: `foley_collision.xtbl`/
+- L5068: system on locomotion speed/gait phase, a vtable-dispatched caller, or Wwise-side) remains OPEN.
+- L5090: Action-bearing kind at index 3 — both previously OPEN/mis-attributed); corrected §9.4's `vt_ca54`/
+- L5096: confirms the field layout and resolves `spec-audio-format.md` §4.2's own long-standing `tag`-field OPEN
+- L5111: from the bitstream — directly confirming Team B's own theory. Resolves prior OPEN item 48's consumer
+- L5196: OPEN item: a 10-bit per-codebook table index into `0x134f3d8` whose consumer wasn't found (more likely
+- L5221: closing OPEN item 42** (SPEC TEAM, agent `a55498f95a34c9d10`, secondary/stretch-goal task that went
+- L5233: (`0x00fa6dd0`), residue decode (`0x00fa72b0`), and floor-curve apply (`0x00fa7060`) remain OPEN,
+- L5237: - **2026-10-08 — MAJOR CORRECTION: the "OPEN item"/"no codebook-ID field" conclusion above was wrong —
+- L5241: ID-referenced" framing and its own "OPEN item" are struck and replaced: each codebook slot in the
+- L5275: does). Former §6 OPEN items and §7 Clean-room check renumbered to §8/§9; OPEN items 12-20
+- L5302: unidentified, the single biggest open item from this batch). Former §8 OPEN items and §9 Clean-room
+- L5303: check renumbered to §12/§13; OPEN items 21-40 appended. `review/scoping-audio.md` corrected directly by
+- L5325: corrected in place. OPEN items 41-46 appended (the caller-supplied output struct's own identity, the
+- L5347: `"labl"` pair. OPEN items 47-51 appended. A cosmetic duplicate `---` separator left over from an earlier
+- L5401: independent monotonic serial (`0x026ea798`) — directly resolving this file's own flagged-OPEN
+- L5409: searched for across ~700 instructions and genuinely not found (honest negative, new OPEN item).
+- L5423: flagged-OPEN slot-count question (exactly 3, base `0x0322d828`) and traces the full allocate/populate/
+- L5438: flag as "hidden/disabled by player," narrowing `spec-save-format.md` §12.8.3's own OPEN item (not
+- L5440: OPEN. Full detail: `scratchpad/vehicle_radio_music_2026-10-09.md`. Cleanroom self-check: strict
+- L5443: OPEN — Team-B-routed question** (SPEC TEAM, agent `a1921856e97195898`). The real event is the
+
+## spec-cellphone-menu-runtime.md (weight 5, 16 live)
+
+- L16: CONFIDENCE (follows from structure but not independently exercised); OPEN (flagged honestly, with
+- L52: ## 2. Top-level open — OPEN (same shape as the pause menu)
+- L81: its own dedicated action code exists in the table. **OPEN**, best-supported remaining leads: a
+- L422: - **Exit convention — matches §4 exactly, with one OPEN side-note.** `cell_rewards_exit_to_main`
+- L427: icon grid entirely — **OPEN**, not traced: what calls into `cell_rewards` that way is a concrete
+- L565: Built by `0x0083d3c0`; array `0x023156A8`, entry stride `0x18`, count `0x02315690` (no capacity check seen — OPEN).
+- L591: (Status-value names are OPEN; 1 and 8 behave as "unlocked", 0 as "unlocked only when the unlock flag is set".)
+- L603: State word `0x02315688`: 0 idle, 1 connected, 2 busy, 3 "record status 5" special, 4 (set elsewhere, OPEN).
+- L614: the update neighbourhood `0x0083d150`–`0x0083d3b0` (outside a defined function; exact timing OPEN).
+- L630: **The inner bodies of `0x007e30b0`/`0x007e3ba0` (arrival logic, despawn) are OPEN.**
+- L637: The numeric max is OPEN (Lua `party_allow_max_followers` `0x00a59380` toggles the per-player flag at `+0x28AC` bit 0;
+- L645: The return-value polarity of each branch is not recoverable from the decompile — **OPEN**.
+- L647: OPEN (likely inside `0x007e3ba0`).
+- L675: OPEN: status-value names; arrival/despawn bodies (`0x007e30b0`, `0x007e3ba0`); max-follower number; any cooldown; `0x0083d800` branch polarity; connect-callback timing; `contacts_sr3.xtbl` consumer.
+- L681: (`spec-frontend-menu-runtime.md` §7/§9, where it has since been LANDED). **Still OPEN for the
+- L740: with a new OPEN lead on an alternate non-icon-grid entry path. Cleanroom self-check: strict regex
+
+## spec-frontend-menu-runtime.md (weight 5, 26 live)
+
+- L43: "loading screen" game-mode `spec-lua-api-behaviour.md` §55.1 already flags as OPEN there (discussing
+- L79: `0x006fe180` (a large, not-fully-traced consumer — OPEN).
+- L106: register and add the offset at runtime, which an xref scan cannot attribute. Left OPEN.**
+- L119: OPEN (possibly a sentinel for "use the default/UI-script-chosen duration" rather than a literal
+- L139: traced — flagged OPEN, exact entry points named for whoever picks it up.**
+- L170: `0x022425fb` gating a call to `0x007adc00`, not traced further — OPEN).
+- L197: falls through to more UI bookkeeping (disconnect-reason dialogs, not traced further — OPEN, appears
+- L232: not traced further, OPEN, plausibly "are we mid-shutdown"), and this differs from the object's own
+- L238: and driving a *different* side effect (`0x007f1070(1)`/`0x007f1070(0)` — not traced further, OPEN;
+- L279: caller's own argument (purpose not traced — OPEN).
+- L292: document — **OPEN.**
+- L311: **OPEN** (see §9).
+- L335: binding remains OPEN. The phone/cellphone menu (a structurally parallel, separately pushed
+- L411: / `0x014ff338` / the 20-byte "world/zone transition request" template global / CONFIRMED (shape); role OPEN /
+- L412: / `0x006fe180` / consumer of the patched local copy / NOT independently traced — OPEN /
+- L418: / `0x007029c0` / `0x0087f440` / descriptor-build chain inside `0x0088ba10`, session/mode-manager neighborhood / NOT independently traced — OPEN, handed to session/coop team /
+- L440: / `0x007b4750` / shared "open UI screen code N" primitive mode-6's enter handler uses / NOT independently traced — OPEN /
+- L443: / `0x007aec20` / a fourth sibling in the same `0x007ae0a0`-caller family / NOT traced — OPEN /
+- L447: ## 9. OPEN items
+- L460: chain, OPEN for the literal.** The live player-record pointer (global `0x0262edfc`, getter
+- L525: - **Still genuinely OPEN, and the strongest remaining lead:** none of the above is where the 5700
+- L598: re-adds only the default garments for the player's gender/ethnicity) but previously marked OPEN
+- L639: phone side's own binding is still OPEN (new item below).
+- L655: 8. **The phone/cellphone-menu-open input binding — OPEN, clean exhaustive negative (2026-10-10).**
+- L686: **OPEN (honest negatives, not guessed):** see §9.
+- L720: route; phone's own binding still OPEN, clean negative** (SPEC TEAM, agent `adacb57c01da892c6`).
+
+## spec-bink-codec.md (weight 4, 110 live)
+
+- L78: ### 1.3 Per-OPEN scale-mode selection (distinct from the per-file revision selector, §1.4)
+- L135: -10-08**: logical AND of the keyframe bit (§1.6) across every frame `0x1000e560` validated (§1.5a) — no consumer found elsewhere in `BINK`, OPEN /
+- L157: instead — no consumer for this specific quotient was found (OPEN).
+- L164: else in the `BINK` section (OPEN — may be genuinely unused in this build, or read by a path this static
+- L166: `BinkOpen` time was not checked (OPEN). Full disassembly, both epilogues, and the complete call-site
+- L202: dword's low 16 bits (`0xbb80` = 48000) matches a 48 kHz sample rate; the rest is OPEN, not required by
+- L236: further internal chaining past Y remains equally OPEN for `D10=0` and `D10>=1` alike (out of scope
+- L522: ### 5.3a The entropy coding itself: fixed-width + table-driven, NOT Huffman, for the three named giants (2026-10-08, closes former OPEN items 2/3/8)
+- L550: the audio dequantizer it feeds was left OPEN.
+- L623: video core's own case-dispatch mega-function (§5.1). **One honest gap left OPEN: its own caller was
+- L629: boundary and Huffman-tree-builder role.]** ~~OPEN — the `0x10037cc0` table's audio-side consumer; the
+- L635: ### 5.3b Primary cases 2/3, and the real video-side DCT residual family — CLOSES former OPEN item 5a (2026-10-08)
+- L658: **its caller was the one thing §5.3a left OPEN; it is this function, reached only from video primary
+- L703: **This closes §8's former OPEN item 5a** ("the real video-side per-block transform, if this codec
+- L730: the former OPEN item — both are real and fully traceable, and neither is DC/flat fill): secondary=2
+- L745: ~~OPEN — the precise byte-offset-to-coefficient-index mapping inside `0x10024eb0`'s output struct
+- L750: directly against the dumped matrix bytes in `spec-bink-static-tables.md`. OPEN — a full bit-exact
+- L757: ### 5.3c A previously-undocumented entropy pre-stage feeds §5.3's own primary case-selector byte stream — new OPEN item, the real blocker on the still-open worked-example (2026-10-08)
+- L759: A fresh attempt at the bit-exact hand-decode-vs-FFmpeg worked example (§8 item 5a's own standing OPEN
+- L804: **Consequence for §8 item 5a: still OPEN, materially narrower and better-understood than before, not
+- L829: checking). OPEN:  **`0x1001a160` OPENED,
+- L856: both named files, block (0,0). OPEN: whether this exact desc_A→primary / desc_B→secondary mapping
+- L928: OPEN.
+- L943: (§5.3e). OPEN: the DC-bug's TRUE root cause (the construction site is now traced, §5.3e, but two
+- L953: true root cause is still OPEN** — both concrete hypotheses this pass could actually test turned out to
+- L992: `[ebp+8]` is the destination pointer, `[ebp+0xc]` is the pitch (stride) — closes the OPEN item §5.3d
+- L1081: (the `0x10019360` permanent -4 stall from its 2nd call onward). OPEN, unchanged: the DC bug's true
+- L1272: traced this pass, flagged OPEN below.
+- L1278: stream at `[ebp-0x1a4]`, built/expanded identically, downstream consumer not traced, flagged OPEN):
+- L1304: sub-streams (motion-vector-adjacent and/or other alphabets, not traced further — OPEN) — **all 23 share
+- L1397: three banks by `cur_class`.** Remaining OPEN: call #19's and calls #20-23's own downstream
+- L1467: reproducing the "-4, -4, -4, ... forever" telemetry. **What remains OPEN, named precisely: why chromaB's
+- L1481: instruction. OPEN: descriptor B's own downstream consumer; the 23 sibling calls' own downstream
+- L1487: ### 5.3h Descriptor B's own downstream consumer, traced live — closes the OPEN item above, and finds
+- L1533: roles are a new, bounded OPEN item (not chased further this pass).
+- L1556: formulas, cross-checked live. OPEN: the 4 newly-pinned per-row setup functions' own semantic roles;
+- L1610: cursor/array would diverge from the real DLL.** OPEN, not chased this pass: whether descriptor L
+- L1668: oduce it. The `0x100195b0` path loses that distinction, which is one more reason the real decoder choice matters. The value to use there is OPEN). Bytes from the `0x10019850` path are used unmodified. The old `+128` is only the first half of this mapping.  **RESOLVED the same day (§5.3af OPEN (2)): the selector is handle `+0x20`
+- L1725: arithmetic (exact match). Every register value quoted above was read live, not inferred. OPEN: the
+- L1770: frame/file samples (listed above), via a corrected, properly-configured harness. OPEN: a genuine live
+- L1790: (OPEN, flagged honestly rather than guessed). **If that bit is set, execution jumps straight to a shared
+- L1801: by an EARLIER flag-bit short-circuit that bypasses the secondary byte read entirely. **OPEN, not
+- L1811: the two-writes-per-16-pixel-column pattern, and the flag-array stride source (`[ebx+0x24]`). OPEN: the
+- L1813: out); the flag array's own downstream consumer semantics (pre-existing OPEN item, §5.6).]** Full
+- L1900: count and frequency. OPEN: a live worked example with real source/destination bytes and a register-level
+- L1919: earlier units' own disassembly-based confirmations); a genuine, bounded, honestly-reported OPEN item that
+- L2289: finding). OPEN: the full case-0/case-1 tag-arithmetic meaning (what each of the `+0x11/+0x12/+0x22/+0x32`
+- L2469: the item previously left OPEN above.** Both independently re-disassembled (`disasm_util.dump_range`,
+- L2491: **Updated selection rule, no longer OPEN:** mechanism 1 is used ONLY by Phase 1's immediate
+- L2518: post-mask/OR'd magnitude value. OPEN: a clean live bit-trace tying one specific real block's leaves
+- L2555: the +128 pattern is binary/per-block-run, not uniform, pointing inside `0x1001a160`. OPEN, unchanged
+- L2557: also newly OPEN: why the same DC-array address is sometimes read multiple consecutive times before
+- L2583: **OPEN, refuted plan: `0x1001a160`'s `param1+0x30` field ("writeptr" per
+- L2602: granularity. OPEN, unchanged from §5.3f/k: the exact faulting instruction inside the per-chunk
+- L2608: assembly pins the exact commit mechanism; corrects §5.3l's capture method but the column correlation and final instruction-level pin remain OPEN (2026-10-11)
+- L2664: replaced with a working per-commit live-capture method. OPEN, unchanged from §5.3f/k/l: the exact
+- L2731: total calls ever reach the delta-accumulation loop body at all. OPEN, narrowed from §5.3m: the
+- L2849: **New, OPEN, not previously flagged:** the DC-read address (`0x303f8620` in this run) sits exactly
+- L2860: and the resulting decoded pixel (24) exactly matches FFmpeg. OPEN: the suspicious 2-byte heap
+- L2862: OPEN, carried over unchanged: §5.3n's own named next steps — not addressed this pass, since they
+- L2865: ### 5.3p Descriptor L's buffer SOURCE and cursor START, for block (0,0) of frame 0 — resolves §5.3o's own "suspicious 2-byte adjacency" OPEN item (2026-10-11)
+- L2920: with a commit-style bookkeeping pair, not yet fully characterized (OPEN, see below).
+- L2922: **Resolves §5.3o's own "suspicious 2-byte adjacency" OPEN item: it is not adjacency between two
+- L2936: §5.3o's 2-byte-adjacency OPEN item as the same buffer, not coincidental adjacency. OPEN: the exact
+- L3016: values, which is the exact contradiction a routed Team B report caught against §5.3m. OPEN: the
+- L3022: ### 5.3r The 1757→9256 bit gap, attributed call by call (2026-10-11, closes §5.3q's own named OPEN item)
+- L3065: prologue/bound-field shape only, not traced line by line. OPEN: what each of these 3 functions'
+- L3116: the exact byte-count/bit-cost cross-check against §5.3r's own independent measurement. OPEN: what
+- L3156: independent measurement. OPEN: what this function's own output is used for downstream; whether
+- L3229: sample; OPEN: whether the nibble is ever 0 (flat-fill path, `0x1001a421`-`0x1001a44d`, not
+- L3294: see §8 OPEN item 5's replacement text: the real video-side per-block transform, if this codec
+- L3316: ### 5.6 The literal pixel-write instructions and the per-slot plane-pointer field map (CLOSES former OPEN item 6, 2026-10-08)
+- L3342: ncrete mechanism, consistent with driving the per-macroblock skip/change-flag array (§5.3); that array's own consumer-side semantics remain OPEN /
+- L3385: black-box oracle. HIGH CONFIDENCE — no colorspace conversion inside this DLL. OPEN — call 2's
+- L3555: 3-plane decode — a harness limitation, not a real codec behavior. Flagged OPEN rather than guessed.
+- L3963: exactly which 4 bits they are or what they encode). Flagged as a genuine OPEN item for whoever
+- L4637: idual mismatch / 173 Y cells (all primary 9) match 36-58 of 64 pixels: near misses, probably the same sign-mode artifact acting on deltas / OPEN (minor) /
+- L4643: under the REAL decoder flags (word `0`, alpha argument `0`; §5.3af OPEN (2)) snapshots the entry state,
+- L4701: implementation reproduces it exactly: one symbol replicated N times, **20 bits total for the whole call**, final class 1 (matches the DLL). OPEN:
+- L4711: (what `BinkOpen` builds for a `BIKi` file with header flags 0; §5.3af OPEN (2)). The plane-mask
+- L4780: > **HARNESS-VALIDITY WARNING (2026-10-12, §5.3af OPEN (2)).** Every emulation capture in this document made with the old harness flag word (`0x108200`, alpha argument `0x100000`) ran a decode path the shipped game NEVER takes: luma through the alpha slo
+- L4920: volume/mute-change re-setup path, partially closing §8's former OPEN item 7). **Zero reachability
+- L4996: ## 8. OPEN items
+- L5025: against one concrete worked example. **Attempted 2026-10-08, STILL OPEN (§5.3c): a fresh
+- L5038: no hardcoded bias constant exists), but the true root cause is STILL OPEN — two concrete fix
+- L5049: broader "+4" fix hypothesis was tried and REFUTED again. Still STILL OPEN: the true arithmetic
+- L5061: scope (the case-5/7 worked example's DC +128 bug) is UNCHANGED by this pass — still STILL OPEN,
+- L5063: New narrower OPEN items surfaced instead, not chased this pass: a second, previously-
+- L5077: site. Still OPEN: the exact instruction. A fresh single-row DC-array-vs-ground-truth column
+- L5091: of the backing array) is named for the next pass. Still OPEN: the exact instruction — this
+- L5111: decode, which is the real reason commit counts never divided cleanly by 240. **OPEN,
+- L5222: — exact match. The missing 4-bit field itself not yet identified/characterized, flagged OPEN.
+- L5333: OPEN rather than papered over. Relayed to Team B directly. Cleanroom self-check: strict regex
+- L5402: impossible for a real VLC, and traced to Part 2's own flagged-OPEN "read next node's bit before
+- L5485: count-driven. OPEN: what the output feeds downstream. Cleanroom self-check: strict regex 0
+- L5489: §5.3q's own named OPEN item** (SPEC TEAM, self, direct Unicorn instrumentation, routed from
+- L5507: (0,0), resolving §5.3o's own "suspicious 2-byte adjacency" OPEN item** (SPEC TEAM, self, direct
+- L5518: `+0x30` field before the function's first call). Resolves §5.3o's 2-byte-adjacency OPEN item:
+- L5614: narrower OPEN items surfaced (descriptor B's downstream consumer, the 23 sibling calls' own
+- L5619: case-selector byte; §1.6 extended with on-disk frame-table/frame-blob layout; §8 item 5a still OPEN,
+- L5658: - **2026-10-08 — new §5.3b finds the real video-side DCT, closes former OPEN item 5a** (SPEC TEAM,
+- L5688: all, remains unidentified). Separately, new §5.3a closes former OPEN items 2/3/8: the three giant
+- L5701: - **2026-10-08 — §5.5 corrected, new §5.6 closes former OPEN item 6** (SPEC TEAM, agent
+- L5742: mid-instruction inside the audio core's own transform cluster, §6.4). 3 new OPEN items (§8 item 15).
+- L5774: byte-offset-to-index-mapping OPEN item (§5.3b: row-major, `struct_byte_offset(k)=2*k`,
+- L5790: true root cause remains OPEN** — reported honestly, not claimed fixed. **New data file
+- L5813: root cause remains OPEN, now a much narrower target (hand-decode one affected batch bit-by-bit against
+- L5883: report exactly, instruction for instruction. Left OPEN: Phase-2's `sel==1`/`sel==3` arms' own
+- L5906: present in the spec before trusting the agent's reuse of them. Still OPEN: the exact instruction;
+- L5917: the spec before trusting its framing. Did not reach the single-instruction pin — still OPEN,
+
+## spec-agora-hydra-boundary.md (weight 2, 17 live)
+
+- L67: If a master config flag byte at `0x013123d1` is clear, return immediately — do nothing (this flag's own writer was not traced in this pass; OPEN item 1, §7).
+- L72: , each either a built-in empty default or a game-config value (`0x013123d4`, `0x013123cc`, `0x013123d8`, `0x013123c8` — not traced further, OPEN item 2, §7).
+- L74: 8. Call a post-init hook, `0x00710560` (not traced further, OPEN item 3, §7) — into game code, not Hydra's.
+- L84: o, **return `0xffffffff` (failure) immediately** — a real, reachable failure branch (not traced further what specifically can make it fail; OPEN item 4, §7).
+- L85: arguments) returns nonzero, **return `0xffffffff` (failure) immediately** — likewise a real, reachable failure branch, not traced further (OPEN item 5, §7).
+- L96: ery next instruction after the call to `0x00bd8110`, `0x005d3ab1  jmp 0x00bce470`, tail-jumps into a later continuation not chased further (OPEN item 6, §7) — that jump is in the *caller*, not inside `0x00bd8110`'s own body.
+- L112: 0x0040253e  call 0x00401a30     ; not traced further (OPEN item 7, §7)
+- L115: tail-jump to 0x00403320 — not traced past this point (OPEN item 8, §7)
+- L143: If the caller's second argument (a function-pointer-shaped value, HIGH confidence a completion callback — not confirmed to exact semantics, OPEN item 9, §7) is null, return `0xffffffff` immediately.
+- L175: point, and resolving them would mean either finding a name→hash table (not located) or brute-forcing candidate strings, neither attempted (OPEN item 10, §7). What calls each of these 63 entry functions was spot-checked for exactly one of them (`0x00422fb0`, called from `0x00bd8d6f`, not traced further) and not chased for the res
+- L177: k the session as live/connected," but the exact triggering condition (what calls `0x00402e40`, and under what circumstance) was not traced (OPEN item 12, §7) — `0x00402e40` itself has zero confirmed `CALL`-site references anywhere in `.text` by this pass's census, the same "no confirmed caller found" result §6 reports for the th
+- L200: aced in full, is the response side of that same request once Hydra's own machinery (on whatever thread/mechanism it uses — not located, see OPEN item 13, §7) reports an outcome back: §5 below.
+- L208: state values `0`, `2`, `3`, `4`, `5` (meanings beyond "4 = a response has arrived, go inspect its status code" not individually confirmed — OPEN item 14, §7). **This function itself has zero confirmed `CALL`-site references anywhere in `.text`** by this pass's byte-level census — the same "no confirmed caller found" result as th
+- L249: as a 5xx response** (both are "this one request didn't work, move on"), but this is not CONFIRMED to the instruction level the 4xx path is (OPEN item 15, §7).
+- L256: 1719bc` only ever becomes `1` via a fully successful `0x004024d0` init (§2.2) — itself dependent on two untraced-but-real failure branches (OPEN items 4–5, §7) plus a dependency on `SteamUser()` resolving (dead on the GOG stub build per `spec-steamworks-boundary.md`'s own finding that every Steamworks accessor on this build triv
+- L272: ot found" is the most defensible statement, not "provably dead," consistent with how this project treats an unresolved absence of evidence (OPEN item 16, §7).
+- L276: ## 7. OPEN items
+
+## spec-ai-behavior-format.md (weight 2, 14 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: nst the other specs and Team B's files, not re-derived from the executable. Three claims are contradicted by other specs and are now marked OPEN in place: the "`.xtbl` field names" reading of `human_ai_data`/`ai_force_flags*` (§1; `spec-lua-api-behaviour.md` §3.4/§7.1/§7.6/§7.10 shows them as network-record debug tags); "all fou
+- L13: ecord bytes plus per-goal code tests, then each goal's data-ordered actions. The "hardcoded" reading becomes a mixed data/code one. **Still OPEN:** what each goal-test and action routine does; whether `0x009ba300` is a riot-shield test (HYPOTHESIS). The NEEDS-DATA items for §2, §3 intro and §3.2 are unchanged.
+- L21: ject has already characterized** (vehicle tuning, customization, mission/diversion tuning) — the same shape, not a new kind of evidence. **[OPEN — desk review 2026-09-30: contradicted for `human_ai_data` and the `ai_force_flags*` family by `spec-lua-api-behaviour.md` §7.1, §7.6, §7.10 (and §3.4), where these strings are debug ta
+- L55: already-documented diversion-minigame tuning in `da_tables.vpp_pc`, but reached here through a completely different, unblocked archive.) **[OPEN — desk review 2026-09-30: `spec-tables-diversions.md` §8.1 lists exactly 3 `Level` rows in `horde_mode.xtbl` (`zombie_area`/`angels_area`/`daedelus_area`); `steel_mill_area` is not amon
+- L57: **Review status (2026-09-30): DESK-PASS, text fixes applied (horde claim and "already-documented" marked OPEN); NEEDS-DATA as in the marker — desk review (not re-derived from the executable).**
+- L105: logic is not in any of the 4 files, and the master table that would define it (`AI\ai_behavior.xtbl`) was not reached by this pass (§2) **[OPEN — desk review 2026-09-30: `spec-tables-traffic-ai.md` §10 has since documented that table (loader `0x004F2B50`): a Behavior row is a data record carrying actions, goal-enabled bytes, cov
+- L115: meterises a fixed set of hardcoded goal tests (up to 17; a goal whose slot is empty is skipped) and hardcoded action routines (up to 70). **OPEN:** what each goal-test routine and each action routine does. Each needs its own disassembly pass.
+- L117: e code reached through static function-pointer tables (`0x012E22F0`, `0x012E1C60`). What the individual goal and action routines do remains OPEN.**
+- L127: he executable *(narrowed, §1)*; the AI-suggestive literal strings in the binary are `.xtbl`-field-shaped data, not middleware signatures **[OPEN for `human_ai_data`/`ai_force_flags*`: network-record debug tags per `spec-lua-api-behaviour.md` §7.1/§7.6/§7.10 — see §1]**; a real, schema'd `Group_AI_Override` mechanism exists, reac
+- L128: named profile is hardcoded Volition engine code rather than further `.xtbl` data, matching the pre-pass prediction in `HANDOFF.md` §28.4 **[OPEN — contradicted in part by `spec-tables-traffic-ai.md` §10 (a Behavior row is a rich data record); see §3.3]** **[CORRECTED 2026-10-02, re-derived from the executable (§3.3, `0x004f3750`
+- L135: **Review status (2026-09-30), §5/§6: DESK-PASS, text fixes applied (§5 inherits the §1 narrowing and the §3.3 OPEN marker; OPEN list updated) — desk review (not re-derived from the executable).**
+- L139: - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the §2 extraction-failure row, the §2/§5 OPEN items on the master AI tables and `combat_actions`/`combat_tricks`, and the §5 extraction-failure item superseded (`spec-vpp-container.md` §7, `spec-tables-traffic-ai.md` §10/§11, `spec-tables-weapon
+- L141: nit (DESK-PASS 2, WITH-FIXES 5, DESK-PASS + NEEDS-DATA 1); "no AI middleware linked" narrowed to "no AI-middleware strings found" (§1, §5); OPEN markers where other specs contradict this one — `human_ai_data`/`ai_force_flags*` as `.xtbl` fields (`spec-lua-api-behaviour.md` §7.1/§7.6/§7.10), "all four are horde areas" (`spec-tabl
+
+## spec-anim-format.md (weight 2, 34 live)
+
+- L10: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L40: 209 the `0x09` count is 2,179.* / **[CONFIRMED — disassembly for bit `0x10`'s exact role; CONFIRMED — empirical for the value distribution. OPEN — the meaning of bits `0x01`, `0x04`, `0x08`, `0x40`, `0x80`.]** **[Partly resolved: `0x01` selects the rotation mode (§6c.3 item 3); `0x80` widens the per-track counts (§6c.1); `0x40` 
+- L49: e keyframe payload begins after the TABLE, not at a fixed `0x48`.** *(Previously recorded here as "observed zero in every sample inspected, OPEN" — true, and the 90% case mistaken for the only case: 3,803 of 4,209 clips use the identity mapping.)* / **[CONFIRMED — disassembly + empirical, see §6b.]** /
+- L50: e next begins at `+0x30`.* Not characterized (possibly the paired high/zero word for `+0x28`, as `+0x44` is for `+0x40` — unverified). / **[OPEN — desk review 2026-09-30: contents of `+0x2C..+0x2F` never stated; to be settled against real data (u32 histogram at `+0x2C`) / the executable.]** /
+- L51: ar, but not at, end of file; the gap varies widely (2, 10, 12, 122, 230 … bytes). / **[CONFIRMED — empirical, that it is an in-file offset; OPEN — what it points at.]** **[Resolved: the end of the keyframe payload — §6c.1, §8 item 3.]** /
+- L52: y `+0x34..+0x37` (4 bytes) is header and `+0x38` onward is the track table or payload; in bit-`0x10` files `+0x34..+0x3F` is header.)* / **[OPEN.]** **[OPEN — desk review 2026-09-30: what `+0x34` (and `+0x38..+0x3F` in long-header files) holds; to be settled against real data / the executable.]** /
+- L106: r. The acceptance function refuses out-of-range handles and won't re-bind a slot that is already claimed. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: no constructor or acceptance-function address is cited in this section (the inventory spec gives the constructors), and §10.1 finds the registry's buffer point
+- L120: animation data, but means the payload cannot be decoded by arithmetic alone. **[HYPOTHESIS — sparse/compressed storage as the explanation; OPEN — the actual per-track encoding.]**
+- L138: e rig holds **no** rest rotation — all orientation has to come from here. **[CONFIRMED — empirical, that records of this shape are present; OPEN — that they are the whole encoding, which they are not, see below.]**
+- L219: unt over all 4,209 (`team-b/HANDOFF.md` l.3804); whether these 12 are the same 12 sub-`0x48`-byte files of §2 / §8 item 6 is not stated. **[OPEN — to be settled against real data.]**)* It also caught a false comment in their own reader claiming the field was "observed zero everywhere, not read".
+- L257: //  bytes sit is OPEN - see 6c.3 item 3]
+- L310: translation span of 0 is specified. **[OPEN — desk review 2026-09-30: overshoot
+- L354: **[OPEN — desk review 2026-09-30: the direction is not stated. Read as a gather
+- L442: stays OPEN below.)* The scale constant and the field widths agree with each other
+- L488: > distribution. Label left unchanged. **[OPEN — desk review 2026-09-30: the cause
+- L521: characterised, with several models refuted, in **§9.1**; still **[OPEN]**
+- L542: is therefore very probably **exercised by those 4 clips**. **[OPEN — desk review
+- L681: cannot be reproduced from the text. **[OPEN — desk review 2026-09-30: whether the
+- L702: fourth carries is unread. **[OPEN.]**
+- L711: lane *is* that byte is not shown. Label here left OPEN.**]**
+- L728: [OPEN]** — recorded as a real null result, not forced to a verdict.
+- L760: ends on the declared endpoint (0 / 518 with the bit, 3,687 / 3,691 without), so it adds payload beyond the `+0x0A` tracks — what exactly is OPEN.** **→ RESOLVED 2026-09-12, §10: it is a per-track layer-override table, parsed fresh from the clip's own bytes on every call to the runtime layer-blend sampler `0x004c21a0`; not more k
+- L762: iform-array model only; §9.47.1 records a 271-clip residue not explained by the 1,099 ceiling. See §2's `+0x06` row. `+0x08`, `+0x09` still OPEN.]** *(`+0x0A`/`+0x0B` are now resolved — see §2 and §6a.)*
+- L763: 0x28` and `+0x34`** — zero or unexamined in every sample checked. **[`+0x28` resolved since: track-to-bone table offset, §6b. `+0x34` still OPEN.]**
+- L886: e two control implementations on those two points before trusting either verdict.** Until that is done, the status of this measurement is **UNKNOWN, not confirmed and not refuted** — the 334/397 real-vs-shifted separation stands as a measurement, but no inference from it (narrower or otherwise) should be treated as settled. **[S
+- L1086: trailing bytes was not traced — [OPEN], and is the most direct remaining
+- L1134: the extra trailing bytes actually are remains [OPEN]**; the leading candidate
+- L1313: "[OPEN]" wording per this project's standing rule on corrections) rather than
+- L1353: stratified test is the answer, and it is OPEN — but it narrows *where* a
+- L1393: 1,147-byte function and was **not reached in this pass**. **[OPEN — concrete
+- L1525: 518 / 518. OPEN — to be settled against the executable (`0x004c1260`–`0x004c12fc`).]** It then calls `0x004c1190` as
+- L1573: than its start. **[OPEN / UNKNOWN -- not traced this pass, named so it is not
+- L1657: **OPEN / UNKNOWN** -- flagged as a concrete, well-scoped next lead rather than
+- L1729: an-room claim (`FUN_`/`DAT_` labels are used); added the missing `+0x2C` row and scoped the `+0x34` row to the 0x38/0x48 header sizes (both OPEN); annotated bit `0x01` as clear in exactly 4 files; marked §6c.3 item 3's "unexercised" as contradicted by the 4-clip `0x0C`/`0x1C` residual (byte position OPEN, replay added as a data 
+
+## spec-asm-format.md (weight 2, 15 live)
+
+- L9: **Confidence key** (same as prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L112: **[OPEN — desk review 2026-09-30: the loader callers `0x006e2960` and `0x00856690` and the site that invokes the destub callback `0x00daf770` are untraced (not needed to parse the format); to be settled agai
+- L118: rmat" is true of the *files* — 805/805 carry it — but nothing enforces it: a file with a different first dword would parse identically.) **[OPEN — desk review 2026-09-30: the scans rule out an immediate compare, not a later byte-wise compare of the stored 8-byte header copy; to be settled against the executable (header handling 
+- L119: the branches below 11 are read from code and **never exercised by data** (HIGH CONFIDENCE for their width, no empirical check possible). **[OPEN — desk review 2026-09-30: where the extra `u32` sits for `version < 9` and how the size-table skip differs are not given, so versions 8–10 cannot be implemented from this text — impleme
+- L158: 0` on 46. / 0x80 gate CONFIRMED; 0x100's effect on the container object read but not followed (HIGH CONFIDENCE); 0x200 alone has no reader (OPEN) /
+- L159: / Number of entries; sign-extended (`MOVSX`). Max **3,820** in the population; **491** records exceed 255, so §4's `u8` cannot hold it. **[OPEN — desk review 2026-09-30: what the engine does with a negative value (the size table is sized by it) is not stated; no shipped record is negative, so a reader should reject one (Team B's
+- L162: never exercised** — the width is from code only (a control that skips the blob still parses 805/805 because of this; it proves nothing). **[OPEN — desk review 2026-09-30: whether the blob is read from the stream on the verify path and when the group byte is non-zero (a reader that skips it on only one path would lose sync), and 
+- L180: exture entries), **`0x20`** (12 entries, all type 32; read by the allocation routine's first pass, which then queries two file names — role OPEN). / values {0: 55,699; 4: 212,253; 68: 122,170; 32: 12} /
+- L181: 214); `0xFF` (= −1) only on type 39 (Buffer, no file), 2,447/2,447.** Which extension slot each value indexes was not read from the row. **[OPEN — desk review 2026-09-30: "low 2 bits, sign-extended" does not say how the byte maps to the stored value (sign-extending two bits gives 3 → −1 and 2 → −2; 2 never occurs); to be settled
+- L212: , so a `file_id` of 255 would index past it; the shipped tables never use 255 (their highest id is 254), and a reader should reject it.* **[OPEN — desk review 2026-09-30: the engine's behaviour for `file_id` 255, the `0xFF` allocation size and the three registry bases are disassembly-only; to be settled against the executable (`
+- L220: 2]*; `GSC_DESTUB_CONTAINER` is `0xFE` in `0x00db01a0`, as in the file. **[HIGH CONFIDENCE for the  8 unchecked, CONFIRMED for the 32.]** **[OPEN — desk review 2026-09-30: §8.1 counts 41 registration calls in `0x006ff730` plus the destub kind from `0x00db01a0` (42 kinds), against 41 table-3 entries including the destub kind; whic
+- L228: (so a manifest can in principle describe destub containers) but in **no** entry of the population (no entry has type 253 or 254; §9.5). **[OPEN — desk review 2026-09-30: the bootstrap role rests on disassembly; the data only shows that these types are absent, and the site that invokes the callback is untraced; to be settled agai
+- L267: om the **resource types** 29/30 "Zone (fast)"/"Zone (slow)" (table 2, `spec-format-inventory.md` §2); the numbers coincide.]* **[CONFLICT / OPEN — desk review 2026-09-30: `spec-world-streaming.md` §10.2/§10.6 count 597 kind-29 records (468 tile + 129 `^name`) and 843 kind-30 records over the same 805 manifests, exactly half of 1
+- L331: **Review status (2026-09-30): DESK-PASS (none overclaimed; the new desk-review OPEN notes are in §6.2, §7.3, §7.4, §8.1, §8.2, §8.3 and §9.3) — desk review (not re-derived from the executable).**
+- L342: a summary after the front matter; a banner saying §1–§5 are historical; container-kind vs resource-type 29/30 naming note (§9.3); CONFLICT/OPEN on kind-29/30 counts (twice `spec-world-streaming.md` §10.2); `header_region_size` breakdown recomputed (2,103 includes the 155; 1,948 others); "nine" unchecked kind names recounted to e
+
+## spec-audio-format.md (weight 2, 22 live)
+
+- L14: - **OPEN / UNKNOWN**: not determined in this pass, with a concrete next step named.
+- L24: §4) **[desk review 2026-09-30: the directory walk is fully characterised; header fields `+0x08`/`+0x14`/`+0x1C` and the record `tag` remain OPEN, §4.1–§4.2]** that behaves nothing like any documented Wwise chunk, is never referenced by the string or byte patterns that mark Wwise's own chunk-tag dispatch code in the executable (§
+- L47: (`0x0`) archives is exactly one of two shapes** (`CONFIRMED — empirical`, 253+105+275+172 = 805 directory entries read, zero exceptions) **[OPEN — desk review 2026-09-30: the per-archive split below does not close — `sounds.vpp_pc` 129 plain + 122 media = 251 of 253 entries, and the four archives total 267 plain + 536 media = 80
+- L56: p in the same physical `.vpp_pc` file as their plain bank.** `voices.vpp_pc`'s complete absence of any in-archive plain sibling is left as `OPEN` rather than explained: the most likely reading (`HYPOTHESIS — unconfirmed`) is that per-character dialogue events are defined once in a shared, not-yet-located bank (plausibly inside `
+- L79: mple checked: `00 00 00 00 02 00 01 00` ( **[desk review 2026-09-30: a `u32` reading `0`, then two `u16` fields reading `2` and `1`]**) / **OPEN** — role not determined; never varied, so no file-side test could distinguish "format version" from any other constant /
+- L81: / `+0x14` / 4 / Numeric field, varies per file, does **not** equal the real record count (ruled out directly — see the walk below) / **OPEN** — no candidate tested this pass fit it /
+- L83: / `+0x1C` / 4 / Numeric field, varies per file, no candidate tested this pass matched it / **OPEN** /
+- L86: **[OPEN — desk review 2026-09-30: this section never states the reader's behaviour for a file whose `+0x18` is `0`; Team B's validator counts such files (`g_zeroDeclaredCount`, `team-b/tools/validation/valid
+- L95: , 12288, 14336, 16384`). **CONFIRMED — empirical** that it is not always zero (in fact rarely zero) and that ignoring it breaks the walk; **OPEN** what it represents semantically — a plausible but untested reading (`HYPOTHESIS — unconfirmed`) is a Wwise-style prefetch/zero-latency-streaming cache size, since Wwise's own public f
+- L96: - **`size`**: this record's own payload length in bytes. **[OPEN — desk review 2026-09-30: whether the `extra` block precedes or follows the `size` payload inside the span `[offset, offset + round_up(size + extra, 0x800))` is not stated — the chain rule fixes only
+- L125: estimate. The remaining 55 non-Wwise exports are the previously-identified c-ares (DNS) and a handful of others; none are audio-related. **[OPEN — desk review 2026-09-30: the 217/162/55 split and the make-up of the 55 cannot be replayed from the text; to be settled against the executable (re-list the export table).]**
+- L131: This closes what would otherwise be an open question about the raw sample data's encoding without needing to touch a single sample byte. **[OPEN — desk review 2026-09-30: the codec id `4` / Vorbis registration and the "roughly twenty" plugin count at `0x0046fdd0` (distinct from the `0x0046fd00` cited in `spec-lua-api-behaviour.m
+- L137: CONFIRMED — disassembly** that Wwise's own code, not a Volition wrapper, is what recognises and dispatches on these standard chunk tags. **[OPEN — desk review 2026-09-30: only `BKHD`/`DIDX`/`ENVS` were checked, and the two sites are `0x3752` bytes apart; whether other tag compares (`HIRC`, `STID`, `STMG`) sit in the same functio
+- L143: — inferred`, not `CONFIRMED`, that no runtime code validates the `VWSBPC` magic the same way Wwise's own code validates `BKHD`/`DIDX`.** **[OPEN — desk review 2026-09-30: a check keyed on the extension strings (`.bnk_pc`/`_media.bnk_pc`/`.mbnk_pc`) rather than on the magic was not searched for; to be settled against the executab
+- L157: LocationResolver*` and (moments earlier, via `AK::StreamMgr::SetFileLocationResolver`) the same role again. **CONFIRMED — disassembly.** **[OPEN — desk review 2026-09-30: as written this sentence names the resolver role twice; in the public Wwise SDK `SetFileLocationResolver` takes the resolver and `CreateDevice` takes the low-l
+- L180: all, request-tracking subsystem specific to audio I/O — not a rediscovery of the generic 43-type table, and not Wwise's own code either. **[OPEN — desk review 2026-09-30: which vtable the slot numbers index (see the §7.3 conflict marker), the stride of the slot list at `0x02cea950`, the entry size of the table at `0x0321c5d0`, a
+- L186: c id, through one reference-counted, Volition-authored state machine, never by handing Wwise a filename or a pre-loaded buffer directly. **[OPEN — desk review 2026-09-30: the overload caller census and the widths of the `+0x40` and `+0x54` fields are to be settled against the executable (xrefs to each `LoadBank`/`UnloadBank` exp
+- L224: a genuine `BKHD` chunk, consistent with §3. Its `_media.mbnk_pc` companion is entry 1 and was **not** independently decodable this pass. **OPEN.** **[⚠ SUPERSEDED 2026-09-30: `soundboot.vpp_pc` is mode (b) (`0x4803`) and all 930 of its entries extracted with 0 errors (`spec-ai-behavior-format.md` §2); the entry-0-only rule is it
+- L230: en anywhere else in this project and not a public Wwise chunk tag. **CONFIRMED — empirical** for the magic and the naming correspondence; **OPEN** for everything else, including what `DMLV` stands for — a per-character lip-sync or line-timing metadata table is a plausible gloss given the naming correspondence with voice banks (`
+- L242: section's own OPEN item. **[OPEN — desk review 2026-09-30: the number of the 550 `sound_turbo.vpp_pc` entries actually checked for `DMLV` is not stated (`spec-ai-behavior-format.md` line 27 records 528/550 extraction f
+- L265: **OPEN, each with a next step already named above:**
+- L290: " and "usually zero" text superseded by Team B's 255/536 clean, 281 broken, 91.8% `extra != 0` (`team-b/HANDOFF.md` lines 7138–7145); added OPEN markers for §2's 253 vs 129+122=251 count, `extra` placement, `+0x18 == 0`, §6.x/§7.x executable checks and §9.1/§9.2 data checks; added a CONFLICT marker for §7.3's 16-byte vtable spac
+
+## spec-bink-boundary.md (weight 2, 16 live)
+
+- L85: the scoping pass — each is flagged OPEN rather than forced (§6).
+- L99: Carried forward as OPEN item 9 (§7). Nothing else in the note's arithmetic (the 28-site direct count,
+- L199: higher-level caller itself was not traced in the scoping pass (§7, OPEN item 5).
+- L244: sum to 41, not 44 (§0.1, OPEN item 9). **Either way, the headline fact stands and is not in question:
+- L302: by the scoping pass — OPEN item 7, §7). A companion cleanup pass, `0x00bdd520` (closes any movie whose
+- L374: HIGH CONFIDENCE, not read to the instruction level — see §5.5's own narrowed OPEN item). Full detail:
+- L398: the narrowed OPEN item below.)
+- L413: this setter). **This independently CONFIRMS §5.4/OPEN-item-3's own
+- L446: - **Still genuinely OPEN, narrower than before:**
+- L485: ### 6.2 OPEN — the splash gate's own caller (flagged, not invented)
+- L490: subsystems' bring-up), not traced further by the scoping pass. Flagged honestly as OPEN rather than
+- L491: guessed (OPEN item 2, §7).
+- L510: ### 6.4 OPEN — the cutscene-xtbl → module chain (flagged, not invented — the clearest concrete gap in part (a))
+- L518: **This is the clearest concrete gap in part (a)** (OPEN item 4, §7) — the natural next step once this
+- L546: ## 7. OPEN items
+- L618: with new reads. Ten OPEN items carried forward or newly itemized in §7, including the three the task
+
+## spec-building-purchase-runtime.md (weight 2, 5 live)
+
+- L179: are not destroyed are counted. Zone property `district_income` exists (descriptor `0x01301acc`) but **the income routine never reads it** (OPEN: what consumes it). NEW /
+- L265: Southwest, …). The starting value of `+0x94` (presumably 1.0) was not traced (OPEN).
+- L276: checked (OPEN; see `spec-player-runtime.md` "Timers").
+- L322: consequences are the statistics above and the higher income from T.2. **OPEN:** any gang or
+- L375: (runtime effect OPEN); the shop info native's description text is always the same fixed
+
+## spec-conversation-format.md (weight 2, 7 live)
+
+- L9: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L21: ted at 31 characters in 1,187 files**, so it is a label, not a reliable key. **[CONFIRMED — disassembly (a 32-byte copy) + empirical.]** **[OPEN — desk review 2026-09-30: Team B's first sweep read 0 truncated names because its detector tested the wrong condition (a 32-byte name with no NUL); the detector was fixed (`team-b/HANDO
+- L35: voice type *[desk review 2026-09-30: this cannot hold for all nine families (9 × 640 = 5,760 > 4,984 files), so read it as "up to ~640". **[OPEN — per-family file counts are not recorded; to be settled against real data (histogram of the trailing voice token).]**]* /
+- L79: **[OPEN — desk review 2026-09-30:  how many `0x58`-byte conversation slots the pool holds, and the order of the validation ladder all rest on disassembly that is not reproduced here; to be settled against th
+- L105: routine `0x00D9E8B0`): "seed `0xFFFFFFFF`" CORRECTED to initial value `0` / max-length `0xFFFFFFFF`; no final complement CONFIRMED. Both §6 OPEN items from 2026-09-30 are closed. Cross-reference: `spec-tables-ui-controls.md` §1.4, `spec-vehicle-data.md` §7.1.**
+- L165: m length `0xFFFFFFFF` at both of its two call sites, not a seed of `0xFFFFFFFF`. Confirmed: no final complement is applied, closing both §6 OPEN items and the matching clause of §5's OPEN item. No new executable run was needed; existing dumps sufficed.
+- L168: s "eleven" is recounted to twelve. §7's stale sentence is struck. Arithmetic notes added: ~640 per family (§2) and 63,323 vs 73,337 (§6.1). OPEN notes added for the 1,187 re-count, per-family counts, the CRC final XOR and the slot pool size. No label raised.
+
+## spec-coverage-summary.md (weight 2, 4 live)
+
+- L26: counts (DESK-PASS / VALIDATED-BY-DATA / NEEDS-EXE / NEEDS-DATA tallies) and OPEN-items sections.
+- L139: - anim-runtime carries ~48 tracked OPEN items (e.g. a per-bone accumulator sub-path selector) — mostly
+- L152: **Specced:** ~60–65% by volume — 15 major units landed, but the file's own OPEN list has grown past 100
+- L165: - OPEN item #97: the HUD prompt-flag (`+0x2084`, triggers watercraft/weapon prompts) setter — extensively
+
+## spec-ctorless-types.md (weight 2, 26 live)
+
+- L9: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: type 39 contributes its file (§9.4, 8,057/8,057). The "zone module finds its own files" conclusion (§1, §2 row 44, §4) is therefore marked OPEN, and its CONFIRMED label is downgraded in place for the conclusion only. **Awaiting the executable:** §4 (addresses of the `.czn_*`/`.czh_*` tables and the functions that reference them,
+- L13: tatus update (2026-10-02, re-derived from the executable, exe_index/ctorless-types.txt):** The NEEDS-EXE unit §4 and the executable-pending OPEN notes in §1, §3 and §5 were re-derived from the indexed dumps, plus fresh read-only dumps of `0x00858290`, `0x0085a070`, `0x00863110`, `0x00dd2ed0` and `0x008633b0`.
+- L17: to-4 base: RESOLVED, CONFIRMED.** It is relative to the file start and is a no-op on the reader path. Header bytes `+0x20..+0x3F` are still OPEN. **New OPEN:** the reader's pad is a round-up-to-16, so the replay's always-advancing pad depends on `0x00dd7d70`.
+- L19: - **Still OPEN:** which source (manifests or the zone module's own names) feeds the shipped game's zone loads, and how a paired 29/30 request maps its name.
+- L20: (§4) and 1 CONFIRMED (§3); §1 is partly confirmed and partly corrected; §5 is CONFIRMED except header bytes `+0x20..+0x3F`, which are still OPEN; no unit stays NEEDS-EXE. §2 stays NEEDS-DATA.
+- L27: 39. Per `spec-resource-dispatch.md` §2 and §8.6 item 2, row flag bit `0x4` makes `0x00dd2a70` resolve no file, and only ID 39 sets it.)* **[OPEN — desk review 2026-09-30: types 44/45 register no extension (§4), so the registration row cannot supply their file name. `spec-asm-format.md` §9.3 shows the manifest entry supplies it (
+- L28: le references and the registration rows (§4). The conclusion that the zone module's own name-building is how the shipped files are found is OPEN. `spec-asm-format.md` §9.3 (CONFIRMED — empirical) shows the manifests list types 44/45 with real `.czh_pc` names and types 29/30 with `.czn_pc` (paired with `.gzn_pc`), and §9.4 shows 
+- L32: 2026-10-02, re-derived from the executable, exe_index/ctorless-types.txt):** The null-constructor bullets are CONFIRMED (`0x00dd2e30`). The OPEN note on how a name reaches a type with no registered extension is RESOLVED: the unpaired branch of `0x00dd2a70` opens the stored name as given. The zone-file-finding conclusion is CORRE
+- L41: 44 / Zone header (fast) / **none in the registration table** / **none** / `.czh_pc` **2,971** (found by the zone module's own table, §4) **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9.3 shows the manifests list type-44/45 entries under their real `.czh_pc` names; see §1.]** /
+- L54: not show this. These five types also have a null destructor (`spec-format-inventory.md` §1), and how teardown handles a null destructor is OPEN — to be settled against the executable.]** **[RESOLVED 2026-10-02, re-derived from the executable (fresh read-only dump of `0x00dd2ed0`, reached by an xref query on the destructor column
+- L58: rom the executable, exe_index/ctorless-types.txt): CONFIRMED.** The null-constructor path is confirmed in `0x00dd2e30`. The null-destructor OPEN note is RESOLVED: teardown `0x00dd2ed0` skips a null destructor and clears the loaded bit. The residency claim stays HIGH CONFIDENCE — inferred.
+- L65: IRMED — disassembly stays for the table references. The "therefore" conclusion, read as how shipped `.czh_pc`/`.czn_pc` files are found, is OPEN: `spec-asm-format.md` §9.3/§9.4 shows the manifests list type 44/45 entries as `.czh_pc` and 29/30 as `.czn_pc`, and every non-39 entry contributes its file (8,057/8,057); see §1.]**
+- L73: **[OPEN — desk review 2026-09-30: this section gives no address for the `.czn_*`/`.czh_*` tables or for the functions that reference them. `spec-zone-data-format.md` §9.2 names `0x00863170`/`0x00863310` as `
+- L87: 568f0` instead. **[HIGH CONFIDENCE — inferred** from the wildcards and the message**: `0x00856f50` lists the zone headers by file name.** **OPEN: which branch the shipped game takes.]**
+- L88: y carries (§1). The manifests (`spec-asm-format.md` §9.3) are a second source of these names, and the private tables do not replace them. **OPEN:** which of the two sources feeds the shipped game's zone loads. **OPEN:** the paired types 29/30. For these, `0x00dd2a70` builds both names from the entry's name plus the registered `.
+- L90: e-derived: full names for `0x00858290`'s own type 44/45 and 29/30 requests, plus a `*.czh_pc` wildcard on one branch of `0x0085a070`. Still OPEN: which source the shipped game uses for zones, and how a paired 29/30 request maps its name.
+- L105: run time (paragraph below); `+0x0C..+0x17` hold three `f32` origin values (§8 item 2, `spec-world-streaming.md` §10.7); `+0x20..+0x3F` are OPEN (§8 item 2). "Every shipped file is 29": Team B's HANDOFF §9.55 quotes version 29 only for its 93-file spot-check ("version 29 in 93/93"); its full run reports "2,971/2,971 found and par
+- L109: * — reproducing by disassembly the layout established above by replay, and identifying one further field. **[CONFIRMED — disassembly.]** **[OPEN — noted 2026-10-02, re-derived from the executable (`0x008633b0`, fresh read-only dump).** The reader's own pad step rounds the cursor up to a multiple of 16 and adds **nothing** when t
+- L119: NFIRMED (`0x00863080`). The align-to-4 base is RESOLVED: it is relative to the file start, and it is a no-op on the file-reader path. Still OPEN: header bytes `+0x20..+0x3F`, which are not read. Also OPEN (new): how the reader's round-up-to-16 pad relates to the replay's always-advancing pad, which depends on `0x00dd7d70`.
+- L130: **[OPEN.]** Resolving this needs the consumer that walks the array, which is inside the zone streaming subsystem — deliberately not opened here (§7). *(Partly answered since: see the note above and `spec-wor
+- L151: record positions are relative to)**, and the header bytes between `+0x20` and `+0x40`. *(2026-10-02, re-derived from the executable: still OPEN. Neither the parser `0x00863080` nor the reader `0x008633b0` touches them; the align-to-4 base is resolved, §5.)*
+- L152: e zone module's request path, a `~f` name is requested as types 44/29 and a `~s` name as 45/30 (`0x00863110` → `0x00858290`, §2, §4). Still OPEN: how the two types are then handled differently.)*
+- L155: ivate tables name the files that `0x00858290` requests as 44/45 and 29/30, and they build a `*.czh_pc` wildcard in `0x0085a070` (§4). Still OPEN: which source the shipped game uses, and how a paired 29/30 request maps its name.)*
+- L162: (DESK-PASS 1, text fixes 5, NEEDS-EXE 1, NEEDS-DATA 1, VALIDATED-BY-DATA 1 via Team B HANDOFF §9.55 "2,971/2,971 found and parsed"). Marked OPEN, citing `spec-asm-format.md` §9.3/§9.4, the "zone module finds its own files" conclusion (§1, §2 row 44, §4), with the CONFIRMED label downgraded in place for the conclusion only. Marke
+- L163: rived the private tables' role: full names for `0x00858290`'s type 44/45 and 29/30 requests, plus a `*.czh_pc` wildcard in `0x0085a070`. §1 OPEN RESOLVED (`0x00dd2a70` unpaired branch opens the stored name) and its zone-file conclusion CORRECTED. §3 null-destructor teardown RESOLVED (`0x00dd2ed0`). §5 align-to-4 base RESOLVED (r
+
+## spec-customization-data.md (weight 2, 23 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: riantID`, 32-bit wrap, long names); CORRECTED: usable record capacity is 999 / 55, so §5.1's 56 = 56 DLC capacity match is not exact; still OPEN: case-sensitivity of the element lookup (`Disabled` vs §2.1's `disabled`), when the DLC record counter is reset, the default for a missing `VariantID`, and the 65-byte content-name buff
+- L32: h the names shown; it does not cover completeness (§6 found 17 further fields across all 621 rows) or every parent/child placement (see the OPEN notes in the Variants and Misc rows).]**
+- L37: ags`, `Incompatible_Flags`, `Particle_Systems` **[child element names of the three flag lists and of `Particle_Systems` are not given here; OPEN — desk review 2026-09-30]** / A flag-based prerequisite/incompatibility system for when a given wear variant is available — the flag lists were empty in every sample checked, so their e
+- L102: to exist as a real mechanism but every sample checked had these lists empty — what actually sets/checks them at runtime is unconfirmed. **[OPEN — desk review 2026-09-30: "empty in every sample" covers the DLC samples only; how many of the 621 real rows (§6) carry a non-empty flag list is not recorded; to be settled against real 
+- L129: format.md`, `spec-tables-audio-radio.md`, `spec-tables-progression.md`), not this hash; `spec-tables-customization.md` §4.2 carries its own OPEN note on that point. ]** **[Re-derived from the executable 2026-10-02 (exe_index/customization-data.txt) — CONFIRMED, function identities and filename source settled: (a) `0x00d9e8b0` is
+- L131: ritten in §2.1, would be seen) is not settled by these dumps: the lookup helper (`0x00daba10` / `0x00dc4ff0`) is not in the index — **still OPEN**, and to be checked against the spelling used in the real rows.]**
+- L133: DENCE — the mapping "non-`main` framework -> small table" is read from the decompilation's flag flow; the 56 = 56 match is empirical.]** **[OPEN — desk review 2026-09-30: §6 counts the DLC rows as 13 + 26 + 8 = 47 (621 − 574), while §5.3 counts 13 + 26 + 17 = 56 with nine dlc3 rows repeating dlc1 rows (56 − 9 = 47 distinct). The
+- L135: table sizes, framework → small-table mapping; CORRECTED — usable record capacity is 999 / 55, so the 56 = 56 DLC match is not exact; still OPEN — case-sensitivity of the child-element lookup (`Disabled` vs `disabled`), when the DLC counter is reset (`0x009fd3b0`), and the 47-vs-56 DLC row count (data).**
+- L146: 1,348 bundles), registered only when the wear option names a `Cloth_Sim_Filename` — **56/56 on the DLC rows** **[56 vs 47 DLC rows: see the OPEN note in §5.1]** (13 items with a cloth-sim filename have a `.rig_pc` in their bundle, 43 without have none); the composer also probes body-type variants of that rig name (`male_ideal`/`
+- L148: ntainer request; the `.str2_pc` extension is attached by a layer this pass did not trace. **[HIGH CONFIDENCE — inferred; extension handling OPEN.]**
+- L150: applied (counts tile: 675 − 2 = 673, 675 + 673 = 1,348; female filename stated as presence-only; 56 vs 47 and the body-item reading marked OPEN) — desk review (not re-derived from the executable).**
+- L169: high half `0xB8F2` again needs the unread `Name`. **[CONFIRMED — empirical for the low half and the additive term; the two high halves are OPEN pending the `Name`.]** **[Resolved: §6.1 reproduces all 628 base plain bundles from the real item `Name`s.]**
+- L175: (`Hair Purple Matte.str2_pc`, `face_makeup_cat.str2_pc`, `tattoo_chest_8.str2_pc`, ...) — **how each of those is formed was not traced** (**OPEN**, low value).
+- L179: **Review status (2026-09-30): DESK-PASS, text fixes applied (stale "Excluded" bullet struck; OPEN (3) stays) — desk review (not re-derived from the executable).**
+- L187: across archives). Combined base+DLC row totals, confirmed exact: **621 real `Customization_Item` rows** (574 base + 13/26/8 in dlc1/2/3 **[OPEN — desk review 2026-09-30: §5.1/§5.3 give dlc3 17 rows (DLC total 56); see §5.1]**) and **84 real `Outfit` rows** (70 base + 1/11/2 in dlc1/2/3).
+- L197: 2 rows and files, 574 / 70 base rows, 17 extra item fields, `Cost` 56/84 all match Team B `HANDOFF.md` §9.85; dlc3 row count (8 vs 17) left OPEN — desk review (not re-derived from the executable).**
+- L207: - **Every real `VariantID` used across all 621 items is exactly 1** — resolving §5.4 OPEN item 2's base-game half: no base item uses a different `VariantID` or exercises a disabled wear option through this path.
+- L211: ame-building helper, `0x00da8790`, not in the index), so very long mesh names may be cut there; that helper's overflow behaviour is **still OPEN**. Also still OPEN: what `VariantID` the staging record holds when a `Variant` has no `VariantID` element (the integer reader `0x00dabc70` is not in the index).]**
+- L213: d wear options are keyed, any `VariantID` is added as-is, the add wraps at 32 bits and prints signed, the key path has no length cap; still OPEN — the default when `VariantID` is absent, and how the 65-byte content-name buffers treat very long mesh names.**
+- L217: apacity" on the 56 DLC rows); §6.1 edge-case scope CONFIRMED (disabled, any `VariantID`, 32-bit signed wrap, no key-path length cap); still OPEN: element-lookup case, DLC counter reset, missing-`VariantID` default, 65-byte content-name buffers; updated the summary, §5.1 and §6.1 status lines and a §5.4 tag.
+- L219: - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): marked the stale "blocked/unreachable/parked/OPEN" statements in §1, §2.1, §3, §5.3 and §5.4 resolved (§6, §6.1); marked §4 item 4's morph dequantisation gap resolved (`spec-morph-format.md` §13); flagged the `spec-output.md` citation as unpublished
+- L221: iew/adv_customization-data.md`): added review-status summary and per-unit status lines; narrowed §2.1's CONFIRMED to its one sample; marked OPEN: Shader_Type parent, Default_Colors_Grid level, Default_Wear_Option referent (vs `spec-tables-customization.md` §5.1), DLC rows 56 vs 47 (§5.1/§5.2/§6), composer filename source and `di
+
+## spec-cutscene-camera-format.md (weight 2, 16 live)
+
+- L9: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L38: **[OPEN — desk review 2026-09-30: 90 + 6 accounts for the 96 distinct files, but 192 entries mean each file appears twice, and the text does not say where the second copies live (the same archive twice, or a
+- L53: nters aimed at the end of the data region *(desk review 2026-09-30: i.e. at `record_offset`, the end of `[0x08, record_offset)` above)*. **[OPEN — desk review 2026-09-30: the order of the arrays inside the data region (per shot, per channel, times before values?) is not stated. A pointer-following reader does not need it, but a 
+- L141: y or cap on the script side; the live bound is the XML-driven manager shot table. The population comparison with the XML shot count remains OPEN (§10.9 item 5).**
+- L156: roup is all-or-nothing). **[CONFIRMED — disassembly for the plumbing; HIGH CONFIDENCE — that the four values are ordered depth breakpoints; OPEN — which breakpoint is which, §10.9.]**
+- L179: **[OPEN — desk review 2026-09-30: about thirty addresses here are disassembly-only, and only some of them can be checked against data; the clock object's field types (float or double, §10.6 item 1) are not g
+- L196: **[OPEN — desk review 2026-09-30: the numeric type (float or double) of `T`, `V`, `f` and of the slerp threshold `10⁻⁷` is not stated. Team B's decoder, evaluated in double, agrees with its own sampler, but
+- L208: **[OPEN — desk review 2026-09-30: the unit-norm and scale checks cannot separate component order from transposition. The norm is unchanged by any permutation of `(x, y, z, w)` and by negating `x, y, z` toget
+- L227: ch breakpoint is the near-blur edge, near-focus, far-focus or far-blur edge is a property of the shader, which is not in the executable — **OPEN**. The remap the update applies to channel 3 (`c₃ → 4·c₃ + 1` when `c₃ > 0`) is gated on a 3-byte function that always returns false, so it never runs on this build. Per-shot DOF also h
+- L229: *Desk review 2026-09-30: `57.2957763671875` is exactly representable as a float and lies just below 180/π (57.29577951…). **[OPEN — the constant's address and type (float or double) are not given, and the DOF plumbing, the always-false 3-byte remap gate and the debug defaults are disassembly-only. To be settled against the exec
+- L238: ere is no pre-roll. Any cut smoothing downstream of the output globals (camera-mode blend code reads the same globals) was not examined — **OPEN**. **[CONFIRMED — disassembly for the update; OPEN — downstream.]**
+- L240: §7; `cutscene_tables.vpp_pc` 118/118), so this comparison is now actionable — not yet run.]** **[CONFIRMED — disassembly for the mechanism; OPEN — the population comparison.]**
+- L276: **Review status (2026-09-30): DESK-PASS (matches §10.3–§10.5; item 1's order and row convention carry §10.4's OPEN note) — desk review (not re-derived from the executable).**
+- L280: tions (the camera-basis reader), not decoded. *(Desk review 2026-09-30: component order and `M` vs `Mᵀ` are also disassembly-only — §10.4's OPEN note.)*
+- L318: he smallest gap above 0.033401 s is 3.98 s (authoring jumps straight from "about one frame of tail" to "well over a second"). **[CONFLICT / OPEN — desk review 2026-09-30: this cannot agree with §10.6 item 3 / §11.5 (median tail 1.267 s, p90 4.10 s over the same 1,405 shots). If 478 shots have gaps ≤ 0.033401 s and the smallest o
+- L336: `): review status lines on 15 units, plus a summary after the front matter. Scope line's "12-byte header" corrected to 8 (per §3). CONFLICT/OPEN at §11.4: 3.98 s vs the median 1.267 s / p90 4.10 s, with a pointer from §10.6 item 3; the figure is not changed. OPEN at §10.4: the unit-norm checks cannot separate component order or 
+
+## spec-effects-format.md (weight 2, 58 live)
+
+- L12: rientation/transform filter (§7.3); and `Q+0x60`'s lazy-rebase mechanism is now exact, though `Q`'s six sub-blobs' interior content remains OPEN via a scoped negative (§7.2). §6.12 item 4's "no populated element in any sample" is resolved; item 1's `P+0x08/0x0C → particle+0x124` gap has its first confirmed consumer.
+- L14: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L63: §6.2 item 2: float #1 (`root+0x20`) is the effect DURATION in seconds — RESOLVED (consumer + 13/13 empirical); float #2 (`root+0x24`) still OPEN.**
+- L107: pulation: 0–16**, `team-b/HANDOFF.md` l.11286); `>0` gates the optional field at `+0x10` **[CONFIRMED — disassembly + byte match, 3/3]** **[OPEN — desk review 2026-09-30: whether `+0x08` is a count of entries in the `+0x10` region (values up to 16) or only a flag; to be settled against the executable / real data.]** /
+- L109: / `0x10` / optional pointer / only fixed up/meaningful when `+0x08 > 0` (only shockwave, `flagB=1`); content not decoded — **OPEN** /
+- L116: ULL-effective in practice) validating a name-table entry count against `+0x40`'s count; inert since `+0x40`'s count is 0 in all samples — **OPEN** /
+- L121: ssembly + cross-sample comparison that the version gate is functionally real, 3/3]**. Content beyond "it's a valid pointer" not decoded — **OPEN** /
+- L123: **[OPEN — desk review 2026-09-30: the table does not tile the header — `+0x14`, `+0x1c`, `+0x2c`, `+0x34`, `+0x3c`, `+0x44`, `+0x4c`, `+0x5c`, `+0x64`, `+0x74`/`+0x7c`, `+0x84`, `+0x8c`, `+0x94`, `+0x9c`..`+
+- L148: D, §6.5: four booleans that become bits `0x20`/`0x40`/`0x80`/`0x100` of the `Q+0x50` flags word at instantiate (what each bit does is still OPEN)** /
+- L149: -1` (0xFFFFFFFF) in all 13 records, 3/3 samples** — reliably present-but-null in this data, not touched by any fixup in the traced code — **OPEN** /
+- L153: `0xD8`-byte render-state block (flags word at `+0x50`, lazily rebased pointer at `+0x60`, six sub-blob pointers); interior semantics still OPEN** /
+- L157: be `0x1D815E4A`, box `0xB3269ACC`, column `0xFAA8D302`. The class NAMES (hash inputs) are not recoverable from the binary's strings — still OPEN.** **[OPEN — desk review 2026-09-30: Team B's population lists `0xA1CC7F44` ×502, `0x4A8FB92D` ×80 and `0x00AB1EC0` ×44 (`team-b/HANDOFF.md` l.11287–11288) without saying which of its t
+- L177: all, it lives in this separate sibling structure. Internal record layout beyond the name pointer at `+0x00` was not explored this pass — **OPEN**.
+- L185: not-yet-traced consumer (plausibly the material-resolution subsystem itself, given its positional coincidence with the material array) — **OPEN**.
+- L186: crete instance of §4 item 5's own prediction that larger/more complex effect files might reveal structure invisible at this sample size — **OPEN, needs a larger real sample to observe even one populated element.** **[Resolved: populated samples decoded, §7.6.]**
+- L196: - Item 3 (two floats' meaning) — **location resolved**, meaning still open. **[Update: float #1 = duration, §6.2 item 2; float #2 still OPEN.]**
+- L202: s, child lists; all 41 pointer slots classified; exact tiling gate passes 3/3 (§6.11). Renderer-side meanings of a handful of fields remain OPEN (§6.12 item 1).**
+- L203: FFF`/offset), and its only found consumer (`0x00e7faf0`) is a generic setter, not a reader — the six sub-blobs' *interior content* is still OPEN, now via a scoped negative (not dereferenced by any of `0x0043fd50`/`0x00e7faf0`/`0x00436760`/`0x00437fc0`/`0x00430e60`/`0x004309c0`/`0x00433c10`).
+- L204: y at `VA 0x01352200`; the hash inputs (type names) could not be recovered (0 hits over every executable string, five hash variants) — still OPEN as names.**
+- L205: efore, still open. **UPDATE §6.2: float #1 (`root+0x20`) = effect duration (RESOLVED); `MCKH`'s reader and float #2 (`root+0x24`) are still OPEN.**
+- L207: ctively). **UPDATE §6.5: `+0x08` (material-link name) and `+0x14..0x17` (four booleans → `Q+0x50` flag bits) are RESOLVED; `+0x18` is still OPEN (not read by the three instantiate functions).**
+- L215: d update particles — resolving §5.8 items 1–2 (the `record+0x28` parameter block, the `record+0x30` block) and advancing several §5.3/§5.4 "OPEN" cells. **Method:** Ghidra 12.1.3 headless on a disposable project copy (`tools/gp_fx2`), one-off scripts `tools/scripts/Ab*.java`; every field role below was read off the code that con
+- L236: FNV-1, FNV-1a or djb2. The tags are class ids whose source names are not in the binary as plain strings; **the type names stay unrecovered [OPEN]**, but the tags are fully identified by what the registered classes *do* (§6.6).
+- L243: 2. **Root float #1 (`root+0x20`) is the effect DURATION in seconds** (§5.3 called it "meaning still OPEN"): the instance update divides elapsed time by it and clamps to `[0,1]` (`0x00430e60`, `0x00433c10`, `0x00436620` family), `0x0043fd50` copies it into every record's `P+0x204`, and `0x00440270` copie
+- L275: ement curves hold real non-monotone key sequences, §7.5/§7.7; and the size-track key-time slots hold age fractions, not seconds, §6.7.)* **[OPEN — desk review 2026-09-30: the evaluator's result for `count == 0` and its behaviour on equal or unsorted key times are not stated; to be settled against the executable (`0x00434820`).]*
+- L277: **Review status (2026-09-30): DESK-PASS, text fixes applied (sortedness scoped to P curves; count-0 behaviour marked OPEN) — desk review (not re-derived from the executable).**
+- L286: s **`0x20`, `0x40`, `0x80`, `0x100`** of the `Q+0x50` flags word (§6.9); what each bit *does* is not traced / CONFIRMED (bit mapping); role OPEN /
+- L287: 8` / `-1` in 13/13; **not read** by `0x0043fd50`/`0x00440030`/`0x00440130` (scoped to those three functions, not a whole-binary negative) / OPEN /
+- L292: / `0x3C`–`0x57` / not touched by any function traced (zero on disk, 13/13) / OPEN /
+- L306: rt of the filter rows that §6.10 numbers 5–10 — so the image holds one table whose row 0 is this `0xA1CC7F44` row. The class is live.]** **[OPEN — desk review 2026-09-30: how this row reaches the volume list `0x031729bc` (the static census found four link sites) and what `0x0043fd50` does when no row matches; to be settled again
+- L308: e satisfied at run time was not established; the class↔tag mapping above rests on the create-function chain instead, not on the overlay. **[OPEN — desk review 2026-09-30: for the 502 real `0xA1CC7F44` records, whether `P+0x478 == 8` and the shape array holds two finite half-extents; to be settled against real data.]**
+- L324: / `0x08`,`0x0C` / f32 / pair lerped over particle age into particle field `+0x124`; role OPEN / 0.0 ×13 / CONFIRMED consumer; OPEN meaning /
+- L335: / `0x20` / u8 / copied to a render-descriptor flag (`4`); role unknown / 1 ×13 / OPEN /
+- L364: ticle fields and forwarded to the renderer; the overlay's single **"opacity scale"** label is the only naming hint / layout CONFIRMED; role OPEN (sample: `(0,1,.25,1,.75,1)`, `(1,1,.25,1,.75,1)`) /
+- L365: ) copied wholesale into the emitter's dynamic-light record by `0x00430e60` / layout CONFIRMED (5 tracks × 13 records fit the pattern); role OPEN (light colour/intensity/radius is a guess) /
+- L371: he physics-proxy path also reads it. **The magnitudes (`50`/`500`/`5000`/`0`) are implausible as a per-second linear drag — units/semantics OPEN** / 5000 ×2, 500 ×6, 50 ×1, 0 ×4 / CONFIRMED consumer; OPEN meaning /
+- L381: 210` / f32,f32 / `(value, half-range)` handed to the external physics-proxy factory when `P+1 != 0` / `(1.0, 0)` ×13 / CONFIRMED read; role OPEN /
+- L383: of **16-byte** elements `(t, x, y, z)`-looking, small values (e.g. `(0, -0.0092, 0.0594, 0)`); count 1 in 13/13; **no consumer found** / / OPEN /
+- L384: / `0x228`,`0x230` / count,ptr / occupies a **32-byte** region in 13/13; no consumer found / / OPEN /
+- L385: / a curve slot; value `1.0` at `t=0` in 13/13 (with a stale second pair `(1.0,1.0)` beyond the count); not read by any traced function / / OPEN /
+- L394: 288` / value written to `emitter+0x80` each step (count 1, `1.0`; `2.0` in `shockwave` `Object01`); consumer of that field not identified / OPEN /
+- L411: — see §6.2 item 6; curve pairs at `+0x18/+0x20` and `+0x98/+0xA0` and a colour at `+0x54`, evaluated by `0x00433c10`. Count 0 in 3/3; role OPEN. **[Resolved: field-mapped and validated on 13 real elements, §7.5.]**
+- L419: king triple (`0.144, 0.323, 0.965` / `0.209, 0.386, 0.965`), `+0x80`.. `(c,c,c)` then `0`, `0.8` (`0.8` in 13/13). **Interior semantics are OPEN** — the renderer that consumes the descriptor was not traced; Q is a render-state block (the flag composition and lazy pointer say so), not particle-simulation data. Sizes of the 6 sub-
+- L425: o the class's init. The instance also receives `root+0x20` (duration). The class behaviour (what a "VFX Filter" *does* to the picture) is **OPEN** — the six filter classes were not decompiled. **[Resolved: all six decompiled, §7.3.]** *(Desk review 2026-09-30: the row numbers 5–10 are consistent with a single table starting at `
+- L443: ### 6.12 What remains OPEN after this pass
+- L445: its* were already resolved in §6.5/§6.9; what each bit *does* downstream, and `Q`'s six sub-blobs' interior, are FURTHER ADVANCED but still OPEN per §7.2 — and `P+0x08/0x0C`'s downstream field `particle+0x124` now has a confirmed first consumer, §7.3: two of the five particle-force filter classes multiply their force by it).
+- L447: stract-base-class HYPOTHESIS.)* **[Desk review 2026-09-30: that HYPOTHESIS is now marked refuted as data, §6.6; how the row is linked stays OPEN (NEEDS-EXE).]**
+- L486: 00e7faf0`** — the actual GPU draw/submission module lies outside this anchor set and was not located. **Q's six sub-blobs' interior remains OPEN**, now for a concrete, stated reason rather than by default. **[CONFIRMED — disassembly, scoped negative.]**
+- L502: re: position `+0x00/+0x04/+0x08`, velocity `+0x10/+0x14/+0x18`, and (two of the five) the age-derived weight `+0x124` already documented as OPEN in §6.12 item 1 (`P+0x08`/`P+0x0C` lerped into it) — **this pass identifies its first real consumer.** **[CONFIRMED — disassembly.]**
+- L513: r "align to a reference axis"); the exact geometric meaning of the transform and the identity of its two inputs were not traced further — **OPEN**. **[CONFIRMED — disassembly for the mechanism; HIGH CONFIDENCE for the functional label; both blob content and real per-class parameter values are UNVALIDATED against real data for ev
+- L515: nter is pre-resolved by a pass this pass didn't trace, possibly the two real files simply never exercise the branch that would need it) — **OPEN, honestly left unresolved rather than guessed.** **[OPEN — desk review 2026-09-30: the field-by-field blob layouts (`0x40` = four curve slots, `0x20` = curve + scalar + rebased field) a
+- L535: turally present and were spot-checked to resolve inside the file, 16-aligned, but their individual roles were **not** decoded this pass — **OPEN**.
+- L554: / `+0x48`, `+0x4c`, `+0x64`, `0x68`(bool) *(desk review 2026-09-30: a second bool byte next to `+0x69` above; OPEN whether both are distinct fields — to be settled against the executable, `0x00433c10`)* / type-`1`-only fields / copied to the light only when `type==1` /
+- L557: the format and is read by the consumer, but was not exercised by any file this project has examined. **[CONFIRMED — empirical, 13/13.]** **[OPEN — desk review 2026-09-30: "types 1/3 and the cookie unexercised" is a 4-file statement; Team B counts 595 populated `root+0x70` occurrences in 168 files (`team-b/HANDOFF.md` l.11265–112
+- L568: for exactly that many bytes, with no gaps or overlaps in the samples checked) but their individual roles were **not** decoded this pass — **OPEN**, and the tiling was checked only informally (by inspecting sorted pointer targets), not with the same formal region-level gate §6.11 built for `P`/`Q`.
+- L576: ### 7.8 What remains OPEN after this pass
+- L584: 7. Every item already listed as OPEN in §5.8/§6.12 that this pass did not touch (the `MCKH` reader, `root+0x24`, `record+0x18`, `record+0x3C..0x57`, the `root+0x40`/`0x48` array's own root-level `+0x50/+0x58` cross-check mechanics, etc.
+- L590: as refuted by data (Team B 502 records, `team-b/HANDOFF.md` l.11287; contiguous rows `0x013521EC`→`0x01352200`→`0x01352250`), linkage left OPEN (NEEDS-EXE); `root+0x38` / §2 size-field CONFIRMED labels downgraded (Team B 1,468/1,812, 344 fail, l.11277–11281); `root+0x08` range 0–16; pad rule shown identical to `spec-geometry-for
+
+## spec-extensionless-types.md (weight 2, 19 live)
+
+- L9: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: ghtmult_pc`/`.lightrot_pc`/`.lightpos_pc`. This spec's "never filename-resolved / constructed programmatically" reading is therefore marked OPEN where it appears (§1, the §2 closing paragraph, §3 shape 5), and its CONFIRMED label in §1 is downgraded. **Awaiting the executable:** row 25 (`0x00599120`: consumer, argument test), ro
+- L18: ving a path. The registration entry exists to give that data a type, a name and a lifetime, not to find it on disk.  **[Label downgraded to OPEN, desk review 2026-09-30: `spec-asm-format.md` §9.3 (CONFIRMED — empirical) shows all six types ship real files with real extensions, picked by the manifest entry's `type_id` (25/33/34/4
+- L19: **[Qualified, desk review 2026-09-30: what is confirmed is that the registered destructor is a no-op; whether teardown happens elsewhere is OPEN, as §5 item 5 of this spec asks.]**
+- L23: **Review status (2026-09-30): DESK-PASS, text fixes applied (mechanism claim downgraded to OPEN per `spec-asm-format.md` §9.3; teardown claim qualified; count wording annotated) — desk review (not re-derived from the executable).**
+- L29: me, buffer, size, context)` to a real consumer. Calls the no-op hook with the literal label `"Lightset"`. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: the consumer was not opened (§5 item 2). It is probably the lightset registry of `spec-tables-vehicle-world.md` §11 (resolve-or-create by filename hash at `0x0
+- L30: -dispatch.md` §2 and §8.6), not by the type. `spec-asm-format.md` §9.3 lists type 26 among the unpaired types, shipped as `.vint_doc`.)* **[OPEN — desk review 2026-09-30: which container holds the slot, its stride, the compare or hash used, and what the constructor returns when no slot matches. To be settled against the executab
+- L31: e `.xtbl` files whose rows are `mission_override` elements, and `spec-asm-format.md` §9.3 shows type-33 entries ship as `.xtbl` files.)* **[OPEN — desk review 2026-09-30: whether this parser is the same reader as the one `spec-tables-environment.md` §15.1 anchors at `0x006E2460`, and whether `external_light_override` here is a c
+- L32: tine and stores it into a table that holds **at most two** entries (the constructor refuses beyond that). **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: not stated are what "it" is (the CRC, the buffer, or both), the table's address and entry layout, where the cap of two is compared, the CRC-32 variant (§4 says
+- L33: (§4.1), and looks it up: if already present, returns success immediately; otherwise allocates and parses. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: not stated are the table's address, collision handling, what "already present" compares, whether the modulo is signed or unsigned (§4.1), the parse routine (§5
+- L34: (`spec-cutscene-camera-format.md` §1), including the consequence that **only one can be live at a time**. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: label conflict. `spec-cutscene-camera-format.md` §1 labels the same "only one … live at a time" consequence of the same stash pattern **[HIGH CONFIDENCE — infe
+- L36: — the `.xtbl` file already has one and is loaded by its own type.  **[HIGH CONFIDENCE — inferred from type 33's document-node parse.]** **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9.3 shows types 25, 33, 34 and 43 ship as real `.xtbl` files picked by the manifest's `type_id`, while the generic cutscene-xtbl type 23 s
+- L48: 5. **No extension at all** — the six here: never filename-resolved, constructed programmatically. **[OPEN — desk review 2026-09-30: contradicted by `spec-asm-format.md` §9.3, which shows all six ship real files with real extensions, picked by the manifest's `type_id`; see §1. What is established is only
+- L52: **Review status (2026-09-30): DESK-PASS, text fixes applied (roster completed by annotation; shape 5 marked OPEN) — desk review (not re-derived from the executable).**
+- L70: **[OPEN — desk review 2026-09-30: hash-count conflict. `spec-rig-format.md` §13.1 reports a raw `CALL`/`JMP` flow scan of the whole `.text` that finds **12 callers** of `0x00da7890` (all listed), against **≈
+- L74: hese are real calls in undisassembled code or chance byte matches was not checked; they bound the totals at 876 / 206 / 19 at most and stay OPEN. **`0x00db09d0` identity.** It is a second, separately compiled copy of the rotate-6/XOR hash: the same loop instruction for instruction as `0x00da7890` (only `A`–`Z` are folded to lowe
+- L78: RMED — disassembly.]** *(Desk review 2026-09-30: the five steps match the published 32-bit integer mixer of Thomas Wang step for step.)* **[OPEN — desk review 2026-09-30: not stated from the disassembly are 32-bit wrap, logical vs arithmetic `>>`, and an unsigned `% 512` (vs a signed modulo or `& 511`); these change the result w
+- L99: `review/adv_extensionless-types.md`): review status summary plus a status line on 12 units (DESK-PASS 1, text fixes 6, NEEDS-EXE 5). Marked OPEN, citing `spec-asm-format.md` §9.3 (all six types ship real `.xtbl`/`.vint_doc`/`.light*_pc` files): the "never filename-resolved / constructed programmatically" claim (§1, label downgra
+- L100: y found at `0x00db0e40`, and the 41 / 32 / 1 unverified byte matches in undisassembled code and the seven sibling CRC-32 table readers left OPEN. §4.1 CORRECTED: the mixer's right shifts are arithmetic and its modulo a signed divide, but its output never has bit 31 set, so the bucket equals an unsigned modulo 512. The same day's
+
+## spec-foliage-format.md (weight 2, 27 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L49: / Material-handle table / 8-aligned after the Mesh block (§12 note 2: starts exactly at `align8` of the Mesh end, 19/19 per Team B) **[OPEN — desk review 2026-09-30: whether the 8-alignment is taken relative to the file start or to `B`; to be settled against the executable (`0x00747b50`) / real data.]** / `0x10` header (`u32 ptr
+- L50: 32 B-relative offset of material record i, u32 0}`, Team B's measurement; the loader overwrites the slots with material objects, §11.3)* **[OPEN — desk review 2026-09-30: the handle table is `0x10 + 4 × count` bytes from an 8-aligned start, so for odd counts (1 and 3 occur) it ends 4 mod 8; whether an extra alignment precedes th
+- L56: 32-bit value **stored at** `B+N`, not the address `B+N`; §11.2 and §12 establish this for `+0x38` (19/19, reading `B+0x38` itself 0/19). **[OPEN — desk review 2026-09-30: that `+0x08`, `+0x18` and `+0x28` use the same B-relative base is implied by §11.2's shared idiom and by Team B's 19/19 chain, but not separately stated; to be
+- L58: **Review status (2026-09-30): DESK-PASS, text fixes applied (slot-array content superseded by §12 note 1; odd-count alignment OPEN) — desk review (not re-derived from the executable).**
+- L68: `+0x14` is 0 in 19/19; at load `+0x10` is overwritten with the handle-set object, §11.3)* / **[CONFIRMED — disassembly (runtime use).]** **[OPEN — desk review 2026-09-30: whether the loader reads the on-disk `+0x10` value at all; to be settled against the executable (`0x00747b50`).]** /
+- L71: 2`, 19 distinct non-zero heap-pointer-like values in 19 files (`0x001E9CB8` … `0x045AFF90`) / **[CONFIRMED present — empirical, §12 note 3; OPEN — meaning.]** /
+- L77: **[OPEN — desk review 2026-09-30: for the pairs `+0x08/+0x0C`, `+0x18/+0x1C`, `+0x28/+0x2C`, `+0x38/+0x3C` the low half is the offset (established for `+0x38` by §11.2); the on-disk contents of the high halv
+- L79: lative to the outer-block base `B` and the table starts at `B + i32(B+0x38)`, 19/19 on two readers, §12; the other three are covered by the OPEN notation note in §3)* on disk and fixed up to absolute pointers at load, with `-1` meaning absent — the idiom shared by every format in this project.
+- L83: ixes applied (`+0x10`/`+0x14` superseded by §12 note 2, `+0x24` row added from §12 note 3, offset base corrected to B-relative; high halves OPEN) — desk review (not re-derived from the executable).**
+- L89: **[OPEN — desk review 2026-09-30: Team B's reader locates and version-checks the Mesh sub-block but does not parse its internals (`team-b/HANDOFF.md` §4.5), so bit 0 clear, stride 2, counts 30…858 and the 5–
+- L95: lign, a `0x30` header, then three arrays; the bytes consumed must equal `size` (the loader checks this; the replay reproduces it 33/33). **[OPEN — desk review 2026-09-30: whether "consumed" is counted from the size prefix, from after it, or from after the 8-align pad, and whether the 16-alignment of the `vec4` array is relative 
+- L103: path (§6.1). *(Pairing, Team B: `0xC2` ×10 are the `(1, 1, 3)` records, `0x40` ×23 the `(3, 9, 11)` records, `team-b/HANDOFF.md` §4.5.)* **[OPEN — desk review 2026-09-30: both shipped values have bit `0x08` clear, and §6.1 places bit `0x08` on the binding `flags`; which field carries it is unsettled; to be settled against the ex
+- L106: / `+0x28`…`+0x2F` / not described **[OPEN — desk review 2026-09-30: these 8 header bytes are untiled, and whether the pointer slots at `+0x10`/`+0x18`/`+0x20` are 4 or 8 bytes wide is not stated; to be settled against the executable / real d
+- L112: **Review status (2026-09-30): DESK-PASS, text fixes applied (shape/flags pairing cited; size semantics, alignment base and `+0x28..+0x2F` OPEN) — desk review (not re-derived from the executable).**
+- L116: `{ u32 name_offset, u32 slot_hash, u16 resolved_index, u16 flags }`. `name_offset` indexes the `+0x28` string table **[OPEN — desk review 2026-09-30: whether it is a byte offset or an index, and relative to which base (the table start at `B + (+0x28)` or another), is not stated; to be settled against the executable (`0x00
+- L120: **Review status (2026-09-30): DESK-PASS, text fixes applied (`name_offset` base and bit-`0x08` location OPEN) — desk review (not re-derived from the executable).**
+- L124: bserved values are defaults such as `(1, 1, 1, 1)` (a tint) and zeros. **[CONFIRMED — disassembly for the mechanism; values observed.]** **[OPEN — desk review 2026-09-30: the mapping from the `B` hashes to the `C` `vec4`s is not stated — `B ≠ C` in both shapes (9 vs 11, 1 vs 3), so it is not one-to-one, and whether hash *i* cove
+- L147: block** (`spec-tree-format.md` §6), and the record parser has ten call sites in eight functions engine-wide (`tools/tree_callers.txt`). **[OPEN — desk review 2026-09-30: "ten call sites" here (record parser `0x00e71090`) and "ten callers" of the index-list utility `0x00e401d0` (§3) are separate counts; the first was not re-liste
+- L153: e chain end exactly at the file's own `+0x28` offset. **When an exact-size chain fails, the file's other offset fields are the oracle.** **[OPEN — desk review 2026-09-30: "15/19 failed" here and "with 8-byte alignment the chain held in 6/19" (§3) imply 15 vs 13 failures; the text does not say whether they count the same replay s
+- L155: **Review status (2026-09-30): DESK-PASS (15/19 vs 6/19 OPEN) — desk review (not re-derived from the executable).**
+- L176: **[OPEN — desk review 2026-09-30: consumer semantics (bucket layout, the `0x40` resident refusal, and whether foliage distances are scaled by the quality multiplier `0x0130cbc0` as tree LODs are, `spec-tree-
+- L199: xture-binding count, constant/`vec4` count or any of six simple combinations of them (0/19 each, `tools/harnesses/foliage_w34_probe.py`). **OPEN.**
+- L201: **[OPEN — desk review 2026-09-30: §5 gives neither the offset nor the count of the Mesh header's group array, so `drawGroupIndex` (up to 2) is not checked against the group count; to be settled against real
+- L207: e's file content carries no key at all. **[CONFIRMED — disassembly for the mechanism; CONFIRMED — empirical for the identity content.]** **[OPEN — desk review 2026-09-30: §12 note 1 shows the slot array holds B-relative record offsets on disk; whether the loader takes each record's location from that slot or from the running cha
+- L223: ct values of 19, min `0x1E9CB8`, max `0x45AFF90`.)** Outer `+0x34` (values 40 ×8, 80, 94, 96 ×2, 148 ×2, 228, 238, 262, 280, 292) remains **OPEN**.
+- L232: nd fixed `flat-normalmap_n` attribution; corrected the front-matter clean-room claim; replaced meta-comments with neutral provenance; added OPEN notes (odd-count alignment, record size semantics, header `+0x28..+0x2F`, `name_offset` base, bit `0x08` location, B-hash/`vec4` mapping, high halves, 15/19 vs 6/19) and per-unit review
+
+## spec-format-inventory.md (weight 2, 24 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: e_id`. Those cells, row 25's "never filename-resolved", and the zone "composes its own names" claims (rows 29 and 44, §6 item 4) are marked OPEN.  **Update 2026-10-02 (re-derived from the executable, `exe_index/format-inventory.txt`): both NEEDS-EXE units are closed. §1's "13" is CONFIRMED and corrected in kind (13 platform-inde
+- L18: ists for either anywhere in this function. **[CONFIRMED — disassembly.]** Whether they're reserved, registered elsewhere, or vestigial is **OPEN**.
+- L19: 360). **[CONFIRMED — disassembly, read directly from the pointer tables; the same five-way split appears in all 13 extension tables.]** **[OPEN — desk review 2026-09-30: count conflict. §2 below shows 30 distinct non-empty `pc` extension strings (`.ccar_pc`, `.gcar_pc`, `.cvtf_pc`, `.cpeg_pc`, `.gpeg_pc`, `.cvbm_pc`, `.gvbm_pc`,
+- L27: vint_doc`; 27 and 32 `.lua`; 35 `.matlib_pc`; 38 `.lightmult_pc`/`.lightrot_pc`/`.lightpos_pc`; 44 and 45 `.czh_pc`. Those cells are marked OPEN below.)* `alt` extensions (a second accepted extension pair for the same type) are noted inline.
+- L37: 26-09-30: consistent with `spec-asm-format.md` §9.3/§9.5, where type 8 never occurs as a manifest entry type.)* **[CONFIRMED — disassembly; OPEN — byte-level confirmation]** /
+- L51: / 22 / Material / `matlib_pc` *(no leading dot)* / — / `0x0074d9a0` / `0x0074db30` / **Light** — `spec-texture-format.md` Appendix **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9.3 shows types 22 and 35 ship as `.matlib_pc`, with the dot. How the dot-less registered string is joined to a name (or whether the dot sits j
+- L54: / 25 / Lightset / — **[OPEN — desk review 2026-09-30: ships as `.xtbl`, `spec-asm-format.md` §9.3]** / — / `0x00599120` / *(no-op stub)* / **Yes** — `spec-extensionless-types.md`: parse-in-ctor; requires a buffer and **no `g`-s
+- L55: / 26 / VINT doc / — **[OPEN — desk review 2026-09-30: ships as `.vint_doc`, `spec-asm-format.md` §9.3]** / — / `0x007b6760` / `0x007b67c0` / **Yes** — `spec-extensionless-types.md`: **stash-only** into a name-matched slot (buff
+- L56: / 27 / Vint LUA script / — **[OPEN — desk review 2026-09-30: ships as `.lua`, `spec-asm-format.md` §9.3]** / — / `0x007b6810` / `0x007b6850` / **Partial** — `spec-lua-bindings.md` /
+- L57: **Mechanism resolved** — `spec-ctorless-types.md` (null ctor ⇒ buffer loaded but never parsed; the zone module builds its own filenames **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9.3 shows type-29/30 manifest entries name their `.czn_pc` files (paired with `.gzn_pc`); see `spec-ctorless-types.md` §1]**). 2,971 `.czn
+- L60: / 32 / Mission LUA script / — **[OPEN — desk review 2026-09-30: ships as `.lua`, `spec-asm-format.md` §9.3]** / — / `0x006cfac0` / `0x006cfba0` / **Partial** — `spec-lua-bindings.md` /
+- L61: / 33 / Mission override table / — **[OPEN — desk review 2026-09-30: ships as `.xtbl`, `spec-asm-format.md` §9.3]** / — / `0x006e1c50` / *(no-op stub)* / **Yes** — `spec-extensionless-types.md`: parses an **`.xtbl` document** handed over as a
+- L62: / 34 / Activity table file / — **[OPEN — desk review 2026-09-30: ships as `.xtbl`, `spec-asm-format.md` §9.3]** / — / `0x006d13c0` / `0x006d08b0` / **Yes** — `spec-extensionless-types.md`: registers the name by **CRC-32** into a table cap
+- L63: / 35 / Material Library / — **[OPEN — desk review 2026-09-30: ships as `.matlib_pc`, `spec-asm-format.md` §9.3]** / — / `0x0074d9a0` / `0x0074db30` / **Light** — same loader as ID 22 /
+- L66: / 38 / Light Curve / — **[OPEN — desk review 2026-09-30: ships as `.lightmult_pc`/`.lightrot_pc`/`.lightpos_pc`, `spec-asm-format.md` §9.3]** / — / `0x008e6300` / `0x008e5940` / **Yes** — `spec-extensionless-types.md`: **CRC-32**
+- L71: / 43 / Vehicle customization camera / — **[OPEN — desk review 2026-09-30: ships as `.xtbl`, `spec-asm-format.md` §9.3]** / — / `0x00a9afb0` / *(no-op stub)* / **Yes** — `spec-extensionless-types.md`: **stash-only** to two globals, byte-for-byte th
+- L72: / 44 / Zone header (fast) / — **[OPEN — desk review 2026-09-30: ships as `.czh_pc`, `spec-asm-format.md` §9.3]** / — / *(none)* / *(none)* / **Yes** — `spec-ctorless-types.md`. No ctor **and no extension in the registration table** (re-v
+- L73: / 45 / Zone header (slow) / — **[OPEN — desk review 2026-09-30: ships as `.czh_pc`, `spec-asm-format.md` §9.3]** / — / *(none)* / *(none)* / **Yes** — same as ID 44 /
+- L79: - **Rows 25–27, 32–35, 38, 43 ("—" extensions): DESK-PASS, text fixes applied** ("—" cells marked OPEN against `spec-asm-format.md` §9.3; row 43 label conflict marked OPEN).
+- L80: - **Rows 29, 30, 39, 44, 45 (constructor-less): DESK-PASS, text fixes applied** (zone "composes its own names" marked OPEN against `spec-asm-format.md` §9.3; type-39 name-only entries noted; 2,971 `.czh_pc` validated by Team B HANDOFF §9.55 "2,971/2,971 found and parsed").
+- L124: **Type IDs 6 and 28** — absent from the registration function entirely. Reserved, registered elsewhere, or removed during development is **OPEN**. *(Desk review 2026-09-30: `spec-asm-format.md` §9.3/§9.5: types 6, 8, 14 and 28 never occur as manifest entry types, so 6 and 28 are also absent from shipped data, and 8 and 14 are re
+- L127: additionally **bypass the registration table**, composing `.czh_pc`/`.czn_pc` names from the zone module's own private platform tables. **[OPEN — desk review 2026-09-30: `spec-asm-format.md` §9.3 shows the manifests list type-44/45 entries as `.czh_pc` and 29/30 as `.czn_pc`; see `spec-ctorless-types.md` §1.]** `Buffer` (39) shi
+- L145: us status lines for 11 units (DESK-PASS 3, text fixes 5, NEEDS-EXE 2, VALIDATED-BY-DATA 1, citing `team-b/STATE.md` reader figures). Marked OPEN, citing `spec-asm-format.md` §9.3: the "—" primary-extension cells of rows 25–27, 32–35, 38, 43–45 and the §2 preface; row 25's "never filename-resolved"; the zone "composes its own nam
+
+## spec-fxo-format.md (weight 2, 37 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**. Pass 2 (§6–§9, 2026-09-20) adds **CONFIRMED — disassembly**: read directly from the loader's decompilation in the game executable.
+- L64: 026-09-30: "each later blob at `align16(previous end)`" is one of two readings of the loader's running offset; which one the loader uses is OPEN — see §6.4. The two agree on every worked number in this document.]**
+- L71: (§7.1, §7.3, §7.4).** Decoded: magic, version, role-presence flags, all nine counts, the nine table layouts, the role index bytes. **Still OPEN, exactly:** (a) bytes `0x19`–`0x1F`, `0x6B`–`0x6F`, `0x7C` (never read by either build; zero in the sample); (b) flag bits `0x002`, `0x008` and `0x2000` upward (never tested); (c) what r
+- L72: y-shader slot, consumed only by the Direct3D 11 build's loader and inert in the Direct3D 9 build. No hull/domain/compute slot exists. Still OPEN: no file with a non-zero geometry count has been seen.** **[Team B reports 277/847 `.fxo_pc_dx11` with `nMid = 1` (§10; lead, not yet re-derived).]**
+- L73: s.vpp_pc` (844 by name), so the count of reliable samples stays exactly 1 (entry 0); no mode-(b) or raw-sentinel container holds any. Still OPEN — and blocked only by the parked mode-(a) limitation, which this pass did not touch. Note the `.fxo_pc_dx11` family (847 names in the same archive) shares this wrapper (§8.2) and is equ
+- L93: **[OPEN — desk review 2026-09-30: the hit counts (one immediate at `0x0048DC13`, one byte-pattern hit at `0x0048DC15`, two references to the string at `0x0125AF84`) are executable-only facts that no other sp
+- L108: **[OPEN — desk review 2026-09-30: the call chain, the arena default sizes and the claim that `0x0048DBF0` has exactly one caller rest on addresses only; the `0x400`-file cap is consistent with the population
+- L122: e header size of step 3 yields exact consumption on 844/844 `.fxo_pc` and 847/847 `.fxo_pc_dx11` (Team B, `team-b/HANDOFF.md` §9.76).]** **[OPEN — desk review 2026-09-30: every file holds version 14 (Team B: 14 ×1,691, never above 14), so "below 14 rejected" and "no upper bound" cannot be tested by data; the arena alignment, the
+- L131: el entries, so alignment padding sits *before* every blob, including the first. **[CONFIRMED — disassembly; CONFIRMED — empirical, §9]** **[OPEN — desk review 2026-09-30: this sentence does not say whether the running offset advances from the *rounded* blob start (`off = align16(off); start = off; off += len`, so padding accumul
+- L132: tes and tested with `> 0`**, so a count byte of `0x80` or more makes that stage's loop not run at all (effective maximum 127 per stage). **[OPEN — desk review 2026-09-30: whether the header-size formula (§7.2) adds such a count as signed (shrinking `H`) or unsigned is not stated, and no census has shown that every count in the 1
+- L133: e equality test goes through a virtual comparator that was not decompiled, so **HIGH CONFIDENCE — inferred:** identity is the CRC alone. **[OPEN — desk review 2026-09-30: the CRC-only identity and the 3,000-record pools are not tested by data (Team B's "837 distinct" counts whole files, not blobs); a census of distinct vertex/pi
+- L160: te block does not divide into 128 equal sub-records, so the block's internal layout is unstated (it does not affect the file format).]** **[OPEN — desk review 2026-09-30: the accessor routines, the vtable at `0x012A1254` and the absence of any reader of the T3/T4 pointers rest on addresses only; to be settled against the executa
+- L168: terial → `.fxo_pc` stem join is 81/81 (`team-b/HANDOFF.md` §9.133). The class/variant slot mapping is not exercised by any data test.]** **[OPEN — desk review 2026-09-30: the order in which the 13 suffixes are tested is not given, and it matters for overlapping tails (`_bms` also ends in `_ms` and `_s`; `_mv` in `_v`; `_ts` in `
+- L182: its clear, as §9.3 itself says; no flags census exists)*; bits `0x002`, `0x008` and `0x2000` upward are never tested by anything traced — **OPEN** /
+- L191: / `0x19`–`0x1F` / 7 bytes / Never read by anything traced (either build). Zero in the sample. / **OPEN** /
+- L195: / `0x6B`–`0x6F` / 5 bytes / Never read by anything traced. Zero in the sample. / **OPEN** /
+- L198: / `0x7C` / u32 / Never read. Zero in the sample. / **OPEN** /
+- L200: iles `0x00`–`0x7F` with no gap or overlap (checked). The counts that `H` needs are validated by data through §7.2 (844/844, 847/847).]** **[OPEN — desk review 2026-09-30: no census over the 1,691 files has tested the flag bits against the role index bytes (bit set ⇔ byte ≠ `0xFF`), whether bits `0x002`/`0x008`/`0x2000`+ are ever
+- L233: h no name in the constant tables (Team B: they "hash a name absent from every constant table"), so for those the name hashed is unknown — **OPEN**, see the note below* /
+- L234: e (desk review 2026-09-30): CONFIRMED except 8 population entries whose register differs from the named constant's; **why those 8 differ is OPEN**; not testable for the 1,269 unnamed hashes — see the note below* /
+- L235: / `+0x05` / u8 / Not read by any accessor. `0` on 5/5. / **OPEN** /
+- L239: accessor among the object's method slots and no other reference was found**, so **whether T3 and T4 are consumed anywhere in this build is OPEN** (they are still *counted* into `H`, so they must be present and well-formed).
+- L241: gures sum to 19,929 (18,652 + 1,269 + 8), one more than the 19,928 total; the difference is in Team B's report and is not resolved here. **[OPEN — desk review 2026-09-30: why 8 entries carry a register different from their named constant (for instance a name resolved against the other stage's constant table, or a register set ot
+- L258: **[OPEN — desk review 2026-09-30: "the sample has zero T0 entries" is no longer the limit — Team B finds T0 populated in 784 files (`team-b/HANDOFF.md` §9.76) — but no per-field census of those entries, and
+- L267: / `+0x06` / s16 / Not read. Sample `0`. / **OPEN** /
+- L268: s tried against the lower-cased and raw CRC forms, with and without inversion, and none matched). / **CONFIRMED** as a hash key; preimage **OPEN** /
+- L269: / `+0x0C` / u32 / Not read on the traced path. Sample `0x00000200`. / **OPEN** /
+- L275: — stage-table length VALIDATED-BY-DATA (844/844, 847/847); `+0x04` register label scoped (CONFIRMED except 8 of 19,928 population entries, OPEN why; 1,269 unnamed hashes OPEN); T0/T4 layouts and the 8 mismatches NEEDS-DATA; T8 consumer NEEDS-EXE — desk review (not re-derived from the executable).**
+- L295: byte `0x6A` = `0` → its single T8 entry is member 0 of the indexed group. **What roles 0–9 mean (which render pass or technique each is) is OPEN** — the sample uses none of them, and the caller that picks a role was not traced beyond the render-context bind (§6.5).
+- L297: **[OPEN — desk review 2026-09-30: the bit→role pairing comes from disassembly only (the sample's 11/11 is the degenerate all-absent case, §9.3), so a transposed pair would not be detected; "out of range" is
+- L305: o_pc_dx11` the vertex → middle → pixel order is data-supported by 847/847 exact consumption, including the 277 files with `nMid = 1`.]** **[OPEN — desk review 2026-09-30: "ends `940`" advances from the rounded start (208 + 732); whether the loader's running offset does that, or advances from the unrounded offset (200 + 732 = 932
+- L307: status (2026-09-30): VALIDATED-BY-DATA: 844/844 exact + 7,276/7,276 tokens (`.fxo_pc`), 847/847 (`.fxo_pc_dx11`); running-offset carry form OPEN (§6.4) — desk review (not re-derived from the executable).**
+- L313: m (lower-cased, initial 0, no inversion) is validated by data: 18,652 T1–T4 matches (§7.3) and the 37/37 and 81/81 stem joins (§6.6).]** **[OPEN — desk review 2026-09-30: this spec does not show how the blob-identity call inside `0x0048DBF0` was identified as `0x00D9E6C0` rather than one of its siblings, nor that `0x00D9E6C0` do
+- L323: **[OPEN — desk review 2026-09-30: Team B's 844/844 `.fxo_pc` consumption counts `nMid` into `H` but does not report `nMid` over those files; the prediction here is 0 in every `.fxo_pc` (a non-zero one would
+- L342: d by data — Team B finds 8,166/8,166 `.fxo_pc_dx11` blobs beginning "DXBC" (`team-b/HANDOFF.md` §9.76); the label is left as written.]** **[OPEN — desk review 2026-09-30: that the middle table is the geometry stage rests on the device-slot indices; no data test has shown that the 277 files' middle blobs are geometry programs rat
+- L348: e non-first entries of a mode-(a) container, so they are not readable (§9). How often the geometry slot is used, and by which shaders, is **OPEN.** **[Lifted 2026-09-20, §10: these entries are now readable; Team B reports 277/847 with `nMid = 1` (lead, not yet re-derived).]**
+- L395: eview-status line (22 units); scoped §7.3's `+0x04` register label to Team B's population figure (CONFIRMED except 8 of 19,928 entries, why OPEN; 1,269 unnamed hashes OPEN; noted Team B's parts sum to 19,929) rather than removing it; added explicit OPEN wording for the §6.4/§7.5 running-offset carry form (the sample cannot decid
+
+## spec-geometry-format.md (weight 2, 24 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: ull decodes, §5.1 744-entry `.cvtf_pc` classification and Region-2 composition, §5.2 a real Character-cvtf sample. Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+- L46: 0` name start on 1,803/1,803 `.ccmesh_pc`/`.csmesh_pc` files (`team-b/HANDOFF.md` §4.2) and again on 100,384/100,384 `.clmesh_pc` files. **[OPEN — desk review 2026-09-30: the "zero" fields at `+0x08` and `+0x10`–`+0x1F` are not read by any population check; to be settled against real data.]**
+- L66: heck value (version field `+0x04`), §4.1.2 items 5 and 7, and `g[0:4]` equals it on 1,937/1,937 pairs (`spec-vertex-format.md` §4.1).]** **[OPEN — desk review 2026-09-30: the 12 zero bytes (`g` `+0x04`–`+0x0F`) are one-sample observations, not population-checked; to be settled against real data.]**
+- L93: tent is separately resolved in §4.1.2 item 3 (a fixed identity table); array 5 is never populated in shipped data (this section, above). **[OPEN / UNKNOWN only for arrays 2/3's real consumer, per §4.1.5's own exhausted search — everything else in this sentence is now resolved, not guessed.]** Every array boundary is padded to a 
+- L95: 24`, `+0x40`/`+0x44`, `+0x48`/`+0x4C` (§4.1.5); blob length at `+0x88` (§4.1.2 item 1); accepted version range `0x29`–`0x2A` (§4.2, §8). **[OPEN — desk review 2026-09-30: the widths of fields `+0x10`, `+0x70`, `+0x78` and `+0x80` are not stated; whether array 5's `+0x78` gate still applies and `+0x12` is ignored below version `0
+- L137: Desk review 2026-09-30: a block ending at `0x20` is header-only, i.e. a zero-texture mesh; the file is not named in the source record.)* **[OPEN — desk review 2026-09-30: (a) whether the alignment is of the cursor's offset from the buffer start or of an absolute address (PC primary buffers are only guaranteed 8-aligned, `spec-re
+- L153: ) and Team B's constant (372/372) pass on vehicles, which is consistent only if those sub-headers are in fact 16-aligned — not measured. **[OPEN — desk review 2026-09-30: the general case (sub-header not 16-aligned) is unsettled — to be settled against the executable (`0x007527b0`/`0x007524f0`, alignment base of the blob skip) o
+- L161: raw content itself. This resolves the count/content half of §6 open item #8 for array 4 specifically; arrays 1, 2, 3, 5 remain open.]** **[OPEN — desk review 2026-09-30: "fixed constant, identical everywhere" rests on 2 files; count == 68 and content == `0..67` over every file with a non-zero array-4 count is not reported — to b
+- L167: dex buffer or a compact vertex-attribute stream. **[CONFIRMED — disassembly, that this exact arithmetic is computed and used by the loader; OPEN — the precise byte offset within `.gcmesh_pc` where the result actually starts, see below.]** **[Resolved: item 10 below — the data begins at `.gcmesh_pc` offset `0x10`.]**
+- L191: handled by generic/different code entirely, not this path. **[CONFIRMED — disassembly, for `.ccmesh_pc`/`.csmesh_pc`'s structure existing. OPEN — the field semantics within it (per the real-sample test above), and separately, whether any of this applies to `.glmesh_pc` or `.gzn_pc`.]** **[Resolved: `0x0074c530` is a real constru
+- L195: futed zone figures marked superseded; pad alignment base / round-to-4 interaction, blob-skip general case and array-4 population check left OPEN — NEEDS-EXE `0x007527b0` / NEEDS-DATA) — desk review (not re-derived from the executable).**
+- L216: ble and §9.25–§9.29, vehicle geometry 372/372); **367** = the vehicle pairs scored against Team A's independent oracle (§4.1.2, §4.1.4). **[OPEN — desk review 2026-09-30: which archives/filter produce 372 and 367, and why they differ from 393, is not stated — to be settled against real data.]**)*
+- L239: r the writer/stride/offsets, empirical for the decoded content and the quaternion check, cross-corroborated by real XTBL field names.]** **[OPEN — desk review 2026-09-30: the record layout (32 + 36 + 12 + 16 = 96 bytes) is decoded on 7 of the 48 populated files; the other 41 are not decoded, and the role of the second dword of e
+- L243: dy-part-count shape, the unit-vector check, and the mirrored-limb repeat; the two leading integers and the real consumer remain open.]** **[OPEN — desk review 2026-09-30: the fields listed (2 integers 8 B + 3-float vector 12 B + 2 floats 8 B + float pair 8 B) account for 36 of the 40 bytes; 4 bytes are undescribed, so no struct 
+- L247: f arrays 2/3 (static routes exhausted, emulation needed); array-3 record gap, array-1 sample coverage and pointer-slot second dwords marked OPEN (NEEDS-DATA) — desk review (not re-derived from the executable).**
+- L297: * **RESOLVED, same day (2026-09-29), by decompiling the real parser** — see the dedicated finding immediately below, which supersedes every OPEN/HYPOTHESIS tag in this paragraph for `a`, `b`, `c`, and `tag`'s low byte.
+- L306: Region 1 table, out of this task's bounded scope (one function fully decompiled plus light caller context, not a further consumer hunt). **[OPEN — `tag`'s upper bytes; data-only observation, not disassembly-confirmed: in the one worked sample the upper byte reads `1` for nearly every mechanical/paint-finish component slot, `0` f
+- L312: be counted by any header field; they are more likely covered by one of the dword-offset arrays at `+0x20`/`+0x24` or `+0x28`/`+0x2C`.]** **[OPEN — desk review 2026-09-30: the composition as written does not add up — 4 front families + 5 rear families × 5 heights = 45, not 40, and "4–7 wheel-family numbers" conflicts with the 4/5
+- L320: (2026-09-30): DESK-PASS, text fixes applied (Region-1 entry-start ambiguity, 372-vs-744 population and Region-2 40-vs-45 composition marked OPEN, NEEDS-DATA / `0x00aaf9a0` for the entry loop) — desk review (not re-derived from the executable).**
+- L342: oss-checked against real file bytes**, and the nested structure's own field semantics (what the top-level records actually represent) are **OPEN**, not guessed at. **[CONFIRMED — disassembly; OPEN — empirical byte-level confirmation, and field semantics.]**
+- L380: s are identical, so it must come from the container or the entry's manifest type byte; not traced (`spec-morph-format.md` §16.8 item 1). **[OPEN.]**
+- L386: -reference (§1 table `.clmesh_pc` §4.1→§4.2), marked 8 stale open items resolved/closed in place (§4.1.2 items 3, 6, 11, the §4.1.2 closing OPEN, §6 items 2, 4, 5, 8), reworded 2 decompiler-shaped expressions (§4.1.1 virtual-call expression, §8 auto-named argument), and flagged `spec-output.md` as unpublished.
+- L388: pad/ID-40 notes; recorded the blob-skip rule vs Team B's constant `subheader + 0x91` (agree iff the sub-header is 16-aligned; general case OPEN); added OPEN markers for NEEDS-EXE/NEEDS-DATA items. No renumbering (the `3.1.1` heading and items 12/11 order are listed only).
+
+## spec-localization-format.md (weight 2, 2 live)
+
+- L7: real shipped files — the latter marked *replayed*), **HIGH CONFIDENCE** (inferred from structure), **HYPOTHESIS** (plausible, unchecked), **OPEN**.
+- L299: ## 10. OPEN items
+
+## spec-low-mips.md (weight 2, 10 live)
+
+- L9: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L13: cing, six arguments, flags `0`/`1`/`1`, shared destructor, type 18's result check and extra call; the shared loader is `0x00dcf020` (§3.1's OPEN closed). **CORRECTED in wording** (§3.1): types 3/17 pass the loader's result through untested rather than discarding it; plus two precisions — constructor argument 2 is unused, and des
+- L43: 67,665 is the count of reliable `.cvbm_pc` c-files parsed, not of pairs; the census is 67,710 entries each, §1)*, `c`-side 104–132 bytes **[OPEN — desk review 2026-09-30: no Team B figure or number in this spec fixes this range; `spec-texture-format.md` §12.3/§12.4 show 24-byte zero-texture c-files and multi-record files across 
+- L45: **Review status (2026-09-30): DESK-PASS, text fixes applied (on-disk magic bytes; 67,665 relabelled; 104–132 B marked OPEN); the PEG/GEKV structure of the files type-17 entries name is VALIDATED-BY-DATA by Team B's PEG reader (70,524/70,524 c-files, 76,651/76,651 records, `team-b/STATE.md`) — desk review (not re-derived
+- L64: - ***Still OPEN:*** *what the flag changes downstream (the paragraph below; §7 item 1), and the bodies of `0x005d78e0`, `0x00a71d80` and `0x00a71c60`, none of which is in this index. One pointer for `spec-texture-fo
+- L66: ts effect on pixel data; what is established is that it is the *only* difference between the vehicle-texture path and the low-mips path. **[OPEN — what the flag changes downstream.]** *(Partly traced since: a non-zero flag ORs runtime bit `0x2000` into every record, `spec-texture-format.md` §10.7 (CONFIRMED — disassembly); what 
+- L68: ts, shared destructor, type 18's extra call (`0x00a71d80`, gated on a loader result of exactly `1`); loader address recorded (`0x00dcf020`, OPEN closed). CORRECTED in wording — types 3/17 pass the loader's result through untested rather than discarding it; constructor argument 2 is unused; destructor `0x005D7990` is also registe
+- L80: `spec-vpp-container.md` §1 lists header field `0x164` as **OPEN / UNKNOWN**, noting it "does not fit a consistent formula". In `high_mips.vpp_pc` — a container with **zero entries and zero payload** — that field holds **3,936,256**. So whatever it is, **it is not
+- L103: luded = 67,710); "five arguments" clarified as five plus the flag; §3 GEKV on-disk bytes, "67,665 pairs" relabelled, "104–132 bytes" marked OPEN; §3.1 loader address OPEN; §3.1/§7 item 1 cite the `0x2000` runtime bit (§10.7); §4 code citations; §5 hex/alignment note; repo-absent evidence paths replaced with "(evidence dump, not 
+- L104: ED (spacing, six arguments, flags, shared destructor, type 18's check and extra call `0x00a71d80`), shared loader recorded as `0x00dcf020` (OPEN struck); CORRECTED in wording ("ignore" → result passed through untested); precisions appended (constructor argument 2 unused; destructor `0x005D7990` also registered for type 16 `Peg`;
+
+## spec-mission-packages.md (weight 2, 9 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: d names in other archives), §5 (top-level name lists of `sr3_city_0/1` — the odd count 1,033 — and of `dlc1/2/3`). Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+- L19: e any entries (§2), so "all entries decode reliably" is exercised on exactly two containers; for the 13 empty ones it holds trivially.)* **[OPEN — desk review 2026-09-30: the archive census (16 top-level entries, flags `0x0`; `0x4803` on all 15 nested containers) has not been re-run by Team B; to be settled against real data.]**
+- L59: ecode test (§1) and a row-element example (§3.1) — not as a "first worked example" or "fully documented," wording corrected 2026-10-03** **[OPEN — desk review 2026-09-30: `spec-xtbl-format.md` names this file only as "one early sample … seen in the container-format pass" (§4), as the mode-(b) decode test (§1) and as a row-elemen
+- L73: `source_name` is empty** — it is `19 + len(source_name)` bytes, `extra_len` being 0 on 8,362/8,362 records, `spec-asm-format.md` §9.3.)* **[OPEN — desk review 2026-09-30: whether all 13 zero-entry records here have an empty `source_name` is not stated; to be settled against real data.]** — this is the same shape the implementati
+- L74: rde Mode`, `Running Man`) are the archive's top-level entries and the manifest keeps authored case — compare names case-insensitively.)* **[OPEN — desk review 2026-09-30: whether any of the 15 record names also matches a same-named `.str2_pc` in another archive (Team B found 68 such records population-wide) is not checked; to be
+- L84: ion or activity. A world-streaming system, not a mission-package one. **[CONFIRMED — empirical, name pattern and entry count checked.]** **[OPEN — desk review 2026-09-30: if every tile contributes a `.str2_pc`/`.asm_pc` pair, a top-level count is even; 1,033 is odd, so at least one entry of `sr3_city_0.vpp_pc` is not a coordinat
+- L120: bling-container vs manifest-record emptiness (§2); marked the `running_man_globals.xtbl` "first worked example"/31,474-byte cross-reference OPEN (§3.2); marked the `.cefct_pc` sub-object list a subset of `spec-effects-format.md` §5.4; qualified the 19-byte zero-entry tail to empty `source_name` and added a name-case note (§4); O
+- L121: running_man_globals.xtbl` 31,474-byte size backed by the PC-era extraction listed in bridge job `…-kbhb`; the cross-reference wording stays OPEN.
+
+## spec-morph-format.md (weight 2, 34 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L20: The 21,104,267 population is not stated and is not the 1,541-unique set Team B measured (10,415,507 elements, `team-b/HANDOFF.md` l.1466) — OPEN. Team B has not implemented the decode (`team-b/STATE.md` l.25, l.113).]** See §13 (formula) and §14 (the slider weight `w` and the renormalisation that follows it). §7 is kept as the s
+- L72: er of descriptor records for that target — `1` in every entry inspected; the loader supports more. **[CONFIRMED — disassembly for the walk; OPEN — whether `n > 1` ever occurs.]**
+- L74: alidates Σ`n`, but per-entry `n` was never tabulated — if the summed target count over the same files equals 45,243, `n = 1` everywhere. **[OPEN — desk review 2026-09-30: histogram of `n` and Σ targets vs 45,243 not measured; to be settled against real data.]**)*
+- L82: / `+0x00` / 4 / Zero in every record inspected / **[OPEN.]** /
+- L153: s read in full.]** Mode 2's 8-byte element (vs. 12) reads as a more compact quantisation for the GPU-resident variant. **[HYPOTHESIS.]** **[OPEN — desk review 2026-09-30: the `0x18`-byte mode-0/2 descriptor is a stride only — the mode-1 descriptor spends `0x20` bytes on fields before its 8-byte runtime slot (zero dword, `N`/max-
+- L168: this project's methodology keeps on purpose (`HANDOFF.md` §5). The two `[OPEN.]` labels
+- L173: the 16-bit values are unsigned-biased or two's-complement — was not determined. **[HIGH CONFIDENCE — that these are the decode parameters; OPEN — the formula.]** — **RETIRED, resolved by §13.3: neither guess was right. `A` (the small triple) scales the *position* delta, `B` (the larger triple) scales the *normal* delta — two dif
+- L174: - Element `+8` is uncharacterized; `+10` is bounded below 4,096. Plausibly a quantised normal delta or a per-vertex weight. **[OPEN.]** — **RETIRED, resolved by §13.2: `+8`/`+9`/`+10` are three individual unsigned bytes, one per normal axis, decoded as `(u8/255.0)*2.0-1.0`; `+11` is unused padding, confirmed zero in 21,104,267 /
+- L175: tionship between the vertex indices here and the vertex order in the paired `.ccmesh_pc` (`spec-geometry-format.md` §4.1.2) is untested. **[OPEN.]** *(Still open — not addressed by §12 or §13; see §11 item 6.)* — **RESOLVED, §15: index `i` addresses vertex `i` of the paired mesh directly.**
+- L224: view status (2026-09-30): DESK-PASS — item statuses agree with the body (items 3, 4, 5, 7 still open; see also the mode-0 descriptor-layout OPEN added at §6) — desk review (not re-derived from the executable).**
+- L248: samples)**, *[population not stated — OPEN, desk review 2026-09-30: the 1,541 unique files hold only 25,789 descriptors with `N > 0` (§5; `team-b/HANDOFF.md` l.1486), and 56,822 / 25,789 ≈ 2.20, so this count is over some non-deduplicated set
+- L262: **[OPEN — desk review 2026-09-30: 136,804 / 170,466 = 80.3% checks, but the other 33,662 axis samples (19.7%) are unexplained. If `A` (§13.3) were the per-target, per-axis maximum absolute delta, every axis
+- L269: -30): NEEDS-DATA: population of the 56,822 / 170,466 figures unlabelled, and the 80% vs expected-100% `max/q/` gap unexplained (see the two OPEN notes above); Team B has not measured the triples — desk review (not re-derived from the executable).**
+- L315: *[OPEN — desk review 2026-09-30: the scope of this negative is not stated — the struck text of §14.5 item 3 records that an earlier pass had decompiled only the first 90 of this function's ~600 decompiled l
+- L356: review 2026-09-30: Team B never implemented anything in §12–§16 — its reader exposes the raw element bytes and treats the dequantisation as OPEN (`team-b/HANDOFF.md` l.1421-1429, l.1201-1202; `team-b/STATE.md` l.25, l.113). No unit from here on has a Team B full-population validation; the "RESOLVED" above is a disassembly result
+- L393: ation is not stated and differs from the 1,541-unique set Team B measured (10,415,507 elements, `team-b/HANDOFF.md` l.1466; ratio ≈ 2.03) — OPEN. The `+11 = 0` result is layout evidence (three bytes plus a zero pad); that the three bytes are `u8` decoded as `(u8/255)·2−1` rests on the disassembly constants of §13.3, not on this 
+- L417: **[OPEN — desk review 2026-09-30: for a bit-exact implementation the formula leaves unstated: the decode of `i16 = −32768` (gives −1.00003 under `/32767.0`); the operation order and precision (§14.3 says eac
+- L430: is "forced by" the decode and "costs nothing" — not a discriminating test of the formula. Population of 21,104,267: see the note at §13.2 (OPEN).]*
+- L451: **Review status (2026-09-30): DESK-PASS, text fixes applied (evidence scoped to layout/plausibility; population flagged OPEN) — desk review (not re-derived from the executable).**
+- L617: **[OPEN — desk review 2026-09-30: (a) orphan claim — `spec-vertex-format.md` has no mention of `0x012a2f84`, `0x01176de0`, the adaptive scale or morphs at all (grep, 2026-09-30), so this load-bearing claim h
+- L641: (0x15..0x3f: 43 bytes not read by this kernel -- OPEN, plausibly a UI label
+- L645: **[OPEN — desk review 2026-09-30: the entry does not tile — `+0x10`..`+0x13` (4 bytes, between `hi2` and `flags`) is neither described nor listed as unread; 0x15..0x3f = 43 bytes checks. To be settled agains
+- L686: **[OPEN — desk review 2026-09-30: behaviour when `hi = lo` or `hi2 = lo` (division by zero) is not stated; to be settled against the executable.]**
+- L721: smoothing target/velocity for animated slider transitions — not traced. **[OPEN.]**
+- L729: pass; flagged as the concrete next step). **[OPEN / UNKNOWN.]**
+- L807: runtime. **[OPEN, precisely bounded.]**
+- L898: between "decompile everything" and "mark it OPEN and move on," and it is now available
+- L977: r the same population test, while §15.5 says 30 trials "same method as §15.3"; which trial count produced §15.3's figures is not recorded — OPEN, to be settled by rerunning against real data.]** This is exactly the control
+- L1026: *[CONFLICT — desk review 2026-09-30: "8 trials/target" here vs "30 trials, averaged" in §15.1 step 4 — see the note there; OPEN.]*
+- L1065: a separate file" cannot also hold as stated. The index conclusion is unaffected; which reading of the body mesh's upper region is right is OPEN, to be settled against real data.]** **Reproduced independently
+- L1098: ve, and §9), so a denominator of 100 cannot be right as stated — either the counts are 95/95 and 0/95 or the figures cover a different set; OPEN, to be settled by rerunning against real data.]** Every single target is at least
+- L1265: entry's own type byte in the manifest trailer, `spec-resource-dispatch.md` §8.5); which one was not traced. **[HYPOTHESIS — container type; OPEN.]**
+- L1276: 13.2; scoped §1/§13.4's "confirmed on 21,104,267 elements" to layout/plausibility and flagged the unlabelled populations (21.1M, 56,822) as OPEN; added OPEN markers for the mode-0/2 descriptor (§6), §12.1's 80% gap, §12.3's float-op negative, §13.3 bit-exactness, §14.3 orphan scale claim, §14.4 untiled `+0x10`..`+0x13` and zero-
+
+## spec-output.md (weight 2, 1 live)
+
+- L14: ter spec labels each claim `CONFIRMED — empirical`, `CONFIRMED — disassembly`, `HIGH CONFIDENCE — inferred`, `HYPOTHESIS — unconfirmed` or `OPEN / UNKNOWN`. This document has no labels, so nothing in it should be read at better than **HIGH CONFIDENCE — inferred** unless a later spec confirms it. Its own Scope line is the honest 
+
+## spec-physics-format.md (weight 2, 44 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L26: ) + 3 `hka` (§2) — and §5's "5 sub-namespace buckets" names only these four; the remaining 2 tokens / fifth bucket are not listed anywhere. OPEN — desk review 2026-09-30: which two tokens make up the difference; to be settled by re-running the token census against the executable.]**
+- L32: **Review status (2026-09-30): DESK-PASS, text fixes applied (469-vs-471 token arithmetic flagged OPEN above; the census itself needs a re-run against the executable) — desk review (not re-derived from the executable).**
+- L114: - **Still OPEN:** what `0x00c8f4f0` (the second, Havok-side constructor caller) is. It was not read, as it is out of scope.**
+- L133: n checks of `spec-geometry-format.md` §4.2 and the `+0x08` flags byte, `+0xc0`–`+0xd7` (0x18 bytes), and `+0x110`–`+0x13f` (0x30 bytes). **[OPEN — desk review 2026-09-30: whether these ranges are runtime-filled, unread, or always zero on disk; to be settled against real data (on-disk census of the gaps) and the executable (reads
+- L135: **Review status (2026-09-30): DESK-PASS, text fixes applied (header-coverage gaps listed as OPEN; step 1 already corrected in place) — desk review (not re-derived from the executable).**
+- L142: ITIONALLY, even when the count is 0 — §4.4.2(a) refinement; only the array advance is conditional.]** Contents not determined this pass — **OPEN**. **[OPEN — desk review 2026-09-30: the 56-byte record's fields and the consumers of header `+0x68` are untraced, and the stride is validated only by the whole-file landing; to be sett
+- L144: rrected: when header byte `+0x08` bit 2 is set, `0x00749ba0`'s collision-hull parse, §4.4.6(f))**. **What the 1–2 values themselves mean is OPEN** — plausible readings include a primary/secondary material or physics-attribute id pair, not established either way. **[Desk review 2026-09-30: read together with §4.4.6(f), which give
+- L145: ach listing its own local-space point positions) — **HIGH CONFIDENCE — inferred** for the grouping shape, and now **CONFIRMED** rather than OPEN for the element's field layout. /
+- L146: (`0x34`) / `+0xa0` / One flat array, only walked if the count is positive (no explicit zero-case branch, unlike `0x00749b40`). Contents — **OPEN**. /
+- L147: / `0x00749d40` / `+0xa8` / 96 bytes (`0x60`) / `+0xb0` / Same shape as the previous row, 96-byte stride. Contents — **OPEN**. **[OPEN — desk review 2026-09-30: this row's and the previous row's contents and consumers (header `+0xa0`/`+0xb0`) are untraced; the 52-byte stride is tested only by the whole-file landing, and t
+- L149: e3ffd0`) **[traced §4.4.6(c): name-hash→handle cache / free-list pop]** and a two-argument cleanup call (`0x00c0dea0(2)`, `0x00e47f80`) — **OPEN**, not characterized beyond "index remap + release." **[Desk review 2026-09-30: this row's `byte(+8) & 2` is the literal mask `0x02` (the "already finalized" bit), a different bit of th
+- L179: pc` only (the worked examples here give the header's file offset, e.g. `0x80` for `vent_metala`, §4.4.3, but not the material block's end). OPEN — desk review 2026-09-30: whether `magic_offset = material_block_end + (16 − material_block_end mod 16)` holds for `.clmesh_pc`; to be settled against real data (all 100,384 files, mand
+- L187: **Review status (2026-09-30): DESK-PASS, text fixes applied (magic-location rule flagged OPEN; the struck HEAD formula is kept in place per house style, its bold correction is the operative text) — desk review (not re-derived from the executable).**
+- L201: +0x20`/`+0x2c`-family min/max fields — a strong single-file signal, reported as a lead only, not decoded or population-tested this pass. **[OPEN — desk review 2026-09-30: which function reads header `+0x0c`–`+0x3c` (`0x0074a030` is the first candidate) and whether the center = (min+max)/2 relation and min ≤ max hold across the p
+- L203: count(+0xfc) == 3` in 100,384/100,384 (`team-b/HANDOFF.md` l.7697-7699, l.9908-9909); (f) NEEDS-EXE + NEEDS-DATA: single-file lead, see the OPEN note in (f). — desk review (not re-derived from the executable).
+- L207: n this document is a 100,379-entry subset figure, not a property of the files. Only the derivation is new here; which 5 entries they are is OPEN — desk review 2026-09-30: to be settled against real data (re-run the probe with complete output, or diff it against `validate_clmesh`'s per-file list).]**
+- L215: signature actually fail (46 of 65 files with `count == 2` land fine), so the signature describes the population at risk, not the cause. **[OPEN.]**
+- L221: x48) == count(+0x58) == count(+0x70)`: 100,379/100,379 — new; `0x00749b40`'s 56-byte records run one-per-resolved-reference, contents still OPEN. `+0xb8` non-zero on disk: 0/100,379 (confirms runtime-filled, §4.4.1). `count(+0xa8)` populated: 0/100,379 (same never-exercised-but-real category as §4.4.2(e)). `count(+0xe8) > 0` whi
+- L252: ces (9 genuine gaps, §4.4.6(i)) with the same-archive dedup fallback. These post-fix per-archive figures are arithmetic, not a measurement; OPEN — desk review 2026-09-30: to be settled against real data (re-run a resolver per archive after the fix).]** **This closes the verification-scope gap this note previously flagged — the f
+- L318: ds are not described (the layout is validated without them). (4) `MATSET` applies the `+1` name-table byte even when `u32(H+0x10) == 0`. **[OPEN — desk review 2026-09-30: whether any shipped file has `u32(H+0x10) == 0` (the case where the `+1` is untested), what `R+0x4c`–`+0x4f` holds, and the `0x60` group-header fields; to be s
+- L347: esk review 2026-09-30: the two statements refer to different times — non-zero is the on-disk value, "zeroed" is the walker's runtime write. OPEN — desk review 2026-09-30: whether the on-disk value is a stale authoring-tool address like `+0x24`/`+0x34`; to be settled against real data.]** /
+- L348: / `+0x48` / `0` ×93,469; otherwise 27–52-ish across 6,915 files **[OPEN — desk review 2026-09-30: Team B counts 419,640 trailer records over the full population (§4.4.6(h), `team-b/HANDOFF.md` l.10214), a mean of about 60.7 per non-zero file, which cannot come from count
+- L352: ple `diner_wall_2_a01` gives HEAD `0x220`–`0x434` and MIDDLE `0x440`–… (§4.4.6(e)), i.e. MIDDLE lengths here run from the 16-aligned start. OPEN — desk review 2026-09-30: which origin each side's 21,341/13,070 and 21,345/13,093 use; to be settled against real data (both length definitions over the 1,454 HEAD files, and the 27 `H
+- L354: Team B, `team-b/HANDOFF.md` l.9888-9896; `+0x40` wording clarified; `+0x48` range, `+0x4c` gap and the length-bucket reconciliation flagged OPEN) — desk review (not re-derived from the executable).**
+- L395: IRMED — disassembly, for the layout and the refutation; the Havok connection is now HIGH CONFIDENCE — content-based, §4.4.6(g) — previously OPEN.]**
+- L397: **[OPEN — desk review 2026-09-30: Team B's population totals for the 18,706 hulls are 1,357,927 vertices and 1,357,927 `u16` indices (`team-b/HANDOFF.md` l.9901-9902) — identical, which would mean `n1 == n2`
+- L399: (gate mask `0x04` and the no-align third outcome, both backed by Team B's whole-population controls; `n1`/`n2` totals and `blobLen` flagged OPEN) — desk review (not re-derived from the executable).**
+- L405: ssHierarchyDescriptor`, via `tools/harnesses/exe_va.py`, file-direct, no Ghidra project needed) against the four vtables this section's own OPEN item (below) named as the missing link, validating the method first against two known-good controls (`0x01243174`→`hkpBoxShape`, `0x011978cc`→`hkpWorld`, both reproduced exactly) before
+- L446: y literal adjacency in memory, not by any reference tying the string to this vtable or class — it could equally be unrelated nearby data. **OPEN — a lead only, not evidence, consistent with this project's discipline against rounding up.**
+- L470: / `+0x08` / Flags byte; bit `0x08` selects a fallback texture path / CONFIRMED for bit `0x08`; rest OPEN /
+- L473: x28`–`+0x2F` / **not described — desk review 2026-09-30.** The three 8-byte pointer slots end at `+0x28` and the header is `0x30` bytes. **[OPEN — desk review 2026-09-30: content of these 8 bytes; to be settled against real data / `spec-foliage-format.md` §6's record.]** / OPEN /
+- L510: lines ~168–231 and ~292–349.]** The sub-record's other bytes (`+0x00`–`+0x17`, `+0x1A`–`+0x1F`) were not read anywhere found this pass — **OPEN**.
+- L528: 74c2b0`, `0x00748d50`.]** The rest of `+0x30`'s bits, and bytes `+0x00`–`+0x2B`/`+0x31`–`+0x33`, were not read anywhere found this pass — **OPEN**.
+- L534: me function separately builds and truncates a `"~"`-suffixed name in a local buffer later on), but identifying that "?" argument fully is **OPEN**, unchanged from `spec-resource-dispatch.md`'s own existing status — not newly resolved this pass. `0x00748d10()` is called exactly **once** per constructor invocation (its own sole ca
+- L536: ools/phys7_lodquery.txt`–`tools/phys7_lodquery6.txt`) + exhaustive per-address `getReferencesTo` query, both addresses, whole binary.]** **[OPEN — desk review 2026-09-30: "no writer" is a per-address cross-reference negative, which would not see a write through a struct base below `0x012f7784` or through computed addresses, and 
+- L599: is a pure post-process over four already-parsed in-memory quantities. This closes the one remaining item `spec-physics-format.md`'s own §5 OPEN/UNKNOWN list carried forward from every prior pass.
+- L633: ing written for `.clmesh_pc`. **Not traced further** — `0x012f7bf8`/`0x012f7bf0`'s own identity (what the global table actually holds) is **OPEN**, consistent with this project's treatment of every other such bounded lookup target in this chain.
+- L635: is boundary is recorded and **not chased further**: `0x00749da0` is confirmed shared/generic, and whatever `0x00581ee0` actually is stays **OPEN**, out of this task's bound.
+- L645: **Net effect on open items.** Closes the last entry the `spec-physics-format.md` §5 OPEN/UNKNOWN list carried forward across every 2026-09-13/14 pass ("the 9th, untraced function `0x00749da0`"). The one genuinely unresolved thread this pass leaves behind — `0x012f7bf8`/`0x012f7bf0`'s own
+- L647: own caller, not pursued past confirming the scope boundary), `0x012f7bf8`/`0x012f7bf0` (the bound/base of `0x007549c0`'s own global table — OPEN).
+- L682: .4.6(j), §5), 725/833 and 308/343 (§4.4.6 verification note, §4.4.6(i)) and the 5 DLC+`sr3_city_1` MeshBlock failures (§4.4.3, §4.4.5); new OPEN flags for the header-coverage gaps (§4.1), magic-offset pad rule (§4.4.1), `R+0x4c`, `+1` with empty name table, Mesh-header conditional align8 (§4.4.6(b)), `+0x48` range vs Team B's 41
+- L687: - **Boundary paragraph, desk-review OPEN marker and §5 summary bullet:** struck and annotated in place; the review-status line and summary were updated.
+- L693: 2 known-good controls first) against the four vtables the section's own OPEN item named as the missing
+
+## spec-resource-dispatch.md (weight 2, 29 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: population run, which validates the manifest data model, not any exe-side row/dispatcher claim. **Three internal contradictions are flagged OPEN and deliberately not resolved:** five 1-byte reads vs four entry byte slots (§8.3/§8.5); the morph evidence for "absent secondary tolerated" vs the per-entry paired model (§7 item 5a); 
+- L18: / §3 / CORRECTED / sub-point OPEN: sizes for non-loose search locations /
+- L22: / §8.3 / CORRECTED / five-reads-vs-four-slots contradiction RESOLVED; backend skip of a zero GPU size OPEN /
+- L27: nternal contradictions, two are resolved: five reads vs four slots (§8.3) and IDs 44/45 (§6a). The morph contradiction (§7 item 5a) remains OPEN pending data. Found on the way: IDs 44/45's secondary alignment is `0`, not `4` (§8.1 corrected).
+- L47: 9); "has a pair" is bit `0x4` of the per-*entry* flags byte, not this row byte. The original attribution is retained above as written.]** **OPEN — the other bits** (row bit `0x02`: see §8.3). /
+- L57: **[OPEN — desk review 2026-09-30: the table does not tile the 48-byte row — bytes `+0x11`–`+0x13`, `+0x28`–`+0x2B` and `+0x2D`–`+0x2F` are not described (padding or unused fields?), and none of them is in §8
+- L77: or resolving each name, and the exact fields written.]** *(Desk review 2026-09-30: the gate in this label is corrected by §8.6 item 2.)* **[OPEN — desk review 2026-09-30: (a) with the §8.6 two-gate reading (row bit `0x4` set ⇒ return; entry `+0x15` bit `0x4` ⇒ paired), the text does not say whether steps 1–2 (primary) run for ev
+- L81: - **Gate order (answers OPEN (a)).** First the *row* byte `+0x10` bit `0x04` of the entry's type (entry `+0x14`): if set, the routine returns at once and writes nothing — neither slot is touched. Otherwise the *entry* byte `+0x1
+- L84: - **What the slots receive (answers OPEN (b)).** Each slot gets the return value of `0x00da9670(name, 0, 0)`. That helper asks every registered search location (a global table walked by `0x00da8d90`) for the name; on the loose-file kind it
+- L85: - **Failure path (answers OPEN (c)).** No error is raised here: an absent file simply stores `0` into the corresponding size slot, and the caller returns success regardless.
+- L90: eive looked-up byte sizes (0 if absent, no error); routine is a size-refresh path reached only from `0x00dd2f50`, not the loader. Sub-point OPEN: sizes for non-loose search-location kinds.**
+- L102: actually pushed, the same argument-dropping behavior seen at every other call boundary traced during the `.ccmesh_pc` investigation.]** **[OPEN — desk review 2026-09-30: not recorded — the calling convention (who cleans the stack, push order relative to the listed order, any register-passed `this`), the return value, the identit
+- L107: X`; the dispatcher takes **one stack argument** and removes it itself (`RET 4`). Its **only caller is `0x00db2ce0`** (`0x00db2d47`) —  (the OPEN note's caller list is wrong: neither of those calls it). `0x00db2ce0` walks a container's entries, skips any whose entry `+0x15` bit `0x01` ("loaded", tested by `0x00dd25b0`) is already
+- L126: tent-derived cross-reference) — this is now a standing expectation for this project, not something that needs re-discovering per format. **[OPEN — desk review 2026-09-30: only one constructor (`.ccmesh_pc`'s, §5) has been checked; `.csmesh_pc` shares that constructor (`0x00751f60`, `spec-format-inventory.md` row 19); that the `g
+- L134: 0x009f08c0`, `0x009f0910`), IDs 17 and 18 (`0x005d7870`, `0x005d78a0`), and ID 14. IDs 29 and 30 register no constructor (§6a). **Sub-point OPEN for these types only.** No checked constructor contradicts the expectation.
+- L136: 0x00a71810` ID 36, `0x005cee40` IDs 4/15); argument 6 (secondary size) is used as a gate by `0x0074c530`; all are caller-cleaned. Sub-point OPEN: IDs 1, 9, 10, 14, 17, 18 not checked.**
+- L140: reads and decompresses their files and leaves the buffer registered, but no per-type parse ever happens. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: internal contradiction — IDs 44/45 register no extension (`spec-format-inventory.md` rows 44–45: "the zone module composes the name from its own table"), and th
+- L168: , successful load for at least one registered type — an implementation of §3 must not treat it as an error. **[CONFIRMED — empirical.]** **[OPEN — desk review 2026-09-30: internal contradiction — under §8.6 item 2 the secondary is resolved only for entries with entry flag `+0x15` bit `0x4`, and the morph types (2, 7, 11, 12) are
+- L177: **Added 2026-09-20 (agent T, `gp_sz1`).** Answers `spec-format-inventory.md` §6 item 5 and the two rows §2 left as "count/size field — OPEN" (`+0x08`, `+0x0C`). **Result: they are per-type *alignments, in bytes*, used when the container allocator packs a container's resources into one memory block — `+0x08` for a resource's prim
+- L214: x08` size of the secondary block, `+0x0C`/`+0x10` allocation handles, `+0x14` type ID, `+0x15` flags, `+0x16` group ID, `+0x17` pool ID. **[OPEN — desk review 2026-09-30: internal contradiction — this layout has four byte slots (`+0x14`–`+0x17`), but §8.5 says the entry reader `0x00dd2f50` makes **five** 1-byte reads (manifest o
+- L220: **[OPEN — desk review 2026-09-30: not stated — whether the GPU allocation is skipped when `gpuSize` is 0, and how often an unpaired entry with nonzero secondary size (the "same CPU pair" branch) occurs in sh
+- L222: four-slots contradiction is RESOLVED: there are five reads, four byte slots and a 2-bit field. The zero-size GPU path is narrowed but still OPEN in the backend.]**
+- L267: - **Zero-size GPU path (narrows the OPEN marker above).** If no entry contributes a GPU block, the totals stay at size `0` and alignment `1`. `0x00db24e0` contains **no zero test** before allocating: it passes (CPU size, CPU alignment, out
+- L270: a zero secondary entirely; the allocator passes a zero GPU size to the backend without testing it (skip-or-not inside backend slot `+0x2C`: OPEN). Placement tests row bit `0x02` only, sizing tests row `0x02` + entry `0x04` (agree for shipped pairing except possibly ID 14).**
+- L280: **13 bytes** (five 1-byte reads and two 4-byte reads — widths checked; the 4-byte read byte-swaps when the stream is flagged big-endian) **[OPEN — five reads vs §8.3's four entry byte slots; see the marker in §8.3]** **[Resolved 2026-10-02, from the executable: four byte slots `+0x14`–`+0x17` plus a 2-bit variant field at `+0x18
+- L291: r way — see §4)*. (Row bit `0x02` selects the separate-GPU-accumulator behaviour in §8.3; PC additionally sets `0x10` on IDs 17 and 18.) **[OPEN — desk review 2026-09-30: the set of types whose row byte has bit `0x02` is not listed, so §8.3's GPU-accumulator condition cannot be reconstructed; Team B's harness confirms on data th
+- L332: te (§8.1); named trailer bytes 1–3 (§8.5); added desk-review open items (§8.7); paraphrased two copied executable string sets (§8.3, §8.4); OPEN markers (not resolved) for the three internal contradictions — five byte reads vs four slots (§8.3/§8.5), morph evidence vs the per-entry paired model (§7 item 5a), IDs 44/45 with no ex
+- L336: iant at `+0x18`, in a 32-byte entry. A zero secondary is skipped in sizing. The zero GPU size reaches the backend allocator untested (still OPEN there). Placement tests row bit `0x02` only.
+
+## spec-rig-format.md (weight 2, 48 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L13: 1); bone `+0x14`'s sign in the pose accumulator (§13.5); the descriptor/fix-up function claims of §11.12; and the data measurements flagged OPEN in §3/§3.1 (header `+0x3C`–`+0x4C` on disk), §4 (root split 300 + 275 = 575 vs 585), §11.4 (the "12 omitted" meshes) and §11.5.1 (66,822 = 3 × 22,274).
+- L52: **[OPEN — desk review 2026-09-30: the population behind "observed 0" for header `+0x40` and `+0x48` is not stated (Team B's reader assumes 0 and parses 585/585, so a non-zero or `-1` value was never exercise
+- L54: region) reads 585/585 rigs with every name offset resolving (`team-b/HANDOFF.md` l.2385); non-zero header `+0x40`/`+0x48` never exercised (OPEN marker above) — desk review (not re-derived from the executable).**
+- L67: `T` = 45 in 281 rigs, 3 in 260, 1 in 37, six other values in one or two each. No runtime reader found / **[CONFIRMED — empirical; consumer OPEN.]** /
+- L71: SK-PASS, text fixes applied (stale 260/260 sentence struck; "others" row superseded by §10 item 4; on-disk values of `+0x3C`–`+0x4C` marked OPEN for data); `+0x28`/`+0x2C` partition validated by Team B 585/585 (`team-b/HANDOFF.md` l.10940) — desk review (not re-derived from the executable).**
+- L81: this is the parent link and not a list pointer. Rigs have 1 root (300) or several (275 — typically 5, e.g. vehicles / multi-root props). **[OPEN — desk review 2026-09-30: 300 + 275 = 575, not 585; ten rigs are missing from this split and no recount is recorded on either side (the total of 1,710 roots in the `+0x14` row does not 
+- L82: ;  ADVANCED 2026-09-20, §13.5: no runtime reader or writer found in the scopes of §13.6 — a bounded negative, not "confirmed unused"; still OPEN.]** *(An intermediate reading of this slot as a second hierarchy link was vacuous — it passed tree tests only because it is always `-1`.)* /
+- L88: **Review status (2026-09-30): DESK-PASS, text fixes applied (root split 300 + 275 = 575 ≠ 585 marked OPEN for data); `+0x08`/`+0x14`/`+0x20` validated by Team B (`team-b/HANDOFF.md` l.2647); the on-disk values of `+0x04` and `+0x24` are Team A measurements only — desk review (not re-derived from the exec
+- L188: r of either field found in the bounded scopes of §13.6; the bone-LOD hypothesis is UNSUPPORTED. What the authoring side uses them for stays OPEN.**
+- L189: n at `+0x2C`, parent at `+0x38`, tag `-1` at `+0x3C`. Bone `+0x24`: no runtime reader or writer found (§13.5, a bounded negative) — remains OPEN.**
+- L277: **[OPEN — desk review 2026-09-30: `< 0x34` admits 52 semantic codes and `< 0x12` admits 18 encoding codes, one more than the 51-entry and 17-entry tables, so the bounds cannot be exactly "where the sizes com
+- L368: **Review status (2026-09-30): DESK-PASS, text fixes applied ("three dereferences" corrected per §11.16.1; the OPEN limit pointed to §11.12.1/§11.16.2) — desk review (not re-derived from the executable).**
+- L394: `r-breast` on one and `l-eye` / `r-eye` on the other. **[OPEN — desk review 2026-09-30: the two meshes are not named; neither is `brad`, whose palette (`team-b/HANDOFF.md` l.8739–8752) omits 10 of rig indices 0–65 (0, 16, 18, 27, 33, 45–49) and keeps the eyes;
+- L452: expected to"; that story cannot also cover a midline/limb confusion. **[OPEN — the
+- L458: / density rows qualified or superseded by Team B's 272/318 and 268/272, `team-b/HANDOFF.md` l.8903–8909, l.9194; "12 omitted" meshes marked OPEN) — desk review (not re-derived from the executable).**
+- L630: none, and examines the same 32,380 bone pairs. **[OPEN — desk review 2026-09-30: 66,822 is exactly 3 × 22,274, the population's total bone count (§1). For six meshes of 34,442 vertices it is plausible (about 1.94 live lanes per vertex), but a transcripti
+- L821: 7-function call graph and stays **OPEN** — its fill loop was not located.~~
+- L1123: caller-supplied subset (not the rig's own count); the `+0x40` pointer CONFIRMED as the same array; the source array's own ordering remains OPEN (2026-09-13)
+- L1125: .16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+- L1136: > named, bounded stopping point and remains OPEN; the conflict item 3 raised is therefore
+- L1289: #### 11.12.3 Item 3(b): the source array's own ordering — pursued to a named stopping point, OPEN
+- L1291: .16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+- L1324: **Answer to item 3(b): OPEN.** The fill loop for `record+0x00` was not located within this
+- L1345: call sites was traced one level further. Item 3(b) itself stays **OPEN** — the search is
+- L1350: — the live lead identified and ruled out (attachment/prop lag, not skinning), both driver chains traced one level further, item 3(b) still OPEN (2026-09-13)
+- L1352: .16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+- L1366: > OPEN — this is a bounded negative, stated as a claim about the search.**
+- L1541: .16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+- L1543: **Item 3(b) stays OPEN.** Both of §11.12.3's own named next steps were carried to a definite
+- L1754: .16 (`source` is allocated by `0x004c79a0` as `limit` matrices in rig-bone order; §11.16.3: no per-frame writer of the pointer exists). The OPEN verdicts below are kept as the record of the search.**
+- L1786: source array's own fill/ordering remains OPEN.
+- L1828: location (§11.1), the 48-byte affine palette (§11.2), and the gather's `destination[i] = source[table[i]]` mechanism with `table` left as "OPEN, but shaped like the `+0x38` array" (§11.3) are the *disassembly-side* view of the exact mechanism Team B found from the *file* side — two independent methods, converging. §11.3's own op
+- L1832: /2 and all of §11.8 (minus item 4, already superseded)/§11.9/§11.12–§11.14 stand independent of the blend-index/sign question; item 3 flips OPEN→RESOLVED (now further corroborated at the instruction level, §11.16); item 4/§11.10/§11.11 needed real re-examination, done in §11.17 (13/13 resolve); item 5 is moot.
+- L1908: (`MOVQ XMM0,[EAX + EBP*1]`, `EAX = index*48`); `CMP EAX,[ESP+0x18]` makes **arg 2 = the limit** **[OPEN — desk review 2026-09-30: at the stated depth of three pushes `[ESP+0x10]` is argument 1, so argument 2 is `[ESP+0x14]`; `[ESP+0x18]` is argument 2 only if a fourth push precedes `0x00e7b027`. The de
+- L1972: **[OPEN — desk review 2026-09-30, conflict: if `N` is the binding-descriptor count, the suppliers traced in §11.18 give `N` = 68 (array 4 = `0..67`, 2 sampled files, §11.18.1) or 128 (`0x008cb170`'s global,
+- L2005: -30): NEEDS-EXE: `N` = descriptor count (68 or 128 in the traced suppliers) against palettes reaching rig bone 81 and 69-bone player rigs — OPEN conflict marker added; needs the array-4 population count (data) and the type-5 descriptor trace (`0x00751f60` → `0x004c1730`); the pool-flag line `rec[0x6c] /= / &= 0x10` records both 
+- L2103: / `+0x04` / `matrix48[N]` — attachment/prop spring-lag state cache **[OPEN — desk review 2026-09-30: §13.4 calls `rec+0x04` "a live pose array" feeding the attachment-transform getter `0x004d0fe0`; one reading is wrong or the field has two roles; to be settled against the e
+- L2213: alf rests on 2/2 sampled files (`spec-geometry-format.md` §4.1.2 item 3); array 4's count and content over the population are not measured. OPEN — to be settled against real data; see the `N` conflict marker in §11.16.2.]** `slot` space and rig-bone space coincide outright for this carrier — the last
+- L2238: 2026-09-30): NEEDS-DATA: array 4 = `0..67` rests on 2/2 sampled files; count and content over every `.ccmesh_pc`/`.csmesh_pc` not measured (OPEN marker added) — desk review (not re-derived from the executable).**
+- L2359: **[OPEN — desk review 2026-09-30: this caveat is where the runtime account meets the validated data. The character meshes validated by Team B (318 triples, every one declaring a palette, `team-b/HANDOFF.md`
+- L2643: **[OPEN — desk review 2026-09-30: whether the plain attachment-by-name routines (`0x004d0ad0`, `0x004d0e00`) return the first or the last name match is not stated; the bone routine returns the first (above),
+- L2696: `w = 1` — the same 48-byte affine layout as §11.2's palette matrices). With a live pose array (`rec+0x04` **[role conflicts with §11.16.6 — OPEN marker there]**) the result is *attachment matrix × parent bone's pose matrix* (`0x0048cf50`); in the un-posed path the translation row has the parent bone's **`+0x08` rest position sub
+- L2711: (`team-b/HANDOFF.md` l.10937–10940), zero-translation 8,490/8,489 with the predicate stated; record `+0x04` role and the un-posed sign stay OPEN — desk review (not re-derived from the executable).**
+- L2719: convenience" is the field the runtime *reads* for pose building (the sampled-translation path that feeds the accumulator was not traced) **[OPEN — desk review 2026-09-30: the stored value is `pos(parent) − pos(bone)` (§4) and it is added into a position accumulator; whether the runtime local translation is this value or its nega
+- L2723: scanned scopes. It is most simply an **unused reserved slot** that ships as `-1`; a consumer outside the scanned scopes is not excluded. **[OPEN — bounded negative: no reader/writer found in the scopes of §13.6; not "confirmed unused".]**
+- L2746: 1 → §4.1/§13.4), struck §11.8 item 4 as retracted (§11.15), inverted-lesson note on §11.9 note 6 and the §11.7 verdict table; marked stale OPEN items resolved in place (§10 item 7, §11.7 verdict row, §11.12/§11.12.3/§11.13/§11.13.3/§11.14.4 item 3(b) → §11.15/§11.16, three §11.15 bullets → §11.5.1/§11.16.1); annotated §11.18.2/§
+- L2748: ded by Team B's 272/318 and 268/272; retracted §11 title/headline and §11.11 sentences struck with pointers; §11.7 item 1 marked unblocked; OPEN markers for the `N` = 68 bound conflict (§11.16.2/§11.18.1/§11.18.4), root split 575 vs 585 (§4), 66,822 = 3 × 22,274 (§11.5.1), §11.1 bounds, limit stack depth, record `+0x04` role, at
+
+## spec-steamworks-boundary.md (weight 2, 17 live)
+
+- L53: `SteamAPI_RegisterCallResult` (1 site) vs. `SteamAPI_UnregisterCallResult` (7 sites) is a real, unresolved asymmetry — carried forward as OPEN item 1 (§6).
+- L73: 3. Call an unexamined helper (`0x00d449d0`, OPEN item 2, §6) and register an unrelated subsystem's cleanup entry (`0x00870320`, a two-instruction stub unrelated to Steam) into the generic cleanup list described in §2.3 — unconditionally, before `St
+- L81: 11. Reset a small state dword to 0, call a further unexamined helper (`0x00d1de80`, OPEN item 3, §6), and tail-jump to a generic continuation (`0x0101b5b0`, not chased further, OPEN item 4, §6).
+- L98: though whether it's genuinely unused or reached through a mechanism this method can't see (e.g. an unenumerated function-pointer table) is OPEN item 5 (§6).
+- L111: t with this being Saints Row 3's co-op P2P session-request handling. What `0x00870150` itself does when the callback fires was not traced — OPEN item 6 (§6).
+- L126: c event-object pipeline (`0x0086bc00`, `0x0087f3b0`, `0x0087f290`, `0x0087f420` — HIGH, structural; not traced to a Lua-visible event name, OPEN item 7, §6);
+- L128: 0x008702c0`, which reads/advances a small connection-phase state dword (`0x024d6290`; values 0, 2, 3, 4, 5 seen written elsewhere; meanings OPEN item 8, §6).
+- L129: 4. Call `0x005bae10` with argument `0xa3` (163) — a generic poll whose role was not re-traced in this pass (OPEN item 9, §6). **Cross-reference note:** `0x005bae10` is the same button-query entry point `spec-player-runtime.md` §1.8 documents as part of the input-query contract; that spec's own §0 point 2 and it
+- L148: s a 3-way dispatch on a small integer read from its first argument — HIGH: an `OnRunCallback`/call-result outcome dispatcher; exact meaning OPEN item 10 (§6).
+- L152: ctly. HIGH: this is the "incoming request" half of the same local queue the per-frame tick drains; not traced to a Lua-visible entry point (OPEN item 11, §6).
+- L161: as not traced further (save-game sync is HIGH by the cluster's shape and this project's own `spec-save-format.md`, but not confirmed here — OPEN item 12, §6).
+- L165: heck per this project's own address-numbering convention elsewhere), `0x00701da0`, `0x00849660`. Which DLC/ownership flags these resolve is OPEN item 13 (§6).
+- L166: Not traced individually in this pass — each is small enough (1–4 sites) to pick up directly in a future spec pass without further scoping (OPEN item 14, §6).
+- L176: ace's overlay-activation virtual method, gated on the interface pointer resolving. What Steam does with a null string was not traced there (OPEN, carried as-is).
+- L188: ## 6. OPEN items
+- L197: 8. The connection-phase state dword `0x024d6290`'s values (0, 2, 3, 4, 5 seen written elsewhere) and `0x008702c0`'s exact role — meanings OPEN (§3 step 3).
+- L199: 10. `0x0086e230`'s 3-way dispatch — an `OnRunCallback`/call-result outcome dispatcher by shape; exact meaning of each of the three branches OPEN (§4.1).
+
+## spec-tables-animation.md (weight 2, 43 live)
+
+- L8: nfidence key:** **CONFIRMED — disassembly** · **CONFIRMED — empirical** · **HIGH CONFIDENCE — inferred** · **HYPOTHESIS — unconfirmed** · **OPEN / UNKNOWN**.
+- L12: nd-tree flag bit settled to `0x40000000`; the IK preset write order settled to presets-first; trigger-name truncate-vs-drop stays genuinely OPEN pending one more dump; slots 7/9 corrected to "validated, never opened"; the `<Trigger>` shape settled by the real-data pass above). **The one finding to flag loudly for any host implem
+- L60: p is anchored on an object at `0x0340B220` and goes through `0x004b8740` after a `0x00dab2b0(hash, 6500)` step (both untraced; bucket count OPEN) **[CONFIRMED — disassembly 2026-10-01 for the hash, seed, miss value and index derivation]** (buckets `0x0340b228`, chain `0x034117b8`, keys `0x03417d48`, values `0x0341e2d8` — the sam
+- L64: **[OPEN — desk review 2026-09-30: for `0x004bf650`  **[Settled 2026-10-01 — see the bullet above: hash `0x00d9e740`, seed 0, over the text exactly as supplied.]** the bucket count (still OPEN — needs `func 0
+- L68: eed 0, text as supplied), miss value, index derivation and the rotate/XOR hash's signed-byte handling CONFIRMED — disassembly; bucket count OPEN (needs func 0x004B8740, func 0x00DAB2B0); duplicate policy see §3.4. (jobs 20261001T123123-team-a-ytgi for 0x004bf650/0x004bf610, 20261001T123128-team-a-dvje for 0x00da7890)**
+- L117: IRMED — disassembly for items 1–3 and the call sequence in item 4; the satellite files' schema and the element matched in them (item 4) are OPEN]**
+- L124: … per the real sample below),  each of which is a `Skeleton_Set`-row file; **the internal schema of those satellite files was not traced** (OPEN — out of budget for this pass; each is itself a full `.xtbl` and would need its own loader trace).  **[Settled 2026-10-02: the literal is `ID`; `0x004ae4f0` read. Still untraced: `0x004
+- L128: -data.md`'s and `spec-rig-format.md`'s territory) rather than the animation loader itself, but that consumer was not found in this pass — **OPEN**.
+- L136: entries, and the 0x031675a0/0x03136090 binding arrays filled by 0x004ae4f0 CONFIRMED — disassembly; 0x03171bd8/BDC CORRECTED (input list). OPEN: xref 0x03171BDC; func 0x004CCEB0; func 0x004CCF30. (job 20261001T123123-team-a-ytgi)**
+- L142: lement tree **[CONFIRMED — disassembly for the reader; CONFIRMED — empirical for the tag spelling and nesting (the shape of `<Trigger>` was OPEN; resolved by data 2026-10-01, see below), corrected against real base-game rows where the disassembly's stack-variable naming was ambiguous — see §3.5]**
+- L166: kmsh`): 7,060/7,060 `Trigger` elements have a `Name` child, 0 have direct text; each also has a `Frame` child, not described here — meaning OPEN, NEEDS-EXE]** is hashed with the **rotate/XOR hash `0x00da7890`** (§1.3, not the group's usual CRC-32) and checked against the registry `anim_triggers.xtbl` builds (`0x03132b18`/`0x0313
+- L170: a generic extension hook for other subsystems to hang data off an `Anim_file` row; **which subsystem installs this callback was not traced (OPEN)**.
+- L175: s (2026-09-30):  `<Trigger>` shape VALIDATED-BY-DATA 2026-10-01 (job `…-kmsh`: `Name` child 7,060/7,060; `Frame` child 7,060/7,060, meaning OPEN); reader flavours and pool offsets NEEDS-EXE; diagnostic text paraphrased — desk review (not re-derived from the executable).**
+- L177: ompare → record pointer, Audio_Switch split order CONFIRMED — disassembly; Trigger pass CORRECTED (Frame read and forwarded to 0x004cad90). OPEN: func 0x00DABC70, func 0x00DAC830, func 0x004CAD90, range 0x012A20A0-0x012A20A4. (job 20261001T123123-team-a-ytgi)**
+- L179: ayout summary **[CONFIRMED — disassembly, offsets record-relative within the `0x44`-byte `0x02ef2178` element; the blend-tree bit number is OPEN]**
+- L193: bution: **5,859 `.animx`, 109 with no extension** — those 109 are presumably resolved through a different, unexamined name-resolution path, OPEN); **6,850/6,850** `Flags/Flag` values fall inside the 30-name table above; **1,859/1,859** `IKs/IK/Location` values fall inside the 4-name table; **991/5,968** rows have a non-empty `So
+- L251: **[OPEN — desk review 2026-09-30: the registry indices are the stable keys used by §6, §10 and §13 and by other specs, but this text does not give  the preset contents (`ptrs 0x011507F8 1318`), what happens
+- L255: n actions; exact capacity; preset-match collapses, file-vs-file duplicates append; +0x08/+0x0C zeroing corrected — CONFIRMED — disassembly. OPEN: preset contents, empty Name, 0x004bf810's lookup. (job 20261001T123123-team-a-ytgi)**
+- L274: ttled 2026-10-01 in part: the loader itself writes −1 only into the first dword of `0x02ea4588` at entry; who (if anyone) fills the rest is OPEN (`xref 0x02EA4588`). A `From_State` that does not resolve (−1) addresses the 8 bytes below the array, unguarded; an unresolved `To_State`/`Action` is stored as −1. The array length is n
+- L280: IRMED — disassembly; -1 fill CORRECTED (only entry 0's first dword, by this function); unresolved From_State writes below the array; length OPEN (xref 0x02EA4588). (job 20261001T123123-team-a-ytgi)**
+- L307: Cancel_range_min` · `+0x3C` `Cancel_range_max` · `+0x40` `Speed_throttling`. **[CONFIRMED — disassembly 2026-10-02; replaces the 2026-09-30 OPEN note]**
+- L315: bels, unresolved-State path, control-point cap and the Ramped-input attribution CORRECTED; an unresolved Action/Animation hangs the loader. OPEN: absent-child behaviour of 0x00daccb0/0x00dacd40/0x00dac480; consumers 0x004b2280/0x004b2b50/0x004b1b90; Team B census of Actions under Blend_trees and max Control_point per State. (job
+- L321: ### 8.1 Compiled-in presets **[CONFIRMED — disassembly for the 34-entry preset table; when presets are written relative to file rows is OPEN]**
+- L325: ### 8.2 Element tree and fields **[CONFIRMED — disassembly; `Prop_Name`'s hash algorithm and the preset-overwrite order are OPEN]**
+- L355: ### 9.1 Element tree and fields **[CONFIRMED — disassembly; truncate vs drop for names of 32+ characters is OPEN]**
+- L357: **and** count `< 0x6E`)  **[2026-10-01: see the note above — guard order and duplicate-skip CONFIRMED — disassembly; truncate-vs-drop still OPEN pending `func 0x00DABA70`.]**
+- L371: ): RE-DERIVED — guard order (length < 32, count < 110, not already registered) and duplicate skip CONFIRMED — disassembly; truncate vs drop OPEN pending func 0x00DABA70; 0x004ca340 untraced. (job 20261001T123123-team-a-ytgi)**
+- L402: icmp everywhere, +0x07 padding CONFIRMED — disassembly; Flags is a dword at +0x08 (CORRECTED); cap leaves count = 150 and leaks the handle. OPEN: 0x00dac7d0 case rule; ptrs 0x0117308C 4 for entries 2–3. (job 20261001T123123-team-a-ytgi)**
+- L436: nly reads CONFIRMED — disassembly; absent YOffset → +0x04 = XOffset HIGH CONFIDENCE (func 0x00DACD40); 0x0095da50 is the name→index lookup. OPEN: func 0x00982920 (second SyncedMove user), func 0x00DAD460 (zero-fill). (job 20261001T123123-team-a-ytgi)**
+- L446: ### 12.2 Element tree and fields  **[CONFIRMED — disassembly for the reads; the stored 4-float value is OPEN]**
+- L452: irst** row for an animation wins and later repeats are dropped; the slot count is bounded by the object's layout to at most 34 (exact count OPEN — `0xFF` is the sentinel, not a capacity).  **[Settled 2026-10-02: first row wins (allocator control flow CONFIRMED — disassembly; lookup-helper semantics HIGH CONFIDENCE); "255" was th
+- L474: refuses a held index); "255" CORRECTED to the 0xFF sentinel, capacity ≤ 34 (HYPOTHESIS 34); Offset seed is a zero global (HIGH CONFIDENCE). OPEN: func 0x005961A0, func 0x010197E0, func 0x00957580, func 0x00DACF60. (job 20261001T123123-team-a-ytgi)**
+- L504: the handle closed, 0x00462960 → 0x0046fd00 thunk chain CONFIRMED — disassembly; §13.2 Entry offsets CORRECTED (+0x04 pointer, +0x08 count). OPEN: 0x00dad460 zero-fill (decides absent Variant and the tail entries' content). (job 20261001T123123-team-a-ytgi)**
+- L510: 14.1 Element tree and fields  **[CONFIRMED — disassembly for the reads; the `Target_Value` scale factor and the `Target_Name` consumer are OPEN]**
+- L515: resolve against a character's morph-target table (`spec-morph-format.md`'s territory); the resolving consumer was not traced in this pass (OPEN).
+- L533: rget_Value × 0.01 (double multiply by 0x01117DC8) CONFIRMED — disassembly (constant's exact encoding HIGH CONFIDENCE); Target_Name consumer OPEN (func 0x0097ABA0, func 0x0097A160). (job 20261001T123123-team-a-ytgi)**
+- L539: gative claim was reached  **[CONFIRMED — disassembly for the literal-address range scan; exhaustiveness against indexed or copied access is OPEN]**
+- L560: overstated. The `anim_set_filenames.xtbl` row (satellite schema not traced) and the `character_visemes.xtbl` row ("presumed" target) carry OPEN parts.]**
+- L577: s.xtbl` `Target/Target_Name` / (presumed) a character's morph-target name table / CRC-32 hash stored, resolving consumer not traced (§14.1, OPEN); readers `0x0097a160`/`0x0097aba0` identified 2026-10-02, not read /
+- L582: **Review status (2026-09-30): DESK-PASS, text fixes applied (overstatement annotated; IK `Situation` match mechanism OPEN) — desk review (not re-derived from the executable).**
+- L606: on (`0x00da38e0`) was not fully traced; whether it is a rotation quaternion, and whether it reads a further row element beyond `Offset`, is OPEN.
+- L628: status summary and 22 unit status lines (DESK-PASS 1, DESK-PASS with text fixes 6, NEEDS-EXE 13, NEEDS-DATA 1, VALIDATED-BY-DATA 1); marked OPEN at both places 6 internal contradictions (§7.2/§7.3 stride vs cap, §3.3/§7.1 blend-tree bit, §8.1/§8.2 preset order, §9.1 truncate vs drop, §1.4/§15.1 slots 7 and 9, §3.1/§3.2 `Trigger`
+- L629: 0) — VALIDATED-BY-DATA; the §3.1 tree drawing corrected; the always-present `Frame` child (7,060/7,060) added as an observed field, meaning OPEN until the executable.
+
+## spec-tables-audio-radio.md (weight 2, 37 live)
+
+- L8: ) / CONFIRMED — empirical (checked against real shipped rows extracted this pass) / HIGH CONFIDENCE — inferred / HYPOTHESIS — unconfirmed / OPEN / UNKNOWN.
+- L12: §14, §16, §17); 7 are now fully cleared for implementation (§1.3 items 1 and 2, §3, §4, §5, §7, §13), plus 3 more cleared with only a minor OPEN remaining (§8, §14, §16) — **10 units cleared in total**; 10 units still carry a substantive OPEN (§1.2, §2, §6, §9, §10, §11, §12, §15, §17, §18.1). §1.1, §1.3 item 3 and §19 remain DE
+- L30: e Wwise SDK's own `AK::SoundEngine::GetIDFromString` (`0x00F4C350`). The hash algorithm is therefore the SDK's, not engine code; it remains OPEN until `0x00F4C350` and `0x0046FC50` are read. Consequence for every Wwise-hashed field in this document: a `Name`/`wwise_id`/`Wwise_switch` text that is empty or literally `none` (any c
+- L32: d00` (NULL / empty / `none`); the id algorithm is the Wwise SDK's `GetIDFromString` (`0x00F4C350`), not re-derived — not cleared: algorithm OPEN — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L39: , `0x00D9E920`), of which this is one (2026-10-01, disassembly). **[CONFIRMED — disassembly that this specific call path is case-sensitive; OPEN why it differs from its documented siblings.]** **[2026-10-01, re-derived (job 20261001T123123-team-a-ytgi): CONFIRMED — disassembly. Calling shape: (string, seed, maximum byte count) o
+- L73: capacity is the initial value of the u16 free count at registry `+0x1E`, set by 0x00466ED0 (the only writer of `0x0320E520`), not dumped — OPEN — the shipped 496-row file did not exhaust it.
+- L75: es are `+0x54` = 0x8004, the two 0x004673C0(1) calls, and (for `Init`) `+0x5B` bit 0. Nothing here zeroes a record before filling it. Still OPEN: the free-list capacity (free count = u16 at registry `+0x1E`; the registry pointer 0x0320E520 is written only by 0x00466ED0, not dumped), the writer of `+0x5B` bit 6 (neither function 
+- L81: 47-bucket map at `0x0321B4B0`) — not cleared: free-list capacity (0x00466ED0) and the `+0x5B` bit-6 writer (0x004673C0 / 0x00465CC0) remain OPEN — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L132: simply stops calling the per-element reader (2026-10-01: and the 119 that are stored are referenced by no other function by name — see the OPEN note above).
+- L153: / `+0x26` / *(unused by this reader)* / — / `0xFFFF` / not traced further; **OPEN**. /
+- L160: ven the full `Name` text; `+0x2C` is a `u16`; `+0x25`, `+0x2B`, `+0x2E`–`+0x2F` are never written; dedup is a linear scan on `+0x20`. Still OPEN: what the "always" `u32` reader leaves for a missing `wwise_id` (callee `0x00DABDF0` not dumped) — if 0, all such rows after the first collapse onto one record.]**
+- L168: _id` "always"; cap handled in the fill helper; sign-test DLC selection) — not cleared: the absent-`wwise_id` value depends on `0x00DABDF0` (OPEN) — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L206: r NULL, §1.2) and the row is kept; the ×0.44704 conversion is a double-precision multiply narrowed to `f32`. CONFIRMED — disassembly. Still OPEN: the three accessors' behaviour when `CollisionFoleySet` itself is absent (NULL node), and whether the allocator zeroes the array.]**
+- L208: double-precision conversion, absent `Name` → key 0) — cleared for implementation except the absent-`CollisionFoleySet` accessor behaviour (OPEN) — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L226: 61A90` and `0x00561BB0` (the last also reads the count) — identified from the cross-reference listing but not read; the matching rule stays OPEN.]**
+- L246: ex resolver exists; whether the vehicle loader stores `+0x7AC` from such a resolver, and under which name (`Veh_` prefixed or not), remains OPEN on the vehicle side — none of the seven is dumped.]**
+- L264: The selectable-station enumerator `0x0055ddc0` tests **bit 6**, not 5. Record 0's two names are two fields. CONFIRMED — disassembly. Still OPEN: who sets bit 6 on station 0 (nothing in these dumps), and `0x0055F580` (not dumped).]**
+- L318: e indirection removed from the save file's own `u16`s. The exact byte layout of the stride-20 song table itself was not mapped this pass (**OPEN**, §20).
+- L320: ir writer for stations 1..N (and station 0's `+0x194`) is outside this job — candidate `0x0055C9F0`. CONFIRMED — disassembly for the roles; OPEN for the writer.]**
+- L348: r field is still written. The u16 count lives at `0x013BBBFC`; the only consumer of the array and count is `0x0055C0B0` (not dumped). Still OPEN: what `0x00d9e8b0` stores for a NULL pointer (its sibling `0x00d9e7e0` stores 0); whether the pool allocator zeroes; whether the radio-content table is already populated when `+0x2C` is
+- L364: C18` radio-content table) — cleared for implementation except the NULL-`Name` hash value and the allocator's zeroing (both HIGH CONFIDENCE, OPEN) — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L372: ference listing), and read by a third function `0x0055C070` (not dumped) — the second dword's purpose and the slots' initial content remain OPEN. The one caller `0x0055BF90` runs this loader immediately before `commercials.xtbl`'s (`0x0055BF90`, then `0x0055BF95`).]**
+- L380: load order before `commercials.xtbl`) — not cleared: the second dword's reader and the startup initialiser's content (`0x00FEE100`) remain OPEN — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L403: , `+0x13` (bytes); stride 0x14 (entries of the `0x013BBC18` table); not-found → row dropped, never created; CRC seed 0 on both sides. Still OPEN: which code creates the entries (candidates `0x0055C9F0`, `0x0055C950`) and the meaning of `+0x08` / `+0x0E`–`+0x10`.]**
+- L405: (the registry is the radio-content/song table, not a separate structure) — cleared for implementation; entry creation is outside this job (OPEN) — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L418: ndidates `0x00465CC0` (bank state machine, if the bit means "resident") and `0x004673C0`; the caller `0x00469460`'s timing matters equally. OPEN; the "few `.lm_pc` files are opened by this path" alternative is the better supported one.]**
+- L436: 0` and `0x004673C0` are unread, so the hook bit's writer and the meaning of `+0x54` bit 15 (boot-load mark vs resident mark — see §17) stay OPEN. "Answers the boot-time half" remains HIGH CONFIDENCE.]**
+- L438: own check; but on the writers found so far the gate admits none of the shipped entries (§17), so whether this path ever opens a `.lm_pc` is OPEN; the interior layout at the depth read is handed over in the re-derivation notes, correctly left there.
+- L442: is "Mix Tape" there and `"My Radio 85.5"` here, and bit 5 of `+0x689` is "has mix tape" there but half of `Selectable`'s `0x60` here — both OPEN, see §11.1; which of `+0x190`/`+0x5A4` is the playlist count is OPEN, see §12.2.)*
+- L462: s applied; §18.1 narrowed by the re-derivation of §2/§17 (loader-side writes CONFIRMED — disassembly; `+0x5B` bit 6 writer and `0x00465CC0` OPEN); inherits the open items of §2, §11, §12, §17 — re-derived from the executable (job 20261001T123123-team-a-ytgi).**
+- L472: / `audio_banks.xtbl` / 51 / 285,851 / 496 `NewEntity` base **(544 base+DLC merged, see note below table)** / fixed free list, size OPEN / 496/496 have `Name`+`wwise_id`; exactly 1 `Init`; 0/496 `wwise_id` fail the bespoke grammar /
+- L478: / `foley_engine.xtbl` / 132 / 15,425 / 84 `Engine` base **(87 base+DLC merged, see note below table)** / unbounded (OPEN) / 84/84 `Vehicle_Model`; 0/84 `NPC_Only`; 0/84 `dlc_framework_id` /
+- L499: /`+0x12` enable/disable event slots, `+0x13` enabled flag; count = s16 at `0x013C045C`. Songs, commercials and radio events share it. Still OPEN: `+0x08`, `+0x0E`–`+0x10`, and the entry creators (`0x0055C9F0`, `0x0055C950`).
+- L502: NFIDENCE 128 by layout; every reader of the pointer array is index-addressed and two name → index resolvers exist (§10); vehicle side still OPEN.
+- L520: names; §14 written/unwritten bytes 17/35 → 16/36 and `+0x2D`–`+0x2E` → `+0x2E`); reworded §1.3 item 2 "contradicts" → "differs from"; added OPEN notes for exe/data-only gaps (§1.2, §1.3, §2, §3, §4, §5, §6, §7, §8, §9, §10, §11 incl. the `+0x689` bit 5 / record-0 name conflict with `spec-save-format.md` §12.8.1, §12, §13, §14, §
+- L521: §17, §18.1 and the §20 open-items ledger; cleared 10 units for implementation (7 fully: §1.3 items 1–2, §3, §4, §5, §7, §13; 3 with a minor OPEN noted: §8, §14, §16), corrected 14 units, and narrowed-but-left-OPEN 10 units (§1.2, §2, §6, §9, §10, §11, §12, §15, §17, §18.1); updated the front-matter review-status-summary paragrap
+- L522: - 2026-10-08 — §17 item 9's own OPEN item gains corroborating (not resolving) evidence from a sibling
+
+## spec-tables-customization.md (weight 2, 59 live)
+
+- L9: document is stated either without its compare instruction or only as a prose "exceeds N" test, so whether each loop keeps N or N-1 rows is OPEN until the compare is read in the executable. Units awaiting the executable:  Units awaiting real data: §15.2 (plus data checks noted in §10, §11, §15.1).
+- L83: ### 3.1 `items_color_pool.xtbl` — a fifth, structurally separate colour pool **[CONFIRMED — schema empirical; consumer OPEN]**
+- L87: **[Re-derived 2026-10-02 from `func_0x008fb6b0.txt` (`0x008fb6b0` read in full, job `20261001T123123-team-a-ytgi`): still OPEN, narrowed further but not settled.** The instruction at `0x008fb6fd` (`MOV EAX,0x116e55c`) loads the `"items_color_pool.xtbl"` string address into `EAX` immediately before two `MOV`s that zero unrela
+- L93: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN — `0x008fb6b0` read in full; the consumer call is narrowed to a HIGH-CONFIDENCE candidate (`0x008fa6d0`, via an implicit register argument the decompiler doesn't surface) but not confirmed; `0x008fa6
+- L108: s; **36 in the `patch_compressed.vpp_pc` copy, §21**) — nesting depth and per-level field names read directly off the disassembly above. **[OPEN — desk review 2026-09-30: which archive copy (34-row base or 36-row patch) is loaded at boot is not settled by this document; to be settled against the executable (load order in `0x00be
+- L112: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): CORRECTED/partially OPEN — the `0xc`-byte record shape fully reconciled at all 3 levels (CONFIRMED — disassembly); archive precedence remains OPEN (lives in the generic `0x00dac9a0`, not this reader). Cleared for implementat
+- L139: and remain unidentified (minor, not blocking). The other 5 `Brand` array entries (§22 item 8) are still not individually dumped — genuinely OPEN, the array's own string table wasn't captured by this pass's dumps.**
+- L141: OWN reader (`0x009fca30`, §6.1) — not to this item reader. Also newly observed (not previously documented, not gating any currently-listed OPEN item): immediately after the `Slot` resolution, the code calls `0x009fd5f0` on the resolved slot index and skips the row (same `goto`) if bit 2 of a byte that helper returns is set — a s
+- L145: attributed (belongs to §6.1's own reader); a second, previously-undocumented slot-property skip gate (`0x009fd5f0`, bit 2) found. Remaining OPEN: the other 5 `Brand` array entries, and fields `+0x00`/`+0x04`. Cleared for implementation (record offsets), brand-array names remain a separate data gap.**
+- L275: IVE"` (`0x01300bdc`) — both are "*_COLLIDER_ACTIVE"-style names, narrowing the family. Entries 2/3 (at `0x01300c00`/`0x01300c24`) are still OPEN — their string contents are not captured by this dump (no other code references their literal addresses in this pass's dump set).]**
+- L290: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN. `0x00828340` is not among this pass's 44 dumped addresses (`review/exe-notes-2026-10-01/exe_index/tables-customization.txt`) and is not reachable as a side-effect of any other function read this pas
+- L294: ldren count is `1` — the single `Defaults` wrapper — the real row array is two levels further in; **58 bytes per row, cap not explicit** **[OPEN — desk review 2026-09-30: "58 bytes per row" contradicts the `0x50` (80-byte) record size in the next paragraph; neither 58 nor 0x58 is reconciled; to be settled against the executable 
+- L296: d60`) **replace** the item's own default colours for this specific default-selection row, again clamped to the larger of the two counts. **[OPEN — desk review 2026-09-30: "larger" here vs "smaller" in §4.4 for the analogous clamp; which bound applies is not settled; to be settled against the executable (`0x00820f40`).]**
+- L301: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN. `0x00820f40` is not among this pass's 44 dumped addresses and was not reached as a side-effect of any other function read this pass. Not cleared — needs a dedicated dump of `0x00820f40` to settle th
+- L311: **Validation:** 7 real `Cust_Material` rows (`misc_tables.vpp_pc` #100; **8 in the `patch_compressed.vpp_pc` copy, §21**). **[OPEN — desk review 2026-09-30: which archive copy (7-row base or 8-row patch) is loaded at boot is not settled; to be settled against the executable (archive search order).]**
+- L313: **[Re-derived 2026-10-02: still OPEN overall — `0x00828be0` (this table's own reader) is not among this pass's 44 dumped addresses, so the `0xc` record's own fields and the archive-precedence question are both unresolved by this pass. O
+- L317: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN. `0x00828be0` not in this pass's dump set; the `0xc`-byte stride has weak indirect support only (from a neighbouring function's array walk, not an independent read). Not cleared.**
+- L360: in this same function (not fully traced this pass, it's dense stack-local manipulation feeding `0x006f6c20`/`0x006f7330`) — genuinely still OPEN, narrower than before.]**
+- L366: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): CORRECTED/partially OPEN — cap compare CONFIRMED (600, pre-increment); record layout recovered to 52 of 68 bytes (11 of 17 fields), up from 48; a 16-byte range (`+0x14`–`+0x23`) remains unidentified. Cleared for implementati
+- L392: .txt` (`0x00831270` read in full, job `20261001T123123-team-a-ytgi`): CONFIRMED — disassembly, array/count roles; language-id mapping stays OPEN.**
+- L395: e (not separately tallied from the raw XML in this pass, since the split key is the element's own child, not a distinguishing tag name). **[OPEN — desk review 2026-09-30: the Insult/Compliment split is a direct count of `ActionType` values; to be settled against real data.]** **[Still OPEN 2026-10-02 — this is a data-count quest
+- L399: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): CORRECTED/partially OPEN — array/count roles and the full `0x10` record CONFIRMED; language-id→name mapping still OPEN (`0x00849940` not dumped at depth 0); the Insult/Compliment row split remains a data-only question. Clear
+- L403: loader chain, the real field reader, the full call tree, and ~34 of the record's 236 bytes, 2026-10-08 — see the correction below; residual OPEN items are small, named spans, not a whole-function gap.]** **[Label scope, desk review 2026-09-30: CONFIRMED covers the filename literals, loader entry points and row tags/counts only, 
+- L427: / `+0x00`..`+0x07` / no writer found / OPEN /
+- L434: / `+0x20` / composed filename (interned) / attribute name at `0x01148848`, extension at `0x0113a86c` — text not read this pass, OPEN /
+- L435: / `+0x24` / no writer found / OPEN /
+- L437: / `+0x58`/`+0x5C` / always 0 / purpose OPEN /
+- L445: +0x94` / archetype-class enum (0=Soldier,1=Specialist,2=other) / `[0x00bdf690]`; XML attribute name itself not recovered (Ghidra arg-loss), OPEN /
+- L449: / `+0xCC`..`+0xD7` / no writer found / OPEN /
+- L450: / `+0xD8`/`+0xDC`/`+0xE0` / 3× `0x00db3530` name-lookup handles (Name, Name+suffix1, Name+suffix2) / suffix text not read this pass, OPEN /
+- L451: / `+0xE4` / no writer found / OPEN /
+- L461: ed `0x16`-tagged matlib handle into actual D3D texture-stage bindings lies past this chain (`0x00dd35e0`, `0x00db3c80`→`0x00db3b40`) and is OPEN for a future pass. `0x006f6cc0` (the per-body-type variant sub-path) fans a single variant-file attachment out into several independently-cached per-entry `.cvbm_pc` resources via the s
+- L465: Direct follow-up on §12.1b's own OPEN item — the real consumer past `0x00dd35e0`/`0x00db3c80`→`0x00db3b40`. **Headline: there isn't one.** An exhaustive caller census of both the global by-name lookup (`0x00db3530`, 45 distinct calling f
+- L473: evidently through a different field than the ones §4.1.5 searched (most likely "array 5" or "array 6," which that document separately flags OPEN/"never populated" over a different, vehicle-heavy sample). **Not pursued to a conclusion here** — flagged for `spec-geometry-format.md`'s own owner as the single most promising next ste
+- L475: caller census both directions (55 functions total checked), for the negative result and the matlib constructor's full two-block structure. OPEN — the `0x007524f0`/array-5-or-6 lead; whether `.ccmesh_pc` resolves its own materials independently of any matlib; who, if anyone, assigns a resolved material handle onto a character's r
+- L492: ss` class specifically serves avatar-gallery screenshot compression (not independently nailed down by reading its two callers' own bodies). OPEN — whether the unconsumed placement fields have a reader through an indirection static cross-reference cannot see; the gating flags on the PCR-selection-cache functions found incidentall
+- L502: _composite_material"`**. Opcodes 55/56's own producers were searched for via three independent whole-binary scans and genuinely not found — OPEN.
+- L509: l-time render bind path itself (reasoning from the `compress`/`ultracompress` class-naming parallel, not independently traced to a caller). OPEN — opcode 55/56's producers; the final mesh-bind instruction; whether this pipeline is singleton (customization-screen-only) or per-character-instance.]** Full detail: `scratchpad/char_t
+- L525: all of Q1, Q2, and Q3(a)/(b) — independently re-derived from the executable and, for Q3(a), directly from the shipped character archive. No OPEN items remain in this unit's own original scope.**
+- L539: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): partially OPEN. `0x00be0630` read in full — it decompiles (correcting "not decompiled" to "decompiled but not exhaustively field-mapped") and is confirmed to be a large platform-asset-resolution reader, not a flat
+- L565: ### 13.3 `character.xtbl` — loaded twice, not decompiled to field level **[CONFIRMED — real, single-literal, consumed twice; schema OPEN]** **[Label scope, desk review 2026-09-30: CONFIRMED covers the filename literal, both call sites and row tag/count only.]**
+- L571: **One field now resolved (2026-10-02, player-gender initial-state investigation — narrows, does not close, "schema OPEN" above):** the row reader is `0x00be3a50` (found via its use of the `"Gender"` string `0x0113cf80`); rows are `0x54` bytes in a static array at `0x0299b8a0` (cap `0x1d4` = 468). The array's reset (`0
+- L575: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN, narrowed. `func_0x00be4120.txt` (job `20261001T123123-team-a-ytgi`) was read in full for §13.1 and settles that `0x00be4120` is NOT this table's reader — it hardcodes the child-element name `"catego
+- L587: etail reader) into a **shared, cross-category pool capped at 128 (`0x80`) total `Morph_Info` entries across ALL 14 categories combined** **[OPEN — desk review 2026-09-30: no compare operator is given for the 128 cap; to be settled against the executable.]** (`0x0264d694` is a single running total, not per-category) — i.e. the 14
+- L593: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN. The dispatcher `0x009f6870` itself was read in full (job `20261001T123123-team-a-ytgi`) and confirmed to do nothing but iterate `Morph_set` rows and call `0x009f6700` once per row, resetting a runni
+- L653: pped data's one `Default`-marked row (`male_white`) is `Gender`=0/`Race`=3. `0x00838cc0`/`0x00838d10` (regional `Category`/`Preset`) remain OPEN.]**
+- L665: **[Re-derived 2026-10-02 from `func_0x008388d0.txt` (`0x008388d0` read in full, job `20261001T123123-team-a-ytgi`): still OPEN for `figure`'s vocabulary — `0x00831f80` is called exactly as described but is itself not in this pass's dump set, so the value set it maps text to remains unread. Bonus, not previously given: both r
+- L667: 1 real `RegionalPresets` row (`misc_tables.vpp_pc` #213, 9,783 bytes — all real content nested inside that one region's `Presets` grid). **[OPEN — desk review 2026-09-30: the value set `figure` is mapped to by `0x00831f80` is not given; to be settled against the executable.]**
+- L671: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN for `figure`'s vocabulary (`0x00831f80` not in this pass's dump set) — but both record sizes are now fully tiled as a bonus (`0x10`-byte `RegionalPresets` record, `0x14`-byte `Preset` record, 8-byte
+- L675: xc, so "roughly 12" is not supported by these addresses; the true slot count (6 or 7, depending on whether the end address is inclusive) is OPEN]** ) of known entity/anim-position combinations; on a match, the resolved slot id and a copy of the entity's own local position (a stack-allocated float triple assembled just before the
+- L679: most certainly a stack-slot-reuse artifact rather than a real distinct source value — what this second output dword genuinely holds is left OPEN, narrower than before (it is confirmed to be exactly one dword, not a float triple).**
+- L685: ne unidentified dword." Cleared for implementation of the lookup/storage mechanism; the second output field's true meaning remains a narrow OPEN gap.**
+- L706: a small edge case. `char_cust_cats.xtbl` (§12.3) is a 13th unreachable name, but isn't a real archive file, so it's counted separately. **[OPEN — desk review 2026-09-30: the deadness test is a whole-literal scan; a name built at runtime from parts (a stem such as `custcolorpool` or `gang_customization` plus a suffix, or a `%s.xt
+- L710: **Review status (2026-10-02, re-derived from the executable, exe_index/tables-customization.txt): still OPEN. This is a methodological gap (whether any dead filename could be built at runtime from a stem + suffix/format-string, which a whole-literal scan can't catch), not tied to any specific address — noth
+- L796: / `items_color_pool.xtbl` / 30 `Item_Color` / not determined (consumer OPEN) / — /
+- L800: / `customization_stores.xtbl` / 15 `Store` (255 items/store **[OPEN: 254 vs 255, §5.2]**, 73 outfits/store caps) / none on store count / — /
+- L808: / `customization_normals.xtbl` / **8** `Normals` / **8** / **exactly at cap** **[OPEN: compare operator, §9.2]** /
+- L825: / `player_cust_shot_map.xtbl` / 5 `NewEntity` /  lookup array **[slot count OPEN, §17: 0x4c bytes = 6⅓ × 0xc]** (not itself a row cap) / — /
+- L848: = 6⅓), struck the §6.1 narrative and the §14.1 "one entry short" comparison; annotated the §2.1/§20 pool addresses as pointer slots; added OPEN markers for every cap compare (858, 255/0xfe, 73, 8, 600, 120, 128, 129, 4, 8), the §4.2 `0x00da7930`/`Female_Mesh_Filename` conflicts with other specs, the §4.4/§8 clamp contradiction, 
+
+## spec-tables-diversions.md (weight 2, 43 live)
+
+- L8: **CONFIRMED — empirical** (checked against real shipped base-game rows) / **HIGH CONFIDENCE — inferred** / **HYPOTHESIS — unconfirmed** / **OPEN / UNKNOWN**.
+- L75: the **role** of each is CONFIRMED from how it is used, but its **exact numeric value** could not be read statically this pass and is marked OPEN. **[⚠ Corrected 2026-09-30: this "all zero" reading is contradicted for `0x012a2d90`, which `spec-cutscene-camera-format.md` §11.2 read as literal bytes from the image = **1000.0** (dou
+- L79: is group is read with the `f32` accessor and then run through this exact `ROUND(x*k)` idiom. / HIGH CONFIDENCE role (k ≈ 1000); exact value OPEN **[`0x012a2d90` = 1000.0 read from the image, `spec-cutscene-camera-format.md` §11.2; `0x01115368` not re-checked]** **[OPEN — desk review 2026-09-30: other specs describe `0x012a2d90` 
+- L80: `, `stunt_jumping_diversion`'s per-axis `Max_Percent`, and `shop_names`' two discount fields. / HIGH CONFIDENCE role (k ≈ 100); exact value OPEN **[desk review 2026-09-30: `spec-tables-animation.md` §14.1 uses `0x01117dc8` as the `Target_Value` multiplier and calls its meaning unknown; the two documents do not cross-cite, and th
+- L81: nconverted mph float ( §5 **[cross-reference fixed 2026-09-30: `cat_and_mouse` is §5]**). / HIGH CONFIDENCE role (k ≈ 0.44704); exact value OPEN **[desk review 2026-09-30: `spec-vehicle-data.md` §7 read 0.44704 at its own constant; that is not shown to be the same address as `0x01119df8`, so "matches" is unverified]** **[CONFIRM
+- L82: *rotation* axes; the two *distance* axes and one *height* axis are left unconverted, §2.9). / HIGH CONFIDENCE role (k ≈ π/180); exact value OPEN **[CONFIRMED 2026-10-02, re-derived from the executable: read back by the decompiler as the literal double `0.017453` (Ghidra's own display-rounding of π/180 ≈ 0.0174532925199433) in `s
+- L83: ne field — it stays in degrees). Matches the field's `TableDescription` `MaxValue=180`. / HIGH CONFIDENCE (k ≈ 180.0 for both); exact value OPEN **[CONFIRMED 2026-10-02, re-derived from the executable (`0x006c0070`, §2.6): `0x011391e0` holds the static `f32` bit pattern `0x43340000` = `180.0` exactly; `0x012a3080` is read back b
+- L84: `Knife_Edge_Tolerance`/`Inverted_Tolerance` (matches the schema's stated `MaxValue=90` for both). / HIGH CONFIDENCE (k ≈ 90.0); exact value OPEN **[CONFIRMED 2026-10-02, re-derived from the executable (`0x00691f10`): `0x011349a4` holds the static `f32` bit pattern `0x42B40000` = `90.0` exactly, and the decompiler substitutes the
+- L87: nt_low_flying`'s `Verticality_Mult` floor / `Max_Height`+`Activation_Height` absent-fallback. / Role confirmed by call pattern; exact value OPEN (plausibly 0.0 or 1.0 depending on site — not asserted) **[desk review 2026-09-30: `spec-lua-api-behaviour.md` (`camera_shake`-class argument default) reads the constant at `0x01117a4c`
+- L95: table) suggests an intentional divergence. **A reimplementation reproducing retail behaviour exactly must special-case this one field.** **[OPEN — desk review 2026-09-30: the destination's width and signedness, and whether the consumer of this global reads it as a percent or as milliseconds, were not traced; reproduce it as stat
+- L97: iversions.txt`): PARTIALLY CONFIRMED. Destination type settled (plain 4-byte dword, ms-style ROUND, no sign clamp needed). Consumer remains OPEN — no other function in the binary statically references this global, so the percent-vs-ms question at the read side could not be settled from this dump.**
+- L113: er `0x00ea3a70` — an MSVC-style SSE/x87 dispatch stub for a transcendental function; **which** trig function was not pinned down this pass, OPEN), `Record_Display_Time`/`Record_Queue_Time` (optional, §1.2 item 3), `Record_Threshold` (§1.4), `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash` (§1.2 item 2). **9/9 real-row fields acco
+- L115: onversion, and the 11-field count; the dispatch-stub nature of `0x00ea3a70` is CONFIRMED but the specific trig function it computes remains OPEN (its callees are outside this pass's index); the 9-vs-11 tally stays NEEDS-DATA (two of the 11 are legitimately optional).**
+- L119: ema), `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash`. **6/6 real-row fields accounted for.** **[CONFIRMED — disassembly + empirical.]** **[OPEN — desk review 2026-09-30: no clamp is recorded for a negative `Cooldown_Time` result (`Cooldown_Time > Hud_Time`); `spec-tables-ui-controls.md` §6 records the same formula for `qte.xtbl
+- L125: element fanning out to more than one destination; HIGH CONFIDENCE this is a per-side/quadrant hit-test radius, exact meaning of the 4 slots OPEN), `Max_Time_Between_Misses`/`Min_Time_Between_Misses`/`Delay_After_Crash`/`Delay_After_Completion` (all seconds→ms), the `Record_*` triad, `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash
+- L127: ED (contiguous 4-float destination array, exact bounds given; `Max<1` reset rule confirmed). Per-slot meaning and the 15-vs-12 tally remain OPEN/NEEDS-DATA.**
+- L131: , `End_Time` (seconds→ms), the `Record_*` triad, `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash`. **8/8 real-row fields accounted for.** **[OPEN — desk review 2026-09-30: the prose above names 10 fields (2 + 1 + 1 + 3 + 3), not 8; whether two are absent from the real row or the tally is wrong needs a per-field census; whether th
+- L137: ad, `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash`. **13/13 real-row fields accounted for.** **[CONFIRMED — disassembly + empirical.]** **[OPEN — desk review 2026-09-30: "no clamp seen" on `Lane_Tolerance` is a negative result, and the consumer that gives the stored `180 − x` degrees value its meaning was not traced; to be sett
+- L139: le (`exe_index/tables-diversions.txt`): CONFIRMED — `Lane_Tolerance` genuinely has no clamp of any kind. `Angle_Tolerance` consumer remains OPEN (its one known reader, `0x006c0470`, is outside this pass's index).**
+- L143: *with `Record_Threshold` mis-converted, §1.5** — `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash`. **9/9 real-row fields accounted for.** **[OPEN — desk review 2026-09-30: the prose above names 10 fields (4 + 3 + 3), not 9; a per-field census of the real row is needed; to be settled against real data.]** **[CONFIRMED — disassembl
+- L149: hing found this pass contradicts them, but readers should treat the top-level field NAMES as 3/7 enumerated, not 7/7 — the remaining ~4 are OPEN, not silently confirmed.** **[CONFIRMED — disassembly + empirical for the 3 named fields and all 21 nested fields; the unnamed ~4 top-level fields are OPEN.]** **[OPEN — desk review 202
+- L155: Row `Stunt_Jumping`. Top-level `End_Time` (seconds→ms, `+0x14`), `Record_*` triad (`+0x18`/`+0x1C`/`+0x20`ish, §1.2 item 3 **[OPEN — desk review 2026-09-30: "`+0x20`ish" is not an exact offset; the reward-field offsets are not given either; to be settled against the executable.]**), `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash
+- L161: _Cooldown` (seconds→ms), the `Record_*` triad, `Max_Respect`/`Max_Lifetime_Respect`/`Max_Cash`. **12/12 real-row fields accounted for.** **[OPEN — desk review 2026-09-30: the prose above names 14 fields (8 + 3 + 3), not 12; a per-field census of the real row is needed; to be settled against real data.]** **[CONFIRMED — disassemb
+- L184: - **`Target_Info`** (`+0x34`…`+0xE4` **[OPEN — desk review 2026-09-30: this range contains `Veh_Info` (`+0x48`/`+0x4C`) and `Reward_Info` (`+0x50`–`+0xCF`), so it is a min/max bound, not a contiguous block; no per-field offsets are given for `T
+- L190: PARTIALLY settled: 3 of its 8 names are now directly known (`Location`, `Kill`, `Defend`); the remaining 5 and the table's order are still OPEN (outside this depth-0 dump).**
+- L196: sembly + empirical.]** The function also opens with a call to an unrelated helper `0x006a4010` before touching the XML at all — not traced (OPEN, likely an unrelated per-diversion-mode reset, not part of the table read). **[OPEN — desk review 2026-09-30: the top-level scalar offsets and the running-count slot are not given (only
+- L212: d-distance threshold, no mph-style conversion needed since it's already a meter value), `Default_Min_Cash` (floored at a shared constant **[OPEN — desk review 2026-09-30: the constant is not named or valued; to be settled against the executable.]**), `Default_Max_Cash` (clamped ≥ `Default_Min_Cash`). **7/7 real-row fields accoun
+- L218: the "non-negative respect and at least one non-zero reward" core; "identical" is downgraded to HIGH CONFIDENCE — inferred same idiom.]** **[OPEN — desk review 2026-09-30: whether this loader really omits the `Cash≥0` check (a `Level` with negative `Cash` and positive `Respect` would then be accepted); also the behaviour when `0x
+- L220: **Review status (2026-09-30): DESK-PASS, text fixes applied (the predicate difference from §4 is OPEN for the executable) — desk review (not re-derived from the executable).**
+- L226: decompiled this pass (it is called generically, so both blocks' capacities/strides are necessarily identical; not independently re-derived, OPEN). Top-level `Trigger_Effect` is resolved through the shared effects resolver `0x005c50b0` (§1.3), defaulting to `0xFFFFFFFF` if absent. Real base row: both `Saints_Loved` and `Saints_Ha
+- L240: disassembly for the first loader half's offsets and the Player_Characters capacity/stride mechanism; the second half's internal offsets are OPEN per above.]** *[desk review 2026-09-30: Team B's population run gates every count above (3/5/10/4/60/20, `team-b/HANDOFF.md` section 9.94) and found the leaf names `Point_Value.Value` a
+- L246: y-notification strings. **[CONFIRMED — empirical for the shape difference; the consumer that looks these 32 keys up by name was not traced, OPEN.]** *[desk review 2026-09-30: 32 rows independently confirmed by Team B by direct extraction (`team-b/HANDOFF.md` section 9.94, 5,725-byte file); Team B's population harness still gates
+- L254: or several, a set of **7 function-pointer literals** (very likely a per-activity start/update/end/etc. callback vtable; not traced further, OPEN) — rather than parsing any XML at all. **The actual reading of each named file's `Texts` grid therefore happens inside one shared, generic reader that consumes the descriptor's stored f
+- L267: t 5.0)}`. Row counts in the real data: `escort_text.xtbl`/`snatch_text.xtbl`/`snatch_kinzie_text.xtbl` each carry **~20** `Text` entries **[OPEN — desk review 2026-09-30: "~20" is not an exact count; Team B's run reports but does not gate it; to be settled against real data.]** covering the recruit/return/fail/rescue/trap notifi
+- L269: st-load vs refresh" two-pass behaviour anywhere in this group's descriptor fillers. The generic Texts-grid reader itself remains unlocated (OPEN).**
+- L275: `fraud_globals` was not in the priority list); the loader's own existence and its three-way split are CONFIRMED, its field-to-offset map is OPEN.
+- L285: _NAME_1A`/`_1B` … `_39A`/`_39B`). **[CONFIRMED — disassembly for the loader/cap; CONFIRMED — empirical for the real row's 39 entries.]** **[OPEN — desk review 2026-09-30: the cap of 40 is visible only in the executable, its compare operator is not stated, and the two arrays' base addresses are not given; to be settled against th
+- L295: he weapons-combat spec's documented row-key convention), a second Name-derived value at `+0x30` via an unidentified transform `0x00821ee0` (OPEN — not confirmed to be a second hash or an id derivation), `Localized_Name` (`+0x04`, heap-duplicated string, default `{localize}franchise`), `Ownership.Cost` (`+0x10`, `s32`, default 10
+- L297: NFIRMED — disassembly for the full per-row offset map; CONFIRMED — empirical for the row count and for every schema field's presence.]** **[OPEN — desk review 2026-09-30: the 8 bytes at `+0x08`–`+0x0F` are not explained; whether the defaults (10000, 500, 15, 20, `{localize}franchise`) are applied by the loader or only stated in 
+- L299: it is a linear case-insensitive name search into an unrelated external array, not a hash or id derivation (the array's own identity remains OPEN).**
+- L338: the fields named in their sections — drifting 9 vs 11, near_miss 12 vs 15, back_seat_driver 8 vs 10, peel_out 9 vs 10, low_flying 12 vs 14; OPEN, see each section;  **closed 2026-10-03, see §3: the loader reads 12, not 11.**]** **stunt_drifting 9/9 · stunt_hijacking 6/6 · stunt_near_miss 12/12 · stunt_back_seat_driver 8/8 · stun
+- L342: →(m/s)² except the one documented exception / **11 fields converted, 1 field (`cat_and_mouse.Mouse_Min_Speed`) confirmed NOT converted** **[OPEN — desk review 2026-09-30: this document names only 7 converted speed fields (`Min_Speed` in drifting, near_miss, back_seat_driver, oncoming, low_flying, barnstorming, plus `near_miss.Re
+- L364: `spec-lua-api-behaviour.md` and Team B's element names (`Vehicle_Name`, horde `Value`/`Point_Multiplier`, irregular `Minimum_<X>`); marked OPEN: N/N tallies vs named fields (6 tables), 11 vs 7 speed fields, constant widths, `0x01115368` vs the qte twin, exact offsets (§2.9, §4), per-table loader items; no label raised.
+
+## spec-tables-environment.md (weight 2, 40 live)
+
+- L8: m the code) · **CONFIRMED — empirical** (checked against real DLC data) · **HIGH CONFIDENCE — inferred** · **HYPOTHESIS — unconfirmed** · **OPEN** · **UNKNOWN**
+- L12: rial desk review (`review/adv_tables-environment.md`) checked 47 units: 23 DESK-PASS, 18 DESK-PASS with text fixes applied (most also carry OPEN items, below), 6 NEEDS-EXE, 0 VALIDATED-BY-DATA. A desk pass alone does not clear a unit: it means only that the text is internally consistent and agrees with the other specs. No unit h
+- L14: l not cleared: 13** (§1.2, §1.4, §1.5, §3.1, §3.2, §4.1, §7.2, §7.3, §9.2, §9.3, §10.1, §12.2, and the §15 table range). **Untouched, still OPEN: §1.3, §4.2, §13, §17.4** (and the §11.1/§11.5 capacities). Units still awaiting the executable: 16 of the 18 above (§6.3 and §10.2 are cleared) plus §1.3. The DOF camera-position confl
+- L75: ments, §17.2) the readers of §9.3/§11.5 take the element's own leading text; the real colour values sit in that leading text (§17.2).]** **[OPEN — desk review 2026-09-30: the text does not state whether `+0x0C` holds only the element's leading character data or also text that follows a child element; to be settled against the ex
+- L113: successive powers of 0.1 in single precision; an `e`/`E` right after them takes the rest as a C integer power of ten (`0x007D9B00`).]** **[OPEN — desk review 2026-09-30: this document does not say which accessor (signed or unsigned) each integer field below uses (`Density`, `Start_Time`, `On_Time`, `Priority`, `Life_Time`, `Fade
+- L135: `0x00DA73C0` applied to the framework name alone (descriptor `+0x80`) is true — the base name is never examined; the predicate's meaning is OPEN, likely an empty-name test; the buffer is `0x40` bytes with the NUL forced at the last byte (`0x00DA78D0`, a bounded `vsnprintf`). `0x0045BAB0` is the same formatter without the `+0x103
+- L136: he **`Info_Slot_Index` of the first `Effect` row whose `Framework` matches** (§10.1). Other rows' `Info_Slot_Index` values are not read. **[OPEN — desk review 2026-09-30: whether any base `Effect` row carries `Info_Slot_Index` or `Framework` beyond the 60 DLC rows (Team B `team-b/HANDOFF.md` section "9.80 `sr3tables_environment`
+- L212: th object would write through a `NULL` slot). **[Desk review 2026-09-30: arithmetic checks — `0x304 + 15×0xC0 = 0xE44`, `+4 = 0xE48`.]** **[OPEN — desk review 2026-09-30: the orbital record's bytes `+0x1E`–`+0x5B` (between the 30-byte name and `Tint` at `+0x5C`) are not described, and the real number of orbital objects  is unkno
+- L214: st-wins West/East bits — while the 21 direct `Stage` children OR theirs in. Whether the mission-override reader `0x00BA0140` uses the 12 is OPEN.]**
+- L225: ` → `+0xD0` P(2EC,7) · `Fog_Ground` `f32` `+0x100` P(2ED,2) · `Fog_Atmosphere_Scale` `+0x104` P(2ED,3) · `Fog_Density` `+0x108` P(2ED,4) **[OPEN — desk review 2026-09-30: the real authored spelling of `Fog_Density` was not reported in §17.2 (the mission-override vocabulary of §15.2 uses `fog_density_new`); to be settled against 
+- L275: one remaining route is that the accessors in §4.1 feed *particle* and *audio* wind (their callers are effect/rain code), not vegetation. **[OPEN — desk review 2026-09-30: the 9 tree-wind references come from `spec-tree-format.md` §13, which carries its own desk-review conflict about the wind manager layout (`0x02706800`); the ne
+- L301: one level by Team B `team-b/HANDOFF.md` section "9.80 `sr3tables_environment`" (row-level gate passed); `Density` signedness: see the §1.4 OPEN note) — desk review (not re-derived from the executable).**
+- L419: ction's `0x013C8740` do not conflict — HIGH CONFIDENCE that both hold the camera position; whether another writer ever makes them differ is OPEN.]** Then
+- L467: `Duration` present 4/27, `Spasm` present 13/27, `Framework` present exactly 1/27". The −1.0 default itself rests on disassembly only.]** **[OPEN — desk review 2026-09-30:  **[2026-10-01: bytes `+0x3C`–`+0x3F` are not written by the loader (padding, zero in the static array) — CONFIRMED — disassembly]**; the `Spasm` child names h
+- L500: §3.1; truncating division, no wrap) **[CORRECTED — CONFIRMED — disassembly 2026-10-01; the authored element names behind the two fields are OPEN — likely `day_begin`/`day_end` of §15.2]** and a default variation of `0x0111E4B0 = 10 / 1440`.
+- L530: ent and mask bit]**. Which subsystem owns the records (a light-management pool keyed by light name) and reads slot 1 was **not** traced — **OPEN**.  **[CONFIRMED — disassembly 2026-10-01: `0x00DA7890` starts from 0 and, for each byte up to the NUL, sign-extends it, folds `A`–`Z` to lower case (+`0x20`), rotates the 32-bit hash l
+- L579: the caller-supplied registry object. Its purpose (a name→visual string map, presumably for streaming or an editor hook) was not traced — **OPEN**.
+- L623: **Review status (2026-09-30): DESK-PASS, text fixes applied (LOD-absent case marked OPEN); NEEDS-EXE: `0x005C3E70` with no `LOD`. Stride `0xB8` tiles; the `Streaming_Category` enum is backed by Team B `team-b/HANDOFF.md` section "9.80 `sr3tables_environment`" (enum gate over 589 rows: no
+- L810: and `Time` semantics — that the array is a curve sampled by time — is inferred from the element names, **HIGH CONFIDENCE — inferred**). **[OPEN — desk review 2026-09-30: the largest `Strength_Element` count in the 70 real rows has not been measured, so whether the unchecked 6-element limit is ever exceeded is not known; to be se
+- L817: ctly these eight; it never names `melee_lock_group` or `sway_group` — their reader, if any, is the loader `0x0056E4C0` or another function, OPEN — CONFIRMED — disassembly 2026-10-01) **[Desk review 2026-09-30: the loader reads eight; the real file has ten — `melee_lock_group` and `sway_group` are also present, §17.5 (Team B `tea
+- L819: n the dampening set `{fine_aim, heavy_weapon, human_shield, tank, tank_…_genki}` × `{horiz, vert}_dampening` (`0x012E3E9C`–`0x012E3EC0`) **[OPEN — desk review 2026-09-30: only `tank_horiz_dampening_genki_mouse`, `tank_vert_dampening_genki_mouse` and the two `interior_*` pairs are given as literal names; the other dampening eleme
+- L822: st`/`y_dist` are always-write reads (`0x00DACCB0`) handed to `0x0056AD50(z, y)` and are not stored in the record (what `0x0056AD50` does is OPEN). `0x00DAC830` returns −1 for a `NULL` node or at a `NULL` table entry.]** Other elements: `Aspect` (string, read), `lookat_offset` (`vec3`) with `z_dist` and `y_dist` (combined into an
+- L848: _Refraction/Situation` / `refraction_situations.xtbl` `name` / CRC-32 (seed 0) stored, compared with the situation's `+0x00` at use time **[OPEN — desk review 2026-09-30: no function for the use-time comparison is named, so this row has no anchor despite the section label; real data never exercises it (Team B `team-b/HANDOFF.md`
+- L863: **Review status (2026-09-30): DESK-PASS, text fixes applied (unanchored `Proximity_Refraction` row marked OPEN); NEEDS-EXE: consumer of effects `+0x8C` — desk review (not re-derived from the executable).**
+- L920: ` reads indices 82–93 (plus three cloud-material names and a segment list) from a second document **[CONFIRMED — disassembly for the reads; OPEN — the file name]**
+- L941: **OPEN: which file this is.** `0x00BB6400` opens whatever (file name, provider) its caller `0x00B9D3F0` passes it (two call sites), and `0x00B9D3F0` itself has not been dumped. **HIGH CONFIDENCE, not proven
+- L943: **Review status (2026-09-30): DESK-PASS, text fixes applied (pointer-table range arithmetic shown, OPEN); NEEDS-EXE: `0x00BA0140` table end, `0x00BA4A10`, `0x00BA25E0`. 251 = 217 + 24 + 10 recomputed; the cloud-layer naming stays HIGH CONFIDENCE — desk review (not re-derived from the executable).**
+- L957: and the `weather_time_of_day` cell blending (presence-bit-gated 2×2 bilinear corner selection, formulas given) are all now traced.** Still OPEN from this item: how the wind state machine (`0x005A9990`) picks stages; how a `Lightning_Type` is picked; what reads the `external_light_override` records (slot 1); the readers of the `0
+- L974: ), `da_tables.vpp_pc` (a second, byte-identical `map_districts.xtbl`), `cutscene_tables.vpp_pc` (a second, byte-identical `effects.xtbl` **[OPEN — desk review 2026-09-30: Team B `team-b/HANDOFF.md` section "9.80 `sr3tables_environment`" calls this "a second, distinct base copy ... (worth Team A diffing the two)"; whether the two
+- L1020: le's own string table at `0x0118CC9C`), but **every real row** — all 12 instances across the 4 segments × the (non-`Clear Skies`) stages **[OPEN — desk review 2026-09-30: 4 segments × 4 stages gives 16 cells (§17.2, last paragraph), so either 4 cells omit the element or the count is wrong; to be settled against real data.]** — a
+- L1030: tartY`, `+0x14` `ImageWidth`/`ImageHeight` pairing per the decompile — exact byte roles of `+0x08`/final dword not disambiguated further **[OPEN — desk review 2026-09-30: the four integers `StartX`, `StartY`, `ImageWidth`, `ImageHeight` are mapped to the three dwords `+0x0C`–`+0x14`, and §17.9 names a `+0x18` dword that lies out
+- L1041: t; their destinations were not decompiled here (no address anchor was already in hand for either, unlike `Vehicle_Aims`) — recorded as an **OPEN** addition to the table's vocabulary, not a decoded one.
+- L1073: **Review status (2026-09-30): DESK-PASS, text fixes applied (copied real values and two verbatim excerpts replaced by descriptions; OPEN notes on the effects copies, the 12-of-16 instance count and the §17.4 record layout); NEEDS-DATA: hash of both base `effects.xtbl` copies; NEEDS-EXE: `0x00E21F70` record layout. Row counts agr
+- L1079: 82-93 TOD-definition-file question — are untouched by this pass; still OPEN as before.)
+- L1110: thunks). The "segment-high" accessor pair was not found this pass (OPEN: either read directly as a
+- L1134: **Sun/moon direction — OPEN, sharpened to a genuine, substantiated negative, not just untried.** No
+- L1141: against "angle"); the orbital-object master list (`0x0290FBB0`, already flagged OPEN at §16 item 1/§3.2)
+- L1155: exact CPU-side global feeding the role-1 shader constants is still OPEN, but the recipe is now
+- L1180: spelling and two schema-absent fields annotated in §3.3; arithmetic shown (§3.2 12 unassigned presence bits, §6.3, §12.2, §15.2 range end); OPEN markers for the exe/data questions (HHMM truncation, cell-array size, gaps at `+0x40` in radial_blur/effects and `+0x3C` in refraction, LOD-absent defaults, duplicate effect names, DOF 
+- L1182: `segment` array not previously in this spec, with defaults and destinations CONFIRMED — disassembly; the file name `0x00BB6400` opens stays OPEN (HIGH CONFIDENCE `default_global.xtbl`; its caller `0x00B9D3F0` not dumped) and `0x00BA5DA0` is flagged as a distinct, unrelated loader not to be conflated with it. §15.2's bare parenth
+
+## spec-tables-progression.md (weight 2, 50 live)
+
+- L8: de) · **CONFIRMED — empirical** (checked against real data, N/N stated) · **HIGH CONFIDENCE — inferred** · **HYPOTHESIS — unconfirmed** · **OPEN** · **UNKNOWN**.
+- L10: its awaiting real data:** §2.1/§2.2, §3.2/§3.3, §4.6, §14. Each unit ends with its own review-status line; the open questions are marked **[OPEN — desk review 2026-09-30: …]** at the claim. **Update 2026-10-01 (re-derivation from the executable, bridge job `20261001T123123-team-a-ytgi`, `review/rederive_tables-progression.md`):*
+- L18: 4**, whose `Type` element selects one of **61 type names** with a per-type payload — and the loader's type indices resolve several "meaning OPEN" fields of `spec-save-format.md` §10.6 (§4.6); DLC unlockables reproduce **784/784** saved DLC ids by name hash.
+- L133: arlier in the file* than the percent stat; if it is not found the denominator stays `-1` (`0xFFFFFFFF`) and the class is still set to 4. **[OPEN — desk review 2026-09-30: §14.3 names the 10 denominators but does not check that each denominator row precedes its percent row in file order and matches its spelling case-sensitively; 
+- L134: ss terminates — which of the two depends on an installed handler not seen in any dump (CONFIRMED — disassembly for the NULL path, job qohu; OPEN — the handler; 217/217 real rows supply the element) / `true` sets the bit; anything else clears it. /
+- L146: tion is per value class (0x00712330 int, 0x00712380 float, 0x007123D0 boolean, 0x00712400 percent); the other four slots were not tracked — OPEN) /
+- L196: e; the handler-type slots below are not affected.]* The handler-type slots 2–5 of the 51-entry table (`0x0151CBF8`) were not classified. **[OPEN.]**
+- L207: main` (§1.4), so it reads 53 rows from either copy and the DLC loaders add the same 30; only the mount/priority trace of §14.2 does.)*   **[OPEN — narrowed again 2026-10-01 (job `20261001T173022-team-a-qohu`): the edge 0x00713BB0 → 0x00DAC9A0 is a direct call with the `stats.xtbl` literal; 0x00DC5A10 builds the mode string `rb` 
+- L209: 0x00DC5A10 → 0x00DAB0C0 → 0x00DAAD80 CONFIRMED — disassembly — not cleared: the by-name open inside 0x00DAAD80 (archive-priority lookup) is OPEN.**
+- L257: d leaves the value unset. A stat can therefore back at most 8 achievements before the pointer array reaches its value dword (unchecked). **[OPEN — desk review 2026-09-30: neither cap (4 requirements per achievement, 8 achievements per stat) has been measured against the 83 real rows, nor whether any real requirement names a perc
+- L271: iple of `HudUpdateFrequency` since the previous value, unless the achievement is earned or its target is 1 (CONFIRMED — disassembly); **NEW OPEN ITEM (§14.2): which of the two same-named `achievements.xtbl` copies the game actually mounts/reads — archive mount-order precedence across `.vpp_pc` archives was not traced this pass, 
+- L288: <Priority>` target sits at an EARLIER slot (not re-derived here).)* The version-8 snapshot's 31 ids are those six + the 25 `dlc1` rows.  **[OPEN — 2026-10-01, narrowed by disassembly (job `20261001T123123-team-a-ytgi`): the save writer 0x0071DBD0 emits the runtime records in index order (base block = records 0…base−1; DLC block 
+- L290: atch pass (NULL framework), the M17 special case and the save emitter's record-order enumeration — not cleared: the base-order mechanism is OPEN (HYPOTHESIS: a same-named patch copy with a different row order).**
+- L431: nd because they are appended after `0x015226F8` they belong to the **DLC-side** saved block. Its rows use the same element tree as §4.2. **[OPEN: the file's content — unreadable; presumably fixes to base rows; the duplicate rule means it can *add* unlockables but not *change* existing ones.]** **[Resolved §14.1: the file has 6 r
+- L446: / `0x4A4C` "meaning OPEN" / 11 `Health` (`Modifier`) / a **health modifier** (player `+0x2770`) / HIGH CONFIDENCE (name + setter) /
+- L447: / `0x4A58` "meaning OPEN" / 14 `Repair_Discount` (`Amount`) / the **vehicle-repair discount fraction**, clamped to [0, 1] / HIGH CONFIDENCE /
+- L450: / `0x4A68` "meaning OPEN" / 23 `Firearm_Accuracy` (`accuracy_multiplier`) / the **firearm accuracy multiplier** / HIGH CONFIDENCE /
+- L451: / `0x4A6C` byte "meaning OPEN" / 34 `Vehicle_Customization` / the **"vehicle customization unlocked" flag** (global `0x027B15F8`) / HIGH CONFIDENCE /
+- L457: **[OPEN — desk review 2026-09-30: types 14 `Repair_Discount` (`0x4A58`) and 23 `Firearm_Accuracy` (`0x4A68`) are not in §14.1's real-table type list, which is itself 4 rows short; if neither type is used, th
+- L470: CONFIDENCE — on every path that found a `Type` child); the payload semantics of the hash-only types beyond the resolvers named in §4.4. **[OPEN.]**
+- L504: er-level `Respect` values and unlockable lists (base table unreadable) *[RESOLVED §14.5]*;  what `Rank`'s handle indexes beyond display. **[OPEN.]** **[OPEN — desk review 2026-09-30: §5.2 says "level 1 = first row" while saves hold levels 0…50 against 50 records and `0x0060eb40(n)` returns 22000 for `n ≥ 50`; whether saved level
+- L524: event at the player's current position" hook; its actual consumer (a cutscene, a radio line, a scripted encounter) was not traced — flagged OPEN.
+- L649: s gang; the meaning of the `Check_Detection` flag beyond its name; the 24 destination structures' remaining fields;  *(resolved §14.6)*. **[OPEN.]**
+- L691: consumer was not traced); the per-level values (unreadable) *[RESOLVED §14.7]*; whether `Mission_Name` is matched against mission names. **[OPEN.]**
+- L731: atfalls, Super Beer Muscles, Never Die, Unlimited Clip, Evil Cars…; **meaning of the flag not traced** — possibly "counts as using cheats"; OPEN) /
+- L732: / `+0x03` / byte: 1 for `Elevator to Heaven`, `Hide Hud`, `Bloody Mess`, `Zombie Peds`, `Mascot Peds`, `Pimps and Hos Peds` (meaning OPEN) /
+- L749: )*;  *(RESOLVED §14.4: none; DLC cheats are 7 `Is_DLC` rows of the base table)*; the semantics of individual actions beyond their names. **[OPEN.]**
+- L804: 0x022CE000 is uniformly zero in the file image — the record array is runtime-filled data, so a range dump cannot bound it; the extent stays OPEN and is not an implementation input; a host should not cap the row count below the save's 40.)*
+- L806: eam-a-ytgi): CONFIRMED — disassembly (record and element layouts); CORRECTION: no loader bound; the static array extent after 0x022CD108 is OPEN (not an implementation input) — cleared for implementation.**
+- L822: mer traced as of 2026-10-08** (`spec-player-runtime.md` §15.3 looked, did not find one — destinations known, consumer search not completed, OPEN). /
+- L910: <Name/>                 text   ← CRC-32, matched against the spawn-group table's hash; UNKNOWN name or wrong group kind ⇒ entry dropped
+- L1013: — into 64-byte globals 0x02915388…0x02915488. Its bool reader 0x00DC51B0 accepts `yes`/`true`/`1`. CONFIRMED — disassembly for the reads; **OPEN** — the file name 0x00B9D3F0 passes (HIGH CONFIDENCE: the same `default_global.xtbl`, since the element set is exactly §14.14's). 0x00BA5DA0 is the time-of-day data loader, unrelated.]*
+- L1015: ; the reader of the five extra elements (0x00BB6400) CONFIRMED — disassembly — not cleared: which file name its caller 0x00B9D3F0 passes is OPEN (HIGH CONFIDENCE the same file); nothing else in the unit is open.**
+- L1168: ed.** Handler-table slots 0 and 1 are *update* and *requirement-evaluate* (job qohu, §2.3); slots 2–5 and the 51 handlers' semantics remain OPEN;  **CONFIRMED yes (§14.3): 217/217 present, none missing.**
+- L1172: 6. **`notoriety*.xtbl`** — which `NotorietyLevels` set is police vs gang (still OPEN — real values decoded at §14.6 but not traced to a consumer); `Check_Detection` semantics (still OPEN);  **RESOLVED (§14.6): confirmed, and `level_info`/`group_info`/`group_details` are ALSO same-nam
+- L1173: 7. **`difficulty_levels.xtbl`** — meaning of set A vs set B (still OPEN/HYPOTHESIS — real values decoded at §14.7 show Set B is uniformly harsher at the top difficulty level, consistent with but not confirming a SP-vs-co-op split); the consumers.  **RESOLVED (§14.7): bot
+- L1174: 8. **`cheats.xtbl`** — flag bytes `+0x02`/`+0x03` (still OPEN);  **the NAMES are now known from the raw XML text (§14.4: `Vehicles`, `Weapons`, `Gameplay`, `World`, `Weather`) — the runtime index-to-name mapping remains OPEN, since that is filled by unrelated m
+- L1202: 08 = 4 rows. The numbers do not show whether those 4 rows are one more type (44 used / 17 unused) or belong to listed types (43 / 18).]* **[OPEN — desk review 2026-09-30: the per-type tally of the 312 rows; to be settled against real data.]**
+- L1234: , matching the "five category hashes" cardinality exactly. **[CONFIRMED — empirical for the name strings; the index-to-name mapping remains OPEN as before.]**
+- L1272: rows nested") reproduces all three totals. So the 80 stands, and the "22/25 groups cover levels 2–5" sentence below is the figure in doubt (OPEN, see the next note).]** **[OPEN — desk review 2026-09-30: these counts do not agree with the next sentence. If 22 of 25 groups cover levels 2–5 with one `level_info` per level, that is 
+- L1314: erraPoint`, …) and one `Test_`-prefixed category named after a developer (an apparent leftover test category; name withheld 2026-09-30). **[OPEN — desk review 2026-09-30: 5 + 26 + 1 = 32, not the 31 rows stated; one of the three figures is wrong; to be settled against real data (recount `spawn_info_categories.xtbl`).]** Element 
+- L1324: 30% at rank 4 as `Ignore`/`Threaten` fall. **[CONFIRMED — empirical; fully resolves §10.8's per-level reaction values, previously entirely OPEN.]**
+- L1328: D — empirical that these five elements exist in the real file and are absent from §10.9's documented tree; whether/how they are consumed is OPEN.]**
+- L1349: ty/notoriety_levels values; `notoriety_spawn` row shape and per-group data — police-vs-gang labeling and `Check_Detection` semantics remain OPEN); item 8 (cheats: the "151" figure explained, DLC-cheats-exist-inside-base-table resolved, category names partially recovered — flag bytes and index mapping remain OPEN); item 10 (drunk
+- L1353: 80/254/263 exactly, so the 80 stands as correct; the actual residual doubt is the "22/25 groups cover levels 2–5" arithmetic in §14.6's own OPEN note, not the 80 total, and that was already marked there — stale conflict removed from this tally, nothing new found this pass** (`review/exe-notes-2026-10-01/interp_needs_data_triage_
+- L1359: 38 per-unit status lines; struck §6.3's flat `notoriety_spawn` tree in place and added §14.6's nested tree; marked the `Pepperspray` parent OPEN in both §10.2 and §14.9; downgraded §10.6's `Spline_Type` list from CONFIRMED to OPEN on Team B's 58/61 (team-b/HANDOFF.md "### 9.81 `sr3tables_progression`"); narrowed the scope of the
+- L1361: 10.1), base `tweak_table` passes `main` (§1.4/§10.10, HIGH CONFIDENCE); load order gains `gameplay_constants` and `mission_help` (§11); old OPEN notes and status lines struck in place, summary updated.
+- L1362: ` destinations swapped, `Freerunning_fail_pct` confirmed unread); §3.1 narrowed to its last hop (0x00DAAD80, archive-priority lookup, still OPEN); §4.1's two save-block writers read (no reorder on the save side; base-order data test still pending); §10.9's reader of the five extra elements identified (0x00BB6400; the file name i
+- L1363: er `0x00702810`, first confirmed consumer of `0x014A1370`), traced in `spec-player-runtime.md` §15.4; `player_health`'s regen fields remain OPEN for a consumer (searched for, not found). Full detail: `scratchpad/player_combat_aim_melee_damage_respawn_2026-10-08.md`. Cleanroom self-check: 0 new hits. Synced to Team B.
+- L1364: §6.2/§6.3's notoriety family gains confirmed runtime consumers: resolved §6.2's own flagged "which `NotorietyLevels` set is police vs gang" OPEN item (Set 0 = Gang, Set 1 = Police, confirmed from a live decay-rate reader's explicit `track==3` branch) in both §6.2 and §14.6; §6.1 gains a cross-reference to the crime-report functi
+
+## spec-tables-traffic-ai.md (weight 2, 55 live)
+
+- L8: nfidence key:** **CONFIRMED — disassembly** · **CONFIRMED — empirical** · **HIGH CONFIDENCE — inferred** · **HYPOTHESIS — unconfirmed** · **OPEN / UNKNOWN**.
+- L10: th no remaining open sub-item — §1.3, §1.4, §1.5, §9, §12, §14.3, §19, §21 — and 5 CONFIRMED/CORRECTED but each still carrying one narrower OPEN sub-point noted at its own claim — §1.2, §5, §7, §10, §13.4); of those 13, **3 carry outright corrections** (§1.2: the second/third `0x00DAC9A0` arguments are not a 0/1 "memory-source" 
+- L45: chemas; §13.4 (`action_nodes.xtbl`), §21 (life files) and §22 (`node_graph_files.xtbl`) are structural, with the interior explicitly marked OPEN.
+- L53: or-offset against the `+0x08`/`+0x0C` accessor-level model stated above, so "text mixed with child elements" is not fully re-derived — left OPEN rather than guessed.]** *(Desk review 2026-09-30: "directly from the document root" differs between the two files. `action_nodes.xtbl` rows are root children (§13.4); `node_graph_files.
+- L55: itespace-only text between tags is discarded, not stored empty; no entity decoding exists); the child/text field-linking arithmetic remains OPEN (not reached at this depth).**
+- L133: ph vs m/s — of `Speed`) were not traced. *(Unit partially resolved 2026-09-23: m/s from editor metadata, HIGH CONFIDENCE, §25 item 11.)* **[OPEN.]**
+- L162: → milliseconds; *hour-of-day* (int) → hundredths. **[CONFIRMED — disassembly for the constants `0.1`, `240.0`, `3 600 000.0`, `100`.]** **[OPEN — desk review 2026-09-30: the float-to-ms conversion `int(value × 3 600 000)` does not state the precision or whether it truncates or rounds (`0.1` in single precision times 3 600 000 is
+- L164: **Review status (2026-09-30): DESK-PASS, text fixes applied (OPEN markers for conversion precision and reader flavour) — desk review (not re-derived from the executable).**
+- L214: caller, not the reader; the `Item` resolver is a plain CRC lookup into the §14.6 registry. `0x00BE3360`/`0x00BE3320`'s relationship remains OPEN.**
+- L226: rtainly the five notoriety factions; the id→name binding is built at run time and was not recovered. **HIGH CONFIDENCE for "five factions", OPEN for names.**)
+- L242: internal slot into the numeric team id switched on above; a registry miss (`0x005961A0` returning `0xFF`) returns id 9 ("unknown"). **Still OPEN** — *which* name (`Deckers`/`Morningstar`/`Police`/`Luchadores`/`STAG`, §26.3) corresponds to which of ids 1/2/3/5/6 depends on how the registry at `0x02623A80`/`0x02623B48` is populate
+- L263: nds of call sites) puts identifying a narrower "owning subsystem" beyond what this pass's budget or method can settle, so that part is left OPEN rather than guessed.]**
+- L265: gleton-object address with thousands of call sites engine-wide, not a variable with discrete writers; its specific owning subsystem remains OPEN (out of this pass's reach, not guessed).**
+- L279: (starts at **6**, incremented per appended row). **There is no capacity check on appended rows** (the array's real bound was not recovered; OPEN). *(Desk review 2026-09-30: the bound can be derived from this document's own addresses. `0x0135B4A8 + 6 × 0x60 = 0x0135B6E8`, and slot 6 would span `0x0135B6E8…0x0135B747`, overlapping
+- L296: RMED — disassembly.]** Cross-references: animation-name table (built by the animation-set loader, not in this group); Wwise event names. **[OPEN — desk review 2026-09-30: whether "seconds ×1000 → ms" truncates or rounds, and in which precision, is not stated (as in §4); the three callbacks `0x0097CDD0`, `0x009BD730`, `0x004DD620
+- L318: ntents depend on which code path reached that point, and resolving it safely would need more careful tracing than this pass covered) — left OPEN rather than guessed.]**
+- L346: ; `goals_can_process_early` is corrected to a child of `Goals` (not row-level, contra Team B's reading). `Riotshield_Only`'s parent remains OPEN — not safely traceable at this pass's depth.**
+- L373: **[OPEN — desk review 2026-09-30: Team B (`team-b/HANDOFF.md` §9.82 item (1)) reports the row-level `HijackBehavior` copy with five fields ("`PlayerRank, StopChance, JackSuccessChance, PostResistFleeChance,
+- L375: **Review status (2026-09-30): DESK-PASS, text fixes applied (OPEN markers: nested `HijackBehavior` field set, clamp signedness) — desk review (not re-derived from the executable).**
+- L410: / `+0x2C` / `+0x2E` / `Instance_Cap`, `MaxSpawns` / signed → stored as a byte; default −1 (= 0xFF) **[OPEN — desk review 2026-09-30: which accessor reads these is not stated (§1.3 marker: the unsigned `0x00DAC1D0` would read `-1` as 0); to be settled against the executable (`0x008C9760`).]** /
+- L418: **Review status (2026-09-30): DESK-PASS, text fixes applied (`Name` field wording; OPEN markers) — desk review (not re-derived from the executable).**
+- L422: y` rows in a base table are silently ignored.]** Cross-reference: `Weapon` → `weapons.xtbl` (AH's doc, `spec-tables-weapons-combat.md`). **[OPEN — desk review 2026-09-30: the value `0x008DCB10` returns on a miss; and the weapon table's live bit (`+0x30` here and in `spec-tables-weapons-combat.md`'s `0x008dcb10` row, bit 0 of `+0
+- L424: **Review status (2026-09-30): DESK-PASS, text fixes applied (first-row rule restated; OPEN marker for the miss value) — desk review (not re-derived from the executable).**
+- L449: red as the strings `True`/`False`; a value that is neither leaves the byte at its pre-set default (§1.3). **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: the `+0x90` bit-7 note "True sets bits 6 and 7; False clears only bit 7" does not say which element (`Never_Exit` or `Can_Not_Exit`) it describes; the state of
+- L451: **Review status (2026-09-30): DESK-PASS, text fixes applied (OPEN markers) — desk review (not re-derived from the executable).**
+- L455: packing (`0x008EFEF0`) and the runtime use were not traced. **[CONFIRMED — disassembly for element names, counts and the transform grammar; OPEN — record layout and consumers.]** *(Desk review 2026-09-30: the real file also has a `num_objects` leaf directly under the root beside the 44 `object` rows, which this section does not 
+- L457: read (dead leaf); the `0x025EF148` hash table is 1000 one-dword slots. The deeper per-object packed-record interior (`0x008EFEF0`) remains OPEN (not fully unwound).**
+- L491: one` float, `+0x10` `Dummy_Car_Length` float, `+0x14` per-type vehicle count (runtime), `+0x18` per-type vehicle list pointer (runtime). **[OPEN — desk review 2026-09-30: "wraps" is not defined; an x86 `SHL` masks the count to its low 5 bits (so `n` = 32 gives 1), but the instruction the loader uses is not stated; to be settled 
+- L493: **Review status (2026-09-30): DESK-PASS, text fixes applied (OPEN marker for the shift) — desk review (not re-derived from the executable).**
+- L503: RMED — disassembly.]** Cross-references: `Mesh` → the item/mesh registry (`items_3d.xtbl`-family, not verified); `Traffic_Type` → §14.4. **[OPEN — desk review 2026-09-30: what the `+0x19` byte is an ordinal of, the type and size of the `+0x1C` mesh resource, and how consumers handle the unwritten tail of the array are not stated
+- L505: **Review status (2026-09-30): DESK-PASS, text fixes applied (OPEN marker) — desk review (not re-derived from the executable).**
+- L530: and only while the count ≤ the capacity in `+0xF8`; **`+0xF4`/`+0xF8` are not set by this reader** — the list buffer is provided elsewhere, OPEN) /
+- L538: disassembly.]** Cross-reference: `Charname` = the character-definition name CRC (same key as §12, §15); `Persona` = audio persona event. **[OPEN — desk review 2026-09-30: data check: the longest real `Bitmap` text must fit 31 characters plus the NUL, or the copy overruns the next entry; not measured.]**
+- L560: bl` §18 — both (2/2 files each) carry a `Name` element not in either section's list". It is not among the leaves listed above as read.)* **[OPEN — the rounding mode and precision of `End_Time`'s "rounded" ×1000 and of the `Record_*_Time` conversions are not stated; to be settled against the executable (`0x006A5310`).]**
+- L562: **Review status (2026-09-30): DESK-PASS, text fixes applied (Team B `Name` note; OPEN marker for rounding) — desk review (not re-derived from the executable).**
+- L566: path for `vehicle_despawn.xtbl` was followed (which mode selects the `_mp` file was not traced). **[CONFIRMED — disassembly for the parse; OPEN: file selection.]** **`0x00908FB0` itself is now fully traced — see `spec-ai-runtime.md` §17.5** (the ambient-population bootstrap: pool inits, the 6 `"os_*"` toggle-category registratio
+- L591: e registries and two data arrays from scratch. **[CONFIRMED — disassembly for element names, the packed transition word and the capacities; OPEN — the runtime meaning of the states (they are keys into the animation system).]**
+- L602: bling to `Transitions`". The tree above does not list it; the loader reads `Transition_Animation` only under `Transitions/Transition`.)* **[OPEN — desk review 2026-09-30: the precision and truncation of the `Speed_Multiplier` multiply, and the sizes of the arrays at `0x0262DCB0`/`0x0262E168`, are not stated; data check: distinct
+- L604: **Review status (2026-09-30): DESK-PASS, text fixes applied (Team B stray-element note; OPEN marker) — desk review (not re-derived from the executable).**
+- L618: lend_tree`) belongs to the animation-network subsystem and is not specified here.** **[CONFIRMED — disassembly of `0x004CB510`'s top level; OPEN — everything below the graph header.]** **[OPEN — desk review 2026-09-30: the slot arithmetic does not close. With 16 slots (0…15) and the base path in slot 15, slots 0…14 hold names, b
+- L620: **Review status (2026-09-30): DESK-PASS, text fixes applied (OPEN marker for the slot arithmetic; §1.2 wording note) — desk review (not re-derived from the executable).**
+- L692: n_elm.Team` additionally uses `Neutral Gang`/`Playas`/`Civilian` — 8 distinct strings from real base data, the id↔name mapping itself still OPEN); and the **rank/character-descriptor table at `0x029A91A0`** (stride `0x698`) used by `ai_behavior.human_elm.Rank` —  **[Resolved 2026-09-30: `spec-tables-progression.md` §10.6, `spawn
+- L701: ENCE, not CONFIRMED); the base file has only 3 real `LaneSpeed` rows against the 754 arithmetic ceiling. The true runtime consumer is still OPEN. See §26.2/§26.4.
+- L716: own.xtbl`. `vehicle_despawn_mp.xtbl` (§18) was searched for in all four archives and **not found anywhere** — a new, real negative for that OPEN item (the base game may simply not ship it, or it lives under a fifth archive not scanned here). Every extracted entry's inflated length matched its directory `sz_uncomp` exactly (32/32
+- L735: ssChance`, `PostJackFleeChance`) sitting alongside the documented `Ambient_tweaks`-nested set — re-decompiled, confirmed **never read**. **[OPEN — desk review 2026-09-30: Team B gives a different field set for the nested copy, see the marker at the end of §11.]** /
+- L741: / `action_nodes.xtbl` (placement file) / ⚠ (structural — §13.4 already OPEN) / per-`object`: `associated_max_file`, `action_node_bounds` → `box_length`/`box_width`; per-`spawn_node`: `source_file`, `source_prop` (spec only names `group`/`name`/`transform` for `spawn_node`).
+- L755: / `pedf_life.xtbl` / `life_default.xtbl` / ⚠ (structural — §21 already OPEN) / `Parent_Skeleton` under `Skeleton_Set` (real values: `PEDM` for `PEDF_Life`, absent for `Life_default`); a lower-case `group` text child of `Group` (real value `Default` in both files) /
+- L767: t/Child `Type` zero mismatches across 629+160 checks"; 629 + 160 = 789)* /  61 free (850 − 789); per-layout and per-type caps not measured (OPEN, §5) /
+- L775: rows in the raw dump, consistent with being under 140 per the loader's own running total (not independently re-derived here) / plausible **[OPEN — desk review 2026-09-30: 159 > 140. "Consistent" holds only if at least 19 (159 − 140) of the 159 sit in `Scripted_Only` rows, which skip `Human_Description` (§10), or if the bound is 
+- L791: e base game exceeds a documented bound.** *(Desk review 2026-09-30: except possibly `ai_behavior`'s `human_elm` sub-table, 159 against 140; OPEN, see the row above.)* Several arrays are within one row of their checked capacity (`ambient_traffic_events`, `roadblock_layouts` layouts, `roadblock_stag_lockdown`), and `ai_behavior.xt
+- L808: `JackSuccessChance`, `PostJackFleeChance` not present in the nested, documented copy; *Team B reports a different nested field set, see the OPEN marker at the end of §11*). Loader `0x00507AC0` was re-decompiled in full: it reads `Name`, `combat_aggression`, `Flee_tweaks/Flee_health_pct`, `Flee_tweaks/flee_events/Flag`, and `Ambi
+- L825: count wording; §26.1 three ✅ rows corrected to ⚠ against Team B §9.82; §26.2 roadblock objects 629 → 789 and `human_elm` 159 vs 140 marked OPEN; §26.4 call rewritten as prose) — desk review (not re-derived from the executable).**
+- L832: traffic-ai.md`): added review status lines to 36 units and a summary after the front matter; marked the combat-action 70-vs-`0x47` sentinel OPEN against `spec-tables-weapons-combat.md` §11.1 (§1.5, §9); derived the panic-reaction capacity of 6 from `0x0135B700` (§8, HIGH CONFIDENCE (derived)); resolved the rank-table owner from 
+- L833: 13 cleared for implementation (8 fully CONFIRMED — §1.3, §1.4, §1.5, §9, §12, §14.3, §19, §21 — and 5 CONFIRMED/CORRECTED with one narrower OPEN sub-point each — §1.2, §5, §7, §10, §13.4), 3 of those carrying corrections (§1.2: `0x00DAC9A0`'s 2nd/3rd arguments are not a 0/1 "memory-source" flag; §10: `goals_can_process_early` is
+- L835: §19.7), a second confirmed consumer alongside this table's own `Spawn_Point` lookup. Does not resolve the singleton's own owning-subsystem OPEN item. Full detail: `scratchpad/notoriety_police_spawn_instruction_2026-10-08.md`. Cleanroom self-check: 0 new hits.
+
+## spec-tables-ui-controls.md (weight 2, 22 live)
+
+- L9: / **CONFIRMED — empirical** (observed directly in extracted game data) / **HIGH CONFIDENCE — inferred** / **HYPOTHESIS — unconfirmed** / **OPEN / UNKNOWN**.
+- L29: 0`,  a state query whose values 2 and 3 are treated as terminal (re-derived 2026-10-01 — see §8.2), not the `0x00dac9a0` XML-table path. **[OPEN — desk review 2026-09-30: the per-row parse after the ready callback is not traced (§8.2, §17 item 4); to be settled against the executable. 2026-10-01: the completion step that stores 
+- L56: tables-weapons-combat.md` §1.5 item 4 documents as the `Name` row key), `Common_Bindings` (bool, stored once per set; consumer not traced — OPEN, §17), then two child lists: `Button_Controls > Control` and `Axis_Controls > Axis`.   **Runtime storage is per binding set (re-derived 2026-10-01):** `0x0142A010` points to an array of
+- L71: ever scheme/binding-set is active, not this section's per-scheme storage array. **So `0x005C1F70` is not the save-format-table builder this OPEN item was asking about; that question (whether any reader here serialises or deserialises the save's own 164-slot Table A shape) stays OPEN**, now narrowed to the other nine unread reade
+- L76: ### 2.3 `Axis` (axis binding) record — **40 bytes, exactly `spec-save-format.md` §7.6 Table B's shape, and closes its field-order OPEN item**
+- L91: **This directly resolves `spec-save-format.md` §7.6's own flagged OPEN item** ("the *pairing* of which key/button sits in which runtime slot is only partly resolved"): the file-order-to-slot mapping is exactly the field order above, four keys then four mouse buttons the
+- L103: mply ignores two of the three. **[CONFIRMED — disassembly for the gate; CONFIRMED — empirical for the 509/509/509 tag-presence count.]** **[OPEN — desk review 2026-09-30: how many `<Control>` rows have `<X360>` false (which decides which rows load) is not counted; to be settled against real data.]**
+- L132: 1 letters are not in alphabetical order; 26 letters cannot fill 15 values), so the individual letter values are not given here either.]* **[OPEN — desk review 2026-09-30: the 20 unlisted entries and the per-letter values (re-dump `0x01121D20`); to be settled against the executable.]** **These values are exactly the standard PC A
+- L150: when absent or unmatched), not `0x00DAC830` — so the stored value is the table's value column. **[CONFIRMED — disassembly 2026-10-01.]** **[OPEN — desk review 2026-09-30: `STICK_UNBOUND`=0 is the only `UNBOUND` entry with a non-negative value and it collides with both `A` and `L_JOY`; whether the value column was read correctly,
+- L177: e bound only via a code path not read this session, e.g. a hardcoded default, or genuinely unused on PC). **Not forced further — flagged as OPEN (§17).** By contrast, **the CAA axis-action union is a clean 34/34** — every one of the 34 compile-time axis actions is bound by name in the union of the two files. **[OPEN — desk revie
+- L256: index) — two tables, both attributions right; `NPC_Animation` child names as listed; `Target_Camera_Angle` alone is converted from degrees. OPEN: the values `0x0060AF80` writes into `+0x4C`…`+0x74` (and the rest of the node) before parsing, which are the defaults when `Shooting_Mode`/`Additive_Action` are absent.]**
+- L302: **[Re-derived 2026-10-01: `0x00EA4AAC` is the CRT `exp` (CORRECTED); `+0x6F8` is written by neither `0x00ACA960` nor `0x00AC5CF0` (OPEN — if anywhere, in `0x00AC6020`/`0x00AC6210`/`0x00AC6120`/`0x00AC9910`); `skip_camera_transition`/`use_alt_freckle_cam` are read with the child-element text getter (HIGH CONFIDENCE element); grou
+- L309: icle_cust_cameras_new.xtbl`: customization-viewer camera presets **[CONFIRMED — empirical for schema; mechanism CONFIRMED for one of three, OPEN for the other two]**
+- L315: ry `0x00dac9a0`/`0x00dc4ff0` grammar, since the file itself is ordinary `.xtbl` text) was **not traced past the resource-ready callback** — OPEN. The data pointer `0x027B3470` is stored by un-functioned code at `0x00A9AE5F` (range `0x00A9AE40`–`0x00A9AEC0`) and consumed by `0x00A9AFD0`; the parse hand-off is in one of those two 
+- L316: umer** — the code that actually walks this array by index was not located this pass. **[HIGH CONFIDENCE — inferred for the container shape; OPEN for the consuming code and the exact per-category default-float layout.]** (A separate function, `0x007b2270`/`0x007b2650`, does reference the same memory region, but only as an inciden
+- L356: `user_interface.xtbl` — UI cluster/resolution layout **[CONFIRMED — disassembly for the loader; schema CONFIRMED — empirical, byte offsets OPEN]**
+- L397: 0–0x007C12E0 that is also the loader's only caller, so whether the pools are sized from the file is not yet read — "no capacity ceiling" is OPEN, not confirmed. Layouts: section {+0x00 section_title handle, +0x04 head of its heading list, +0x08/+0x0C links}; heading {+0x00 head of its item list, +0x04 heading handle, +0x08 type 
+- L399: 90): strides, record layouts, nested circular lists, interning and the name patch CONFIRMED; type table count CONFIRMED (entries 0–1 read). OPEN: pool sizing / "no capacity ceiling" (range 0x007C1230–0x007C12E0), type-table entries 2–3 (ptrs 0x012FD3E0 4), consumer 0x007C0DB0. Tree counts VALIDATED-BY-DATA.**
+- L407: ted by the correction above, which says the function only copies the filenames]*) was **not decompiled to field level this pass** — flagged OPEN rather than forced (§17); field-level decompilation is now done, in `spec-anim-runtime.md` §1–§4, not here.
+- L472: / CBA action-name union used across `control_binding_sets.xtbl` ∪ `control_schemes.xtbl` / 154 of 165 non-sentinel names (§5 item 5, OPEN) /
+- L480: `<root><control_parameters>` shape / confirmed 2026-10-03 by direct read, `spec-anim-runtime.md` §1.4 — closes this section's own row-count OPEN item /
+- L509: ight; reworded a decompiler signature and a format-string call (§12) and a code-shaped guard and decompiler-view wording (§9, §9.1); marked OPEN: ordinary-reader count 15 vs 12 traced (§1.2), final complement/seeds (§1.4), per-set stride arithmetic (§2.1), capacity inference and UNBOUND 0 vs −1 (§2.2/§2.3/§4.1), Scheme_Type sele
+
+## spec-tables-vehicle-world.md (weight 2, 29 live)
+
+- L8: om the reader's code) / CONFIRMED — empirical (checked against real shipped rows) / HIGH CONFIDENCE — inferred / HYPOTHESIS — unconfirmed / OPEN.
+- L10: EEDS-EXE.** 5 units/groupings were out of scope for this pass and keep their 2026-09-30 DESK-PASS status unchanged: §1, §8.1, §9.2 (one new OPEN item added to §23: which hash variant `0x00a952e0`'s colour-set lookup uses against the pool's `0x00d9e7e0`), §20–§21 (the §5/§7/§8.2 cross-reference rows were updated in place without 
+- L22: -run, §6.2*), `externalized_vehicle_components.xtbl` (§7 — *qualified 2026-09-30: slot header only; the `Component` record's own fields are OPEN, §7.1/§23*), `vehicle_cust_slots.xtbl`, `vehicle_cust_interface.xtbl` (§8), `vehicle_cust_color_sets.xtbl` (§9.2), `vehicle_surfing_style_two.xtbl` (§10), `level_objects.xtbl` (§12), `p
+- L72: try 0 is `none` and entry 1 is `any` (first two pointers read from `0x0130e638`/`0x0130e63c`); the remaining 81 pointers in index order are OPEN until the data range `0x0130e638`–`0x0130e784` is dumped. No-match stores 0, the same value as `none`.** Values are stored as the matched index into consecutive dwords starting at the r
+- L101: x00ac9910`, both of which read a `Seat` child in the vehicle-info code; which vehicle element they serve, and the 12 unread strings, remain OPEN. `spec-vehicle-data.md` §7.3's seat labels (`Front Driver Side`…) are descriptions, not this resolver's literals.]**
+- L124: _Shape` statement rests on an unquantified sample, not on all 209 elements; the 209/209 seat figure is for the 51-row base copy only.]** **[OPEN — desk review 2026-09-30: re-run the seat, `Queue` and `Capsule_Shape` predicates on the 52-row `patch_compressed.vpp_pc` copy and identify its extra row; to be settled against real dat
+- L126: er (0x00b07330 and 0x00ac1ba0 read in full); CORRECTED: `Capsule_Shape` indirection table is at `0x011861d0` (`0x0116bb20` belongs to §15); OPEN: the 6 indirection values, 12 of the 16 seat strings, and which vehicle element `0x00ac9060`/`0x00ac9910` serve; NEEDS-DATA: 52-row patch copy unchanged (job `20261001T123123-team-a-ytg
+- L270: in full, stride `0x10`) — CORRECTED from the 2026-09-30 reading; the `Component` record's own internal fields beyond the one flag byte are OPEN — see §23.]**
+- L276: 0` cust_slots row pointer, `+0x04` camera hash, `+0x08` array, `+0x0C` u8 count, `+0x0D` marker byte) — CORRECTED from the 2026-09-30 text; OPEN: `Component` record internals (`0x00a96a80` not dumped).** (job `20261001T123123-team-a-ytgi`)
+- L315: 130 read in full): `name` resolves against `vehicle_cust_slots` `Name` hashes to a row pointer; flags bit0/bit3 by value, bit1 by presence; OPEN only: contents of `+0x88`–`+0x97` set by constructor `0x00818180`; 4-row count corroborated by Team B.** (job `20261001T123123-team-a-ytgi`)
+- L408: Dumps: `0x005984c0` (loader, read in full) and `0x00598160` (activation pass, §11.1). The "two of the three consumers" sentence above stays OPEN (not in scope of these dumps).
+- L452: `+0x78` `Bloom/Radius`, `+0x7C` `Bloom/Cutoff`, `+0x80` `Bloom/` a third child whose literal at `0x0111d7e0` was not resolved in the dump (OPEN: one string read).
+- L454: ords, element names, defaults and the registry (0x005984c0 and 0x00598160 read in full); HIGH CONFIDENCE for the orientation-matrix helper; OPEN: the third `Bloom` child literal at `0x0111d7e0`; 1 × 3 row counts corroborated by Team B.** (job `20261001T123123-team-a-ytgi`)
+- L490: 01, `0x008e7490` read in full); whether `0x00dacfb0` (not dumped) falls back to the parent's `X`/`Y`/`Z` when the named child is missing is OPEN — the §12.3 empirical match describes the data (which happens to use that shape), not the reader /
+- L509: ons, the `+0xC0` bit map, element paths, `Weight`/`Lifetime` formulas and the four defaults (0.5 / 0.05 / 0.05 / 0.01, xref static values); OPEN: `Death_Money` vec3 is requested as a `Cash_Out_Point` child (`0x00dacfb0` fallback behaviour); the `+0x70`/`+0x7C`–`+0x87` bytes are untouched by the builder; 149-row count corroborate
+- L609: / `+0x24` / flags: OR of the `Item_Flags/Flag` matches against a 27-literal table at `0x01308838` (`0x00dac740`, not dumped — OPEN; `inherit_bone_transforms` is one of them per the real data — **`Item_Flags` is consumed, not dead**), plus `0x20000000` when `Override_Bounding_Box` exists, `0x40000000` when `streaming_category` =
+- L616: ame was not identified this pass** (candidates not ruled out: a per-`Item` child element, since no separate top-level section exists; still OPEN after 2026-10-01).
+- L622: ssembly for the per-row builder (0x00904d10 read in full): capacity 430, stride 0xB8, 14 field offsets, pass split by `streaming_category`; OPEN: the 27 `Item_Flags` literals (`0x01308838`), `0x008fbfd0`, `0x009052e0`, the contained-items element; 391-row count corroborated by Team B.** (job `20261001T123123-team-a-ytgi`)
+- L656: he `0x01495410` heap; CONFIRMED — disassembly; the activity-name list of `0x00614d70` and the unknown-persona return of `0x0070a2f0` remain OPEN]**:
+- L661: 0 (none) if absent (desk review 2026-09-30: whether 0 can also be a valid persona id, and what `0x0070a2f0` returns for an unknown name, is OPEN) /
+- L669: mbly (0x00615430 read in full): 19-entry {pointer,count} table at 0x014b2ac8, 8-byte records, `Original` required / `Replacement` optional; OPEN: `0x00614d70` literal list, `0x0070a2f0` unknown-name value; 3-row count corroborated by Team B.** (job `20261001T123123-team-a-ytgi`)
+- L737: the shared 8-seat resolver (`0x00ac1ba0`) also used by `spec-vehicle-data.md` §7.3/§7.4's `ProhibitedGunfireSeats`/`Seat_Specific_Data` **[OPEN — desk review 2026-09-30: not supported by `spec-vehicle-data.md`, see §3.1]** / `_stricmp` against two parallel 8-name tables /
+- L759: us (2026-09-30): DESK-PASS, text fixes applied (24 index rows; loader/entry naming for `level_objects` reconciled; seat-resolver row marked OPEN) — desk review (not re-derived from the executable).**
+- L796: 2.  **Closed 2026-10-01: `0x005984c0` read in full, full `LightSet`/`Light`/`Ambient_Grid` record maps given in §11.3. OPEN remains: the third `Bloom` child literal at `0x0111d7e0`.**
+- L798: re from data alone) but a concrete follow-up target with real, non-empty data ready to validate against once the offsets are found.** Still OPEN after 2026-10-01: `0x00a96a80` (the per-`Component` filler) was not dumped.
+- L804: cument was invented past what the disassembly or the real base rows support; where the trail ran out (items 1–4 above), that is recorded as OPEN rather than guessed, per `HANDOFF.md` §36 (archived §27.8).
+- L810: eat resolver `0x00ac1ba0`, were not dumped, so which vehicle element (`ProhibitedGunfireSeats` or `Seat_Specific_Data`) they parse is still OPEN.
+- L823: sistency review, `review/spec-consistency.md`): qualified §6/§7 in the §1.1 coverage table (not structurally validated / `Component` record OPEN); fixed 3 cross-references (weapons-combat §14.5→§14.4, save-format §10.3/§16→§10.3, §22→§21.1); swapped the reversed From/To of the `vi_*` row in §21; added the 52-row patch-copy cavea
+- L825: 7th `Direction` literal is `Capsule_Shape[0]` (§4.1); struck "matching the 4 flags" (3 named, §8.2); stated row tags in §12/§14/§15; marked OPEN: shared `0x0116bb20` table, seat-name conflict with `spec-vehicle-data.md`, `Slot` stride, 4-vs-8 seats, `Balance_Bar_Params` names, quad count, flag bit map, defaults, activity literal
+
+## spec-tables-weapons-combat.md (weight 2, 36 live)
+
+- L8: om the reader's code) / CONFIRMED — empirical (checked against real shipped rows) / HIGH CONFIDENCE — inferred / HYPOTHESIS — unconfirmed / OPEN / UNKNOWN.
+- L10: m B's full-population run, and that run checks element names and literal membership only, never offsets, defaults or unit conversions.  The OPEN items the review added inside DESK-PASS units are collected in §17 item 12. Three §18 claims were downgraded or corrected against Team B's full-population counts (§18.5 "clean" for ammo
+- L12: ata implied does not exist in that table at all — the real `Beat_Down_Kill` child is simply unread by this loader). **2 units remain partly OPEN** on one narrowed sub-question each that depends on a callee not in evidence this pass: §1.5 (the `Is_DLC` gate byte is confirmed set correctly, but its consumer is confirmed to be neit
+- L75: if no existing record matches; this is a new detail beyond "fewer defaults re-applied." Item 1 (gate-byte consumer) is CONFIRMED set, still OPEN for the consumer: `0x00b82200` writes `+0x0C` to `0x00` on `Is_DLC`=true / `0xFF` otherwise exactly as stated, but neither it nor `0x00b83390` ever *reads* `+0x0C` back, and the one gen
+- L275: / `+0x374` / `Fade_Out_Time` (seconds) / `u16` ms (×1000); 0 if absent or negative **[OPEN — desk review 2026-09-30: behaviour above 65.535 s (wrap or clamp) not stated; to be settled against the executable (`0x00b804d0`) / real data (max authored value).]** /
+- L413: the value carried by the patch; **whether the shipped data uses it to mean "clear the field" was not determinable without the base rows** — OPEN; the 64 real base rows are now available (§18.5) but their `_OM` values were not counted there.)
+- L462: **[OPEN — desk review 2026-09-30, Team B real-data finding not reconciled here: `team-b/HANDOFF.md` §9.83 (the "Correction (2026-09-24)" paragraph) reports row-level `cost` present "**31/35**" outside `<stor
+- L638: **[OPEN — desk review 2026-09-30: the "…" rows from `+0x40` (`fade_in_rate`, `fade_out_rate`, `Capsule_*`, `Use_Cylinder`) do not say whether their parent is `steering`/`slowing` or `steering`/`slowing` → `d
+- L640: **Review status (2026-09-30): DESK-PASS, text fixes applied (element-path ambiguity marked OPEN) — desk review (not re-derived from the executable).**
+- L646: 0`** (resolver `0x00590d20` → `0x00590ce0`, §1.6). No capacity check exists in the loader (the backing region's extent was not determined — OPEN). *(Desk review 2026-09-30: lower bound only — with all three DLCs present the loader writes 93 base (§18.2) + 7 DLC (§16) = 100 records, `100 × 0xEC` bytes, into this region; the upper
+- L691: the executable, exe_index/tables-weapons-combat.txt plus a fresh Ghidra read of `0x004eee40`/`0x005fd830`/`0x00dad0a0`; region extent still OPEN, not addressed this pass — the loader function that would show the backing allocation's size was not read) — desk review (not re-derived from the executable).**
+- L713: **[OPEN — desk review 2026-09-30: §18.5 checks only the row count and `Target_Type` values of the 3 real rows; none of the reject rules above was applied to them, so whether all 3 load is not shown. `team-b/
+- L795: / `+0x08` / `Effect` / effect handle (`0x005c50b0`); a row without `Effect` passes NULL to the resolver / *(OPEN — desk review 2026-09-30: the resolver's result for a NULL name is not stated; `0x005c50b0`)* /
+- L802: / `+0x24` / `Ricochet` → `Ricochet_velocity_scale` / `f32` always (inside `Ricochet`) / 0 **[OPEN — desk review 2026-09-30: §18.6 finds `Ricochet` in 0 of the 13 base rows, so the absent-parent path is the only one shipped data exercises; "0" holds only if the always-read is skipped when `Ricoche
+- L807: **Review status (2026-09-30): DESK-PASS, text fixes applied (absent-`Ricochet` path and NULL `Effect` marked OPEN; shipped diagnostic paraphrased) — desk review (not re-derived from the executable).**
+- L833: e in the same descriptor table but **are not read by this loader** (their consumers, presumably the store's display code, were not traced — OPEN). The descriptor pattern is the same one `continuous_explosions.xtbl` uses (§10.2). No DLC archive carries this table.
+- L841: supplies the *number and types* of lights; the game places them relative to the weapon display at run time. **[The lightset schema itself: OPEN here — belongs to another group.]**
+- L851: **; records at **`0x02624390`, stride `0x64`**, count at `0x02624388` (**no capacity check** — the extent of the region was not determined, OPEN). A row named `Default` (case-insensitive) stores its index at `0x01309860` — the set used when a weapon names none. A weapon selects a set through its `Strafe_Angles` element (§2.2, re
+- L868: **Review status (2026-09-30): DESK-PASS, text fixes applied (absent-child pointer; storage extent still OPEN) — desk review (not re-derived from the executable).**
+- L964: xplosions`, `weapon_tracers`); the vehicle handler is `0x00ace890` (`spec-vehicle-data.md` §7.1); the weapon handler is described in §2. **[OPEN — desk review 2026-09-30: "fifteen" cannot be reproduced from this list, which names 16 table files in 14 list entries (one entry groups three character tables), mapping plausibly onto 
+- L966: **Review status (2026-09-30): DESK-PASS, text fixes applied (handler count marked OPEN) — desk review (not re-derived from the executable).**
+- L1058: 12. **Added by the desk review (2026-09-30)** — OPEN items marked in place: the absent-child behaviour of the "always" readers (§1.3); the order of the two `+0x1A4` writes and the reader flavours of `Fire_Cone_Angle`/`Charge_Release_Info` (§2.2, §2.3);
+- L1062: **Review status (2026-09-30): DESK-PASS (item 12 appended for the review's new OPEN items) — desk review (not re-derived from the executable).**
+- L1141: / `ammo.xtbl` (35-row patch copy) / 35 /  **OPEN (desk review 2026-09-30): not clean — row-level `cost` in 31/35 rows, differing from `store/cost` in 13/35 (`team-b/HANDOFF.md` §9.83, "Correction (2026-09-24)"); see §5.1** / `Inv_Slot` **23/23** in
+- L1142: / `melee.xtbl` / 336 /  **OPEN (desk review 2026-09-30): a row-level copy of `ImpactDir`/`ImpactForce`/`AttackLimb` in 273/336 rows, not listed in §18.6 (`team-b/HANDOFF.md` §9.83, "Spec disagreements found against real base-game
+- L1144: / `aim_drift.xtbl` / 20 /  **OPEN (desk review 2026-09-30): `Penalties`, `Bonuses`, `lag_amount`, `lag_time`, `vertical_offset` occur in 20/20 rows, measured per row, and are not listed in §18.6 (`team-b/HANDOFF.md` §9.83, "Correctio
+- L1153: / `store_weapons.xtbl` / 34 entries / clean (`Num_Hoods`/`Angle`/`Distance`/`Offset` still absent from real data too — §13.2's OPEN item gets no new information either way) / — / — /
+- L1159: **[CONFIRMED — empirical for every row above.]** *(Desk review 2026-09-30: except the three coverage cells downgraded to OPEN above (ammo, melee, aim_drift), which Team B's full-population counts refute. Two further Team B findings qualify "clean" without a count that settles them: every singleton table here (`Crib_Weapons`
+- L1166: `Bonuses`, `lag_amount`, `lag_time`, `vertical_offset`; whether the reader really looks for `Recovery`, or the path was mis-associated, is OPEN — see §8.)*
+- L1167: some other, non-table-driven system (not read in this pass — no consumer of any table was read, §16.5) resolves the chain another way is **OPEN**.
+- L1170: rom stated-as-fact to HYPOTHESIS — it was never confirmed by tracing which trick's id the localisation key resolves to.**  **[Downgraded to OPEN by the desk review 2026-09-30: the field count conflicts with Team B's reading of the same single element — `team-b/HANDOFF.md` §9.83 item (4): "same 6-field shape as the documented 18"
+- L1182: ion on: `aim_drift` `MinTime`/`MaxTime` (19/20, corrected in §18.6); the "clean" coverage of `ammo`, `melee` and `aim_drift` (downgraded to OPEN in §18.5); the shape of `Beat_Down_Kill` (5 vs 6 fields, OPEN in §11.2/§18.6); row-level `<Name>` on the singleton tables and the `Daedalus` row's lower-case names (OPEN, §18.5 note). T
+- L1184: 0): DESK-PASS, text fixes applied (`MinTime`/`MaxTime` corrected to 19/20; three "clean" cells and the `Beat_Down_Kill` shape downgraded to OPEN against Team B's counts; shipped note text paraphrased) — desk review (not re-derived from the executable).**
+- L1191: anagement` "seven `u16`" to six + `u8` + pad (§2.3) and `aim_drift` `MinTime`/`MaxTime` 20/20 to 19/20 (§18.6, Team B §9.83); downgraded to OPEN the §18.5 "clean" cells for ammo/melee/aim_drift and the §18.6 `Beat_Down_Kill` 5-field reading, against Team B's counts; added OPEN notes for Team B's ammo/melee/aim_drift findings (§5
+- L1192: zero-fill) and 2 narrower points inside otherwise-cleared units (§3 inline note's exact stored handle; §10.1's backing-region extent) stay OPEN, each behind one specific callee not read this pass (`0x00b834c0`'s refresh-time gate consumer was not found anywhere searched; `0x00dad460`, `0x00849950`/`0x00db0ba0`, and the `explosio
+- L1194: aller (`0x009ec3c0`), traced in `spec-player-runtime.md` §15.1. The `steering` half of each profile block still has no confirmed consumer — OPEN. Full detail: `scratchpad/player_combat_aim_melee_damage_respawn_2026-10-08.md`. Cleanroom self-check: 0 new hits. Synced to Team B.
+
+## spec-terrain-format.md (weight 2, 15 live)
+
+- L8: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L24: runtime `u16` count at the list's `+0x30` equals this file's own `+0x0C` slot count was not traced this pass (the file→object mapping stays OPEN), so the 56-vs-58 census itself is still a data question.**: the first group is **ground/splat textures** — real names like `dirt_tile_01_d_dt.tga`, `tarmac_02_n.tga`, `asphalt_lot_02_r
+- L26: ts only caller, the zone dependency resolver (`0x00858290`), are now identified — `N` is summed, not a label; closes the "no address given" OPEN item. Residual NEEDS-DATA: whether the `cc:N` strings are counted in the file's own slot count (56 vs 58 strings) — the file→runtime-list mapping was not traced this pass; a full `cc:N`
+- L54: .czh_pc`'s or `.czn_pc`'s marker values — followed by 12 zero bytes, forming a 16-byte header. **[CONFIRMED — empirical, exact bytes.]** **[OPEN — desk review 2026-09-30: `spec-zone-data-format.md` §7.1 finds that the `.gzn_pc`'s leading `u32` also appears in its own `.czn_pc` in 1,002/1,002 pairs (control 6.5%), and §7.2 calls 
+- L60: **Review status (2026-09-30): DESK-PASS, text fixes applied (the "magic" annotated OPEN against `spec-zone-data-format.md` §7.1; constructor pointer added); data check: whether `0xE6EA70B7` occurs in the sample's `.czn_pc` and varies across tiles — desk review (not re-derived from the e
+- L149: against, doesn't disprove. **OPEN.**
+- L183: rking tile at a fixed point in time — but it's the only true conditional found in this function's record loop, never previously documented. OPEN: what sets `0x0245d710`, and what bit `0x10` gates downstream (not opened this pass).
+- L187: 0` MATSET format) to check whether any of its 12 references specifically resolves to the already-known world-origin-collapsed Mesh block. **OPEN, concrete next step:** locate which of `0715`'s reference records' own AABB/position fields match that block. **[2026-10-11: superseded as the priority lead — Team B empirically found t
+- L200: this side's pre-fix population, 535 is Team B's corrected one; the 20-byte test has not been re-run on 535 — `spec-vertex-format.md` §12.13 OPEN marker)*) **— agreement across both sides of the clean-room boundary, from two structurally different methods (their container-level reader vs. this side's channel-record decode).]** Th
+- L204: le: composite render shows it's real, visible shell geometry aligned with code-0's facade detail — 'probable proxy' label RETIRED, role now OPEN", `team-b/HANDOFF.md` §9.130. Team B names the companion "code-0" (a layout code) where this paragraph says "sem 0/2/4" (semantics); which companion channel carries the facade detail is
+- L206: **Review status (2026-09-30): DESK-PASS, text fixes applied (CONFIRMED narrowed to HIGH CONFIDENCE, citing Team B §9.130's "role now OPEN"); data check: a composite-render overlap metric over the 535-channel population — desk review (not re-derived from the executable).**
+- L214: The real lookup — whatever links a zone draw range's material id to an actual `.czh_pc`/`.matlib_pc` texture reference — remains genuinely OPEN; this narrows the search (a real, varying id exists to key from) without resolving it. *(For buildings, see `team-b/HANDOFF.md` §9.132/§9.133: textures from `.clmesh_pc`'s `MaterialRecor
+- L232: 83 `.gzn_pc` (81 empty), citing `spec-zone-data-format.md` §7.1 and `team-b/HANDOFF.md` §9.55/§9.55.1; §2 "6th" → 5th, field offsets cited, OPEN on 56 vs 58 strings and on the missing resolver address; §3 step-alignment CONFLICT, original framing marked superseded; §4 "magic `0xE6EA70B7`" annotated OPEN (`spec-zone-data-format.m
+- L265: - **2026-10-08 — the two OPEN static questions from the correction above, chased (same agent,
+- L303: explain a broken-vs-working tile difference by itself — left OPEN. The forward trace to the
+
+## spec-texture-format.md (weight 2, 25 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: `, bucket count, second table `0x02A38140`), the Appendix `.matlib_pc` (population header check, footer), and the data measurements flagged OPEN in §3 (`+0x0C` high half), §4/§10.5 (per-dimension clamp, DXT row formulas) and §10.4 (group count > 1).
+- L48: y the low 16 bits of the field are read.** **[Desk review 2026-09-30: treat the field as 4 bytes on disk and use its low 16 bits (§10.3). **OPEN — desk review 2026-09-30: whether the high 16 bits are `0` on all 76,651 records is not stated anywhere; to be settled against real data.**]** /
+- L56: **Review status (2026-09-30): DESK-PASS, text fixes applied (`+0x0C` on-disk width noted; high-half check left OPEN; §10.3 is the normative record table) — desk review (not re-derived from the executable).**
+- L140: **[OPEN — desk review 2026-09-30: records begin at file offset `0x18` (§10.2, validated 70,524/70,524) while this runtime view puts the count at `+0x14` (same as the file) but the records at `+0x30`; either
+- L142: the **platform-indexed `.cvbm_pc` extension** — the same alternate-extension table the registration row carries — into a 64-byte buffer. **[OPEN — desk review 2026-09-30: whether the extension *replaces* the name's `.tga` extension or is *appended*, and what happens to a name longer than the 64-byte buffer, are not stated; to be
+- L150: m the file bytes. **[CONFIRMED — disassembly.]** *(Desk review 2026-09-30: this cross-checks the stride only, not the record base — see the OPEN note above.)*
+- L158: `, `"a"`/`0x20` → `0x1`) reproduce only with initial value `0` and 32-bit wraparound (0/5 with djb2's `5381`; re-checked in this review). **OPEN — desk review 2026-09-30: signed vs unsigned modulo, the signedness of the character load (bytes ≥ `0x80`), and the hash width above the low bits cannot be decided by those vectors — bo
+- L184: **[OPEN — desk review 2026-09-30: the header layout rests on one 768-byte sample (no Team B `.matlib_pc` figure); the constant at `0x00`, `0x04` = name-table length and the slot-count distribution need a pop
+- L203: t likely the container type ("Cust_Component" / "Cust_Logo") or the manifest's type byte (`spec-resource-dispatch.md` §8.5); not traced. **[OPEN.]**
+- L226: SS (no text fix needed; the FUN_/DAT_ tokens are address citations; negative claims are scoped to the 69-function closure and used only for OPEN labels) — desk review (not re-derived from the executable).**
+- L238: it after claiming a named slot; zero on disk on all files; no reader found in the closure / **CONFIRMED (writer) — disassembly**; reader **OPEN** /
+- L240: 70,524/70,524 (equals the PC g-side alignment of §10.5 — a coincidence not established as a link) / value **CONFIRMED — population**; use **OPEN** /
+- L282: disassembly + population.]** **[Desk review 2026-09-30: the group rule for a count above 1 is **code-derived only, unexercised** (§12.6). **OPEN — desk review 2026-09-30: what `+0x14` holds in records 2…k of a group (the group count again, `1`, or `0`), and whether the walk reads it there at all, is not stated; to be settled aga
+- L284: **Review status (2026-09-30): DESK-PASS, text fixes applied (group > 1 labelled code-derived/unexercised; records 2…k OPEN); group = 1 fully covered by the population (Team B: group count 1 on 70,524/70,524, `team-b/HANDOFF.md` l.11323) — desk review (not re-derived from the executable).**
+- L290: and the row count is `ceil(height / block_edge)`; the per-level source advance is `height × row_bytes / block_edge` (integer) **[CONFLICT / OPEN — desk review 2026-09-30: the two row formulas (rows read = `ceil(height / block_edge)`, pointer advance = `height × row_bytes / block_edge` truncated) agree whenever the height is a mu
+- L294: **Review status (2026-09-30): DESK-PASS, text fixes applied (denominators 70,468; two-row-formula CONFLICT/OPEN marker; clamp and cube face order labelled code-derived); alignment and `size = Σ levels` VALIDATED-BY-DATA: 70,468/70,468 pairs and 76,650/76,650 records, Team B `team-b/HANDOFF.md` l.11318–11322 —
+- L298: byte registry entries (`0x00dce590`); a group of `k` records occupies `k` consecutive entries. **[CONFIRMED — disassembly.]** **[CONFLICT / OPEN — desk review 2026-09-30: this cites the rotate-left-6/XOR hash at `0x00db09d0`, but the project catalogues that hash at a different address, **`0x00da7890`** (≈18 call sites, `spec-ext
+- L312: records (98.3%); also all 264 A8 records and 550 of 1,090 A8R8G8B8 records; DXT1 rarely (323 of 63,101)) / 12,429 / value only — meaning **OPEN** (`has alpha` is a HYPOTHESIS) /
+- L313: / `0x0004` / not tested by any function in the closure / 76 records, mostly character customization diffuse maps / **OPEN** /
+- L320: **Review status (2026-09-30): DESK-PASS (no text fix needed; bit counts re-added and tie; the meanings of `0x1`/`0x4`/`0x200` stay OPEN/HYPOTHESIS as labelled — executor behind `0x00474c80` untraced) — desk review (not re-derived from the executable).**
+- L345: t only ever runs on the low-mip merge that ships no data — so it is best read as a stale or platform-specific alias, **not established** (**OPEN**, cosmetic).
+- L351: ### 11.2 Settling `403` (§4/§6 item 1 said "deliberately OPEN — several 16-bit layouts fit")
+- L413: **Remaining OPEN (honest gaps):** (1) meaning of flag bits `0x0001`, `0x0004` (read by nothing in the scanned closure) and the effect of `0x0200` beyond "its inverse is a per-sampler SetTexture argument" — the comman
+- L427: 0x00dab330`, initial value 0 and 32-bit wrap (from `spec-lua-api-behaviour.md` §5.3's vectors), char-signedness / signed-vs-unsigned modulo OPEN; §2 row `0x10` corrected to two `u16`s per §10.2; §10.3 "70,469 single-texture files" relabelled; 70,471 → 70,468 denominators for first-offset/chain/tail gates (§5, §10.3, §10.5, §12.3
+
+## spec-tree-format.md (weight 2, 34 live)
+
+- L11: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L42: e `c`/`g` size ranges, the 8-bundle split and "every duplicate byte-identical" (their reader parses copies, it does not compare them).)* **[OPEN — desk review 2026-09-30: `c`/`g` size minima/maxima, byte-identity of every duplicate copy per stem, and which shrub carries the one capsule; to be settled against real data.]**
+- L63: `, then `n16 × 16` / pointer slots per material and per LOD; `n16` (0 or 6) 16-byte records in the three tall trees / **[CONFIRMED — sizes; OPEN — the 16-byte records.]** /
+- L82: isk, 11/11). Wind: yes. LOD: no — the LOD distances are geometry `+0xE0` (§13.5.2).** /  **[CONFIRMED — disassembly (CPU side); GPU meaning OPEN]** /
+- L100: / `+0x58` / Equals *material count − 1* in 11/11 (the last material's index?) / **[CONFIRMED — the identity; OPEN — meaning.]** /
+- L102: / `+0x60` / A float that scales with tree size (3.1 small shrub … 35.9 large tree) — not the box diagonal or radius exactly / **[OPEN.]** /
+- L103: / `+0x64` / A float within a few % of the tree's height (4.56, 27.2, 16.8, 44.7 …) / **[OPEN.]** /
+- L104: / `+0x68` / Often equals bounds min-y (−3.0, −2.0, −0.62); not always / **[OPEN.]** /
+- L107: o reader, which Team B also noted, `team-b/HANDOFF.md` §9.72 (l.11050–11052). The `+0x58` = count − 1 identity is not gated by Team B.)* **[OPEN — desk review 2026-09-30: which of `+0x48`/`+0x50`/`+0x70` receives which runtime array is stated by file order and §13.5 only; to be settled against the executable (store sites in `0x0
+- L111: 09-30): DESK-PASS, text fixes applied (widths, undescribed offsets, `+0x70` wording, `+0x40` label scope; runtime-array slot mapping marked OPEN) — desk review (not re-derived from the executable).**
+- L120: at record `+144` or `+136` depending on whether the record start is 0 or 8 mod 16, so the alignment base changes the consumed length.)* **[OPEN — desk review 2026-09-30: whether the record's 16-byte (vec4) and 4-byte alignments are taken on the absolute `c`-file offset or relative to the record start, and whether consumed = decl
+- L124: text fixes applied (name-table position rule stated from `spec-physics-format.md` §4.4.6, texture-name list reduced; record alignment base OPEN) — desk review (not re-derived from the executable).**
+- L138: 672), so the 0/185 negative is scoped to whichever variant was used. Team B decodes the slot hash but reports no slot × suffix figure.)* **[OPEN — desk review 2026-09-30: the slot-hash × filename-suffix cross-tab over all 96 records, and the 0/185 test re-run with each hash variant and input string stated; to be settled against 
+- L154: small indices/flags in some files (`1,1,5,5`; `16,16,17,17`), byte-pattern fills (`0x01010101`) in others, float-like in the tall pine / **[OPEN.]** /
+- L158: / `+0x34` … / zero except in the tall pine (11 further floats) / **[OPEN.]** /
+- L166: 09-30): VALIDATED-BY-DATA: stride/count/EOF 28/28 and radius 0.06–1.1 (`team-b/HANDOFF.md` §9.67); header dwords and trailing floats remain OPEN — desk review (not re-derived from the executable).**
+- L172: Segment length per vertex ≈ 16–27 bytes across the population (index buffer plus vertex channels). **[CONFIRMED — measured; channel layout OPEN as in the geometry spec.]** **[The general channel array is closed in `spec-vertex-format.md`; for the tree layout codes 11/13, normal/tangent are located (code 13 HYPOTHESIS only) and p
+- L173: ursor by each segment's `g`-length and requires each segment's internal walk to close exactly, 28/28 copies (`team-b/HANDOFF.md` §9.67). **[OPEN — desk review 2026-09-30: whether the last segment ends exactly at `g` EOF (Σ segment lengths = `g` size, 11 trees), and whether `+0x04…+0x0F` is zero and the tag equals the first `u32`
+- L175: atus (2026-09-30): DESK-PASS, text fixes applied (absolute-grid alignment inside segments cited from `spec-vertex-format.md` §4; end-at-EOF OPEN) — desk review (not re-derived from the executable).**
+- L192: firmed fields `+0xE0…+0xF4`), but no reader of these four fields exists in the bounded scope (§13.5.3); empirical relations recorded. Still OPEN.**
+- L193: of `(a,b)` with constant `(c,d)`, `d` = `+0xDC`, 3/3) alongside a co-occurring float block at `+0x80…+0xDC`; meaning HYPOTHESIS only. Still OPEN.**
+- L194: ate to §8 above and `spec-vertex-format.md` §12.9.2. The leading four dwords at `+0x00`..`+0x0F` and the tall pine's trailing floats remain OPEN; `0x00a713e0` does not read them.)**
+- L196: spec). **[Now tracked in `spec-vertex-format.md` §12.9/§12.10: normal/tangent located for codes 11/13 (13 HYPOTHESIS only); position still OPEN.]**
+- L213: **[OPEN — desk review 2026-09-30: the `0x00a6f920` store target and the type of manager `+0x08` conflict with `spec-vertex-format.md` §12.9.13 (marked in the `0x00a6f500` row); to be settled against the exec
+- L227: `0x02` / `+0x40` / packed as **`1/k2`** (0 if `k2 == 0`) into constant c2.z. A length-like quantity (it is reciprocated) — role on the GPU OPEN / `20 / 50 / 70 / 100 / 120` / **[CONFIRMED]** packing; OPEN meaning /
+- L249: nt each value is packed into, and gust inertness — are disassembly-only; amplitude-pair roles in particular have no data gate (§13.8).)* **[OPEN — desk review 2026-09-30: the wind behaviour formulas and gust inertness; to be settled against the executable (`0x00a70410`, `0x00a6fe70`, `0x00a6fa20`, `0x00a6f950`, `0x00a6f920`, and
+- L267: Fourth components other than c2.w are never written on the enabled path (always 0). **Where they go is OPEN:** `0x00a6f940` returns the address of this block and `0x00a6f700` copies it into every tree's geometry sub-structure at `+0xF8…+0x167` (28 dwords), but **neither function has a reference in the proj
+- L269: pped stem, `team-b/HANDOFF.md` §9.101 (l.11656–11657) — which gives a place to look for the constant layout; nothing here uses it yet.)* **[OPEN — desk review 2026-09-30: the GPU upload of the seven constants and their vertex-shader meaning; to be settled against the executable (references to `0x00a6f700`/`0x00a6f940`) and the t
+- L271: oad call site itself (whether `0x00a6f700`'s dead-looking copy is ever actually reached, or some other path feeds these registers) is still OPEN — unchanged from the paragraph above. **[CONFIRMED — empirical, direct CTAB read, `tree_s.fxo_pc`.]**
+- L317: f50`: accepted only if `A < B < C < D`, `B−A ≥ 0`, `D−C ≥ 0` — the copy routine's own validity test `0x00e7a700`; it stores the squares) **[OPEN — desk review 2026-09-30: (1) whether `(B−A)s` and `(D−C)s` use the already-scaled or the unscaled `A…D` (a literal reading applies `s` twice; §14 item 5); (2) the two `≥ 0` tests are i
+- L385: F4 = (D−C)·s` use the scaled or unscaled `A,B,C,D`; Team B's reader exposes `+0xF0/+0xF4` raw from the file and does not recompute them. **[OPEN — unspecified in the current text.]**
+- L389: **Review status (2026-09-30): DESK-PASS (§12, §13.9, §14 — open lists; §14 item 5 is a real ambiguity, marked OPEN at §13.5.2) — desk review (not re-derived from the executable).**
+- L395: nt (`spec-vertex-format.md` §4) to §9; marked the §13.1 conflict with `spec-vertex-format.md` §12.9.13 and noted the W5 gap in §13.8; added OPEN markers, Team B figures (`team-b/HANDOFF.md` §9.67, §9.72, §9.101), per-unit review status lines and a review summary.
+- L396: /`_gust_hints` at VS c71-c77, same order as the existing table. Closes the naming half of §13.3's open item; the GPU-upload call site stays OPEN, unchanged.
+
+## spec-vehicle-data.md (weight 2, 24 live)
+
+- L9: **Confidence key** (as in prior specs): **CONFIRMED — empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L106: **[desk review 2026-09-30: further OPEN items found by the review are listed in §7.9 items 8–14.]**
+- L114: sizes and function addresses are evidence anchors. Labels: CONFIRMED — disassembly / CONFIRMED — empirical / HIGH CONFIDENCE / HYPOTHESIS / OPEN.
+- L143: bounding boxes (three `min[3],max[3]` triples, the §6 "three AABBs"), `+0x70` = loaded flag; the constructor clears `+0x10…+0x6F` first **[OPEN — desk review 2026-09-30: `spec-geometry-format.md` §5 says `0x00ab06c0` finds the in-memory `.cvtf_pc` buffer in this element at `+0x5C` or `+0x6C`, chosen by a flag byte at `+0x70`; th
+- L145: e held in `+0x00`. **[CONFIRMED — disassembly for the fill; HIGH CONFIDENCE for "each element is one customisation variant of the vehicle"; OPEN — what writes `+0x00` (the key the constructor matches) and what the `+0x04`/`+0x0C` values mean.]**
+- L151: wo modes and every numeric field uses the same discipline — **initialise from a default, then overwrite only if the element is present** **[OPEN — desk review 2026-09-30: this conflicts with the "always write" accessors below, which leave an unspecified value when the element is absent; which accessor each field uses (in particu
+- L154: ly then converts units** (so units are converted exactly once). `Mayhem_Value` (`+0x4AC`, default 5000) is read only in this group mode. **[OPEN — desk review 2026-09-30: whether every real vehicle's `Group` matches one of the 19 `vehicle_groups.xtbl` rows (§7.9 item 5's miss path) is to be settled against real data.]**
+- L175: / `+0x484`–`+0x493` / **not listed in this table** **[OPEN — desk review 2026-09-30: `spec-tables-vehicle-world.md` §6 places an `f32` plus a `Human_Seat_Offset` vec3 here; not checked from this spec]** /
+- L190: / `+0x7F0`–`+0x847` / effect ids (22 dwords) **[OPEN — desk review 2026-09-30: `0x58` bytes = 22 dwords, but the names listed are 5 + (4 × 2) + 3 = 16; six dwords are unnamed and no per-name offsets are given; to be settled against the executable (`0x0
+- L196: / `+0x880`–`+0x89B` / `Hardtop_VIDs` (count +0x880, `u32` list from +0x884) and `RoofObstruction_VIDs` (count +0x894, list from +0x898) **[OPEN — desk review 2026-09-30: the range end `+0x89B` leaves room for one roof entry (`+0x898`–`+0x89B`), while the next listed field starts at `+0x8A8` (room for four); the hardtop list has 
+- L200: / `+0x90C`–`+0x9AB` / **not listed in this table** (`0xA0` bytes) **[OPEN — desk review 2026-09-30: `spec-tables-vehicle-world.md` §6.1 puts a per-seat animation-modifier array here with 4 named seats; `0xA0` = 8 × `0x14`, matching this spec's 8-seat convention instead; to
+- L206: Level_4`: `f32` multipliers at `+0xAF8 + 0x10·cat + 4·level` (default 1.0) and `u32` costs at `+0xB38 + 0x10·cat + 4·level` (default 50) **[OPEN — desk review 2026-09-30: which XML branch carries the costs is not stated (§7.11 names only `<Cat>/<Value>/<Levels>/<Level_N>`, and leaves open whether `<Cat>` is a literal tag or a pl
+- L209: AF0`–`+0xAF7`, padding at `+0x8B5`–`+0x8B7` and `+0x909`–`+0x90B`. Which hash each sound/effect id at `+0x7B0`–`+0x847` uses is not stated (OPEN). Seat names at `+0x8B4`: `spec-tables-vehicle-world.md` §3.1 gives a different string set for what it calls the same resolver (`0x00ac1ba0`); the reader that fills `+0x8B4` is not name
+- L278: pter_Mode`; = +0x30 + `0x1B4`, so every helicopter offset above gains `0x1B4`)**, plus a camera-override block of eight dwords at +0x410 **[OPEN — desk review 2026-09-30: §7.11's four names (`Camera_Overrides`, `Follow_Distance`, `Follow_Height`, `Lookat_Offset`) give at most 5 values, not 8 dwords]**. The two sizes are self-con
+- L279: ), `LBS_Correction_Acceleration` +0x90 (r), `LBS_Turn_Radius_Modifier` +0x94 block; **child names for the unlabelled offsets not tabulated (OPEN)**. No shipped sample. **[Superseded by §7.11: 3 Airplane and 3 Watercraft vehicles ship in `misc_tables.vpp_pc`; their blocks are still not validated field-by-field against the §7.5 of
+- L291: true`/`no`, compared case-insensitively); **any other spelling leaves the default** (so `Yes` and `yes` are the same; `Y` is not a yes). **[OPEN — desk review 2026-09-30: "a single literal" followed by three spellings is ambiguous, and §7.2 gives the bool accessor `true`/`yes` vs `false`/`no`; which set-literal and clear-literal
+- L293: 00ab0d20`; **the parser and the constructor agree on bit 14**. The meaning of the "preload mode" inside those two callees was **not** read (OPEN).
+- L311: / `ProhibitedGunfireSeats` entries ⊆ the eight seat names / **46 / 46** (DLC only; OPEN — not re-run over 123 vehicles) /
+- L328: ### 7.9 Still OPEN
+- L367: /`+0x60C`) — not a top-level element as first described. Also carries `VehicleClass` (11/19 rows) — neither has a known destination offset (OPEN, extends §7.9 item 6).
+- L369: **§7.9 item 2's still-untabulated regions now have confirmed element names (offsets still not recovered — OPEN stands, just narrower):**
+- L372: * real names `Weapon_Link`/`Weapon_Links`/`Weapon`, occurring 67/36/67 times — still no pointer-resolution mechanism traced (unimplemented, OPEN).
+- L374: lement><Variant>NAME</Variant></NoCustVariantElement>`, not a flat `<Element>` list; `Upgrades` nests `<Cat>/<Value>/<Levels>/<Level_N>` **[OPEN — see §7.9 item 14]**; `Exhaust_Types` is a list of `<Exhaust_Type><Type>normal</Type>…</Exhaust_Type>` items keyed by `<Type>` text, not four literal tag names. Confirmed directly (`ca
+- L384: - 2026-09-30 (adversarial desk review, `review/adv_vehicle-data.md`): added review-status summary and per-unit status lines; marked OPEN: 106 files vs 104 base slots (§7.1), element `+0x5C`/`+0x6C` vs `spec-geometry-format.md` (§7.1), default-then-overwrite vs always-write and the `Mass` accessor (§7.2), `Group` coverage, effect
+
+## spec-vehicle-geometry.md (weight 2, 60 live)
+
+- L9: as in prior specs): **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L11: 393 and the `30/386`/`347` denominators; §4 parts with flag `0x200`, float-vs-byte view of part `+0x60`..`+0x7F`. Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+- L53: 0x28` `+0x2C` `+0x38` / Offsets, never `-1` (393/393); fixed up by the constructor; targets not characterized / **[CONFIRMED — disassembly; OPEN — what they point at.]** /
+- L58: up by the constructor with the other header offsets (§11.12, the `0x00ab1080` `+0xC4` use at `0xab119c`-`0xab11b1`) / **[CONFIRMED present; OPEN.]** **[OPEN — desk review 2026-09-30: the denominator 386 is not explained against the 393 used everywhere else; to be settled against real data.]** /
+- L59: / `+0xC8` / Optional offset to a further embedded resource resolved by a separate loader / **[CONFIRMED — disassembly; OPEN — type.]** /
+- L60: / `+0xCC` / `+0xD0` / Offset + count (0…3,216) passed through a name-resolution routine / **[CONFIRMED — disassembly; OPEN — very likely a material/name table, see §7.]** /
+- L61: / `+0xD8` / Optional offset (`-1` in 347) / **[OPEN.]** *(Desk review 2026-09-30: "347" has no stated denominator.)* /
+- L62: cords, each holding two sub-arrays of offsets (counts at record `+0x10`/`+0x18`, pointers at `+0x14`/`+0x1C`) / **[CONFIRMED — disassembly; OPEN — semantics.]** /
+- L63: Two offset arrays of `count@+0x138` (0…51) plus one offset; the count differs from the part count in 389/393 / **[CONFIRMED — disassembly; OPEN.]** /
+- L66: does not describe (added 2026-09-30 by desk review, read off this table itself; `+0xE4`–`+0x133` assumes `+0xE0` is a 4-byte pointer) / **[OPEN.]** /
+- L68: vehicle in both populations is 16-aligned** (at least 346 of 393 by inclusion–exclusion; up to 367 if the 367 are a subset of the 372). **[OPEN — desk review 2026-09-30: the general case (a vehicle sub-header ≡ 8 mod 16) is unsettled; measure `u32(ccar+0x04) mod 16` over all 393 files, and settle the alignment base (file offset 
+- L81: tes a nested pointer fixup. Common low-16 values: `1`, `0x41`, `0x201B`, `5`, `7`, `0x43`. / **[CONFIRMED — disassembly for the three bits; OPEN — the rest.]** /
+- L83: y desk review.)* No section of this spec establishes a field here (a count for the `+0x54` child array is plausible but was not read). / **[OPEN — desk review 2026-09-30: to be settled against the executable, `0x00aaad50`.]** /
+- L84: box accumulator `0x00aaad50` — §11.12; `+0xA4`'s target has its own conditional pointer at `+0x08` — §11.3.)* / **[CONFIRMED — disassembly; OPEN — targets.]** /
+- L87: 11 step 3. What `0x00760c30` hands back is still the §11.7/§11.11 CONFLICT.]** / **[CONFIRMED — disassembly, §11.11, `0xab0fd3`-`0xab0fe3`; OPEN — meaning.]** /
+- L88: ED: the remap resolves through a generic deferred request-registration mechanism, not a material-index lookup — §11.7, §11.5; target domain OPEN.)* /
+- L115: e across the whole population.]** Types 5, 7, 9–13, 15, 16, 19–21 and 26 occur too rarely (≤ 92 records) to read confidently and are left **OPEN**. The wheel "sets" (`FL`/`FL01`/`FL02`) most plausibly correspond to customization wheel options, matching the `Wheel_Group` concept in `spec-vehicle-data.md` §3 — **[HYPOTHESIS.]**
+- L134: **[OPEN — desk review 2026-09-30: a reimplementation cannot reproduce these from the text alone — the compared name is the vehicle-info entry's `+0x00` name (`spec-vehicle-data.md` §7), not the `_0`..`_4`-su
+- L144: **[OPEN — desk review 2026-09-30: the byte remap array at `+0x20` is under-specified — entry order and count (anchor + parts + four camera names?), the "missing" sentinel, what "compacted" drops, and the wid
+- L153: outine, together with `spec-geometry-format.md` §5's per-vehicle `.cvtf_pc` color/material catalogue, is the likely source — **[HYPOTHESIS; OPEN.]** **[Superseded (desk review 2026-09-30): the materials are the per-material records inside the embedded Mesh block (§7.1, §11.2); the per-material paint colour is in those records to
+- L215: am B, `team-b/HANDOFF.md` §9.69) (text fixes applied: 86/86 label superseded, population note, paint item 2 superseded; blob-rule alignment OPEN at §3) — desk review (not re-derived from the executable).**
+- L255: did not do. **[OPEN — stated as a limit, not as a negative result.]**
+- L273: material count or index inside a part record. **[OPEN.]** *(2026-10-08, §12.2: still
+- L303: s* are generic and the paint is not a texture — is consistent with §9.106 ("NOT a texture"), but was not itself tested against a render. **[OPEN — desk review 2026-09-30: whether any runtime customisation (e.g. `.cvtf_pc` variants) overwrites the authored array-C value is unread; to be settled against the executable (writers of 
+- L305: call was not found** — the two systems are proven architecturally separate, but the connecting hop between them remains a genuine, bounded OPEN item (candidate: the per-render-item dirty-constant table discussed at `spec-render-pipeline.md` §20.12.13, not disambiguated from a competing identity for the same object). Full detail:
+- L423: than an index recoverable from this file's own declared counts. ~~**[OPEN -- what the
+- L564: remains OPEN, more narrowly:]** the eight pointer fields are now fully enumerated and
+- L570: **[OPEN — desk review 2026-09-30: the targets of the eight pointer fields (in particular `+0xA4` and its nested `+0x08`) and the on-disk meaning of the 64-byte records' `+0x04` remain unread; how many parts
+- L633: **What the second half is remains OPEN.** Concrete next step: section 11.3 found that
+- L656: / Is per-part material scoping established? / **Still OPEN**, but two of the eight pointer fields now have a disassembly-confirmed shape (section 11.3) /
+- L659: / What is the unreferenced half, if not a duplicate? / **OPEN** -- next step given in section 11.4 /
+- L669: or") before either side had compared notes -- two methods, same byte offset, same value width. Does not resolve what the field means (still OPEN below) *(resolved separately: vertex-channel index, row above / §11.1)*; does confirm `0x00e58480` is reading the real field, not a lookalike. `this+0x130`'s vtable+`0x1c` target -- wha
+- L672: *(Desk review 2026-09-30: the original table's "Is per-part material scoping established? — Still OPEN" row is answered, as a negative for the `+0xC0`/`+0xC4` mechanism, by the last amendment row above (§11.7); the original row is left as published.)*
+- L686: ### 11.6 What the 0-14 cap on the packed high half enumerates -- still OPEN, a fourth candidate refuted, and the search space narrowed
+- L840: **[OPEN — desk review 2026-09-30: §11.11 step 5 describes the same `0x00760c30` as returning "the slot handle in `EAX`", which conflicts with the reading above. To be settled against the executable (raw tail
+- L928: single per-part field. What the non-zero bands denote is still OPEN; see 11.11
+- L966: argument, OPEN" -- **is the group and draw-range array parser.** Read from raw
+- L998: `u16` table. **[OPEN -- what the `+0x48`/`+0x50` `u16` table holds.]**
+- L1081: **[OPEN — desk review 2026-09-30: the device-wrapper slot numbers and the 14 virtual call sites in this class's closure (§11.9.4) are runtime-wrapper details not checkable from data; to be settled against th
+- L1123: , so one wrapper reference is not accounted for in this table (a non-call reference, a site counted under both wrappers, or a missing row). OPEN — to be settled against the executable (the reference lists of `0x00e718b0` and `0x00e71910`).]**
+- L1216: ompiler's form of a ×20 as ×5 (shift-and-add) followed by ×4 — so "by 4 and by 4 again" is most likely a transcription slip for ×5 then ×4. OPEN — the actual factors to be settled against the executable (`0x00e72d00`).]**: the
+- L1241: `0x00e726e0`, `0x00e75720`, `0x00e7cfd0`, `0x00e7f120`. **[OPEN -- the
+- L1573: guessed.** **[OPEN -- exact geometric meaning of steps 3-4; not pursued,
+- L1575: **[2026-10-03: step 3 is now settled (below); step 4 is narrowed but stays OPEN.]**
+- L1622: - **Step 4, narrowed but still OPEN.** `0x00c8a890` (in Havok's range A) is called
+- L1641: desk review 2026-09-30: §11.7 reads the same function's return value as an unassigned `EDI` left by the caller, not a slot handle; see the OPEN note there.]**
+- L1671: (1-4, 20-21, 50-51, 70-75, 135-137) denote remains OPEN** -- this pass rules out
+- L1678: graph and was not searched for here. **[OPEN -- what the non-zero kind bands
+- L1685: - **Step 4:** narrowed but still OPEN (`0x00c8a890` is inside Havok; HYPOTHESIS: unit-mass mass properties).
+- L1810: denote remains OPEN** -- this task's own scope (named-function/call-graph tracing,
+- L1816: OPEN -- the non-zero kind bands' meaning.]**
+- L1852: g car wheel-steer is NOT delivered through that system — consistent with the override-matrix mechanism below. **[CONFIRMED for the formula; OPEN for the primary-wheel/car render call site and the handling-cache writer.]**
+- L1854: scriptor+0x4c` specifically meaning "Havok wheel index" (inferred by the identical field/pointer pattern in the suspension function below); OPEN — the per-frame writer of the steer/spin/suspension values themselves.]**
+- L1856: d the file-format part-type enum is never assumed identity. **[CONFIRMED — disassembly, full decompile, for secondary/dual-axle wheel sets; OPEN — whether primary wheels share this mechanism or a sibling, and field `+0xc0`'s exact relationship to `spec-physics-runtime.md` §10.4's own suspension formula.]**
+- L1866: CONFIDENCE for `descriptor+0x4c`'s specific "Havok wheel index" meaning and the primary-wheel/secondary-wheel suspension-sharing question; OPEN, honestly, for the per-frame steer/spin/suspension writer of render-object `+0x84` and the §12.2 per-part/draw-range segmentation question (unchanged from §7.2 Q2) — independently re-der
+- L1870: - **2026-10-09 — §7.1 item 2's long-standing runtime-paint-writer OPEN item ANSWERED** (SPEC TEAM, agent
+- L1878: bounded OPEN item, tracked at `spec-render-pipeline.md` §20.12.16 (which also independently confirms
+- L1885: (§7.1 `+0x0C` "upper bound" and `high16` "part index", §4 `+0xC0`/`+0xC4` material-reference reading downgraded per §11.7); marked 6 stale OPEN/HYPOTHESIS items resolved (§7.1 paint source, §10 items 7 and 10, §11.5 amendment row, §11.6 "enumeration" OPEN, and superseded-notes under the §11.6/§11.9.8/§11.10 headings); added poin
+- L1887: DOFF.md` §9.106); marked the stale 86/86 label (§7.1) and the §7 "Materials (original entry)" hypothesis superseded; added §4 rows `+0x50` (OPEN), `+0x60`–`+0x7F` (from §11.12) and `+0x80` (from §11.11), with a CONFLICT marker against the `+0x68` flag byte; listed the uncharacterised §3 header spans and flagged the `30/386`/`347
+- L1891: - **Step 4 narrowed, still OPEN.**
+
+## spec-vertex-format.md (weight 2, 55 live)
+
+- L19: trols (§6)** *(for the generic codes 0–4/100/101; tree codes 11/12/13 position is HIGH CONFIDENCE only, §12.12, and code 24's `+16` slot is OPEN, §12.13 item 3)* /
+- L189: / `24` / 20 / *(not probed — 448 channels)*  *(since probed: position + normal, no texcoord, `+16` OPEN, §12.3, §12.13 items 3–4; 535 channels in Team B's population, `team-b/HANDOFF.md` §9.127)* / zones /
+- L258: sign, and remains unidentified** — 113 distinct values with a dominant mode (`112`, 23%) is real per-vertex scalar content, not padding. **[OPEN / UNKNOWN — but now known *not* to be handedness.]** §12.4 narrows this considerably (per-region tag, finer than material, most likely smoothing-group-style); §12.13 item 1 runs the dir
+- L345: tiling × `1/1024` is inferred, never shown numerically. The first vehicle-only measurement above is in-project data and is unaffected.)* **[OPEN — desk review 2026-09-30: vehicle UV scale 1/1024 versus 1/256 on vehicle panels with flat mapping (seam continuity, §6.5 absolute-delta metric), and the carpaint shader's folded `def` 
+- L351: 0 and 101 — and each accepted code owns a **4-wide** range in the rewritten numbering, into which the texture-coordinate count is added. **[OPEN — desk review 2026-09-30: this does not reconcile with §12.10.3's code-24 value `texcoord_count + 0x57` (contiguous 4-wide ranges from 0 for codes 0–4 and 14–26 would put code 24 at 60,
+- L355: 2.10.1) but is likewise not accepted (§12.10.3).)* Their layouts are consequently unknown. **[CONFIRMED — disassembly for the accepted set; OPEN / UNKNOWN for the unobserved codes' layouts.]**
+- L397: esh_pc`/`.czn_pc` (different outer-header shape entirely) — do not assume cross-carrier confirmation beyond characters and static props. **[OPEN — desk review 2026-09-30: per-mesh distribution of the 34,000 residual triangles, and the rule on vehicles/`.clmesh_pc`/`.czn_pc` using the resolved `high16` channel mapping; to be sett
+- L413: tte bytes counted by header `+0x38` and the palette-set table counted by `+0x48`, §2 note, `spec-rig-format.md` §11.4), 16-byte aligned. **[OPEN — desk review 2026-09-30: the exact cursor arithmetic from the end of the channel records to the group array (sizes of the `+0x38`/`+0x48` arrays, alignment between them) is not stated 
+- L460: **Review status (2026-09-30): DESK-PASS, text fixes applied (group-array offset marked OPEN, multi-channel bound qualified, group-count gap noted); structure VALIDATED-BY-DATA on characters by Team B — desk review (not re-derived from the executable).**
+- L483: irical, real data, for the material-id field's existence and packing; REFUTED — empirical, for the `.czh_pc`-index hypothesis specifically; OPEN — the real lookup mechanism.]**
+- L516: dices read `0, 1, 2, …` consecutively *and* whose every offset lands on a string start in the blob. A fixed-offset reader will be wrong. **[OPEN — the rest of the record's layout, and therefore a direct offset to the run.]** *(Superseded: the record layout and a direct offset are now CONFIRMED — the run starts at the material re
+- L550: is the obvious next step and was not attempted this pass. **[CONFIRMED — empirical, that the region exists and is one record per material; OPEN — its contents, and therefore the id-to-texture binding.]** *(Superseded: contents and binding now CONFIRMED — §12.8; `spec-vehicle-geometry.md` §11.2.)*
+- L600: corrected above. §12.8 aligns before array_C unconditionally where this listing gates it on `N > 0`; the two differ only when `N = 0`.)* **[OPEN — desk review 2026-09-30: whether the `align8` before array_C is gated on `N > 0`, whether alignment is on the absolute c-file offset, and what arrays A/B/C hold; to be settled against 
+- L815: coord set), three independent measurements agreeing (§12.10.1) — the one figure this item still listed as "unconfirmed." **Position remains OPEN for 11/12/13** *(superseded: position for 11/12/13 is now HIGH CONFIDENCE, FLOAT16×3 at `+0`, §12.12, pending a consumer trace)*, and the `+16` slot remains OPEN for 24 — see §12.10.5's
+- L912: asset — which is the practically load-bearing fact for anyone implementing this format. **OPEN,
+- L914: purpose a format implementer has. **[OPEN — desk review 2026-09-30: the zero-on-disk predicate has not been re-run on the corrected (4-byte-grid) block population; to be settled against real data.]**
+- L987: project's small-sample rule (`HANDOFF.md` §5) says to flag rather than trust. **OPEN:** what the
+- L991: for the tangent-at-+16 reading; OPEN for what `+16` actually is.]** **Update, 2026-09-29 (§12.13
+- L996: remains OPEN — see §12.13 item 3 for the full test, including a methodology trap it caught along
+- L1034: so equal bases can be coincidental (code 4 already breaks the regular-family reading at base 12). **[OPEN — desk review 2026-09-30: code-24 position/normal rates and the 1/62/385 `+16` buckets on Team B's 535-channel population; to be settled against real data.]**
+- L1198: -b/HANDOFF.md` §9.29, are the full population to compare against; Team B has published unit normals only, not the tangent fourth byte.)* **[OPEN — desk review 2026-09-30: which subset the 832,194 figure is, and the tangent fourth-byte histogram over all code-101 vertices split by texcoord count and channel; to be settled against
+- L1213: from the five assigned here and was not pursued past noticing it. **[OPEN / UNKNOWN — flagged for
+- L1224: / Layout code 24 (zones) / Position/normal confirmed (581,647/581,647); tangent-slot reading REFUTED, actual content OPEN / CONFIRMED (pos/normal) / OPEN (`+16`) /
+- L1230: / Mesh header `+0x04`/`+0x08` / Previously unlisted; gates the channel walk / stores a helper's pointer return / OPEN / UNKNOWN **[Resolved 2026-09-13: group count / group-array pointer, §8.2; `spec-vehicle-geometry.md` §11.9.1.]** /
+- L1362: lists as `HIGH CONFIDENCE`/`OPEN` on plausibility grounds alone (start point, end point, radius);
+- L1407: **[OPEN — desk review 2026-09-30: §12.9.1–§12.9.4 are negatives read from the decompiler (no CPU-side field reader; 11/13 absent from the rewrite switch; the declaration cache's only reference a vtable slot)
+- L1456: **12.9.6 Position is still OPEN — every remaining offset was range-checked before being reported,
+- L1478: numeric range. **Position remains OPEN**, consistent with — not newly refuted beyond — §12.3's
+- L1518: Recorded as OPEN with the concrete next step being to find whichever load-time or runtime function
+- L1523: code 24's own +16 slot — OPEN.** Pooled across all code-11 channels, `+24` passes the unit-vector
+- L1532: `OPEN / UNKNOWN` rather than promoted.
+- L1545: this document. **OPEN** for what, if anything, this near-constant slot and its one variable byte
+- L1582: **[OPEN — desk review 2026-09-30: whether `+0` or `+16` carries the authored position where the two differ (about 30% of code-11 vertices, §12.9.7) — decode both as half3 and compare face normals against the
+- L1620: **Still OPEN, not chased further this pass, per `HANDOFF.md` §36, archived item 27.8 (defer rather than invent):**
+- L1726: **[OPEN — desk review 2026-09-30: the negative is scoped to the traced CPU load chain; any writer into a locked tree vertex buffer (users of `0x00482f00`'s lock/copy path) or a GPU-side fixup is outside it;
+- L1730: item 2) — traced two levels deeper than Sec 12.9.4; both named entry points reach genuine, disassembly-confirmed dead ends, position still OPEN (2026-09-14)
+- L1764: iption of the `CreateVertexDeclaration`-calling infrastructure exactly — is not actually the path trees' declarations go through at all. **[OPEN — desk review 2026-09-30: "pointer discarded" does not exclude the constructor registering `this` itself (it allocates through the pool allocator `0x00e49580`), so the dead-end label is
+- L1768: **12.9.14.5 Verdict — position remains OPEN; this pass narrows the gap without closing it.** Stacked against Sec 12.9.13 (no CPU-side writer of `+0`/`+4`/`+16`/`+20` anywhere in the traced load chain) and Sec 12.9.1/12.9.3 (no CPU-side field r
+- L1826: #### 12.10.2 Code 12's element fields — normal at `+8`, tangent at `+12`, identical convention to codes 11/13; position OPEN, same shape as 11 — CONFIRMED / OPEN, empirical, full population
+- L1856: **Position is OPEN for code 12, in the same partial, per-channel-varying shape already
+- L1869: normal/tangent offsets and the negative result on the rest; **OPEN** for position,
+- L1911: at once rather than leaving it untested for 24. **[OPEN — desk review 2026-09-30: the full case table of `0x00e711c0` (per-code bases, why code 24 maps to `texcoord_count + 0x57`, behaviour at count 0) is needed to reconcile this with §7's "4-wide range";
+- L1921: further, at the time unlabeled, call site. That document flagged both as "OPEN,
+- L1957: anything render- or tree-related.]** `spec-render-pipeline.md` §8's own "OPEN,
+- L1971: 8 bytes shorter than 11/12/13, so its own normal sits at `+12`, not `+8`) — `D3DDECLTYPE_UBYTE4N` / `D3DDECLUSAGE_NORMAL` / `+16` slot is **OPEN**, not a clean tangent (pooled unit-vector rate 8.0%, real but uncharacterised per-channel-varying structure in 62/448 channels); also now REFUTED as FLOAT16×2/SHORT2-family position, s
+- L1985: §6.6's out-of-project capture, now HYPOTHESIS.)* **[OPEN — desk review 2026-09-30: the
+- L2056: ~~**Position for codes 11, 12, and 13 remains OPEN — but this is now a second,
+- L2189: **[OPEN — desk review 2026-09-30: the per-tree bbox-inclusion test is the weak test §12.13 item 3 shows can pass under a shuffled control, and no shuffled-bbox control or per-vertex test was run here; `+0` a
+- L2205: **Review status (2026-09-30): DESK-PASS (item 1: refutations supported; identity OPEN) — desk review (not re-derived from the executable).**
+- L2219: ps specifically, not generalized further. *(Desk review 2026-09-30: the 34,000 disagreeing triangles (0.67%) are not analysed; see the §8.1 OPEN note.)*
+- L2244: , or a flat/parameter-only material with no texture sampling. **[CONFIRMED — real composite render, cross-team, for the visible-shell role; OPEN — the texturing mechanism itself; a dedicated shader-consumer trace is in progress to settle it from the disassembly side.]**
+- L2255: where in this family — a real, though not provably exhaustive, negative.** **[CONFIRMED — real disassembled bytecode for both sub-families; OPEN/negative — no triplanar found, not proven absent everywhere.]**
+- L2260: **[OPEN — desk review 2026-09-30: no `.czn_pc` draw was traced to the role-4/5 pass selection; the link is an affinity argument (a common vertex shape), not a consumer trace; to be settled against the execut
+- L2268: nt 11,446→12,628 and arrays 1–3, §12.3 tree counts and code-13 `+12`, §12.10.2 `+0` row, headline vertex content qualifier); marked 7 stale OPEN items resolved (channel record `+0x08` ×3, component group B, tree position §10 item 1 and §12.9/§12.9.14/§12.10.2 headings, Mesh header `+0x04`/`+0x08` ×2, §8.1 per-range subdivision);
+- L2270: Team B 535, §12.5 832,194 vs 3,405,780, `D3DDECLTYPE_FLOAT16_3` not a D3D9 type, §6.3 palette, §6.4 max part 37, §8.4 start cursor); added OPEN markers, per-unit review status lines and a review summary.
+
+## spec-vint-doc-format.md (weight 2, 31 live)
+
+- L9: onfidence key** (as in prior specs): **CONFIRMED — disassembly/empirical**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L21: he natural next step (§8, item 1). Every population count given below is against these 159 files specifically, not claimed project-wide. **[OPEN — desk review 2026-09-30: the 159-file count and every population figure below come from Team A's own parser run, not from a Team B full-population run; to be settled against real data 
+- L33: value falls through to the text/XML reader (§1.2). **[CONFIRMED — disassembly + 159/159 population: the magic value is `0x00003027`.]** **[OPEN — desk review 2026-09-30: this spec records no address for the loader/dispatch function, and the "any other value falls through to the text/XML reader" branch is stated without one; to b
+- L48: old plausible IEEE-754 float bit patterns (three files share the identical value `0x3EB0C000` ≈ 0.345) — real data, not garbage, but role **OPEN** **[OPEN — desk review 2026-09-30: the u32 at `0x0A` (and so `0x0E`/`0x12`/`0x16`) is unaligned because `0x08` is a u16; whether `0x0A`–`0x0D` is one 32-bit float or two narrower field
+- L51: ts, 2 files) found this value behaves as the ABSOLUTE file offset of the critical-resource section — see "Walk question (a)" in §3.2; still OPEN here, to be settled against the executable / real data.]** **[2026-10-03: that probe reading is REFUTED. The critical-resource section starts at `0x1E`, and `0x16` points at the string 
+- L59: 09-30): DESK-PASS, text fixes applied (header fields tile exactly: 4+4+2+4+4+4+4+2+2 = 30 = `0x1E`; `0x0A` and `0x16` annotated, both still OPEN and awaiting real data) — desk review (not re-derived from the executable).** **Review status (2026-10-03): `0x16` CONFIRMED (string-table offset; disassembly + Team A walk 159/159); `0
+- L69: e is no per-entry length field alongside the offset — presumably each string is still read as NUL-terminated at the moment it's needed). **[OPEN — exact string-pool boundary semantics / whether suffix-sharing is real, or whether some index↔offset pairings are still off for a subset of entries.]** This uncertainty does **not** af
+- L86: he shape even where the binary reader's own body wasn't the sole source. **[CONFIRMED — disassembly for both entry shapes and their counts; OPEN — the critical-resource entry's own 1-byte selector meaning.]** **[OPEN — desk review 2026-09-30: "after the string-offset array" names the same cursor position §3.1 uses as the string 
+- L91: - *What is OPEN:* whether the reader really seeks to `hdr[0x16]` (no reader address is recorded) and whether the rule holds for all 159 files.
+- L94: desk answer is refuted; entry shapes and the loader's selector-`0` / autoload-flag handling CONFIRMED; what a non-zero selector means stays OPEN. Team A walk 159/159; awaiting Team B data.**
+- L109: / (unexamined) / 1 byte / read and unconditionally skipped by the reader; role **OPEN** — a flag or alignment pad **[2026-10-03, CONFIRMED — disassembly: never read. The cursor is simply moved forward by one byte (when that is still inside the buffer), so nothing in the loader depends
+- L119: name and type words were SWAPPED in the earlier table and are corrected. The property block is inline. The skipped byte is never read (role OPEN). Team A exact walk 159/159; awaiting Team B data.**
+- L138: for the value `0xd` (13), and the record's own `+8` field (a function pointer) is invoked with the parsed value once decoding finishes. **[OPEN — desk review 2026-09-30: what the reader does when `+4` is (or is not) `0xd` is not stated, the property-block function and the descriptor lookup are cited by no address, and the hash i
+- L159: hed from the loader's call site (`spec-lua-bindings.md` §9.3); which vtable slot of each pair (`+0x30`/`+0x34` etc.) is the setter is still OPEN there, and §9.3 and §12.7 Group 7 still disagree on it."]**
+- L161: tatus (2026-09-30): DESK-PASS, text fixes applied (evidence sentence aligned with `spec-lua-bindings.md` §9.3; vtable-slot orientation left OPEN there, awaiting the executable) — desk review (not re-derived from the executable).**
+- L163: exist in the engine's general property-value vocabulary but were never observed in any of the 159 real files' own tagged-value streams. **[OPEN — desk review 2026-09-30: the on-disk table gives tags `1`/`2` a 4-byte payload while this generic switch calls codes `1`/`2` 64-bit integers; whether the 4-byte value is widened at load
+- L171: examined `element`'s 17 properties and `point`'s single property — so the exact property name that carries a bitmap's image reference is **OPEN**, as is confirmation of whether it names a `.peg_pc`/`.gpeg_pc` texture entry directly or names an intermediate atlas entry.
+- L173: between a bitmap element's own name string and the final PEG texture lookup. **[HIGH CONFIDENCE for the atlas layer's existence and shape; OPEN for the exact bitmap-type property name and the precise hookup from that property's string value through to either a direct PEG entry or through this BitmapSheets indirection.]**
+- L179: ## 7. Anchor/tween encoding — HIGH CONFIDENCE on structure, OPEN on the fine detail
+- L181: part is the two defaults for `scale` and `anchor` only; "tag `7`" for them is an inference from their vec2 shape and stays HIGH CONFIDENCE. OPEN — the two name-hash values the reader compares against are not recorded here, and neither is the default-seeding code's address; to be settled against the executable / real data (tag hi
+- L188: esolves to a known `tween` property name**, with one single exception (a 2-occurrence unidentified hash, tag 5/bool, not decoded — residual OPEN, not load-bearing). Aggregate tag/name histogram over all 1,529 elements:
+- L219: narrowed: CONFIRMED read as one 4-byte unit and discarded by the binary loader `0x00e20500`; its meaning, and any other reader of it, stay OPEN.]**
+- L220: ly when the selector is `0`, and reads and ignores any non-zero selector (§3.2). Team A counts 60 × `0` and 144 × `1`. What `1` means stays OPEN.]**
+- L221: ossibly a flag or alignment pad; not decoded. **[2026-10-03: CONFIRMED never read by the loader (the cursor just moves past it); role still OPEN.]**
+- L224: ect was NOT identified this pass, so which of the two hypotheses (or some third resource-manager shape) is the ultimate backing store stays OPEN, now narrowed to one specific, bounded next hop rather than "the resolution code itself was not read."]**
+- L225: s carry their keyframe shape entirely as ordinary named properties, zero `point`-typed children exist in the population. Runtime half still OPEN — `spec-vint-render.md`'s own `0x00846ae0` citation was found to be mislabeled (it's cursor/focus housekeeping, not animation processing); the real call chain was traced two levels furt
+- L228: th `idle` and `waiting` to 0. The loader's fallback path when a lookup misses (`0x00e29d2c`) was not re-read this pass and stays a residual OPEN item.]**
+- L234: TA); withdrew the "804 scripts' worth" phrase (§1.1); struck and corrected the "one of the three trampolines" evidence sentence (§5); added OPEN notes at §1.1, §1.3, §2 (`0x0A`, `0x16`), §3.1, §3.2, §4, §5 (`0xd` branch, hash, tag-`1`/`2` widths), §7; added labelled answers to Team B's walk questions (a) in §3.2 and (b)/(c) in §
+- L237: dex BEFORE the type index, swapped in the old table (§4); header `0x0A` is read as one 4-byte unit and discarded by the loader (§2, meaning OPEN); dispatch address `0x00e212a0` (§1.3). **HIGH CONFIDENCE:** the `0xd` string-to-integer branch (§5). Team A's loader-faithful walk (`tools/harnesses/vintdoc_loader_walk.py`, `vintdoc_p
+- L238: ), with `source_nw`/`source_se` (vec2) and `custom_source_coords` (bool) for the sub-rectangle; the PEG-vs-BitmapSheets hookup itself stays OPEN. Closed §8 item 11 — `0x00e307c0` read in full with all 10 of its enumeration tables; case-insensitive name matching, two-directional ancestor-or-self type matching; the lookup-miss fal
+- L245: interpolation consumer remains OPEN — see `spec-vint-render.md`'s own updated note (the
+
+## spec-vint-font-format.md (weight 2, 6 live)
+
+- L7: e real function — the latter is marked *emulated*), **HIGH CONFIDENCE** (inferred from structure), **HYPOTHESIS** (plausible, unchecked), **OPEN**.
+- L22: outine asks for, §4.2) is still **not found** in `misc.vpp_pc` by name — a fresh search for that exact string found nothing — so it remains OPEN, narrowed: of the three non-default language arrangements (§4.2), codes 3 (`jap`) and `0xb` (`font_sk`) now have every font and texture they need present in this install; only code `0xd
+- L43: / `+0x18` / u32 / not read by any function in this pass / 0 in all 6 / OPEN (unused here) /
+- L48: / `+0x28` / char[64] / a name of the form `<font>.peg` / all 6 / **not read** by the loader (OPEN whether anything else reads it) /
+- L167: t, count, entry index) → true / sum of the advances of up to `count` characters; **not called by text layout** (its caller was not traced — OPEN) /
+- L193: ## 8. OPEN items
+
+## spec-vint-render.md (weight 2, 18 live)
+
+- L8: rectly in disassembly), **HIGH CONFIDENCE** (inferred from structure, not independently traced), **HYPOTHESIS** (plausible, unconfirmed), **OPEN** (not settled).
+- L73: - **Side path (OPEN purpose).** `0x00848d90` calls `0x007b3a70` (`this` = `0x012fced8`), which walks a game-side array backward and renders matching entries' documents with **pass byte 1**, then renders the document nam
+- L156: `+0x18`…`+0x23` and `+0x66`…`+0x7f` are never written by this layer (OPEN — possibly used by per-type draw code).
+- L162: d nibble is confirmed (0/2/5) and whose colour/blend bits are forced off only in mode 2; the exact D3D9 stencil ops those words select stay OPEN (inside `rl_draw`, §13 item 3).
+- L247: nt is tested later.** The hit test consults neither `visible` nor `alpha` nor the clip stack directly (whether the geometry builder does is OPEN).
+- L269: **Worked example** (arithmetic, not a runtime capture — flagged OPEN for live confirmation): document 1280×720, screen 1920×1080 (fit to height, `fitScale` 1.5); a `bitmap` directly under the root with `anchor (100,50)`, `auto_offset c`, `unscaled_size (64,32)`, `scal
+- L365: ## 11. OPEN items
+- L368: ainst it, mode 0 = off; `render_mode` has 5 real values, not just `filter`, each selecting a distinct 4-bit blend code. The one thing still OPEN is the exact D3D9 stencil ops and blend factors each code selects inside `rl_draw` — new item 16.**
+- L451: disagree (HIGH that this is shipped behaviour on both sides; whether authored data compensates is OPEN,
+- L483: writes an explicit value is OPEN (§11 item 10)~~ **U5: markup does — every `[color:]` writes explicit
+- L501: flagged OPEN): builds into a **12,800-byte (`0x3200`) stack buffer** — the hard per-element ceiling;
+- L526: OPEN, §11 item 13).
+- L533: What sets context byte `+0x09` is OPEN (§11 item 9) — it decides whether a host should linearise UI
+- L705: own consumer of this word and remain OPEN (§11 item 16)** — the boundary this project has kept
+- L1008: 2. State-manager slots `+0x64(1)` and `+0x68(0)` — two flags at `+0x4ec`/`+0x4f0`; their effect is OPEN.
+- L1112: `c37` is the constant whose name hashes to `0x8f88517a` (`Tint_color` in `spec-render-pipeline.md` §20.12) — **its value during UI draws is OPEN** (§11 item 26).
+- L1113: - **A second pass** in both files outputs (0, 0, 0, alpha) only; what selects it is OPEN, HIGH that the ordinary UI draw uses the first.
+- L1141: / `+0x4ec`, `+0x4f0` / two flags set by every primitive draw (1, 0); meaning OPEN /
+
+## spec-vpp-container.md (weight 2, 22 live)
+
+- L14: - **[OPEN / UNKNOWN]**: not determined in this pass.
+- L16: depth; 14 vs 15 nested headers), §7.1/§8 (list the ten mode-(a) containers with their compressed counts; 9 vs 10). Units are marked with **[OPEN — desk review 2026-09-30: …]** at the claim and a **Review status** line at their end.
+- L24: **[OPEN — desk review 2026-09-30: the heading says `0x000`–`0x17F`, but the table below defines fields only through `0x17B` (the loader copies `0x17C` bytes); bytes `0x17C`–`0x17F` are described nowhere (see
+- L32: / `0x150` / 4 / Observed as `0x00000000` in every sample checked. / **OPEN / UNKNOWN.** / Not traced in code in this pass. Possibly a secondary flags word, a version sub-field, or simply unused in this game's shipped content. /
+- L36: ot a real discrepancy) and matched a single-filename sample exactly (32 bytes for one 15-character name + terminator, doubled — see §2). **[OPEN — desk review 2026-09-30: conflict — the definition ("exact sum of every name's length plus terminator, no gaps") contradicts this row's own single-name example (15 + 1 = 16 bytes, yet 
+- L37: d** — this field holds `3,936,256`, so it is **not** derived from payload size, entry count or directory size. (`spec-low-mips.md` §5.) / **OPEN / UNKNOWN.** / Re-tested this pass against 4 samples with the now-confirmed `payload_start` formula (below) in hand; still does not fit a consistent formula (it is not a simple sum of e
+- L38: ssion is in play. *Why* the format only bothers caching it in the compressed case is not established, but it doesn't affect correctness. **[OPEN — desk review 2026-09-30: (a) owner conflict — this on-disk reading (5/5 here; `spec-asm-format.md` l.245: sibling `payload_length` = this field on 7,990/7,990,; the asm manifest record
+- L40: by any pass (added by desk review 2026-09-30): outside the `0x17C` bytes the loader copies, inside the heading's `0x000`–`0x17F` range. / **OPEN / UNKNOWN.** / **[OPEN — desk review 2026-09-30: whether these 4 bytes (and `0x180`–`0x7FF`, called "unused padding" in §1.1 but never measured) are always zero; to be settled against r
+- L81: rule `payload_start + Σ round_up(size_j, 0x800)` over earlier entries (`size_j` = `+0x10`, or `+0x0C` if raw) — verified 3,263/3,263.** **[OPEN — desk review 2026-09-30: no rule here covers raw entries inside a mode-(b) container: Team B found 68 mode-(b) containers that hold both raw and compressed entries (`team-b/HANDOFF.md` 
+- L86: cation of raw entries in the 68 mixed mode-(b) containers; `+0x04`/`+0x14` zero on all 405,694 entries; text fixes applied (raw-in-mode-(b) OPEN note, `+0x10` mode-(b) caveat) — desk review (not re-derived from the executable).**
+- L92: the sum of every name's length-plus-terminator with no extra padding between strings. **[HIGH CONFIDENCE — inferred, see §1 evidence.]** **[OPEN — desk review 2026-09-30: conflicts with the §1 `0x160` row's own 32-for-16 example and 303/304 sample; see the marker there.]**
+- L113: e at load time, not read directly from an entry field, but this doesn't rule out a stored hash existing elsewhere. Flagged as open (§6). **[OPEN — desk review 2026-09-30: handling of bytes ≥ `0x80` (signed vs unsigned character before the XOR) is not stated; to be settled against the executable (`0x00da7890`).]**
+- L181: **[OPEN — desk review 2026-09-30: none of the routines above (validator, registration loop, name-pointer helper, slot helper, name-lookup search, LRU eviction) has a recorded address, so the CONFIRMED — disa
+- L215: ately reaches the exact same fields (`+0x164`/`+0x168`) already known to be runtime-only I/O bookkeeping. **[CONFIRMED — disassembly.]** **[OPEN — desk review 2026-09-30: conflicts with §1, where `0x164`/`0x168` are on-disk header fields (`0x168` = `total_size − payload_start`, 5/5 and via `spec-asm-format.md` 7,990/7,990; `0x16
+- L231: reads back real, sensible, internally-consistent values on every single hit. **[CONFIRMED — dynamic/live, hundreds of hits inspected.]** **[OPEN — desk review 2026-09-30: 364 = `0x16C`, the length of the on-disk header prefix before the loader-zeroed area (§1), and these offsets collide with on-disk fields of different meaning (
+- L263: iner magic number (`0x51890ACE`) found it not just once (at file offset 0, the outer container's own header) but **14 additional times** **[OPEN — desk review 2026-09-30: §1's magic row says "15 naturally-occurring nested sub-containers found inside one of them (see §5)"; whether that is these 14 plus another, a different archiv
+- L300: 2. **Header fields `0x150` and `0x164`** — genuinely untouched by any pass's progress so far; still no working formula for either. **[OPEN — desk review 2026-09-30: Team B's reader ignores both and decodes every entry (§8), so they do not block unpacking; a histogram of both over 6,431 containers, and `0x164` against candidate s
+- L319: **[OPEN — desk review 2026-09-30: validated only for flags bit `0x1` set with every entry compressed; bit `0x1` clear with compressed entries, and raw entries inside a bit-`0x1` container, occur in no shippe
+- L347: r uses `+0x0C` for such entries (none occurred in the four archives checked: 0 raw-sentinel entries) — **untested** where they do occur. **[OPEN — desk review 2026-09-30: whether the engine's slot helper (§3.3) uses `+0x10` = `0xFFFFFFFF` here and overflows to 0 blocks is not known; to be settled against the executable.]**
+- L407: . **Mode (a)** (flags bit `0x2` clear): **4,272/4,272 compressed entries over all ten shipped mode-(a) containers** (all flags `0x4801`) **[OPEN — desk review 2026-09-30: nine vs ten — §7.2 and Team B's earlier agent sample (`team-b/HANDOFF.md` l.11236) say nine `0x4801` archives, §9.78 (l.15037) says ten containers. Arithmetic:
+- L415: ees with `team-b/HANDOFF.md` §9.78 (4,272/4,272, 385,168/385,168, 6,239/6,239, 844/844, 847/847, 69,761/69,761, 2,079/2,080); 9-vs-10 count OPEN — desk review (not re-derived from the executable).**
+- L421: - 2026-09-30 (adversarial desk review, `review/adv_vpp.md`): added the review status summary and 23 per-unit status lines; added OPEN markers for the §1 `0x17C`–`0x17F` gap (new OPEN row), the `0x160` definition-vs-example conflict (§1, §2.1), the `+0x164`/`+0x168` owner conflict between §1 and §3.6/§3.7 (NEEDS-EXE), raw entries
+
+## spec-xtbl-format.md (weight 2, 9 live)
+
+- L63: me file. **[HIGH CONFIDENCE, based on a consistent 3/4 pattern; not yet confirmed as universal across every `.xtbl` file in the game.]** **[OPEN — desk review 2026-09-30: the only population figure is a lower bound — `<TableDescription source=".."/>` carries an attribute in 141 of 2,222 entries (§8) — and presence of `TableDescr
+- L69: lished separately in `spec-tables-weapons-combat.md` §1.2 and repeated in `spec-tables-animation.md` and `spec-tables-environment.md`.)* **[OPEN — desk review 2026-09-30: "most but not all" has no denominator; to be settled against real data (ratio of rows carrying `_Editor`).]**
+- L115: **[OPEN — desk review 2026-09-30: the internal address arithmetic tiles (0x00731e20 + 27, 0x00731e40 + 13, next at 0x00731e50) and `spec-format-inventory.md` agrees, but no instruction-level evidence is repr
+- L131: .]** *(The document release `0x00dab960` is reached from other specs through its thunk `0x00DAB9D0`, `spec-tables-diversions.md` §1.3.)* **[OPEN — desk review 2026-09-30: every link is a disassembly claim with no independent (Team B) check, and `0x0153b528` appears in no other spec; to be settled against the executable (`0x0072b
+- L158: Frame` and `ShotEndFrame`, 41/41), `Navpoint` (2), `Lightset` (58) / `Light` (247), `StartTime`/`EndTime` (1 each), `Character` (1,658). **[OPEN — desk review 2026-09-30: these counts do not state their parent element; 58 `Lightset` against 1 `StartTime`/`EndTime` conflicts with §6.3's `Lightset` rows carrying `StartTime`/`EndTi
+- L170: equest names it — was **not traced** (it would need the resource-request site for type 23, i.e. a search this pass was told not to run). **[OPEN.]** **[Partly answered: `spec-asm-format.md` §9.3 — the `.asm_pc` manifests list these entries as type 23 under their real `.cte_xtbl` names, so the type comes from the manifest, not th
+- L176: reader (`spec-tables-weapons-combat.md` §1: node layout name/next/child/text, case-insensitive matching) rather than a standards parser. **[OPEN — desk review 2026-09-30: that the *engine* tolerates a mismatched close tag, `0x1F` and a space in a name is inferred, not traced; Team B's recovery policy is their own choice, and whe
+- L184: then one `<Table>`" is **not universal**: **260 of 1,595** top-level tables do not begin `<root><Table>` — exactly Team B's total of 260 **[OPEN — desk review 2026-09-30: the shape counts do not reconcile. Team B: `root -> Table` in 1,962/2,222 (2,222 − 260 = 1,962). §7 / Team B `HANDOFF.md` §9.78: 1,817 of 2,080 compressed entr
+- L194: 6.2's error message (clean-room) and added a conflict marker for `0x00daca90` vs `0x00DAC9A0`; marked §5 item 1 population-validated; added OPEN markers for §3.2, §3.3, §6.1–§6.4, §7 (engine tolerance) and the §8 shape-count arithmetic (1,817 / 1,959 / 1,962 / 1,595).
+
+## spec-zone-data-format.md (weight 2, 58 live)
+
+- L27: **Confidence key**: **CONFIRMED — empirical**, **CONFIRMED — disassembly**, **HIGH CONFIDENCE — inferred**, **HYPOTHESIS — unconfirmed**, **OPEN / UNKNOWN**.
+- L36: , not a coincidence of shape. **[CONFIRMED — empirical, controlled.]** **[CONFLICT — step alignment — RESOLVED 2026-10-08, see below.]** **[OPEN — desk review 2026-09-30: the 40 non-conforming files are not characterised; to be settled against real data (D1).]**
+- L39: s), `0x80002237` (1,365), `0x80002234` (106). Across the whole population **790 distinct id values** occur. **[CONFIRMED — empirical.]** **[OPEN — desk review 2026-09-30: the harvest method for the 790 is not stated; with chains only 2–3 records deep (§2) and ~9 tag-handlers in the walker (§9.5), the figure may count id-shaped w
+- L58: ords that are not id-shaped — commonly a `0xFFFB`-family value. **[CONFIRMED — empirical, whole population, three alignment variants.]** **[OPEN — desk review 2026-09-30: the 8-aligned row (882) is the worst of the three although §1 states align8 as the rule (see §1's CONFLICT marker); "0 / 2,971 lands on EOF" sits beside §8.1's
+- L66: t walk stopped — §8.1 shows most stops are on words that are not id-shaped — not a count of sections; and the 790 figure is subject to §1's OPEN harvest-method marker.)*
+- L103: rsor 1,880,316 of 1,883,284 after 256 segments — on "no bookend at the declared length" or "declared length overruns". Added 2026-09-13. **[OPEN / UNKNOWN.]** **[SUPERSEDED as stated — desk review 2026-09-30: Team B tiles 1,002 / 1,002 under the cursor-or-next-16-boundary rule, see §10.8's conflict note; what remains open is why
+- L104: nt-size byte is not 2** (§10.8). Two residuals of nearly equal size; a set comparison would settle it and was not run. Added 2026-09-13. **[OPEN.]**
+- L105: . Vehicles are not affected by the alignment gate, so this residual needs its own explanation. Flagged, not diagnosed. Added 2026-09-13. **[OPEN / UNKNOWN.]**
+- L106: by any shipped zone block — 0 of 2,843 validated, 36 and 16 candidates respectively (§10.1). Untested, not confirmed. Added 2026-09-13. **[OPEN / UNKNOWN.]** **[OPEN — desk review 2026-09-30: measured on the old 2,843-block set, not re-run on the corrected 38,152; Team B's locator uses 4-aligned anchors only, so its 38,152 does 
+- L131: `spec-geometry-format.md` §4.1.1 begins; the check value tags the block's `.gzn_pc` segment. The struck line omitted the g-side length. **[OPEN — desk review 2026-09-30: §10.1 calls the version field a `u16` while this section's anchor reads a `u32 == 9`; the two readings agree only for 4-aligned anchors; the width is to be sett
+- L133: **Review status (2026-09-30): DESK-PASS, text fixes applied (pre-header layout corrected to §10.1; version width OPEN) — desk review (not re-derived from the executable).**
+- L139: 65 per multi-block file — and §10.6 could not re-derive the 4,478 denominator; the 400-zone sample is not stated to be representative.)* **[OPEN — desk review 2026-09-30: per-file block histogram over all 1,002 pairs; to be settled against real data (D6).]**
+- L145: ts.]** *(Desk review 2026-09-30: the block count 4,478 is qualified by §10.6's finding that its denominator is not re-derivable; read it as OPEN, not CONFIRMED.)*
+- L184: n the independent walker finding of §9.5 than on this statistic. The "reached EOF 32" stop count here sits against §2's 0 / 2,971, see §2's OPEN marker.)*
+- L369: is what the object/property stream ultimately feeds; OPEN, whether this exact class's
+- L457: **[OPEN — desk review 2026-09-30: Team B's pair count was 1,037 found plus a 37-file extraction gap (the note above), 1,074, not reconciled to this section's 1,083; to be settled against real data (D7).]**
+- L459: **Review status (2026-09-30): DESK-PASS, text fixes applied (1,083 versus Team B's 1,037 + 37 marked OPEN) — desk review (not re-derived from the executable).**
+- L488: pseudocode-shaped lines into prose.)* **[OPEN — desk review 2026-09-30: the exact step (the base
+- L522: object/property interior" question stays OPEN, narrowed from "no walker exists at all" to
+- L590: `OPEN / UNKNOWN` cross-reference question at the end of §9.4.
+- L641: and `p + 0x12` branches are OPEN / UNKNOWN for want of a single shipped case.]**
+- L643: over all 24,477 anchors with two independent oracles: 2,596 close at `0x10`, 247 at `0x14`, zero disagree. The `p ≡ 2 / 6` branches remain OPEN: the 0-of-2,843 figure was not re-run on the corrected 38,152 (data check D2). The mod-8 classes are of the file offset, which matches the rule only if the loaded buffer is itself 8-alig
+- L706: **[OPEN — desk review 2026-09-30: these controls do not agree with the D1 row above or with §10.5 — D1 gives the check value present in a different zone's `.gzn_pc` for 77 / 36,231, yet the tag here is "foun
+- L731: **Review status (2026-09-30): DESK-PASS, text fixes applied (control-figure disagreements marked OPEN, D8) — desk review (not re-derived from the executable).**
+- L767: **[OPEN — desk review 2026-09-30: the offsets tile (0 + 612 = 612, + 1,280 = 1,892, + 720 = 2,612, + 1,176 = 3,788, + 234,088 = 237,876) and the residues mod 16 are right, but the replay-from-16-aligned figu
+- L769: **Review status (2026-09-30): DESK-PASS, text fixes applied (replay-figure inconsistency marked OPEN, D9) — desk review (not re-derived from the executable).**
+- L844: **[OPEN — desk review 2026-09-30: whether the 16-byte pad applies after every segment of a `~al` zone or only when the tag at the cursor does not resolve (97 files "use a skip" in §10.5; Team B counts 115 pa
+- L850: This closes the `OPEN / UNKNOWN` question recorded at the end of §9.4 ("whether Team B's
+- L957: Flagged, not diagnosed. **[OPEN / UNKNOWN.]**
+- L967: Not proven to be the same set. **[OPEN — a set comparison would settle it and was not run.]**
+- L971: **[OPEN / UNKNOWN.]**
+- L973: and 70 of 580 multi-block files have non-monotone segment order. **[OPEN / UNKNOWN.]**
+- L975: accurate: 37,035 / 115 / 0 does not match 37,446 / 284, and the +4 controls differ, 21 / 1,002 tiling there versus 0 / 1,002 here.) **Still OPEN:** why this pass's walker failed on 74 files — run both walkers on the same pairs and diff the failing sets (review data check D10).**]**
+- L1130: two buffers is OPEN, not checked against file content this pass.]**
+- L1230: OPEN — not examined by any function read this pass.]**
+- L1245: this pass — OPEN.**
+- L1486: for everything above; OPEN for the real-data branch frequency.]**
+- L1847: **Extended, 2026-10-09** (`spec-player-runtime.md` §7.11, OPEN 55 extension): a whole-`.text`
+- L2204: instruction-for-instruction.] OPEN:** the exact steering/target-point computation and the junction
+- L2247: pass. **[CONFIRMED for the one coordinate checked — directly verified container contents, `tools/harnesses/scan_meshes.py`+`vpp_modea.py`. OPEN: whether this generalizes population-wide, and what `~f`'s own type/container-kind value and real purpose are — flagged for a future pass, not chased further here.]**
+- L2251: ### 13.3 The other 14 ids, surveyed (not full field census — depth varies, every gap flagged OPEN honestly)
+- L2255: oping note exactly: `0x90` (144)-byte stride, per-entry `0x00dcd3d0`; the `triggers.xtbl` link (`spec-tables-vehicle-world.md` §21.1) stays OPEN.
+- L2320: plane specifically.** Whether (-1280,-560) actually falls inside the global box remains OPEN
+- L2326: the same reader" question is now closed for the whole 22-entry id space (§13.1). Field-level semantics for most of the 14 ids above remain OPEN by design (survey depth, not full census) — Parking (`0x2250`, deep-dived below, §13.4) and Undergrowth (`0x2246`) were flagged as the most structurally interesting candidates for a futu
+- L2332: on-variant sibling set (e.g. `sr3_city~f1012.czn_pc`/`^burn`/`^daedelus`/`^lockdown`) — a clean sanity confirmation, not a new mechanism. **OPEN:** every one of the 178 records has unexplained "leftover" bytes past the parsed Havok blob, within the chain entry's own declared length (not a second Havok-magic blob) — not chased to
+- L2336: Sidewalks dispatcher, §13.2, already uses for load-status bits) — not from the record's own bytes or the Havok blob; exact semantic meaning OPEN. HIGH CONFIDENCE both ids belong to generic base-class bookkeeping shared by other physics-shape-attached object types, not `parking_spot`-private fields.
+- L2340: y + RTTI decode + full-population empirical validation (178/178). HIGH CONFIDENCE — the generic-bookkeeping framing for ids `7`/`0x13`/`8`. OPEN — the exact semantic name of ids `7`/`0x13`; the "leftover" bytes; where the richly-named tuning fields get their per-spot runtime values.]**
+- L2344: **Review status (2026-10-08): CONFIRMED for the payload format, Havok content, and class identity (full-population + RTTI); HIGH CONFIDENCE/OPEN as noted above for the two property ids' exact semantics.**
+- L2370: orm** — no independent ground-truth elevation source (e.g. a placed object's own Y-position, §11) was cross-checked against it this pass. **OPEN.**
+- L2372: , that texturing is not carried by `0x2244` itself; whether it borrows `0x2237`'s own per-zone `.tga` pool (§13.2) was not searched for — **OPEN, not asserted.**
+- L2382: tion's own observed global minimum of `-5` — a legitimate `-5` sample is indistinguishable from "out of bounds" to any caller. **New narrow OPEN item**, not material to the render question below.
+- L2384: HIGH CONFIDENCE (not exhaustive — the rest of the binary outside this call cluster was not searched for an unrelated `0x2244` render path, OPEN as a bounded stretch goal): this content kind is a physics/AI-pathing elevation-query and cost-field API only, with no rendering consequence through this call chain.
+- L2386: earlier "data is not corrupt" cross-check, the bug most likely lies either in a still-unfound separate renderer for this data (unsearched, OPEN) or in an entirely different content kind/mechanism — most plausibly the `0x2237` render-geometry pipeline (§13.2), or a render-state/culling bug unrelated to data decode. **Concrete nex
+- L2390: t kind's own query chain has no rendering consequence. HIGH CONFIDENCE for height-value-equals-metres and the `~al`-spacing reconciliation. OPEN for the `-5.0` sentinel/legitimate-value ambiguity and for an exhaustive whole-binary search for any separate `0x2244` render path.**
+- L2445: narrow new OPEN item). Net: if `0x2244` is the intended base terrain, nothing reached from its
+- L2501: OPEN and is the natural next step.** Side finding: resolves the long-standing §1/§8.1/§9.5
+- L2575: full-population 1,002 / 1,002 tile and 37,035 / 115 / 0 split (`team-b/HANDOFF.md` lines 6622-6627), cause of this pass's 74 failures left OPEN; corrected §7.2's pre-header layout to §10.1's (g-length was missing); struck/scoped §9.2's CONFIRMED labels beside the SUPERSEDED marks; reworded §9.5's pseudocode-shaped lines into pro
+- L2579: avement (its one render sample is rooftop/building-silhouette geometry). The core "where does ordinary street pavement live" question stays OPEN (terrain-system `0x2237` vs. static Level-Mesh/`.clmesh_pc` content, neither ruled out — explained why Team B's own 3-tile negative result doesn't discriminate between them, §10.5's 63.

@@ -523,6 +523,217 @@ own body and the `+0xa70`/`+0xa91`/`+0xa84` field identification; HIGH CONFIDENC
 re-verified against a real mission-script call sequence, that the two sub-field clusters always move
 together in practice.]** Full detail: `scratchpad/wave10_natives_batch1_2026-10-09.md`.
 
+## Free-roam HUD binding map and minimap transform (2026-10-14)
+
+**Scope.** Closes FREE-ROAM-GAPS group C (C-1 binding map, C-2 minimap transform). Sources: the shipped
+`hud.vint_doc` (`interface_startup.vpp_pc`, byte-identical to the copy in `interface.vpp_pc/hud.str2_pc`),
+the shipped HUD Lua (`hud.lua`, `hud_noto.lua`, `vdo_respect_meter.lua`, `vint_lib.lua`; dumps in
+`scratchpad/ui_lua_dumps/`), the executable (pefile + capstone, no Ghidra), the shipped `tweak_table.xtbl`,
+and the minimap tile textures in `sr3_city_1.vpp_pc`. Tools: `tools/scratchpad/hudmap_*.py`
+(`hudmap_vdump.py` element dump, `hudmap_dis.py` disassembly/xrefs, `hudmap_peg.py` PEG lookup,
+`hudmap_orient.py` texture-orientation check, `hudmap_vectors.py` test vectors). Screen coordinates are the
+document's 1280×720 reference pixels, y down, unless stated. Status per item: **FINAL** = every link read in
+code or data; **PARTIAL** = one named link is HIGH CONFIDENCE or OPEN.
+
+### H.1 The HUD dataitems: registration, producers, cadence — FINAL
+
+`0x007F3940` (called once, from `0x00702F9F`) creates every core HUD dataitem with a fixed per-field type list
+and stores each handle in a global. The field-type codes are the VINT tagged-value codes (1 = integer,
+2 = unsigned, 3 = float, 4 = string, 5 = bool). Every producer writes fields with `0x00E26040`
+(set field *i*). That function compares the new value with the stored one (`0x00E245E0`) and returns at once
+when they are equal. Otherwise it stores the value and sets the item's dirty byte `+0x32C`. So a producer
+may push every frame while the Lua `"update"` callback only sees changed items. **[CONFIRMED for the compare
+and the dirty byte; that the callback dispatch reads `+0x32C` is HIGH CONFIDENCE, dispatcher not read.]**
+
+| Dataitem / datagroup (name string) | Handle global | Fields (type) | Producer | Called from / cadence |
+|---|---|---|---|---|
+| `sr2_local_player_status` | `0x022B795C` | 13: `sprint_enabled`(5) `health_pct`(3) `health_level`(1) `is_dbno`(5) `bleed_out_health_pct`(3) `sprint_pct`(3) `sprint_level`(1) `is_sprinting`(5) `orientation`(3) `is_mp_invulnerable`(5) `tunnel_vision_amount`(3) `is_in_satellite_mode`(5) `is_controlling_missile`(5) | `0x007F4A70` | `0x009EA3BC`, inside the per-frame chain `0x00702A50` → `0x009EA630` → `0x009E91C0` (the same chain that feeds `information_indicator`, §6.5), only for the local player (`== [0x0262EDFC]`); every frame |
+| `sr2_local_player_status_infrequent` | `0x022B7960` | 9: `cash`(3) `max_followers`(2) `inventory_disabled`(5) `vehicle_logo`(4) `radio_station`(4) `cruise_control_active`(5) `camera_screenshot_enabled`(5) `force_show_cash`(5) `show_vtol_hints`(5) | fields 0, 1, 5–8: `0x007F4A70` (every frame, as above); field 3: `0x007F1930` (vehicle enter/exit sites `0x00A83F47`, `0x00A87431`, `0x00AFCC25`, `0x00B0492D`); field 4: `0x007F1A20` | field 4 is pushed by `0x0055EFA0` **[CORRECTED 2026-10-14: the push is made by `0x0055F190`, see spec-audio-runtime.md §14.6]** only when the current vehicle's radio record changes (cached in `0x013C612C`) |
+| `sr2_local_player_respect` | `0x022B7978` | 5: `total_respect`(1) `respect_pct`(3) `respect_level`(1) `show_upgrades`(5) `force_show_respect`(5) | `0x007F2000` | `0x009EA3C2`, every frame |
+| `sr2_local_player_weapons` | `0x022B7980` | 25 (the order is listed in the comment at the top of `hud_player_weapon_change` in `hud.lua`) | `0x007F7C80` | `0x009EA3C8`, every frame |
+| `sr2_local_player_frequent_weapon` | `0x022B7984` | 8: `ammo_ready`, `reticle_highlight`, `cur_wpn_spread`, `fine_aim_transition`, `water_pressure`, `x_screen_coord`, `y_screen_coord`, `reticule_opacity` | `0x007F7C80` | same call |
+| `sr2_notoriety` (datagroup, 4 items) | group `0x022B7964`, items `0x022B7968`+4·*i* | 3: `team_name`(4) `noto_level`(3) `noto_icon`(4, always `""`) | `0x007F1F00` | the notoriety system (`0x006092BB`, `0x00609FAD`); on notoriety change |
+| `sr2_local_player_hood` | `0x022B7958` | 4: `hood_name`, `cur_hood_owner`, `orig_hood_owner`, `is_contested` | `0x007F1800` (from `0x009E199A`) | Lua reads it and does nothing with it |
+
+### H.2 Per-stat binding map
+
+| Stat | `hud.vint_doc` element(s) (path, reference position) | Lua function (file) | Dataitem field(s) | C++ value and encoding | Status |
+|---|---|---|---|---|---|
+| Health | `health_bar` (fill), `health_bar_2` (decay layer), `health_bar_bg` — three `bitmap_circle` elements, 150×150, image `ui_hud_wpn_health`/`_bg`, under `base_weapons/weapons_grp(1004,532)/health_sprint_grp(58,56)/health_grp(0,1)`. The ring is around the **weapon** icon, bottom right. The Lua comment "around the minimap" is stale. Also `vignette_health` (alpha) and `map_health_expand`/`_contract`/`health_timer_twn` (show/hide). | `hud_player_status_change` (`hud.lua`). It reacts only when \|Δpct\| > 0.001 or the level changed. Angles: `fill_end = (end − start)·pct + start` with `start = 6.3` and `end` = 3.142 / 2.6774 / 2.2128 / 1.2836 / 0.819 for `health_level` 0–4; `bg_end = fill_end − 0.035`. A drop sets `health_bar.end_angle` and `health_bar_2.start_angle` to `fill_end` and tweens the decay layer. Below 0.5 it fades `vignette_health` to `0.5 − pct`, below 0.3 to `0.70 − pct`. At pct = 1 the bar retracts after the timer. | status field 1 `health_pct`, field 2 `health_level` | `health_pct = trunc(1000 · HP / maxHP) / 1000` as a float, with `HP` = character `+0x1CB8` (float) and `maxHP` = `+0x1CAC` (int), computed by `0x004D31F0`; when `maxHP ≤ 0` it is 0. `0x00EA2560` truncates. `health_level` = `+0x1CB4` (int, `0x00942490`). | FINAL |
+| Ammo clip / reserve | `weapon_ammo_txt` (text, (58,103) in `weapons_grp`, also copied to `sniper_ammo_txt`), `grenade_ammo_txt`. | `hud_player_weapon_change` (`hud.lua`) | weapons fields 1 `rdy_ammo`, 2 `rsv_ammo`, 4 `grenade_ammo`, 7 `no_ammo`, 8 `inf_ammo`, 9 `gnd_inf_ammo`, 10 `cont_fire`, 11 `no_mag` | Clip = the weapon instance's `+0x1A4` (int; forced to 0 for one single-round flag case); reserve = `0x009BFF20(player, weapon, 0, 0)`. Both are halved (arithmetic shift) when `0x009ADBD0(player) == 3` (dual wield). String: no ammo → `""`; no magazine → `rdy+rsv` (or the infinite image); normal → `"rdy/rsv"`; continuous fire → `floor(rdy/100) .. "/" .. floor(rsv/100)`; infinite reserve → `"rdy/[image:ui_hud_base_smcirc_infinite]"`. Grenades: `""` when 0, else the count. *Note: `spec-weapons-runtime.md` gives the clip at `+0x1AC`. This producer reads `+0x1A4` off the object it resolves; the two were not reconciled.* **[2026-10-14 RESOLVED: `+0x1A4` is the live rounds-in-clip and the producer is right. `+0x1AC` on the same weapon instance is the clip-side reserve (rounds not in the magazine). Evidence: the per-shot commit `0x009BB380` does `clip(+0x1A4) −= pending(+0x1F8)` (and `−= +0x1FC` when `+0x1A1` bit 4 is set), then clamps at 0. Reload `0x009C0A50` does `take = min(maxClip − clip, reserve)`, `reserve(+0x1AC) −= take`, `clip(+0x1A4) += take`, where `maxClip = 0x00B81C30(weapon, owner)`. The total-ammo getter `0x009C00F7` returns `+0x1A4 + +0x1AC`. The reserve getter `0x009BFF20` returns `+0x1AC` (or `+0x1B4` for the secondary), or the owner's per-ammo-type pool when the owner has one (player-class characters). The `add [esi+0x1ac]` at `0x00B860E9` that `spec-weapons-runtime.md` called the clip decrement actually moves rounds from the owner's ammo pool into this reserve. It is not the per-shot decrement.]** | FINAL (clip = `+0x1A4`, reserve = `+0x1AC` or the owner pool) |
+| Weapon icon | `weapon_icon`, or `dual_weapon_1` + `dual_weapon_2` (bitmaps 74×80, scale 0.8); `grenade_icon`, `grenade_holster(_extra)`. | `hud_player_weapon_change` | weapons field 0 `wpn_bmp_name` (string; nil → `ui_hud_inv_fist`), 3 `grenade_bmp_name`, 6 `dual_wield` | Field 0 = the bitmap name from the weapon definition's `+0x19C` record (`0x007EF020` → `0x00E21870`); DLC special cases `ui_hud_inv_dlc_escort`, `ui_hud_inv_dlc_ball`. | FINAL |
+| Cash | `cash` (text, font `thin_overlay`, `auto_offset 'ne'`, under `base_cash_respect_homey(-2,-22)/cash_grp(1162,139)`, so the anchor is at (1160,117); alpha 0 until `cash_anim` plays) | `hud_player_status_inf_change` stores `floor(cash)` and plays `cash_anim` when the value changed or `force_show_cash` is set. The thread `hud_process` counts the shown value toward it once per frame: `diff = cash − shown`; if \|diff\| > 5 then `diff = floor(diff·0.5)`; `shown += diff`; `text_tag = "$" .. format_cash(shown)`. | infrequent field 0 `cash` | `cash = player[+0x1CA0] / 100.0` as a float in dollars (`+0x1CA0` = integer cents). `format_cash` = `game_format_int_to_string` (`0x00841C90`): floor through a float, comma every three digits, no locale. | FINAL |
+| Police notoriety | `police_noto_icon_1` … `_5` (bitmap `ui_hud_not_police` 52×58, scale 0.5) at (−70,60), (−38,83), (0,89), (38,83), (70,60) relative to `map_grp`; `map_noteriety_expand`/`_contract`; `notoriety_ring` | `hud_noto_change` (`hud_noto.lua`): `floor(level)` icons lit. Icons that newly light play the add animation, extra icons play remove. A fractional increase or decrease pulses or decays the top lit icon. The ring hides when every type is below 1. | `sr2_notoriety` item 3: `{"police", level, ""}` | Item *i* = track *i* (`0x00605430` reads the name from `0x012ED140`: `brotherhood`, `ronin`, `samedi`, `police`). `level` from `0x00605290(i)`: `L = [0x014A4F70 + 0x4C·i]` (int). If `L ≥ 5` it is 5.0; otherwise `L + [record+4] / T[L + 5·(i==3)]`, with `T` the int threshold table at `0x014A45F4` (gang rows 0–4, police rows 5–9). While the `hud_set_fake_notoriety` override byte `0x022B7574[i]` is set, the producer pushes `0x022B7564[i]` instead. | FINAL |
+| Gang notoriety | `gang_noto_icon_1` … `_5` (bitmap `ui_hud_not_syndicate`) at the mirrored top positions (−70,−61) … (70,−61) | `hud_noto_change`: the highest of the three gang items wins | `sr2_notoriety` items 0–2 | SR3 tracks 0 Luchadores, 1 Deckers, 2 Morningstar are **published under the SR2 alias names** `brotherhood`, `ronin`, `samedi`. Those are exactly the keys in `Hud_noto_data.gangs.teams` in `hud_noto.lua`. All three use the same icon image. | FINAL |
+| Respect bar and level | `respect_obj` (`document`, `vdo_respect_meter`) under `respect_grp(1137,109)` → (1135,87). Inside it: `respect_meter` / `respect_meter_bg` (end angle), `respect_level_text`, `respect_amount_text` ("+N"). | `hud_player_respect_change` (`hud.lua`) → `Vdo_respect_meter:update_respect` / `fill_meter` (`vdo_respect_meter.lua`): shown level = `respect_level + 1`; `end_angle = 2.65 − 5.25·clamp(pct, 0, 1)`; `bg = end − 0.03`; "+N" = `total − previous total` when positive. The bar hides on the `respect_timer` tween unless `can_hide()` refuses. | respect fields 0–4 | `total = 0x009DB890(p)`. `level = 0x009DB8B0(p)` (0-based). `need = 0x0060EB60(p)`. `pct = 0x009DB8A0(p) / need`, or 1.0 when `need == 22000 (0x55F0)` or `need ≤ 0`. Then `pct ← pct − floor(pct)`, so a value of exactly 1.0 publishes **0.0** (the meter is empty at the capped rank). `show_upgrades = ([0x022B79F0] == 2)`; `force_show = ([0x022B79FC] > 0)`, a counter decremented once per push. | FINAL |
+| Minimap | `base_mini_map(1,0)/map_grp(190,566)/map/game_map` (`sr2_map`, depth −200) and `map_ring_NE` (148×148 ring, `ui_hud_map_map_ring_full`); `map_objective_icon`; the notoriety icons above. 640×480 override: `map_grp` (112,375), scale 0.667. | `hud_show_map`/`hud_hide_map` (visibility). `hud_player_weapon_freq_change` sets `map_grp.alpha = clamp(1.2 − fine_aim_transition, 0, 1)`. `hud_map_objective_icon` sets `map_objective_icon` from dataitem `minimap_giant_icon`. | frequent-weapon field 3; `minimap_giant_icon` | Not data-bound: drawn in C++ by the `sr2_map` callbacks `0x00809910`/`0x0080A460` (H.3) | FINAL (H.3 for the map content) |
+| Radio station popup | `radio_station_image` (bitmap, (644,88) in `base_radio_station/radio_grp`, scale 1.25), `radio_left_arrow`/`radio_right_arrow` (moved to ±(w/2 + 20)), `radio_hint_left`/`_right` (keyboard only); `radio_station_anim_1`. The text element `radio_station` exists but is `visible=False`; **no station name text is drawn**. | `hud_player_status_inf_change` (`hud.lua`): on a change, `image = radio_station .. "_sm"`; `""` → `ui_menu_none` at scale 0.8; then plays the animation | infrequent field 4 | The string at the vehicle radio record `+0x80` (e.g. `ui_radio_10666_the_blood`; the document's placeholder image is `ui_radio_10666_the_blood_sm`). A null record pushes an empty string. | FINAL for binding and producer; the station string's origin record is HIGH CONFIDENCE |
+| Time of day | **none.** No clock or time element exists anywhere in `hud.vint_doc` (full element dump), and no HUD dataitem carries time. | — | — | — | FINAL (negative) |
+
+### H.3 Minimap world→screen transform — FINAL except the interior branch
+
+**Entry points.** `0x00809910` (draw) and `0x0080A460` (post-draw), both put into the VINT callback table by
+`0x00848C0D`/`0x00848C17`. Argument 1 points to the element's screen position. Argument 4 is used only as an
+alpha multiplier: the base map is drawn at `alpha·0.75`, and the value is cached in `0x022BFB90`.
+**`0x00809910` never reads the `sr2_map.zoom` instance property (`this+0xA0`)**; the scale is the
+tweak-driven value below.
+
+**1. Centre C.** `0x012FFF6C`/`0x012FFF70` = round((element position − screen origin `0x02A4E388`/`0x02A4E38C`) /
+document scale), so C is in reference pixels. Drawing converts back with `0x00E23350`/`0x00E233A0`. In
+`hud.vint_doc`: `game_map` has no anchor, `map_grp` is at (190,566), `base_mini_map` at (1,0), so
+**C = (191, 566)** at 1280×720. **[CONFIRMED arithmetic; that the callback receives `game_map`'s resolved
+position is HIGH CONFIDENCE — the render-walk call site was not read.]**
+
+**2. Map centre P (world X,Z).** `0x00809910` reads the player's `+0x40`/`+0x48`, writing `0x022CB2C8`/`0x022CB2D0`.
+If the player is in a vehicle (`0x009DDA80`), it uses the vehicle's position instead (handle `0x004DCC60` →
+`0x004DCF00`). If global `0x013C87C8` ∈ {1,3} (a special camera mode, identity HYPOTHESIS), it uses the
+vector at `0x013C8740`. *Correction to the 2026-10-08 note: that {1,3} test is on the global, not on
+`[player+0x1938]`.* Each frame, `[player+0x1938]` is only copied to `0x022BFD5C`.
+
+**3. Scale k (reference px per metre).** `0x008035F0`, using the shipped `tweak_table.xtbl` values
+`Minimap_max_scale` = 0.75 (global `0x022BFB98`) and `Minimap_interior_mag_factor` = 1.75 (`0x022BFB94`):
+- `speed` = round(|v| · 2.23694), i.e. **mph**, from `0x00AD53F0` → `0x00AD4160` (the factor is set at
+  `0x0100A7A0`). It is taken from the current vehicle `+0x16D8`, otherwise the last vehicle `+0x16C0`. With
+  no vehicle (`+0x16C8 == −1` and `+0x16D8` empty) the target is 0.
+- The smoothed level `s` (int, `0x022CB320`) with held target `T` (`0x022CB324`) and accumulator `acc`
+  (`0x022CB328`): each frame `acc += 13·dt`. When `speed > T`, `T = speed`. When `T > speed + 5`,
+  `T = speed`. `s` steps toward `T` by `floor(acc)` (the remainder stays in `acc`), but never sits below `T`
+  (an upward change snaps at once) and is capped at 100. Net effect: the map zooms out immediately when
+  speed rises and zooms back in at 13 mph-units per second once speed has fallen more than 5 below the held
+  peak.
+- `Z = max(0.75·0.75, 0.75 − s·(0.75 − 0.75·0.75)/100) = max(0.5625, 0.75 − 0.001875·s)`.
+- `k = Z × (1.75 if interior) × UI scale`. The interior flag is `0x022C03E1`, set when the zone under the
+  player is an interior zone (`0x00803520` → `0x00861AA0`/`0x0085BE00`). The UI scale is `0x00E23310`, the
+  document's y scale. So at 1280×720: **k = 0.75 px/m on foot or parked, 0.5625 px/m at 100 mph or more.**
+
+**4. Rotation.** `θ = −(h + π)` (`0x022C03EC`). In rotating mode (static-minimap option `0x022C03E0` = 0),
+`h` is the **camera** heading: the matrix at `0x013C8760` via `0x004BC550`, with `h = atan2(fwd.x, fwd.z)`
+(`0x00DA3910` → `0x00DAE5B0`, i.e. atan2 of the first argument over the second). In static mode, `h` comes
+from the player's own orientation `+0x4C` (`0x00DA39F0`), and θ is used **only for the player glyph**. The
+map and the blips are then drawn with rotation 0.
+
+**5. The formula.** Let `dX = X − P.x`, `dZ = Z − P.z`, and `θm = θ` in rotating mode or 0 in static mode.
+With `R(θ) = [[cos θ, −sin θ], [sin θ, cos θ]]` acting on (x, y-down) screen vectors:
+
+    screen(X,Z) = C + R(θm) · k · (−dX, +dZ)
+
+The equivalent polar form, which is how the code computes it (`0x008037B0`, `0x00805B90`):
+`r = k·√(dX² + dZ²)`, `a = atan2(dX, dZ) − 3π/2 + θm`, `screen = C + r·(cos a, sin a)`.
+Consequences: in static mode **screen up = world −Z and screen right = world −X**. The game's own north
+marker (`map_north`, drawn by `0x00806830` at polar angle π, i.e. toward −Z, at radius 67) sits at the top,
+so **the game's north is −Z** (and its map east is −X). In rotating mode the camera's forward direction
+is screen up. **[CONFIRMED — disassembly; sin/cos identified by their `fsin`/`fcos` bodies at
+`0x00EA2470`/`0x00EA3A70`.]**
+
+**6. Base texture (city).** `0x00807DC0` picks the zone each frame: player `+0x70`, the vehicle's `+0x70`, or
+`0x013C88A4` in the camera mode. A value of `0x3180` falls back to a position lookup (`0x00861AA0`); an
+invalid zone gives `0xFFFF`. On a change, `0x008068E0` rebuilds the binding:
+- **Valid zone:** the bitmap name is `"minimap_%s.tga"` (`0x0115D528`), with the zone name from record
+  `+0x7C`. It is looked up with `0x00DCECC0`; if that reports not present (`0x00DCED90` == 1), the code uses
+  `sr2_water_minimap.tga` (`0x012FFF5C`). Bounds = the zone box (`0x00861A20`; for a city tile this is the
+  level-3 grid cell box `0x0085B430` reached through grid-vtable slot `+0x28` = `0x0085B6A0`) **expanded
+  by ±160 m in x and ±116 m in z** (`0x0115D520` = 160.0, `0x0115D518` = 116.0), into
+  `0x022C03F8`/`0x022C03FC` (min x, min z) and `0x022CB2B0`/`0x022CB2B4` (max x, max z). For tile `CCRR`,
+  with `cx = 320·col − 4000 − 160·(row mod 2)` and `cz = 3640 − 280·row` (`spec-world-streaming.md`
+  §10.6(g)), that is `x ∈ [cx − 320, cx + 320]` and `z ∈ [cz − 256, cz + 256]`, i.e. 640 × 512 m.
+- **No valid zone:** `mapsaintsrow.tga` from peg `misc-static.tga`, with bounds set to the world box
+  `0x013CDBE0` (min x `+0`, min z `+8`, max x `+0xC`, max z `+0x14`).
+- Texture size (`0x00DCF390`) goes to `0x022BFD40` (w) and `0x022BFD3C` (h). Metres per texel are
+  `0x022BFD48 = (xmax − xmin)/w` and `0x022BFD44 = (zmax − zmin)/h`. **Data:** `minimap_1815`, `_1914`,
+  `_1410` (in `CCRR.str2_pc/minimap_CCRR.cvbm_pc`, record name `minimap_CCRR.tga`) are 640×512, format
+  403 (R5G6B5), so a city tile maps at exactly **1 m per texel**.
+- Draw (`0x005D9730`): the quad is `k·(xmax − xmin)` × `k·(zmax − zmin)`, centred at
+  `C + R(θm)·k·(P.x − xc, zc − P.z)` with `(xc, zc)` the bounds centre, rotated by θm, with full-texture UVs
+  (u to the right, v down, no flip flags). Combined with point 5, the texture's registration is
+
+      u = (xmax − X) / (xmax − xmin),   v = (Z − zmin) / (zmax − zmin)
+
+  **Data check (`hudmap_orient.py`):** this registration gives the highest mean texel brightness at the
+  road-graph and sidewalk nodes (§13.2a) of tiles 1815 (1,161 nodes) and 1410 (646 nodes) —
+  0.208 / 0.225 against image means 0.163 / 0.180. The three other axis flips score 0.155–0.194. A ±48 m
+  shift scan peaks within one 8 m step of zero. Tile 1914 (239 nodes) does not separate the hypotheses.
+  **[CONFIRMED — disassembly and data.]**
+
+**7. Screen mask and draw order (`0x00809910`).** A black backing quad and the stencil bitmap
+`ui_hud_map_map_mask` (handle `0x022BFD50`, from the name table at `0x0115D3C8`: `ui_unused`,
+`ui_hud_map_map_mask`, `map_north`, `map_blip`) are drawn centred at C. The clip rectangle (`0x005DE290`) is
+the mask's size + 64 reference px, centred at C. Then come the base texture, region polygons (`0x00805D40`,
+through `0x008037B0`), the shared blip pool (`0x007D5C90` with callback `0x008037B0`; HIGH CONFIDENCE, `0x007D5C90` not read), and the
+category passes `0x00808AD0` (categories 10, 8, 7, 0, 2, 3, gated by bits 4, 2, 1, 8, 0x40, 0x80 of
+`0x022BFD30`; category 9 always). The post-draw callback adds the north marker, two more categories, a
+second `map_blip` tinted (0, 0.388, 1) for the object returned by `0x009DF3D0` (HYPOTHESIS: the co-op
+partner) and the player glyph. The mask bitmap's own pixel size is in a HUD peg that was not located — OPEN,
+cosmetic. The visible ring is `map_ring_NE`, 148 px across.
+
+**8. Blip placement and edge clamping (`0x00805B90` → `0x008059E0`).** `r` and `a` as in point 5;
+`R67 = 67 · UI scale` (`0x0115D4E8` = 67.0). The drawn radius is `min(r, R67)`, and the function returns
+"clamped" when `r > R67`. It also outputs an edge factor `e = clamp((r − R67) / (2·R67), 0, 1)`, 0 inside
+the ring. The north marker uses the same function with `r = R67`, so it always rides the ring. Elevation
+arrows use tweak `Minimap_elevation_tolerance` = 3.5 m (consumer not traced).
+
+**9. Player glyph — closes the §6.4 gap.** In `0x0080A460`, the bitmap **`map_blip`** (`0x022BFD58`) is
+drawn white at C. In rotating mode it is unrotated (`0x00E21D40` at `0x0080A81E`). In static mode it is
+rotated by `−θ = h + π` (`0x00E21AC0` at `0x0080A7F4`), so with the player facing −Z (north) the glyph is
+upright.
+
+**OPEN (narrow):** the interior branch (`0x022C03E1` set) positions the texture from `0x022CB2B8`/`0x022CB2BC`
+and an angle offset `0x022BFD38`, but no direct writer of `0x022CB2B8` was found. The mask bitmap's size is
+also open. **[2026-10-14 RESOLVED — interior placement: `0x022CB2B8`/`0x022CB2BC` have no writer at all, direct or indirect. The only references to the two addresses are the reads at `0x00809D53`, `0x00809D59` and `0x00809D6E` in the draw routine. A scan of every 4-byte value in the image (`tools/scratchpad/tail3_ptrscan.py`, range `0x022CA000`–`0x022CB2BC`) finds no base pointer into the block other than `0x022CB2B0`. That one is written only as two floats: `0x00DB91C0` zeroes exactly `+0`/`+4`. The pair is zero-initialised BSS for the process lifetime, so the interior reference point is the world origin (0, 0). The rest of the interior path, from the same pass:**
+**(1) The interior flag `0x022C03E1` is the result of `0x00803520`, stored by `0x00807DC0(player, 0, &flag)`. It is set when the region id found at the player's position, or 1.4875 m above it (`0x00861AA0`), is not `0x3180` ("none") and `0x0085BE00(id)` is true. The current id is kept in `0x013004D4`.**
+**(2) On a change of id, `0x008068E0` loads the texture `minimap_<name>.tga`, with name = string `+0x7C` of the region record `0x0085FD50(id)`. It sets the drawn bounds from the region box `0x00861A20(id)` padded by 160 m in x and 116 m in z: `0x022C03F8` = min x − 160, `0x022C03FC` = min z − 116, `0x022CB2B0` = max x + 160, `0x022CB2B4` = max z + 116. The angle offset `0x022BFD38` is set to 0. If the id is `0xFFFF`, it loads `mapsaintsrow.tga` (`misc-static.tga` fallback) with the city bounds `0x013CDBE0`. Metres per texel = padded extent ÷ texture size, as in point 6.**
+**(3) Draw, interior branch: the quad has the same size as point 6. Its offset from C is `R(θm)·k·(P.x − 0, 0 − P.z)`, the exterior formula with the bounds centre (xc, zc) replaced by the never-written (0, 0). This is shipped behaviour (HYPOTHESIS: an unfinished feature). A faithful port reproduces it; a corrected port would use the padded-box centre.]**
+
+### H.4 Test vectors
+
+**(a) World → minimap texture UV** (`hudmap_vectors.py`; positions from `tools/scratchpad/zone_objects`):
+
+| Landmark (class, zone) | World (x, z) | Tile | Texture bounds x / z | UV | Texel (of 640×512) |
+|---|---|---|---|---|---|
+| `Planet_saints_gps` (navpoint, m04) | (1704.3511, −466.8722) | 1815 | [1280, 1920] / [−816, −304] | (0.336951, 0.681890) | (215.65, 349.13) |
+| `Crib_Kinzie` (Crib, awld) | (2125.9683, −271.3368) | 1914 | [1760, 2400] / [−536, −24] | (0.428175, 0.516920) | (274.03, 264.66) |
+| `Dock_Purchase` (Crib, awld) | (431.2953, 936.4601) | 1410 | [160, 800] / [584, 1096] | (0.576101, 0.688399) | (368.70, 352.46) |
+
+C-2 style vector: player at `Planet_saints_gps`, on foot (k = 0.75), at 1280×720 (UI scale 1), so the
+centre UV is (0.336951, 0.681890) of `minimap_1815`. The offsets below are from C = (191,566):
+
+| Case | Rotating, camera heading 90° (facing +X) | Rotating, heading 0° (facing +Z) | Static |
+|---|---|---|---|
+| Blip 100 m toward −Z (north): r = 75 > 67, clamped, e = 0.0597 | (+67, 0) | (0, +67) | (0, −67) |
+| Blip 100 m toward +X: r = 75, clamped | (0, −67) | (+67, 0) | (−67, 0) |
+| Blip 60 m toward −Z: r = 45, not clamped | (+45, 0) | (0, +45) | (0, −45) |
+| Same at ≥ 100 mph (k = 0.5625), 100 m toward −Z: r = 56.25, not clamped | (+56.25, 0) | (0, +56.25) | (0, −56.25) |
+
+Visible radius at the ring (67 px): 89.3 m at rest, 99.3 m at 40 mph, 119.1 m at 100 mph or more.
+
+**(b) HUD values for the sample state** (health 75/150 at upgrade level 0, cash $12,345, police
+notoriety 2.5, previous display health 1.0 and $0):
+
+| Stat | Dataitem fields as pushed | Displayed result |
+|---|---|---|
+| Health | status field 1 = `0.5` (= trunc(500.0)/1000), field 2 = `0` | `health_bar.end_angle` = 4.721 (= (3.142 − 6.3)·0.5 + 6.3), `health_bar_2.start_angle` = 4.721, decay tween to `fill` 4.721 / `bg` 4.686; flash animation plays; **no vignette** (the test is `pct < .5`, strict); the bar stays expanded (pct ≠ 1) |
+| Cash | infrequent field 0 = `12345.0` (from `+0x1CA0` = 1,234,500 cents) | `cash_anim` plays; `cash.text_tag` on successive frames: `$6,172`, `$9,258`, `$10,801`, `$11,573`, `$11,959`, `$12,152`, `$12,248`, `$12,296`, `$12,320`, `$12,332`, `$12,338`, `$12,341`, then **`$12,345`** |
+| Notoriety | `sr2_notoriety` item 3 = `{"police", 2.5, ""}` (record level 2, progress / threshold = 0.5) | first police update: `police_noto_icon_1` and `_2` play add (image `ui_hud_not_police`), `_3`–`_5` play remove (hidden); `map_noteriety_expand` plays; the 0.5 fraction does not change the icon count |
+| Respect (C-1 extra: level 3 at 40 %) | respect fields `{total, 0.4, 2, false, …}` | `respect_level_text` = `"3"`; `respect_meter.end_angle` = 0.55 (= 2.65 − 5.25·0.4), `respect_meter_bg` = 0.52 |
+| Ammo (example: clip 12, reserve 60, normal weapon) | weapons fields 1 = 12, 2 = 60, 7/8/10/11 = false | `weapon_ammo_txt.text_tag` = `"12/60"` |
+
+### H.5 Team B wiring (CHOSEN → spec)
+
+| Team B file:line | CHOSEN value | Spec value (this section) |
+|---|---|---|
+| `tools\sr3_viewer.cpp:16968-16986` | Hand-built overlay: 4 text objects and 2 rects | Load the real `hud.vint_doc` and run `hud.lua` (`hud_init` subscriptions, H.1), then publish the dataitems of H.1 from the engine state. Element per stat: H.2. |
+| `tools\sr3_viewer.cpp:17004` (and the health note at :16995) | Cash and health polled every frame | Producer every frame, but change-detected per field (`0x00E26040`); health `trunc(1000·HP/max)/1000`; cash `cents/100.0` with the Lua count-up and `"$" + comma` format |
+| `tools\sr3_viewer.cpp:17009`, `:17257`, `:17373-17381` | Notoriety polled from the alias-track value; `"Police"` bound to track 3 | Datagroup `sr2_notoriety`, item *i* = track *i*, names `brotherhood`/`ronin`/`samedi`/`police`, level `L + progress/T[…]` from `0x014A4F70`; fake-notoriety override `0x022B7564`/`0x022B7574` |
+| `tools\sr3_viewer.cpp:17650` | `zoom` = 1.0 | Not used for scale. `Z = max(0.5625, 0.75 − 0.001875·s)`, `s` = smoothed mph; ×1.75 in interiors |
+| `tools\sr3_viewer.cpp:17670` | 0.12 px per world unit × zoom | `k` = 0.75 px/m at rest down to 0.5625 px/m (reference pixels; × UI y-scale) |
+| `tools\sr3_viewer.cpp:17676` (and the playtest box, `:24450` region, 200×200 top right) | Box (1050,10)-(1250,210) | Circular map centred at **C = (191,566)** (bottom left), ring 148 px, blip clamp radius 67 px, stencil `ui_hud_map_map_mask` |
+| `tools\sr3_viewer.cpp:17474-17477` (`worldToMinimapScreen`) | `C + R(−rot)·ppu·(dX, dZ)` | `C + R(θm)·k·(−dX, +dZ)`, θm = −(camera heading + π), or 0 in static mode |
+| `tools\sr3_viewer.cpp:17496-17516` (`drawMinimapBackgroundQuad`) and `:17770` | Whole tile texture stretched to the box; flat colour when missing | Quad `k·640 × k·512` centred at `C + R(θm)·k·(P.x − xc, zc − P.z)`; texture `minimap_CCRR` with bounds = tile box ±(160,116); `u = (xmax − X)/640`, `v = (Z − zmin)/512`; missing → `sr2_water_minimap` |
+| `tools\sr3_viewer.cpp:17420`, `:17524-17530`, `include\sr3luahost\minimap_live_transform.h:118-119` | 10×10 white rect at the box centre | Bitmap `map_blip` at C; unrotated in rotating mode, rotated by `h + π` in static mode |
+| `include\sr3luahost\minimap_live_transform.h:95-106` | Rotation = player or vehicle heading | Rotation source is the camera matrix `0x013C8760`, with `θ = −(h + π)`. The map centre (player, else vehicle) is correct; add the special camera-mode centre `0x013C8740`. |
+| `src\lua_spec_confirmed_stubs_b20_wave2_hud_minimap_hooks.cpp:75,103,174,334-388,573` | HARDENED guards | No change: none of them is on the free-roam HUD path above |
+
+**Clean-room check.** Plain hex addresses only. No decompiler auto-names, no decompiler pseudocode, no leaked material. The Lua quoted here is shipped game script read for its behaviour.
+
 ## 7. Confidence summary and open items
 
 **CONFIRMED:** the `hud_display_*`/`hud_bar_*` architecture and full ruling-out as the core-stat path
@@ -539,11 +750,11 @@ goes through the getter pair from a Lua UI script (§2); money's live wallet fie
 player object every other scalar query reaches (§4); `0x009601d0`/`0x00960160` are the same clamp
 function cited twice (§4, not reconciled).
 
-**OPEN, flagged honestly rather than guessed:** cash's exact live byte offset (§4); which of
-`0x009bc0d0`+`0x00963530` vs. `0x0096f8c0` is the real HP death trigger (§2); the clip-vs-reserve field
-mapping inside `0x028CDC44`'s entries and inside `0x007f2650` (§3); the live notoriety score's own byte
+**OPEN, flagged honestly rather than guessed:** ~~cash's exact live byte offset (§4)~~ **[CLOSED 2026-10-12 by cross-reference: the live wallet is the player object's `+0x1ca0` integer, in cents. The building-purchase and shop data responders (`spec-lua-api-behaviour.md` §62.1/§62.2) read "player cash" as `+0x1ca0 / 100`. That is consistent with the save snapshot's cash ×100 (`spec-save-format.md`).]**; which of
+`0x009bc0d0`+`0x00963530` vs. `0x0096f8c0` is the real HP death trigger (§2) **[CLOSED 2026-10-12: the damage sink `0x0096fa20` does it (`spec-weapons-runtime.md` §4.5, step 20). When HP ≤ 0 it calls ragdoll `0x009bc0d0(V,1,1,1)` and then death `0x00963530(V)`, so that pair is the real trigger.]**; **[clip/reserve CLOSED 2026-10-12 by cross-reference: **clip** = rounds-in-clip at the weapon instance's `+0x1ac`, decremented per shot (`spec-weapons-runtime.md`, the fire path). **Reserve** = the primary/secondary ammo fields of the per-weapon inventory-slot record that `0x00B84330` writes (same spec, the inventory-slot write-side note). A HUD port reads both from there.]** **[2026-10-14 RESOLVED, corrects the line above: clip = weapon instance `+0x1A4` (per-shot commit `0x009BB380`, reload `0x009C0A50`); `+0x1AC` = reserve. See the "Ammo clip / reserve" row of the free-roam binding map.]** ~~the clip-vs-reserve field
+mapping inside `0x028CDC44`'s entries and inside `0x007f2650` (§3)~~; the live notoriety score's own byte
 offset and `notoriety_get`/`notoriety_get_decimal`'s own bodies (§5, but see the `spec-ai-runtime.md`
-§19 cross-reference candidate); which Lua code answers `on_notoriety_event`'s hook (§5); a literal player-glyph draw instruction inside
+§19 cross-reference candidate) **[live score CLOSED 2026-10-12: the 4-slot {level, fraction} array at `0x014A4F70`, stride `0x4C`, one slot per track (0 Luchadores, 1 Deckers, 2 Morningstar, 3 Police), `spec-ai-runtime.md` §19.1; escalation in §19.8. The two getter bodies remain unread.]**; which Lua code answers `on_notoriety_event`'s hook (§5); a literal player-glyph draw instruction inside
 `0x00809910`'s own tail (the player-blip mechanism itself is now CONFIRMED, §6.4 — this is only the
 final draw-call pinpoint), and which code binds a loaded tile texture onto `sr2_map`'s drawable state
 (§6, narrowed from a previously wide-open question down to these 2 specific gaps — the vtable's own
@@ -557,6 +768,8 @@ Plain hex addresses throughout. No Ghidra auto-names, no decompiler pseudocode, 
 address citation. No leaked Volition/Havok/Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-14 — new section "Free-roam HUD binding map and minimap transform"** (SPEC TEAM, FREE-ROAM-GAPS group C). Binding map for health, ammo, weapon icon, cash, notoriety, respect, minimap and radio: the `hud.vint_doc` elements, the `hud.lua` / `hud_noto.lua` / `vdo_respect_meter.lua` functions, the dataitem names and fields (registered by `0x007F3940`), the C++ producers (`0x007F4A70`, `0x007F2000`, `0x007F7C80`, `0x007F1F00`, `0x007F1A20`, `0x007F1930`) and their encodings. Minimap: the exact world→screen formula, speed zoom from tweaks `Minimap_max_scale` 0.75 / `Minimap_interior_mag_factor` 1.75, the camera-heading rotation `θ = −(h+π)`, per-tile `minimap_CCRR.tga` bounds (tile box ±(160,116), 1 m per texel; registration confirmed against road-graph nodes), blip clamp radius 67 and the north marker at −Z. This also closes §6.4's player-glyph gap (`map_blip` at C, `0x0080A460`). Test vectors and a Team B wiring table are included. Remaining OPEN: the interior-map origin `0x022CB2B8`, the mask bitmap size, and the clip offset `+0x1A4` against `+0x1AC` **[2026-10-14 RESOLVED: clip = `+0x1A4`, reserve = `+0x1AC`]**. Cleanroom self-check: strict regex 0 hits.
 
 - **2026-10-09 — §6.5's own render-side consumer gap: CLOSED for objective text, NARROWED for the
   waypoint/GPS record** (SPEC TEAM, agent `a67ae4c189aa4aa2b`, WAVE 9 item 2). Objective text's real

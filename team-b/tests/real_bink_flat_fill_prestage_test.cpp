@@ -167,6 +167,7 @@ int main() {
     // DcArrayPreStageGapResult - see dc_prestage_sibling_gap.h.
     // UPDATE (2026-10-12, fix/flat-fill-perplane-width-promotion task): now
     // ALSO takes the row's own SiblingTableBank + blockCols, and runs the
+    // RETUNED (spec 5.3af literal-colour rule + 5.3ag): production runs 0x10019850, whose bytes are the 0x100195b0 worked-example bytes ^0x80 (153 -> 25). SECTION 2 below still asserts the 0x100195b0 form (153) unchanged.
     // REAL per-symbol tree-decode (decode0x100195b0TreeDecodeAttempt(), per-
     // plane width formula, HANDOFF.md's "RESOLVED 2026-10-12 - flat-fill
     // CLOSED" + "PROMOTION" entries) in production, instead of the prior
@@ -187,15 +188,15 @@ int main() {
         const bool known = flatFillArray.hasIndex(static_cast<size_t>(i));
         const uint8_t v = known ? flatFillArray.byteAt(static_cast<size_t>(i)) : 0;
         std::cout << static_cast<int>(v) << (i < 7 ? "," : "");
-        if (!known || v != kExpectedFirst64[i]) first8Ok = false;
+        if (!known || v != static_cast<uint8_t>(kExpectedFirst64[i] ^ 0x80)) first8Ok = false;
     }
-    std::cout << "] expected [153,153,153,153,153,153,153,153] -> " << (first8Ok ? "MATCH" : "MISMATCH") << "\n";
+    std::cout << "] expected raw BIKi [25 x8] (5.3ag; 153 = 0x100195b0 form) -> " << (first8Ok ? "MATCH" : "MISMATCH") << "\n";
     CHECK(first8Ok);
 
     bool first64Ok = true;
     for (int i = 0; i < 64; ++i) {
         if (!flatFillArray.hasIndex(static_cast<size_t>(i)) ||
-            flatFillArray.byteAt(static_cast<size_t>(i)) != kExpectedFirst64[i]) {
+            flatFillArray.byteAt(static_cast<size_t>(i)) != static_cast<uint8_t>(kExpectedFirst64[i] ^ 0x80)) {
             first64Ok = false;
             break;
         }
@@ -212,9 +213,9 @@ int main() {
         const bool known = flatFillArray.hasIndex(idx);
         const uint8_t v = known ? flatFillArray.byteAt(idx) : 0;
         std::cout << static_cast<int>(v) << (i < 7 ? "," : "");
-        if (!known || v != kExpectedLast8[i]) last8Ok = false;
+        if (!known || v != static_cast<uint8_t>(kExpectedLast8[i] ^ 0x80)) last8Ok = false;
     }
-    std::cout << "] expected [154,157,158,158,157,154,153,153] -> " << (last8Ok ? "MATCH" : "MISMATCH") << "\n";
+    std::cout << "] expected raw BIKi [26,29,30,30,29,26,25,25] -> " << (last8Ok ? "MATCH" : "MISMATCH") << "\n";
     CHECK(last8Ok);
 
     // CHECK 4: UPDATED 2026-10-12 (fix/flat-fill-perplane-width-promotion
@@ -241,13 +242,13 @@ int main() {
     FlatFillPrestageCursor rowCursor(&flatFillArray, 0);
     CHECK(rowCursor.hasAtLeast(1));
     const uint8_t idx1Pixel = rowCursor.readByte();
-    std::cout << "  idx1 pixel = " << static_cast<int>(idx1Pixel) << " (expected 153)\n";
-    CHECK(idx1Pixel == 153);
+    std::cout << "  idx1 pixel = " << static_cast<int>(idx1Pixel) << " (expected 25 = 0x19, spec 5.3ag raw BIKi byte)\n";
+    CHECK(idx1Pixel == 25);
 
     CHECK(rowCursor.hasAtLeast(1));
     const uint8_t idx2Pixel = rowCursor.readByte();
-    std::cout << "  idx2 pixel = " << static_cast<int>(idx2Pixel) << " (expected 153)\n";
-    CHECK(idx2Pixel == 153);
+    std::cout << "  idx2 pixel = " << static_cast<int>(idx2Pixel) << " (expected 25 = 0x19, spec 5.3ag raw BIKi byte)\n";
+    CHECK(idx2Pixel == 25);
 
     // ------------------------------------------------------------------
     // SECTION 2 (2026-10-11, fix/flat-fill-real-tree-decode task, Sec5.3aa):

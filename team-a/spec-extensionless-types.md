@@ -81,6 +81,27 @@ Light Curve's 512-bucket index comes from `0x00dab2b0`, which looked like anothe
 
 **[Re-derived 2026-10-02 from the executable (`0x00dab2b0`; its call at `0x008e631d` in the Light Curve constructor `0x008e6300`; the lookup `0x008e4db0`; the same read-only `calls` query as §4). The five-step structure is CONFIRMED, and every step is plain 32-bit register arithmetic, so each wraps at 32 bits. The open points, settled: (a) **Shifts.** All three right shifts (by 10, by 6 and by 16) are **arithmetic**: they copy bit 31 into the vacated high bits, so the value is treated as a signed 32-bit integer. The two left shifts are ordinary. The published mixer is normally written with logical (zero-filling) right shifts, so the desk review's "step for step" match is CORRECTED: the steps match in shape but not in this detail, and the detail matters. Over 200,000 random 32-bit keys, a version with logical right shifts put 50.1% of them in a different one of the 512 buckets. A reimplementation must shift right arithmetically to reproduce the engine's buckets. (b) **Modulo.** It is a **signed** division: the mixed value is sign-extended and divided by the second argument with the signed divide instruction, and the remainder is returned. There is no mask. (c) **Why the sign never shows.** The last step XORs the value with its own arithmetic shift right by 16; both operands carry the same bit 31, so the result always has bit 31 clear. The dividend is therefore never negative, and for a positive bucket count the remainder always lies between 0 and count − 1. For 512 the result is identical to an unsigned modulo 512, or to keeping the low 9 bits, of that same value. The modulo form is thus harmless; the shifts are what a reimplementation must get right. The 200,000-key check found no mixed value with bit 31 set. (d) **Light Curve's call** passes the CRC-32 key and a count of `0x200`, and the returned index is used unmasked to pick the bucket head (`0x008e4db0` reads the table's dword at +8 + 4 × index), which is safe only because the index cannot be negative. (e) **A shared helper.** The bucket count is an argument, and the raw scan finds 108 call instructions to the function in disassembled code (106 inside 86 functions, 2 outside any function; plus 5 unverified byte matches in undisassembled code). 20 of them lie between `0x008e4ca0` and `0x008e8454`, around the Light Curve table and the 256-bucket second table of row 38.]** **Review status (2026-10-02): CORRECTED (right shifts are arithmetic, not logical; the modulo is a signed divide, but the mixed value never has bit 31 set, so it equals an unsigned modulo 512), re-derived from the executable, exe_index/extensionless-types.txt.**
 
+## 4.2 `.lightmult_pc` (type 38 Light Curve) payload layout (2026-10-14, empirical)
+
+Decoded from the 2 distinct files in `sr3_city_0.vpp_pc`: `pnt_ani_1.lightmult_pc` (114 B) and `light_updown.lightmult_pc` (426 B). Extraction script: `tools/scratchpad/lm_extract.py`. All integers and floats are little-endian.
+
+| Offset | Size | Field |
+|---|---|---|
+| +0x00 | 4 | magic `"LITE"` |
+| +0x04 | 1 | `4` in both files (version or kind; meaning OPEN) |
+| +0x05 | 1 | `3` in both files (meaning OPEN) |
+| +0x06 | 2 | u16: `0x0073` and `0x02F3` (meaning OPEN; it is not the file size) |
+| +0x08 | 2 | u16 **key count N** (13 and 52) |
+| +0x0A | 4 | u32 `0` in both files |
+| +0x0E | 4 | f32 **value at time 0** |
+| +0x12 | 8·(N−1) | N−1 keys of `{f32 time_seconds, f32 value}`, times strictly increasing |
+
+**Size rule (FINAL, exact for both files):** `size = 14 + 4 + 8·(N−1)`. 114 = 18 + 8·12 and 426 = 18 + 8·51.
+
+Times step in multiples of 1/30 s: `pnt_ani_1` runs from 0 to 1.0 s, `light_updown` from 0 to about 3.33 s. Each value is a light-intensity multiplier: `pnt_ani_1` goes 0.5 → 1.22 → 2.0 → … → 0.5. Interpolation between keys, and whether the curve loops, are OPEN (they need the runtime consumer).
+
+**Test vector (`pnt_ani_1`):** N = 13, v(0) = 0.5, first keys (1/30, 0.5), (1/15, 1.2217), (0.1, 2.0), and last key (1.0, 0.5). Status: layout **FINAL** for these two files; header bytes +4..+7 OPEN.
+
 ## 5. Open Items
 
 1. Which subsystems construct each of these six, and from what buffer — the constructors were read, their callers were not.

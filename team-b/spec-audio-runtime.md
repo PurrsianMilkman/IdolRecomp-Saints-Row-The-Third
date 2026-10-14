@@ -4958,7 +4958,8 @@ state machine, and the two D-pad paths below). Body:
    content). On success, writes the new listener slot and **carries the old station's float triple
    into the new registration** rather than resetting to a default — **HIGH CONFIDENCE a
    crossfade/continuity parameter carry-over**, exact consuming Wwise RTPC/bus not independently
-   traced.
+   traced. **[CORRECTED 2026-10-14, §14.6: the triple is the listener slot's emitter position (slot
+   `+0x08`..`+0x13`), not a crossfade parameter.]**
 7. On success: writes **the vehicle object's own `+0x1630` byte to the new station number** (the
    current-station field — confirmed per-vehicle-instance, not per-player/global, by three
    independent writers); unregisters the old listener slot; branches on `0x0055dc60` (tests whether
@@ -4999,7 +5000,9 @@ successfully registered on any station by the normal tune path — either the sp
 name and skips the call entirely. **Either way the observable result is identical: no radio music,
 ambient/foley audio only.** **HIGH CONFIDENCE** (both mechanisms individually CONFIRMED; their
 combination for the persona-spawn case not traced end to end — the exact spawn-time function that
-first applies a persona's `+0x24` preference was not located). **For Team B: "radio off" needs no
+first applies a persona's `+0x24` preference was not located). **[CORRECTED 2026-10-14, §14.6: the shipped `radio_off.xtbl` row DOES carry `Selectable`; Off is an
+ordinary tunable station (number 2) whose empty playlist makes it silent. The reasoning above does not
+apply to retail data.]** **For Team B: "radio off" needs no
 dedicated state variable** — "this vehicle has no station registration" reproduces it exactly,
 provided a reimplemented `RADIO_OFF` entry is built without the `Selectable` flag.
 
@@ -5013,11 +5016,488 @@ track index," and whether track position persists across vehicle enter/exit, rem
 narrowed to: it is *not* `0x005602e0`, `0x0055ed20`, `0x00560580`, or any of the D-pad/cell-phone/
 save-load paths — none of them select or advance a track, only a station. The actual track-advance
 logic lives in an unreached per-station "song manager" update. Full detail:
-`scratchpad/vehicle_radio_music_2026-10-09.md`.
+`scratchpad/vehicle_radio_music_2026-10-09.md`. **[Superseded 2026-10-14 by §14.6: the "song manager" is
+found — queue builder `0x0055D7D0`, per-station tick `0x0055FD90`, run every frame from `0x005607B0`.]**
+
+### 14.6 Free-roam radio playback, end to end (2026-10-14)
+
+**Scope and method.** Closes §14.5 and gives Team B everything a null music backend needs. Read with
+pefile+capstone straight from `SaintsRowTheThird.exe` (no Ghidra). Real data comes from the 12 per-station
+tables in `misc_tables.vpp_pc` (entries 636–647), from `radio_misc.bnk_pc` (HIRC) and from the eleven
+`radio_*_media.bnk_pc` in `sounds_common.vpp_pc`. Scripts are in `tools/scratchpad/radio_*.py`.
+`radio_sim.py` is the clean-room model that produced §14.6.4. Each item is labelled **FINAL** (every link
+read) or **PARTIAL** (what is missing is named). All addresses are image VAs (base `0x00400000`).
+
+**Corrections to §14.1–§14.4 found by this pass:**
+- (a) The `radio_off.xtbl` row of `radio_stations.xtbl` **does** carry `Selectable`. The station with no flags
+  is `credits_radio.xtbl`. So "Off" is an ordinary station that can be tuned. It is silent because its
+  playlist is empty (§14.6.2).
+- (b) The "float triple" carried by `0x0055ED20` is the **emitter position** of the listener slot, not a
+  crossfade parameter. The slot is 0x18 bytes: `+0x00`/`+0x04` handle pair, `+0x08`..`+0x13` xyz. The
+  defaults `0x029CDB98..A0` are a position.
+- (c) A station's `+0x40` is that station file's `Game_display_resource` and `+0x80` is its
+  `Interface_image`. Both are written by the per-station loader `0x0055C9F0`. `"RADIO_OFF"` is the
+  `Game_display_resource` of `radio_off.xtbl`.
+- (d) The HUD popup producer is `0x0055F190`, not `0x0055EFA0` (see §14.6.3).
+
+#### 14.6.1 Station list, order, OFF, defaults, vehicle rules
+
+**Station list and numbering — FINAL.** Station numbers are 1-based. Number *k* is array index *k*−1.
+Number 1 is the code-built Mix Tape. Numbers 2–12 are the `<Info>` rows of `radio_stations.xtbl` in file
+order, each filled by `0x0055C9F0` from its own `xtbl_name` file (loop at `0x0055F2C5`). The `+0x140` id is
+FNV-1 (lower-cased, the Wwise `GetIDFromString` hash) of `wwise_id`. Cross-check: the save sample's flagged
+id `0xD11F2385` (`spec-save-format.md` §12.8.3) is FNV-1("KRHYME").
+
+| # | file | `wwise_id` → `+0x140` | flags | `+0x40` | `+0x80` (HUD image) | pattern | songs/ads/sweep/intro/outro | I%/C%/O% |
+|---|---|---|---|---|---|---|---|---|
+| 1 | (code) Mix Tape | — (0) | bit 3; bit 5 = list non-empty | `My Radio 85.5` | (HIGH: `ui_radio_mixtape`) | user list | — | — |
+| 2 | radio_off | OFF `0x37798A64` | Selectable | RADIO_OFF | (none) | **0 entries** | 0 | 0/0/0 |
+| 3 | genx_radio | GENX `0x48E832A3` | Selectable | LOGO_GENX | ui_radio_89_gen_x | 10 | 18/81/2/54/36 | 40/0/40 |
+| 4 | krhyme_radio | KRHYME `0xD11F2385` | Selectable | LOGO_KRHYME | ui_radio_954_khryme | 10 | 20/81/2/58/40 | 40/0/40 |
+| 5 | k12_radio | K12 `0xFA83B765` | Selectable | LOGO_K12 | ui_radio_976_k12 | 10 | 17/81/2/51/34 | 40/0/40 |
+| 6 | klassic_radio | KLASSIC `0x7EBD4413` | Selectable | LOGO_KLASSIC | ui_radio_1024_klassic | 10 | 17/81/2/51/34 | 40/0/40 |
+| 7 | adult_swim_radio | ADULT_SWIM `0xF024CB66` | Selectable | LOGO_ADULT_SWIM | ui_radio_wddt_adult_swim | 7 | 12/11/4/12/12 | 50/0/50 |
+| 8 | Kabron_radio | KABRON `0x304556E6` | Selectable | LOGO_KABRON | ui_radio_1042_kabron | 1 (Song only) | 16/81/2/46/32 | 40/0/40 |
+| 9 | Krunch_radio | KRUNCH `0x4EC69BA6` | Selectable | LOGO_KRUNCH | ui_radio_10666_the_blood | 10 | 20/81/2/55/40 | 40/0/40 |
+| 10 | the_mix_radio | THE_MIX `0x5DB98EB5` | Selectable | LOGO_MIX | ui_radio_10777_the_mix | 10 | 24/81/2/54/36 | 40/0/40 |
+| 11 | radio_newsbreaks | — (0) | News_Station | — | — | 0 entries | 14 news "songs" | 0/0/0 |
+| 12 | credits_radio | — (0) | none | — | — | 13 (Song) | 2 | 0/0/0 |
+
+- Pattern of the 6 ten-slot stations: Song, Song, Commercial, Song, Song, Sweeper, Song, Song, Song,
+  Commercial.
+- Pattern of ADULT_SWIM: Song, Song, Commercial, Song, Commercial, Song, Sweeper.
+- `westin_lobby_radio.xtbl` ships but no row names it, so it is never loaded.
+
+**Cycle order — FINAL.** `0x00560580` walks the array circularly in index order. A station is accepted only
+if `0x005602E0`/`0x0055ED20` accept it: `+0x689` bit 5 set, bit 7 (hidden) clear, and fewer than 8
+listeners. In retail the forward cycle is:
+
+[Mix Tape, only if its list is non-empty] → Off → GenX → KRhyme → K12 → Klassic → Adult Swim → Kabron →
+Krunch → The Mix → (Newsbreaks and Credits are always rejected) → wrap.
+
+Hidden stations (music menu, §14.1) are skipped.
+
+**Radio off — FINAL.**
+- Off is station 2. Tuning it registers the vehicle normally. Its empty pattern makes the tick return
+  before any post (§14.6.2), so nothing plays.
+- The tune function compares `+0x40` with `"RADIO_OFF"` (`0x0055DC60`). That only selects the bus cues
+  (§14.6.3).
+- "No station at all" (no registration) also exists, for example after `radio_block`.
+
+**Default station when the player enters a vehicle — FINAL.** `0x0055A930` → `0x0055DEB0(vehicle)`, first
+rule that applies:
+1. If vehicle `+0x1548` ≠ 0, use KLASSIC. The meaning of `+0x1548` is not traced; the same field also routes
+   to the forced-Sousa path `0x00560A50`.
+2. Otherwise the vehicle's own last station, byte `+0x1630`, if it is not `0xFF`. This is per vehicle
+   instance: re-entering a car restores its station.
+   - The initial value is copied from the spawn descriptor (`0x005F8D00`, descriptor `+0x14`).
+   - Across a vehicle replacement, `0x00AC5150` carries it through `0x0055A700` → `0x012E3AF8` →
+     `0x0055A720`.
+3. Otherwise `0x0055A680`, by `Special_Vehicle_Type` (`spec-vehicle-data.md`, def `+0x4C4`): Police (6) or
+   Meter Maid (11) → the first `Police_Station` station; SWAT Van (5) or FBI (7) → the first `FBI_Station`
+   station. Retail has no such stations, so this gives `0xFF`.
+4. Otherwise random: repeat k = `rand_int(0, count)` (`0x00DAB660`, **inclusive** of `count`, so it can read
+   one record past the array) until the station has no Police/FBI flag, has bit 5 and is not hidden. In
+   retail this can return Off or a non-empty Mix Tape.
+
+**NPC vehicles — FINAL (shape).** `0x0055ACD0`:
+- No radio if the vehicle's radio is blocked (`+0x163E` bit 0) or the global block is on (`0x013BB7D4`).
+- Otherwise a draw of `rand_float` [0,1) (`0x00DAB5E0`) must not exceed
+  `audio_constants.DrivingSettings.AmbientSpawnAcquireRadio` (retail 0.25).
+- At most `Simultaneous_NPC_Radios` NPC slots exist (retail 1, table `0x013BBAB8`).
+- Station order of preference: the driver persona's `+0x24` preference (`0x0070A510`), then the vehicle-class
+  rule above, then `0x0055F3A0` (a random bit-5 station, then the next bit-6 station after it, `0x0055E050`).
+
+**Vehicle-class and lock rules — FINAL.**
+- A vehicle without `RadioTuner` (def `+0x870` bit 26) never plays radio (`0x005602E0`, `0x0055AFA0`).
+- Lua `radio_block` sets `+0x163E` bit 0 and detaches the vehicle.
+- `vehicle_set_radio_controls_locked` sets `+0x1D7C` bit 2, which blocks the D-pad.
+- Game modes 4 and 9 (`0x00614D00`) skip NPC radios.
+
+#### 14.6.2 Track selection, the continuous timeline, and the save
+
+**Per-station tables, built by `0x0055C9F0` — FINAL.**
+- Each list is {`s16` count, `u16*` content indices, `u8*` used flags}:
+  - Sweepers `+0x148`
+  - Commercials `+0x154`
+  - Intros `+0x160`
+  - Call-ins `+0x16C`
+  - Outros `+0x178`
+  - Songs `+0x190`
+  - Sing-alongs `+0x184` (no flag array)
+- Percentages are `s8`: `+0x144` Intro, `+0x145` Callin, `+0x146` Outro.
+- The pattern is `+0x19C` (count) and `+0x1A0` (`u32` per slot: Song 0, Commercial 1, Sweeper 2).
+- Every cue is registered in the shared content table `0x013BBC18` (stride 20, cap 925 = `0x39D`) by
+  `0x0055C950`:
+  - `+0x00` FNV-1 of `Cue`
+  - `+0x04` `Length` (ms)
+  - `+0x0E` `Delay` or `Prestart` (ms)
+  - `+0x10` type
+  - `+0x11`/`+0x12` = `0xFF`
+  - `+0x13` = 1
+  - `+0x0C` = `0xFFFF`
+  - Duplicates return the existing index, so the 81 shared ads exist once. Retail total: 915 entries.
+- Types: 0 song, 1 commercial, 2 sweeper, 3 intro, 4 call-in, 5 outro, 6 song on a Police/FBI station,
+  7 song on a News station, 8 sing-along.
+- Each song's `+0x08` points to a 0x48-byte record in the pool `0x013C0468` (counter `0x013C58C8`, at most
+  299 records), zeroed, holding:
+  - Intro indices `u16[3]` at `+0x00`, count `+0x06`, used `+0x07..09`
+  - Outro indices `u16[3]` at `+0x0A`, count `+0x10`, used `+0x11..13`
+  - Sing-along indices `+0x14`, persona `u32` `+0x24`, percent `+0x40`, count `+0x47`
+  - Intro and outro cues are looked up, not created (`0x0055C910`). The intro and outro loops have **no
+    bound**. Retail maximum is 3 intros and 2 outros.
+
+**Queue builder `0x0055D7D0(station)` — FINAL.**
+- A station plays a precomputed queue of content indices at `+0x1A4` (`u16[512]`), with count `+0x5A4` and
+  cursor `+0x5A6`.
+- The builder walks the pattern until the queue reaches 512 entries or 512 pattern steps have run.
+- Sweeper slot: one bag pick from the sweeper list.
+- Commercial slot: one bag pick from the commercial list with the enabled test.
+- Song slot:
+  1. Pick a song from the song bag.
+  2. DJ talk is allowed only while the queue length is < 511 and station `+0x689` bit 4 is clear.
+  3. If allowed, roll `rand % 100 < Intro%`. On success pick an intro from the song's record.
+  4. If no intro resulted, roll `rand % 100 < Outro%`. On success pick an outro.
+  5. Append [intro] song [outro].
+- `Callin_percent` and the call-in list are **never used** by the builder. Retail lists are empty anyway.
+  `GENX_CALLIN_*` cues sit in `Intro_list` and play as intros.
+- Pattern quirk: the slot type is read from pattern entry 0 onward on every rebuild. The wrap point is
+  counted from the saved position `+0x19E`. So after the first build, the first pass through the pattern is
+  cut short.
+- When the build ends: `+0x19E` = position, `+0x5A4` = length, `+0x5A6` = 0, and `+0x68A` bit 4 is cleared.
+
+**Bag pick `0x0055D690` (sweepers, commercials, songs) — FINAL.**
+1. r = `rand32 % count` (unsigned).
+2. Scan i = r … count−1. There is **no wrap-around**: indices past the end are always skipped.
+3. Take the first i whose used flag is 0. For commercials it must also pass the enabled test.
+4. Set used[i] = 1 and return the index.
+5. If nothing qualifies, clear **all** used flags and draw again.
+
+So the scheme is "no repeat until a draw fails", not a full shuffle. A song can repeat a few slots later
+(see the vector).
+
+Engine defect: if every commercial of a station were disabled, the loop would never end. Retail new-game
+data has enabled ads.
+
+**Commercial enabled test `0x0055BFA0` — FINAL.**
+- en = flag[`+0x11`] and dis = flag[`+0x12`]. The flags are the bytes at `0x013BBB0C + 8·slot`: the
+  commercial-event flags, i.e. the second dword of each `0x013BBB08` slot. This closes that OPEN in
+  `spec-tables-audio-radio.md` §15.
+- A slot above 30 (including `0xFF`) reads as 0. The test admits slot 30, one past the array.
+- Initially enabled: playable = (not dis) or en.
+- Initially disabled: playable = en and not dis.
+
+**Intro/outro pick `0x0055D750` — FINAL, with an engine defect.**
+- The start index is i = (`int16`)(rand & 0xFFFF) % count, using a C truncating remainder, so it is
+  negative for half the draws.
+- If used[i] = 0, take it. Otherwise probe i+1, i+2, … (each modulo count, also truncating) up to count+1
+  times. After that, clear the three used bytes and take the last index probed.
+- A negative index reads and writes **outside the list**:
+  - i = −1 reads the count byte (never 0), so it moves on.
+  - i = −2 (only possible when count = 3) reads the high byte of idx[2]. That byte is 0 for any content
+    index below 256, so the code "takes" it: it writes 1 into that byte, which adds 256 to idx[2]
+    permanently, and returns the `u16` four bytes before the record. That word is the previous record's
+    sing-along percent bytes, 0 in retail, or zero padding before record 0.
+  - So in retail about 1 in 6 intro picks on a 3-intro song **queues content entry 0 (`GENX_SWEEPER_01`)
+    instead of an intro**, on any station. A later normal pick of slot 2 returns the wrong content entry
+    (its index + 256).
+- CONFIRMED from the code. It shows up in the vector below (entries 0, 9 and 19). The audible effect
+  has not been checked against a capture (HIGH CONFIDENCE). Team B: reproduce it on purpose or fix it
+  knowingly.
+
+**Advance `0x0055DB40` — FINAL.**
+- cursor+1. If the queue is exhausted, or `+0x68A` bit 4 asks for a rebuild:
+  - Mix Tape (`+0x689` bit 3): `+0x19C` = count, wrap to 0. So the Mix Tape plays the player's list **in
+    order and loops**, with no DJ or ads.
+  - Other stations: rebuild the queue (`0x0055D7D0`).
+- `0x0055DAC0` is the current entry. `0x0055DB00` peeks the next one.
+
+**Random source — FINAL.** Every draw above reads the engine-wide ring (`spec-lua-api-behaviour.md`,
+"shared random ring"). This pass closes its generator OPEN:
+- The generator `0x00DAB3C0`/`0x00DAB370` is **standard MT19937**: 624 words, `init_genrand` multiplier
+  `0x6C078965`, twist matrix `0x9908B0DF` (table `0x013214C8` = {0, `0x9908B0DF`}), tempering
+  11/7 `0x9D2C5680`/15 `0xEFC60000`/18.
+- Its state index starts at 625 in the image, so the first use without a seed seeds 5489.
+- The fill `0x00DAB4D0(seed)` reseeds if seed ≠ 0, then writes 8192 outputs, cursor 0.
+- Fill callers:
+  - `0x00DD98F0` passes 0, giving the standard MT(5489) stream.
+  - `0x005D25F0` passes `0x00DAD740(1000000)`: microseconds from the performance counter, so it is
+    time-seeded.
+  - `0x009C1FF0` passes a network-derived value when `0x00867830` is true.
+- Draw shapes:
+  - `rand32` = next ring value (`0x00DAB5B0`).
+  - `rand_int(lo, hi)` = lo + v % (hi−lo+1).
+  - `rand_float` = v·2⁻³².
+- Exact in-game sequences cannot be reproduced: the seed is time-based and the cursor is shared
+  engine-wide.
+
+**Continuous virtual timeline — FINAL. A station keeps "playing" while nobody listens.**
+- `0x005607B0` runs every frame from the world update `0x00702A50`. For every station it:
+  - copies `+0x5A4` into `+0x19C` (station 0),
+  - rebuilds the queue if empty (others),
+  - calls the tick `0x0055FD90`.
+- The tick returns at once if the pattern count is 0. That covers Off, Newsbreaks, and the Mix Tape with an
+  empty list.
+- Each station owns a deadline timer `+0x674` (the engine ms-deadline type of §1).
+- **Inaudible station** (`+0x689` bit 1 clear):
+  - When the timer is not armed, arm it for the current entry's `Length`.
+  - When it expires, advance, **skipping outro entries** (type 5), and arm the next `Length`. The timer
+    uses raw `Length`, with no overlap.
+- **Becoming audible** (bit 1 is set by `0x0055ED20` when the first listener registers on a silent station):
+  1. Create the station voice once: `0x0045DA50(&station+0x5B8, "Radio", 0)` → `+0x5A8`.
+  2. Give it every listener's position: positions 1… via `0x0045E520`, existing ones via `0x0045E410`.
+  3. SetSwitch(`Radio_Stations`, `+0x140`).
+  4. Read the remaining time r of `+0x674`. If the current entry's `Length` > r, post that entry and
+     **seek** to `Length − r` ms (`0x0045EF20`, which sets the play record's start offset). Otherwise
+     advance and start from 0.
+  5. Re-arm the timer to r. Bits: set 0 (playing), clear 1 and 2.
+- So tuning in joins the song mid-way, at the point the station's timeline has reached.
+- **Audible station, timer expires:**
+  1. Stop the play record from two items back (`+0x678`). Shift current → `+0x678`.
+  2. Stop the sing-along (`+0x680`).
+  3. Post the next entry → `+0x67C`.
+  4. Arm the timer to the **overlap-adjusted** duration that `0x0055FAA0` returns:
+     - an intro returns `Length − Delay`, so the song starts `Delay` ms before the intro ends;
+     - an entry followed by an outro returns `Length − Prestart(outro)`;
+     - everything else returns `Length`.
+- So the previous item is never cut. It plays out under the next one.
+- **Last listener leaves** (`0x0055EFA0` path): bit 1 cleared. If playing, bit 2 is set. The next tick
+  runs `0x0055E510`, which stops all three play records, resets the 8 positions and releases the voice.
+  The timer is **not** reset, so the timeline carries on.
+- If no entry is available, the timer is armed for 1000 ms.
+
+**What the save records — FINAL** (cross-checked with `spec-save-format.md` §12.8):
+- Saved: the Mix Tape list, the hidden-station ids, the commercial-event flags, and pending radio events.
+- **Not saved:** queues, cursors, pattern positions, timers or bag flags.
+- World start/load (`0x00708330` → `0x005601F0`):
+  - clears the Mix Tape queue and bit 5,
+  - rebuilds every other station's queue from the ring,
+  - clears the hidden bit 7, which the save loader then restores,
+  - ticks every station once.
+- So after any load every station starts at entry 0 of a freshly randomized queue.
+
+#### 14.6.3 Playback plumbing
+
+**Item → Wwise — FINAL** (`0x0055FAA0`, jump table `0x0055FD6C`).
+- For an entry of type t, call SetSwitch(group = FNV-1(name), value = the entry's `+0x00` cue id, the
+  station voice), then PostEvent(FNV-1(name)) on the same voice. Use `0x0045F5B0`, then
+  `0x0045EA70(voice, event, &playRecord, 0, startDelayMs = 0)`.
+- The switch group and the event share one name:
+
+| type | name | id | event → action → target (in `radio_misc.bnk_pc`) |
+|---|---|---|---|
+| 0 song | `Radio_Songs` | `0x90D4215D` | → `0x0B16555E` → switch container `0x2C2AE6FB` (138 packages = the 138 tracks) |
+| 1 commercial | `Radio_Commercials` | `0xDE61BE86` | → `0x10227473` → `0x0E3DD438` (92) |
+| 2 sweeper | `Radio_Sweepers` | `0x7E248191` | → `0x06C1C141` → `0x3E02AE54` (18) |
+| 3 intro | `Radio_Intros` | `0xCF4C5C28` | → `0x2C1A0A9C` → `0x019B5EC6` (381) |
+| 4 call-in | `Radio_Callins` | `0x3816E237` | **no event in any shipped bank** (never queued anyway) |
+| 5 outro | `Radio_Outros` | `0x9176A6C1` | → `0x3A812A73` → `0x2200F032` (264) |
+| 6 Police/FBI song | `Radio_Police_FBI` | `0xB15E2067` | **no event in any shipped bank** (no such station in retail) |
+| 7 news song | `Radio_News_Breaks` | `0xA73F0527` | → `0x0D9B3B9F` → `0x0E3D68D2` (37) |
+| 8 sing-along | — | — | not postable through this switch; falls through and posts nothing |
+
+- Station switch group `Radio_Stations` = `0x02C9B0FE`, set once when a station becomes audible.
+  **HIGH CONFIDENCE it is inert**: no plain bank in `sounds.vpp_pc` or `sounds_common.vpp_pc` contains that
+  id or any station id. `soundboot.vpp_pc` (shared-stream archive) was not scanned.
+- Song entries also run the sing-along selector `0x0055F8C0`, which posts `Radio_Sing_Along` `0x28560E2A`
+  with switch group `Radio_Sing_Alongs` `0xA9784C6D` on a pedestrian or player voice into `+0x680`. Its
+  selection rules are PARTIAL and not read. Only The Mix carries sing-along data (7 `M04_SINGALONG_*`
+  cues, 0 %), and the Lua gate is `radio_set_sing_along_allowed_during_missions`.
+
+**Cue → media file — FINAL.** In each switch container the switch value is the cue's FNV-1 id. Its package
+lists one kind-2 Sound. That Sound's source/media id (the third dword of its body, layout of §9.8) equals the
+`tag` of one record in a `VWSBPC` media wrapper (`spec-audio-format.md` §4.2). The payload at the record
+`offset` is a RIFF/WAVE (Wwise Vorbis) stream.
+- Songs live in `sounds_common.vpp_pc` → `radio_<station>_media.bnk_pc`. Entry/record counts: genx 18,
+  krhyme 20, k12 17, klassic 17, swim 12, kabron 16, krunch 18, the_mix 18.
+- DJ lines, sweepers and ads live in `radio_misc_media.bnk_pc` (768 records). News is in
+  `radio_newscasts_media.bnk_pc` (36).
+- Every `radio_*` bank is `load_at_boot = True`, `streaming = True` in `audio_banks.xtbl`. The plain station
+  banks are 32-byte `BKHD`-only stubs whose ids match the media wrappers' `+0x10`. All objects live in
+  `radio_misc.bnk_pc` (bank id `0xD4BA4A29`; HIRC: 1075 Sounds, 39 Actions, 29 Events, 7 switch
+  containers).
+
+**Station voice, 2D vs 3D — FINAL (shape).**
+- Each station has **one** game object, the voice named `"Radio"`. It has one **position per registered
+  vehicle**, up to 8 (`+0x5B8 + 0x18·i`).
+- Positions are refreshed per vehicle through `0x0055F4A0` → `0x0055EEA0` → `0x0045E410`.
+- The player's own car and any NPC car on the same station therefore share one stream (multi-position
+  emitter) and are always in sync.
+- No separate 2D in-car path exists in the code read. The in-car "2D feel" must come from Wwise
+  attenuation/spread authored in `init.bnk_pc`, which is PARTIAL and not decoded.
+
+**OFF / on bus cues — FINAL for ids, PARTIAL for names.**
+- `0x0055E110(on, station)`, latched by byte `0x013C60E6`:
+  - Entering a vehicle whose station is not Off posts **`0xC4F14EEA`**.
+  - Leaving, or tuning Off, posts **`0x01DF15F0`**. `0x005602E0` posts it directly when the player's car
+    tunes from a station to Off, and calls `0x0055E110(1, new)` when it leaves Off.
+- Both are posted on the global 2D voice (`0x0045D990`, event, no position). Each event carries 4+2 actions
+  with 500 ms (`0x1F4`) fades. The targets `0x006EF14F`, `0x22FE5B4C`, `0x11BC5601`, `0x0464FD84`,
+  `0x378060A4` and `0x2D7323A5` are bus/object ids defined in `init.bnk_pc`.
+- The event names are not recovered: 26 plausible names were FNV-tested with no match.
+- **No item event is posted by the station switch itself.** The new station starts through the tick
+  (above).
+- Other side effects of a switch:
+  - The D-pad path also calls `0x007059F0(0x10)` and `0x00D9E140(0x7D)` (UI feedback, not traced).
+  - `0x00BDA1C0` is a notifier rate-limited to one call per 5 s that hashes the old and new station names.
+    It is not audio and not the HUD (role PARTIAL).
+
+**Ducking and muting — PARTIAL.** Game-side mechanisms found:
+1. Lua `radio_global_block` (`0x013BB7D4`) stops new attachments (`0x00556740` gate).
+2. Lua `radio_block` detaches one vehicle.
+3. `0x0055F350` stops every audible station (bit 2 + `0x0055E510`). It is called from `0x00554070` and
+   `0x00554500`, which are audio teardown paths.
+4. A newsbreak (Lua `radio_newsbreak` → `0x013C60E8`) is held back while any of 3 active-flag slots at
+   `0x0322D87A` (stride `0x58`, `0x00469FF0`) is set. It is then posted on the **player vehicle's own
+   voice** (`+0x159C`): SetSwitch(`Radio_News_Breaks`, id), PostEvent `0xA73F0527` with a 1000 ms start
+   delay (`0x0055DC80`).
+
+No code that lowers radio volume for dialogue or cutscenes was found in the radio range. Ducking during
+dialogue is therefore expected to be Wwise bus ducking authored in `init.bnk_pc` (OPEN, not decoded).
+
+**HUD station-logo popup — FINAL.**
+- `0x0055F190` runs at the end of every `0x005607B0` frame.
+- It takes the player's vehicle (`+0x16C0/+0x16C4`) → its station (`0x0055EC10`). If the station's `+0x68A`
+  bit 0 is clear (writer not found), it uses the pointer to the station's `+0x80` (`Interface_image`);
+  otherwise NULL.
+- When that pointer differs from the cached `0x013C612C`, it calls `0x007F1A20(ptr)` (HUD infrequent
+  field 4, `spec-hud-runtime.md`).
+- Off has an empty image, which gives `""` and the HUD's `ui_menu_none`. Leaving the car gives NULL.
+
+#### 14.6.4 Test vectors
+
+1. **Station list (FINAL):** the table in §14.6.1 (number, file, FNV-1 id, flags).
+2. **Queue (FINAL as a model; not checked against a live capture):**
+   - Harness conditions:
+     - the ring is filled from MT19937 seeded 5489, which is exactly what the zero-seed fill produces on a
+       never-seeded generator; cursor 0;
+     - the content table is built from the retail files in station order;
+     - commercial flags = new game {1, 2, 6, 27};
+     - all used flags 0 and pattern position 0;
+     - GENX's queue is built first. This matches world start, where station 2 (Off) consumes no draws.
+   - Ring[0..4] = `D091BB5C 22AE9EF6 E7E1FAEE D5C31F79 2082352C`.
+   - The 512-entry GENX queue uses 946 draws and leaves pattern position 2. First 24 entries:
+
+| # | content idx | type | cue (FNV-1) | Length ms | Delay/Prestart |
+|---|---|---|---|---|---|
+| 0 | 0 | sweeper (intro defect, i = −2) | GENX_SWEEPER_01 `0xEE15F037` | 9962 | 0 |
+| 1 | 175 | song | GENX_DELPHIC___CLARION_CALL `0x5423413B` | 175003 | 0 |
+| 2 | 125 | intro | GENX_SHA_LA_LA_LA_LA_FRONT_SELL `0x4B375387` | 8271 | 3518 |
+| 3 | 178 | song | GENX_HEAVY_YOUNG_HEATHENS___SHA_LA_LA_LA_LA `0x0F29C3E2` | 213184 | 0 |
+| 4 | 7 | commercial | COMMERCIAL_IMAGE_BY_DESIGN `0x1DEEBA84` | 65175 | 0 |
+| 5 | 190 | song | GENX_WHITE_DENIM___PAINT_YOURSELF `0x8F0F436C` | 202475 | 0 |
+| 6 | 154 | outro | GENX_PAINT_YOURSELF_BACK_SELL_2 `0x10EC4CCC` | 8963 | 297 |
+| 7 | 179 | song | GENX_HOCKEY___TOO_FAKE `0x653DABB8` | 232757 | 0 |
+| 8 | 168 | outro | GENX_TOO_FAKE_BACK_SELL_2 `0xE0785F52` | 7207 | 1698 |
+| 9 | 0 | sweeper (pattern Sweeper slot) | GENX_SWEEPER_01 | 9962 | 0 |
+| 10 | 85 | intro | GENX_BORN_FREE_FRONT_SELL `0xF93DC2F7` | 5090 | 5090 |
+| 11 | 188 | song | GENX_THE_RASSLE___BORN_FREE `0x12D6DE17` | 253237 | 0 |
+| 12 | 127 | intro | GENX_STOP_SEARCHING_AKA_SWEATPANTS_FRONT_SELL `0x34E72823` | 6886 | 3311 |
+| 13 | 189 | song | GENX_VALENCIA___STOP_SEARCHING `0x3E4C4825` | 209554 | 0 |
+| 14 | 174 | song | GENX_DEFTONES___DIAMOND_EYES `0xB5BD17CE` | 175107 | 0 |
+| 15 | 143 | outro | GENX_DIAMOND_EYES_BACK_SELL `0xE741D016` | 5891 | 0 |
+| 16 | 45 | commercial | COMMERCIAL_VALDORAMA `0xE0862B0D` | 53512 | 0 |
+| 17 | 189 | song (bag reset → repeat) | GENX_VALENCIA___STOP_SEARCHING | 209554 | 0 |
+| 18 | 164 | outro | GENX_STOP_SEARCHING_AKA_SWEATPANTS_BACK_SELL_2 `0xC3405D9A` | 7124 | 620 |
+| 19 | 0 | sweeper (intro defect) | GENX_SWEEPER_01 | 9962 | 0 |
+| 20 | 186 | song | GENX_THE_DO___QUEEN_DOT_KONG `0x187C6B84` | 194000 | 0 |
+| 21 | 26 | commercial | NEWSCAST_SH03 `0x1F32B58E` | 43627 | 0 |
+| 22 | 187 | song | GENX_THE_LINES___EL_MATADOR `0x0AEBE95C` | 205264 | 0 |
+| 23 | 173 | song | GENX_BROOKLYN___VOLCANOLOGY `0x34908852` | 210895 | 0 |
+
+   Draw order per Song slot:
+   1. song draw (+ re-draws after a bag reset);
+   2. Intro% roll;
+   3. if the roll succeeds, an intro draw;
+   4. if no intro resulted, an Outro% roll;
+   5. if that roll succeeds, an outro draw.
+
+   Commercial and sweeper slots take one draw each, plus re-draws.
+
+   Reproduce with `python -I tools/scratchpad/radio_sim.py 5489 GENX 24`.
+3. **Cue → media (FINAL).** Pattern: cue → FNV-1 → switch value → Sound → media id → `VWSBPC` record.
+
+| cue | switch cntr → Sound | media id = record `tag` | file (archive `sounds_common.vpp_pc`) | record #, offset, size |
+|---|---|---|---|---|
+| GENX_BROOKLYN___VOLCANOLOGY `0x34908852` | `0x2C2AE6FB` → `0x1330703B` | `0x1771F271` | entry 4 `radio_genx_media.bnk_pc` | 3, `0x5DB000`, 2,711,096 B (RIFF) |
+| KLASSIC_SOUSA___THE_STARS_AND_STRIPES_FOREVER `0x7AF2299C` | `0x2C2AE6FB` → `0x203B816F` | `0x3CE73F94` | entry 10 `radio_klassic_media.bnk_pc` | 15, `0x1EC4800`, 1,422,394 B |
+| GENX_SWEEPER_01 `0xEE15F037` | `0x3E02AE54` → `0x322402CF` | `0x1382C1E3` | entry 16 `radio_misc_media.bnk_pc` | 241, `0x2809000`, 52,313 B |
+| COMMERCIAL_AISHA `0x8C71978E` | `0x0E3DD438` → `0x26C5C013` | `0x019B2805` | entry 16 `radio_misc_media.bnk_pc` | 23, `0x4DA000`, 748,381 B |
+
+   KLASSIC_SOUSA is also the **default switch** value of `0x2C2AE6FB` (it appears a second time at item
+   offset 84). That is HIGH CONFIDENCE from layout.
+4. **Events when switching station (FINAL):**
+   - Station → station: no switch event. The new station's next tick posts SetSwitch `0x02C9B0FE` plus the
+     current item's pair, for example SetSwitch `0x90D4215D` = cue id + PostEvent `0x90D4215D`, with a
+     seek.
+   - Into Off: PostEvent `0x01DF15F0` (2D).
+   - Out of Off or into a car: PostEvent `0xC4F14EEA` (2D).
+   - Newsbreak: SetSwitch + PostEvent `0xA73F0527`, 1000 ms delay.
+
+#### 14.6.5 Team B wiring (what the null music backend must call)
+
+1. **Load:**
+   - Build the station array: index 0 is the Mix Tape, then the `radio_stations.xtbl` rows.
+   - Run the per-station loader into a 915-entry content table, with FNV-1 ids, types, per-song intro/outro
+     records, and the pattern.
+   - Then apply `commercials.xtbl`.
+   - Seed one MT19937 ring of 8192 values.
+2. **World start and load:** build every station's queue (§14.6.2) and tick each station once. Do not
+   persist queues.
+3. **Every frame, for every station:** run the tick (`Radio_Update` = `0x005607B0`): timer, advance (skip
+   outros when inaudible), rebuild when empty. Then run the HUD check (`0x0055F190` equivalent).
+4. **Vehicle hooks:**
+   - On player enter: pick the default station (§14.6.1) and register the car's handle and position on it.
+   - On exit: unregister.
+   - Every frame: update the position.
+   - D-pad: next/prev over the raw array with the acceptance gate.
+   - Write the result to the vehicle's `+0x1630` equivalent.
+   - NPC cars: the 0.25 chance, 1 slot, then persona/class/random.
+5. **Audio backend calls**, as a minimal interface:
+   - `CreateEmitter("Radio")` per station, with a multi-position list.
+   - `SetSwitch(group, value, emitter)`.
+   - `Post(event, emitter, startDelayMs) → handle`.
+   - `Seek(handle, ms)`.
+   - `Stop(handle)`.
+   - `Post2D(event)` for `0xC4F14EEA` / `0x01DF15F0`.
+
+   A null backend may instead decode the media directly: cue id → Sound → `tag` → `VWSBPC` record →
+   RIFF/Vorbis (§11).
+6. **Timing:**
+   - Arm the next transition at the `0x0055FAA0` overlap value: intro `Length − Delay`; song followed by an
+     outro `Length − Prestart`.
+   - Never cut the previous item. Stop it one transition later.
+   - On join, seek to `Length − remaining`.
+7. **Lua:**
+   - `radio_set_station` → tune.
+   - `radio_block` / `radio_global_block` / `vehicle_set_radio_controls_locked` → the gates above.
+   - `radio_newsbreak` → the deferred newsbreak post.
+   - `cell_music_menu_toggle_station` → the hidden bit.
+8. **Save:** only the Mix Tape list, hidden ids and commercial flags (§12.8 of the save spec).
+
+**OPEN after this pass:**
+- the names of `0x01DF15F0` / `0xC4F14EEA` and their bus targets;
+- Wwise attenuation and ducking in `init.bnk_pc`;
+- the sing-along selector `0x0055F8C0`;
+- the meaning of vehicle `+0x1548`;
+- the writer of station `+0x68A` bit 0;
+- whether `Radio_Stations` is used in `soundboot.vpp_pc`.
+
+Clean-room self-check: no decompiler tokens, all text in our own words.
 
 ---
 
 ## Changelog
+
+- **2026-10-14 — new §14.6 "Free-roam radio playback, end to end"** (SPEC TEAM, FREE-ROAM-GAPS group D).
+  - Found the queue builder (`0x0055D7D0`), the bag and intro pickers, the per-frame tick (`0x0055FD90`
+    from `0x005607B0`) with its continuous per-station timeline and seek-on-join, the item → Wwise event
+    table, cue → media mapping through `radio_misc.bnk_pc` and the `VWSBPC` `tag`, the default-station
+    rules, the HUD producer (`0x0055F190`), and the ring generator (standard MT19937).
+  - Corrected §14.2 (the float triple is the emitter position), §14.4 (Off **is** `Selectable` and is
+    silent because its playlist is empty), and the HUD producer address.
+  - Added test vectors (station ids, a seeded GENX queue, four cue → media records, switch events).
+  - pefile+capstone only. Cleanroom self-check: strict regex 0 hits.
 
 - **2026-10-11 — §11a.8's `MATERIAL_TYPE` runtime-value claim CORRECTED (same day, same section):
   it's a flat 33-entry static table, not a 31-way jump table; the 3 hashes originally attributed

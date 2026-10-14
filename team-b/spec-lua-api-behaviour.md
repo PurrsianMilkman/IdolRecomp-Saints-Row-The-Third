@@ -660,7 +660,7 @@ implementation.**
 ### 1.12 `object_is_in_trigger` (`0x00a57720`) — 86 calls / 19 scripts
 
 **Arguments:** 2 mandatory strings, both read unconditionally: arg 1 an object name, arg 2 a
-trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger method `0x0093bfc0`, while arg 2 goes through the generic name→position lookup `0x00a455a0` (§4.2, §20.24), i.e. "is the object named by arg 2 inside the trigger named by arg 1"; Team B's real-script argument order can also settle this; to be settled against the executable.]** **[Narrowed 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.7's re-derivation): the containment test `0x0093bfc0` takes its object in ECX and exactly one 4-byte stack argument (it pops 4 bytes on return), and branches on that object's `+0x8c` shape code — 0, 1 or 2 select one of three geometric tests (`0x00dbdc90` / `0x00dbe2a0` / `0x00dbe050`) built from the object's own `+0x40` position and its `+0x58`/`+0x5c`/`+0x60`/`+0x90`/`+0x94` extents; any other code returns false. CONFIRMED — disassembly for `0x0093bfc0`. So the ECX object is the trigger volume and the stack argument is the point tested (§28.7 calls it with receiver = the trigger and argument = a candidate's `+0x40` position). It follows that arg 1 (resolved through `0x005e4e30`) is the trigger and arg 2 (the `0x00a455a0` position) is the object: the desk review's reading. ~~HIGH CONFIDENCE — `0x00a57720` itself is not in these dumps, so the register load at its call site is not read~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x00a57720` is now dumped, and its call site matches this reading exactly. ECX is loaded with the handle `0x005e4e30` resolves for arg 1 — `0x005e4e30` is itself called with hidden `this` = the shared singleton `0x02442750` (the same singleton §22.23 cites for a sibling resolver) and explicit argument = the arg-1 string — immediately before `CALL 0x0093bfc0`; the pushed stack argument is the address of the 12-byte position record `0x00a455a0` fills from arg 2. This is exactly the trigger-receiver/point-argument shape `0x0093bfc0`'s own body requires. CONFIRMED — disassembly: arg 1 = trigger (via `0x005e4e30`), arg 2 = object/position (via `0x00a455a0`).]** box/sphere/cylinder names for the three shapes are still HYPOTHESIS.]**
+trigger name. **[OPEN — desk review 2026-09-30: the roles look swapped — arg 1 goes through the trigger/placed-object resolver `0x005e4e30` (§1.1, §21.5) and is probably the hidden `this` of the `0x0093xxxx` trigger method `0x0093bfc0`, while arg 2 goes through the generic name→position lookup `0x00a455a0` (§4.2, §20.24), i.e. "is the object named by arg 2 inside the trigger named by arg 1"; Team B's real-script argument order can also settle this; to be settled against the executable.]** **[Narrowed 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (§28.7's re-derivation): the containment test `0x0093bfc0` takes its object in ECX and exactly one 4-byte stack argument (it pops 4 bytes on return), and branches on that object's `+0x8c` shape code — 0, 1 or 2 select one of three geometric tests (`0x00dbdc90` / `0x00dbe2a0` / `0x00dbe050`) built from the object's own `+0x40` position and its `+0x58`/`+0x5c`/`+0x60`/`+0x90`/`+0x94` extents; any other code returns false. CONFIRMED — disassembly for `0x0093bfc0`. So the ECX object is the trigger volume and the stack argument is the point tested (§28.7 calls it with receiver = the trigger and argument = a candidate's `+0x40` position). It follows that arg 1 (resolved through `0x005e4e30`) is the trigger and arg 2 (the `0x00a455a0` position) is the object: the desk review's reading. ~~HIGH CONFIDENCE — `0x00a57720` itself is not in these dumps, so the register load at its call site is not read~~ **[Confirmed 2026-10-01, job `20261001T170909-team-a-nbjm`: `0x00a57720` is now dumped, and its call site matches this reading exactly. ECX is loaded with the handle `0x005e4e30` resolves for arg 1 — `0x005e4e30` is itself called with hidden `this` = the shared singleton `0x02442750` (the same singleton §22.23 cites for a sibling resolver) and explicit argument = the arg-1 string — immediately before `CALL 0x0093bfc0`; the pushed stack argument is the address of the 12-byte position record `0x00a455a0` fills from arg 2. This is exactly the trigger-receiver/point-argument shape `0x0093bfc0`'s own body requires. CONFIRMED — disassembly: arg 1 = trigger (via `0x005e4e30`), arg 2 = object/position (via `0x00a455a0`).]** box/sphere/cylinder names for the three shapes are still HYPOTHESIS.]** **[2026-10-12, FINAL, port pointer (dlc2_m02 `object_is_in_trigger('trg_loadout_1', '#PLAYER1#')` reported as an "OPEN state"): nothing here is open any more. The shape names are CONFIRMED in §28.7: `+0x8c` 0 = oriented box (`0x00dbdc90`, half-extents `+0x58`/`+0x5c`/`+0x60`), 1 = sphere (`0x00dbe2a0`, radius `+0x90`), 2 = capped cylinder (`0x00dbe050`, radius `+0x90`, height `+0x94`). Trigger position and orientation are at `+0x40`. The result is a pure geometric test of the arg-2 object's current world position against the arg-1 trigger's shape. A port computes it directly from the trigger's zone-data shape and the live object position. The same test serves the trigger ENTER/EXIT dispatch, so a host that already registers trigger geometry has everything this native needs.]** **[Team B blocker dlc2_m02, 2026-10-13, already specified (note above): port rule: return true iff the arg-2 object's current world position (`#PLAYER1#` = the local player, §2.4) lies inside the arg-1 trigger's box/sphere/cylinder. Return false if either name fails to resolve. CONFIRMED.]**
 
 **Return:** 1 Lua value (boolean-shaped) — a real `0x00dfe590` push followed by a literal
 `return 1;`.
@@ -765,6 +765,21 @@ newly establishing) that function's existing "HYPOTHESIS: audio event" framing w
 consumer. **Still OPEN, the single largest remaining gap in this cluster: the native function that
 reads `+0xf8`/`+0xfc` and performs the actual Lua callback dispatch was not found** — neither
 `0x00940c90`, `0x0093b3c0`, nor the active-set add/remove helpers ever touch those offsets directly.
+
+**Lua callback ARGUMENTS for `on_trigger`/`on_trigger_exit`, 2026-10-12, FINAL as a port rule.**
+Context: m11 `m11_base_spawn_callback(player_name, trigger_name)` failed when a port passed only one
+argument. The native dispatch site is still OPEN (above), so this comes from the shipped scripts.
+**Dispatch must pass 2 arguments:**
+1. the **name of the character** that entered or exited, using the same name strings scripts use for players (`LOCAL_PLAYER`/`REMOTE_PLAYER` values) or NPCs;
+2. the **trigger's name string**, exactly as passed to `on_trigger`.
+
+Evidence:
+- **Signature census:** a script census over all mission/DLC scripts in this project's Lua dumps (`scratchpad/trigcb.py`) found 239 functions registered through `on_trigger(...)`/`on_trigger_exit(...)`. Of these, **147 declare exactly two parameters**, named `(player_name, trigger)`, `(player, trigger)`, `(triggerer, trigger_name)` and similar. 77 declare none, 14 declare one (`(triggerer)`, `(whodunit)`, `(npc)`), and 1 declares four (`m23_exited_daedalus_gunfire`, whose last two parameters are only used when the function is called directly).
+- **Usage:** m11 matches the second argument against `base.location` (the trigger name passed to `on_trigger`), proving it is the trigger-name string, not a handle. One-parameter callbacks use theirs as the triggering character (`m08_massacre_cb(poor_sumbitch)`, `dlc2_m02_trap_fire(npc)`). That matches argument 1 and also shows NPCs can fire triggers.
+- **Why this is consistent:** Lua drops extra arguments and leaves missing ones nil. Passing exactly `(character_name, trigger_name)` therefore satisfies every shipped callback. Passing fewer breaks the 147 two-parameter callbacks that read `trigger`.
+- **Contrast:** zero-argument dispatch is what the *other* named-hook path does (`0x00a1f990` → `0x00e0ca80(L, name, 0, 0)`; e.g. hud_prompt, §13.3). Triggers evidently use a different, argument-pushing call site.
+
+**[HIGH CONFIDENCE — script evidence. The exact native argument types (string vs. handle-converted name) are OPEN until the dispatch site is found, but every script use is a string compare or name lookup.]**
 
 **`0x00940270`/`0x009405a0` candidacy CLOSED, 2026-10-09 — a clean negative, not the dispatch site.**
 Both functions were fully disassembled/decompiled (as were their shared tail calls and three further
@@ -883,7 +898,7 @@ cross-confirmed as the box's own local-space min/max corner by its bounding-box 
 vtable `+0x60` (`0x0093b030`); shape 1 (sphere) reads only `trigger_shape_param1` as a scalar f32
 (generic scalar fetch `0x0058ccd0`, size-`0x4` check) to `+0x90` (radius), `trigger_shape_param2`
 is not read at all; shape 2 (capped cylinder) reads both as scalars, `trigger_shape_param1`→`+0x90`
-(radius), `trigger_shape_param2`→`+0x94` (length) — exact match to the already-established runtime
+(**length**, CORRECTED 2026-10-13: `0x00dbe050` uses `+0x90` as the axis-projection bound, §21.13; **axis FINAL 2026-10-14**: `0x0093bfc0` passes the orientation matrix's second row, `+0x58`/`+0x5c`/`+0x60` (the 3×3 starts at `+0x4c`), i.e. the trigger's **local up (Y) axis**, centred at the position `+0x40`), `trigger_shape_param2`→`+0x94` (**radius**) — matches the corrected runtime
 layout. `trigger_flags`→`+0x7a` (word, confirms it's authored, not purely runtime-computed);
 `trigger_action`→`+0xa8` (the `triggers.xtbl` row-index slot, matching the existing "not a plain
 boolean" finding); `trigger_action_param`→`+0xe8` — this resolves the open question raised
@@ -2295,6 +2310,17 @@ above.** The plain character resolver (`0x005e4dd0`, registry `0x2442750`) is tr
 returns null, OR the resolved handle fails the shared liveness check (`0x00853b10`), the function
 falls through to the vehicle resolver (below) — **including the dead/invalid-handle case, which also
 falls through rather than bailing.** But if the character resolver succeeds AND the handle is alive,
+**[2026-10-14 LIVE CAPTURE, FINAL — closes the project-wide vtable `+0x68`/`+0x70` OPEN (§7.10/§17.5,
+dlc2_m01, the "set_attack_enemies_flag" idiom). Captured live during user mission m04, user-approved item 1,
+single read-only session. The object was a `script_npc`: vtable `0x0117EFEC`, RTTI `.?AVscript_npc@@`.
+- `+0x68` → `0x00a330b0`, which is `return [this+0x180] != 0`. It means "this script NPC currently has a
+  spawned human"; it returned true live.
+- `+0x70` → `0x00a330d0`, which is `return [this+0x180]`. It returns that spawned human object (live:
+  non-null).
+
+**Port rule:** for a script NPC, the gate passes iff its spawned human exists, and the setter then acts on
+that human. Before `group_create` spawns it, or after it is released, the gate is false and the native
+returns early.]**
 the function reads a virtual method at that object's own vtable `+0x68` (zero explicit arguments,
 `this` = the resolved character) as a gate: **if that gate returns false, the function returns
 immediately, without ever trying the vehicle resolver.** Only if the gate returns true does it
@@ -2525,7 +2551,7 @@ known writers independently re-confirmed by reading the real immediate at each s
 `+0x16d4`'s values" question was already correct and already written down; the project's own
 earlier citation gap was only that `spec-lua-api-behaviour.md` itself (where Team B's tooling looks)
 never pointed at it.** `set_civilians_flee`'s "remote/proxy" label for the same offset on a
-different object class (§17.4) remains a separate, not-reconciled reading for that class only.]**
+different object class (§17.4) remains a separate, not-reconciled reading for that class only.]** **[Team B blockers dlc3_m02 / dlc3_m20, 2026-10-13, already specified: `+0x16c0`/`+0x16c4` is the character's current-vehicle handle. It is written with the vehicle's handle at enter-state 0 (`0x00af9b1c`/`0x00af9b29`, `spec-player-runtime.md` §7–§8; `0x00b0a170` and the exit finaliser null it), and it matches the vtable `+0x70` identity pair at `+8`/`+0xc` of the named vehicle. Port rule: keep a per-character "current vehicle" reference. Set it when the vehicle-entry sequence starts, and clear it when the exit completes. `character_is_in_vehicle(c)` = (state == 3 seated). `character_is_in_vehicle(c, v)` = seated AND the current vehicle is v. An unresolvable v pushes `false` (plus the extra value noted above). The dlc3_m02 `get_in_truck` loop ends once the player is seated in `start_group.vehicle`. CONFIRMED.]**
 
 **OPEN item RESOLVED (2026-10-07, following up Team B's blocker report naming this section among a
 3-mission blocker, missions `m05`/`m07`/`m21`):** direct disassembly of the real call site
@@ -3092,6 +3118,13 @@ corrected cross-function paragraph**).
 
 **Return:** none (`return 0;`).
 
+**[Port pointer, 2026-10-12, FINAL (m04 `'Starting_Vehicles'`, m06 `'Script_Vehicle 001'` and m07
+`''` reported as "OPEN state"):**
+- **The kind is not a stored state.** It is whichever of the three resolvers below accepts the name, tried in order group → character → vehicle. Each resolver accepts a name only if a live, registered object of its own type carries that name.
+- **Where the names come from:** zone-data placed objects and script groups (e.g. `Starting_Vehicles` is a mission script group, `Script_Vehicle 001` a placed vehicle) and objects spawned by script.
+- **What a port does:** look the name up in its own object registry and dispatch on the type it finds.
+- **Unknown, dead or empty names:** a name that matches no live object, **including the empty string `''`**, fails all three tiers. The native then does **nothing** and returns normally. It must not raise an error.]**
+
 **Body — CORRECTED (2026-10-07, direct disassembly of `0x00a5cb10`, `0x005eab60`, `0x00a2af70`,
 `0x005e4dd0`, `0x0062a190`):** the same name string is tried against three different members of the
 type-gated resolver family (§4.13) in a fixed order, and all three are now identified by address, not
@@ -3404,6 +3437,8 @@ damage-state bits instead (making `+0x16c8` bit `0x1` a pure re-entrancy latch),
 vtable `+0x70` indirection resolves to a different object than `0x00a9e1d0` operates on. Flagged, not
 guessed — see the cited file for the full disassembly-confirmed account.
 
+**[Team B blocker m15, 2026-10-13, FINAL, CONFIRMED by disassembly: a byte-pattern sweep of every write to vehicle `+0x16c8` finds exactly one set of bit `0x1` (`0x00a9e26a`, inside the destruction trigger `0x00a9e1d0`, after its entry gate requires the bit clear) and exactly one clear (`0x00a9eb29`, near the bottom of the same function). Every other writer (whole-word stores and xor-merge sites for bits `0x10`, `0x40`, `0x4000`, `0x100000`, `0x4000000` and others) masks bit `0x1` out. All four early-exit branches of `0x00a9e1d0` jump to `0x00a9eb3a`, which is before the set, and no branch between set and clear leaves the function, so the bit is only ever 1 while `0x00a9e1d0` is running. It is a re-entrancy latch, not a durable wreck flag. A fresh, intact vehicle has it at 0, and so does a wreck once destruction has finished. Port rule: `vehicle_is_destroyed(name)` returns `true` when the name does not resolve, when the resolved object fails the liveness check `0x00853b10`, or when vtable `+0x70` returns null. Otherwise it returns `false`, because the latch is never observable from a script thread. For m15, poll the vehicle registry: `false` while the named vehicle exists and is live, `true` once it has been removed or fails liveness. Do not model a sticky destroyed bit. (That a script-visible "destroyed" therefore comes from the liveness/unresolved fail-safe is HIGH CONFIDENCE; what `0x00853b10` tests is not re-traced here.)]**
+
 ### 4.10 `inv_weapon_add_temporary` (`0x00a510c0`) — 88 calls / 23 scripts
 
 **Arguments:** 2 mandatory strings (target name/`"#PLAYER#"`; weapon name) + 6 further optional
@@ -3516,6 +3551,16 @@ refuted — **cleared for implementation.**
 
 ### 4.12 `on_vehicle_enter` (`0x00a588e0`) — 76 calls / 14 scripts
 
+**[Team B blocker m23, 2026-10-13 (round 2), HIGH CONFIDENCE from the Body below:** `'veh_daedalus_vtol 001'` is a placed-vehicle name. The generic character resolver `0x00a280c0` fails on it. The type-gated resolvers then try bit `0x4` at `+0xb` (kind 1), then bit `0x8` at `+0xb` (kind 2, vehicle), and the vehicle resolver succeeds. **Port rule:** resolve a vehicle name as kind 2 and register the callback in the VEHICLE's enter-hook slot 7 (vehicle `+0xb0` sub-object, helper `0x00a56d50`). The callback fires when a character enters that vehicle. A name that matches none of the three resolvers is a silent no-op (§4.13.0).]**
+
+**[m23 follow-up, 2026-10-13, FINAL for kind, CONFIRMED by disassembly:** the type-gated resolver bits form an **is-a bitset over class type ids**. Each class descriptor in table `0x02cc9900` holds its type id at `+4`, its parent id at `+5`, its name at `+0x28`, and a 256-bit is-a set at `+6` (type T = byte `6+T/8`, bit `1<<(T%8)`).
+- bit `0x2`@`+0xa` = type `0x21` `player`.
+- bit `0x4`@`+0xb` = type `0x2a` `script_npc`.
+- bit `0x8`@`+0xb` = type `0x2b` `script_vehicle`.
+- bit `0x2`@`+0xb` = type `0x29` 
+avpoint`.
+This answers §4.13's open bit meanings. `script_npc` and `script_vehicle` are siblings (parent `0x24`), so their names never overlap. Script NPCs register as kind 1 (slot `0x17` of `+0xf8`); only player names and `#PLAYER#` take the generic path (slot `0x16` of `+0x1f00`); an empty callback name clears the hook. **Callback arguments (HIGH CONFIDENCE, from every m23 handler; engine dispatch not traced):** `(character_name, vehicle_name, seat)`, where seat 0 is the driver and vehicle_name is the same string the script registered with.]**
+
 **Arguments:** 2 mandatory strings, no optional arguments: arg 1 — **a callback/hook name** (not an
 occupant name); arg 2 — a vehicle/seat reference. **[RESOLVED, 2026-10-08: confirmed by opening
 `0x005e4660` and `0x00a56d50` fully — both are hook-slot WRITE helpers (`base[slot] =
@@ -3555,6 +3600,23 @@ both internal template copies) — arg 1 is a callback/hook name, both `0x005e46
 are hook-slot registration helpers, no event is posted to anything. Cleared for implementation.**
 
 ### 4.13 Cross-function observations
+
+**4.13.0 General port rule for by-name resolution failures (2026-10-12, FINAL).** This consolidates
+the recurring "named-object resolution … is OPEN" reports from mission sweeps (m04, m06, m07, m08,
+m09, …).
+- **What a resolver accepts:** every by-name resolver in this document accepts a name only if a **live, registered object of its own kind** carries it. This covers the type-gated family `0x005eab60`/`0x005e4dd0`/`0x0062a190` (§4.4), the light-group resolver `0x00739690` (§17.24), the door resolver `0x006434a0` (§1.10), the trigger resolver `0x005e4e30` (§1.12), and the generic resolver `0x00a281a0`.
+- **Object kinds and where their names come from:**
+  - script groups;
+  - characters;
+  - vehicles;
+  - light groups, e.g. `Script_Light_Group_m08_ALL`;
+  - doors, triggers and effects.
+
+  Names come from zone-data placed objects, mission script groups, or objects spawned by script. They are kept in the shared multi-kind registry `0x02442750` (§17.24).
+- **A failed resolution is never an error.** Unknown name, empty string, dead object or wrong kind all lead to the native taking its documented "unresolved" path: no side effect, plus whatever it pushes on failure (`false`/`0`, or nothing). A port that doesn't have the referenced object loaded should take that same path instead of aborting the script.
+- **Data-dependent sub-objects follow the same rule.** Example: `door_open`'s `+0xc8` interaction-anchor (§1.10, m09) exists only if the placed door defines one. When it is absent, only the character-animation step is skipped, and the door still opens and returns its result. **[Team B blocker m01, 2026-10-13, already specified: port rule: `+0xc8` present iff the placed door's zone data defines an interaction anchor. If it is absent (or the host does not model it), open the door, skip the character animation, and push the normal result. CONFIRMED.]**
+- **Light groups:** `light_group_set_intensity` on an unresolved group (m08) does nothing.
+- **Sentinel names (`#PLAYER#`, `#FOLLOWER#`…, `#CLOSEST_PLAYER#`)** are recognised only by the natives that explicitly test for them (§3.9 and the sentinel list near it). For `#CLOSEST_PLAYER#` those natives resolve it to "the player closest to the acting character". Every other native passes the literal string to its ordinary resolver, where it matches nothing: the no-op path above. A port must not treat an unrecognised sentinel as an error (m10, m14, mm_p_03).
 
 **The generic name resolver, and the `"#PLAYER#"` sentinel.** `0x00a280c0` is the base resolver
 every function in this section reaches directly in some cases (`set_player_can_enter_exit_vehicles`,
@@ -3733,7 +3795,7 @@ Every function below opens with the same shared `lua_CFunction` prologue this do
 
 **Body:** arg 1 resolves through a dedicated notoriety-GROUP name table (`0x008ed350` — a case-insensitive linear scan over 24 fixed name strings read directly from `.rdata`, the first being the literal `"police"`; returns a group-record pointer or null). This is a DIFFERENT resolver from §3.6's own `0x0094cc60` (which returns a small numeric code with failure sentinel `9`) — a third, independent name→record mechanism in this same notoriety family (see §6.22). If the group resolves, an unidentified zero-explicit-argument call (`0x00d21db0`) runs unconditionally, then arg 2 is range-checked against two fields on the group record (offsets `+0x3e0`/`+0x3e4`, read as a per-group minimum/maximum valid tier). If in range, the actual write is delegated to `0x008ed390`: it computes a per-tier sub-record (48 bytes per tier, from a tier-array base pointer at record offset `+0x3e8`), then linearly scans that tier's own sub-item array (32 bytes per entry, up to a per-tier count at `+0x2c`) for a case-insensitive match against arg 3 among each entry's own name field, and on a match overwrites that entry's own flag byte with arg 4, returning success/failure.
 
-**Side effects/subsystem:** writes a named sub-item's flag byte within a specific tier of a named notoriety group. Subsystem: notoriety/gang state, extending the same family §3.6 traced. **[CONFIRMED — disassembly for the full resolve/range-check/write chain; OPEN — the role of `0x00d21db0`, and which 24 real names populate the group table beyond the confirmed first entry `"police"`.]**
+**Side effects/subsystem:** writes a named sub-item's flag byte within a specific tier of a named notoriety group. Subsystem: notoriety/gang state, extending the same family §3.6 traced. **[CONFIRMED — disassembly for the full resolve/range-check/write chain; OPEN — the role of `0x00d21db0`, and which 24 real names populate the group table beyond the confirmed first entry `"police"`.]** **[Team B blocker m22, 2026-10-13: the group records are the 24 `notoriety_spawn.xtbl` destination structures (`spec-tables-progression.md` §6.3, which also lists the 24 names). `+0x3e0`/`+0x3e4` are the first/last `level` of that row's `level_info` list; the test is inclusive (`jl`/`jg` at `0x00a473a6`/`0x00a473ae`). `0x008ed390` indexes the level record at `(tier − first) × 0x30` from `+0x3e8`, matches arg 3 against each group record's `tag_name` (`+0x18`, case-insensitive), and writes arg 4 into that group record's byte `+0x1c`. Ranges from the shipped table: `stag`, `police`, `police_ng`, `police_riot`, `police_motorcycle`, `police_speedboat`, `police_waverunner`, `luchadores`, `deckers`, `morningstar`, `whored_one/two`, `survival_*` = **2..5**; `stag_riot`, `stag_heli`, `stag_attack_heli`, `police_attack_heli`, `police_blackhawk` = 4..5; `morningstar_heli` = 3..5; `police_heli` = 3..3; `stag_tank`, `police_tank` = 5..5. So `('stag', 2..5, 'G_STAG_CopCar'/'G_STAG_BikeCop', b)` is in range, and both tags exist at stag level 2. Port rule: store per group the first/last level from `notoriety_spawn.xtbl`. If tier is within [first, last] and a group at that tier has a matching `tag_name`, set that group's disable flag to arg 4 and return true; otherwise return false and write nothing. m22 ignores the result. CONFIRMED (disassembly plus the extracted table).]**
 
 ### 6.3 `notoriety_set_min_and_max` (`0x00a55b80`)
 
@@ -4025,7 +4087,14 @@ table, not a second table entry; the table itself has no entry-76-specific marke
 default parameter copied into entry `+0x18`; `+0x24` flag bits — `0x04` use the rich (animated/video)
 widget instead of the simple prompt, `0x08` allowed while a mission is active, `0x10` host-only
 (suppressed on a co-op client). **[CONFIRMED — disassembly for the bit tests; HIGH CONFIDENCE for the
-bit names, taken from what each bit gates.]**
+bit names, taken from what each bit gates.]** **[Team B blockers dlc2_m03 / m02 / m12 / m17, 2026-10-13: per-index flag values, from a stack simulation of the populate routine `0x007178c0` (`tools/scratchpad/tut_desc_flags.py`). Every descriptor is built with `+0x24` = 0. The only later writers are the OR-patches at `0x0071a5a1`–`0x0071a89d`, made through the accessor `0x007158c0`, which has no other callers. They give: `0x02` to 54, 136, 139, 184, 20–39, 123–130, 189, 190, 194; `0x08` to 20–39, 123–130, 145, 147, 88, 89, 189, 190, 191, 194; `0x10` to 148, 20–39, 123–130, 189, 190, 191, 194. **Bit `0x04` is never set statically** (no descriptor uses the rich widget unless a runtime writer exists, and none was found). So **index 12 `combat`, 193 `dlc2_alien_aircraft` and 204 `mis_undercover` all have flags = 0**: simple prompt, not host-only, and no `0x08` bypass. With `0x08` clear, dispatcher step 6 requires `0x006d2910` to return −1. That accessor returns −1 unless the object at `0x014c8460` has class flag `0x10`, in which case it returns that object's virtual type (3 = Guardian Angel, §28 cross-ref), i.e. the current *activity*. A story mission is HIGH CONFIDENCE not that object. Port rule (single player): for 12/193/204, show the simple prompt (queue it, state 2) unless an activity is running. 193/204 (≥189) skip the `0x0151d5a6` gate and are auto-armed by step 8. 12 needs arg 3 = true (m02 passes it) or an already-armed entry. `tutorial_start` returns nothing, so the mission continues whether or not the prompt shows. CONFIRMED (flags); HIGH CONFIDENCE (activity reading of `0x006d2910`).]**
+
+**[Team B blocker dlc2_m03 / m02 / m12 / m17, 2026-10-13 (round 2), FINAL:** descriptor `+0x20` (the default parameter) for **indices 12 `combat`, 193 `dlc2_alien_aircraft` and 204 `mis_undercover` is 2 in all three.`r
+- **Source:** a stack simulation of `0x007178c0` run to its `ret` at `0x0071ace1`, using `tools/scratchpad/tut_desc_param20.py`. This fixes two faults in `tut_desc_flags.py`: its end address stopped at index 164, and it cleared ebx at the no-op `lea ebx,[ebx]` at `0x0071a62a`. A re-run of the fixed script also gives `+0x24` = 0 for 12, 193 and 204, matching the flags note above.`r
+- **Whole table:** 203 descriptors have 2; seven have 1 (188 and 196–201); none has 0, 3 or 4.`r
+- **Meaning:** a display-length class. Enqueue copies `+0x20` into entry `+0x18`, or writes 0 there if argument 5 is true. At show time (`0x007165ae`) the value 0–4 (anything else counts as 2) selects one of the tunables `Tutorial_length_infinite`/`_short`/`_medium`/`_long`/`_xlong`. The tunable arms the display timer in milliseconds (`0x00716900`).`r
+- **Lua:** none of the four missions passes argument 5, so all four use **`Tutorial_length_medium`**.`r
+**Port rule:** these prompts use the medium length; use infinite (no auto-dismiss) only when argument 5 is true. The numeric lengths are runtime tunables from game data (OPEN), which doesn't change which tunable is chosen. CONFIRMED (values and selector).]**
 
 *States.* 0 = untouched (zero-fill); 1 = armed/enabled (the dispatcher proceeds from it); 2 = queued as
 a simple prompt; 4 = rich widget issued. **[CONFIRMED — disassembly, from the writers.]** No code writes
@@ -4037,6 +4106,14 @@ step.]** `tutorial_advance` (§10.4) succeeds only in state 3.
 = the hidden 1). Each "stop" means do nothing:
 
 1. A < 189 and the global byte `0x0151d5a6` is non-zero → stop (indices 189 and up bypass this byte).
+   **[Port default, 2026-10-12, FINAL (m02 reported this byte as an "OPEN state"):**
+   - **Start value 0.** The byte is in zero-fill `.data` (past the section's file image end, `0x01357000`).
+   - **Writers:** a whole-binary byte scan finds exactly 18 references.
+     - Paired set-to-1 / clear-to-0 stores in the activity/mission code: `0x00673be8`/`0x00676b0f`, `0x006ca470`/`0x006ca47f`, `0x006cd612`/`0x006cd621`, plus register stores at `0x006c8ce0`/`0x006cad74`/`0x006cc276`/`0x006cdc93`.
+     - A save/restore pair at `0x00b98c0a`–`0x00b98c7b`.
+     - Readers only in the tutorial module (`0x00716172`–`0x00716b3b`).
+   - **Meaning (HIGH CONFIDENCE):** "suppress base-game tutorial prompts while a scripted activity runs."
+   - **Port rule:** keep it **0** in free play and ordinary missions; it only goes non-zero inside those activity/mission code paths. A host that doesn't model them treats it as 0, so base-game prompts are allowed.]**
 2. The global `0x029443bc` is 1, 2 or 3 → stop. **[CORRECTION, 2026-10-10, routed mission-blocking
    (dlc2_m03): this is NOT a "tutorial dispatcher global" — retract that framing entirely.**
    `0x029443bc` is the **machinima-recorder's own recording-state machine**, written exclusively by
@@ -4080,7 +4157,11 @@ step.]** `tutorial_advance` (§10.4) succeeds only in state 3.
    `0x0088cf70`, `4`=`0x007ad410` (identity still OPEN), `5`=`0x007041b0`, `7`=`0x00bdc120`,
    `8`=`0x007a8530` (already confirmed elsewhere as async player-teleport, §35.3), `9`=`0x007b06f0`,
    `10`=`0x00707840`. Full detail: `scratchpad/dlc2_m03_0x00706ab0_2026-10-10.md`.]**
-6. If the byte `0x014f3d34` is non-zero, continue only for A = 188 or 196 ≤ A ≤ 201. If it is zero,
+6. **[Port default, 2026-10-12, FINAL (dlc2_m03 reported this byte as an "OPEN state"):**
+   - **Start value:** `0x014f3d34` is in the zero-fill part of `.data`. The section's file image ends at `0x01357000`, so this address has no static initializer, and the byte starts at **0**.
+   - **Writers:** only the scripted-action cluster setters described below (the `0x006e4500`–`0x006eca10` range) write it, together with its companion pointer `0x014f3d2c`.
+   - **Port rule:** a host that does not model that scripted-action state keeps it at **0**. Step 6 then reduces to "continue when the descriptor has bit `0x08`, or no mission object is live", which is the normal free-play/mission path. Its meaning as "a scripted player action is active" stays as narrowed below.]**
+   If the byte `0x014f3d34` is non-zero, continue only for A = 188 or 196 ≤ A ≤ 201. If it is zero,
    continue when the descriptor has bit `0x08`, or otherwise only when no mission object is live
    (`0x006d2910` returns −1). **[NARROWED, not resolved, 2026-10-11 — orchestrator-routed, one
    fresh static pass (dlc2_m03), then parked per instruction: `0x014f3d34` is NOT tutorial-owned
@@ -4310,6 +4391,8 @@ destination. **[CONFIRMED — disassembly for the resolve chain, the negative-ra
 NaN guard, and both setters' shared fields; the 5th resolver's real object kind is OPEN, consistent
 with §3's own treatment of its other unidentified resolver kinds.]**
 
+**[Team B blocker m01 named object `gat_captive_nav`, 2026-10-14, FINAL, CONFIRMED by zone data + disassembly:** `gat_captive_nav` is a **`navpoint`** (class id 41). The resolver `0x005982e0` tests `+0xb` bit `0x2`, which is class id (0xb−6)·8+1 = 41 = `navpoint` under the is-a bitset reading (§7.27 note), so the "5th resolver kind" above is navpoint-derived objects. It is authored as `Gat_captive_nav`, object #46 of the m01 mission zone `sr3_city~fm01`.czn_pc` (in `sr3_city_0.vpp_pc` → `m01.str2_pc`). Position (2235.2734, 176.052, 2725.8188), orientation quaternion (0, −1, 0, 0), i.e. facing 180°. The name lookup (`0x004588f0`, §29) is case-insensitive, so the script's lowercase `gat_captive_nav` matches. The NPCs `gat_captive` (#309, at 2235.2139, 176.052, 2725.2781) and `Gat_bobble` (#316, same position as the navpoint) sit on it. m01 uses it in `npc_leash_to_nav` (Gat radius 0.0 / 5.0, the captive radius `FLOOR_LEASH_RADIUS_METERS`) and as a `teleport` destination for Gat. **When resolvable:** from the moment the m01 mission zone is loaded, i.e. once the mission's `m01.str2_pc` has been streamed in at mission start, until the mission zone is unloaded. It is never resolvable from the city zones alone. **Port rule:** register every object in the loaded m01 mission zone by name (case-insensitive) when the zone loads. `gat_captive_nav` then resolves to that navpoint, and the leash/teleport target is its position above. If the zone is not loaded, resolution fails: `npc_leash_to_nav` silently does nothing (§7.5) and `teleport` follows its own unresolved-destination rule (§4.3).]**
+
 ### 7.6 `follower_set_can_abandon` (`0x00a49980`)
 
 **Arguments:** 1 mandatory string. 1 optional boolean, standard nil-gated idiom, default `false`.
@@ -4415,7 +4498,23 @@ separate flag locations; see §17.5's 2026-10-09 trace — class hierarchy confi
 third sibling), but the inherited vtable default is provably not the real target function (stack-
 argument-count mismatch), identity still OPEN, dynamic analysis recommended.]**
 
-### 7.11 `set_animation_state` (`0x00a5edf0`)
+**Call-shape detail and port guidance (2026-10-12, FINAL as guidance; the predicate identity stays
+OPEN):**
+- **Call shape, re-read from raw bytes at `0x00a5f107`–`0x00a5f155`:**
+  1. The object comes from `0x005e4dd0` with `this = 0x02442750` (the global name registry), not from a human-only resolver.
+  2. `+0x68` is called with `ECX` = that object and **no stack arguments**. Its return value's low byte is tested.
+  3. `+0x70` is called with `ECX` = the object and **one** stack argument (the boolean). Its **return value is a pointer**, and `0x004e0100` then runs with `ECX` = that pointer `+ 0x2b0`. That `+0x2b0` offset is where the `"human_ai_data"`-tagged flag record lives.
+- **Interpretation (HIGH CONFIDENCE):**
+  - `+0x68` is a zero-argument type predicate of the "is this a human-AI-capable object" kind.
+  - `+0x70` is an accessor that returns the object's human/AI record.
+  - This would also explain why `human`'s inherited slots (`0x0091fc30`, `RET 0x8`; `0x00945640`, `RET 0x14`) cannot be the targets: the dispatched object is a different, more generic class, and the call's stack shapes don't match them.
+  - The flag's debug name (`ai_force_flags` / `attack_player_on_sight`) and the record-and-replicate path both live on that record.
+- **Port rule (CHOSEN, labelled):** for any name that resolves to a live character (human NPC or player), treat `+0x68` as **true**:
+  - write bit `0x04` at `+0xac` as now;
+  - also set or clear the character's AI "attack player on sight" flag (bit `0x01` of the AI-flags byte) with the boolean.
+  - For a non-character name, the predicate is false and only the `+0xac` bit is written.
+  - This reproduces the evident intent of every shipped call site (mission scripts call it on hostile NPCs, e.g. dlc2_m01) and never fails, so no "OPEN state" error should be raised for this native.
+  - A live capture can still confirm the predicate's exact identity later. (`0x00a5edf0`)
 
 **Arguments:** 2 mandatory strings (character name; a state name). 1 optional string (a third,
 secondary object name), standard nil-gated idiom — the string-typed variant of the idiom already
@@ -4738,6 +4837,8 @@ disassembly. Naming note: Lua-visible "prevent_bumping" vs. debug tag "suppress_
 
 ### 7.27 `character_is_ready` (`0x00a41920`)
 
+**[Team B blocker m01 `Gat_bobble` / m07 `Kinzie` / m20 `NPC Mascot<001>`, 2026-10-13, FINAL, CONFIRMED by disassembly:** the OPEN predicate `0x009a1dc0` is 5 instructions. It returns **true iff the human's pose-mode byte `+0xcd2` is neither 0 nor 6**. That byte selects the human-poster mode (spec-anim-runtime: mode 0 is normal animation; modes 1–5 are physics/ragdoll bands; 6 is treated like 0 here). This is the same not-0-and-not-6 test as `character_is_ragdolled` (§15.30). Its sibling `0x009a1de0` adds a `+0xec` bit `0x40` test. **Port rule:** `character_is_ready` returns false while the character is ragdolled or physics-posed. A standing, animated NPC (mode 0) passes this gate, and the rest of the Body below then applies. For the three named NPCs in normal play, treat `0x009a1dc0` as false (not ragdolled).]**
+
 **Arguments:** 1 mandatory string, resolved via `0x00a281a0`.
 
 **Return:** 1 boolean, via `0x00a3bae0(object, 0)`.
@@ -4761,6 +4862,8 @@ purely as a read, something this project has not previously observed the gate us
 — disassembly for the full predicate chain; OPEN — `0x009a1dc0`/`0x00ad3820`/`0x004d47e0`'s own
 bodies, the two marker characters' real meaning, and the `0x014ff6b8` global.]**
 
+**[Team B blocker m01/m07/m12/m20 `character_is_ready`, 2026-10-14, FINAL, CONFIRMED by disassembly:** the full chain of `0x00a3bae0` re-read instruction by instruction; the Body above has two corrections. (1) **Class bit:** the class-descriptor byte is `+0xa` (decimal 10); a descriptor's bytes `+6`..`+0x25` are an is-a bitset where bit *n* = "derives from class id *n*". `+0xa` bit `0x04` is class id 34 = **`npc`** (registered with name `"npc"`, parent 32; class 33 is `"player"`, which is the `+0xa` bit `0x02` that §7.21 uses). So scripted and ambient NPCs have the bit; players do not. (2) **The three NPC-only tests:** `0x014ff6b8` has exactly one writer, a `mov byte [0x014ff6b8], 0` in a game-reset routine (`0x00941c90`). No other code or data references it, so in the retail game it is always 0 and the test never fires. The "name-tag" bytes are the AI mode bytes: `+0x501` is the current AI mode (44-entry table `0x012e1538`) and `+0x500` is the AI sub-state (name table `0x012e1168`). The NPC is not ready when the mode is `0x22` = **`Stunned`**, or when the mode is 0 (`Idle`) and the sub-state is `0x26` = **`trans to stand`** (getting up from sit or sleep). (3) **Gate:** `0x008addb0(npc,0)` is the network-authority check: **true = locally owned**, which covers every object in single player. It is false only for a co-op object owned by the other machine, and in that case the native returns **true** at once. (4) `0x00ad3820` returns 1 ("bail") if `+0x3b` bit 0 is set (`0x008cc4d0`, unusable/hidden), or `+0x3a` bit 0 is set (`0x0091f600`), or `+0x33` bit `0x08` is clear. `0x004d47e0` returns `+0x33` bit `0x08`. That bit is the object-activated flag: it is set by the object activate routine `0x00457270` (vtable `+0x10`) when the object is added to the world, and cleared by deactivate `0x004572a0` (vtable `+0x14`). (5) The last step is `0x004f2880` (no pending scripted action, §7.28 note). **Port rule (single player):** return false if the character is dead, ragdolled or physics-posed, hidden or unusable (`+0x3b` bit 0), `+0x3a` bit 0 is set, or it is not activated in the world. Also return false if it is an NPC whose AI mode is `Stunned`, or `Idle`/`trans to stand`. Also return false while a tracked scripted action (`ai_do_scripted_*`, `ai_suggest_action`) is still pending. Otherwise return true. **An ordinary scripted NPC standing in the world (Idle or any non-Stunned mode, spawned, not ragdolled, no pending scripted action) returns true.** The player skips the NPC-only tests. OPEN, non-blocking: what `+0x3a` bit 0 means. Treat it as clear for spawned characters (HIGH).]**
+
 ### 7.28 `ai_scripted_action_is_complete` (`0x00a3c440`)
 
 **Arguments:** 1 mandatory string, resolved via `0x00a28150`.
@@ -4776,6 +4879,8 @@ lookup still succeeds, used here as an "absence means complete" proxy.
 **Side effects / subsystem:** none — pure query. **[CONFIRMED — disassembly for both functions; HIGH
 CONFIDENCE — inferred for the "absence = complete" interpretation, not independently cross-checked
 against a writer of the `+0x4aa` field.]**
+
+**[Team B blocker sh03 `+0x4aa` action-id lookup, 2026-10-14, FINAL, CONFIRMED by disassembly:** **Registry:** a global circular doubly-linked list headed at `0x014f4be0`, with a free list at `0x014f4be4`. Each node: `+0` next, `+4` prev, `+8` flags (bit 0 = complete), `+0xc` kind, `+0x10` u16 id, `+0x18`/`+0x1c` the owner object's handle pair (its own `+8`/`+0xc`), `+0x20` an optional completion callback. **`0x006f63c0(obj, id)` returns a status, not a pointer.** It returns 2 if `id` is 0, if no node has that id, or if the node's owner pair is not `obj`. It returns 0 if the node is found and still pending. It returns 1 if the node is found and complete; in that case the node is also unlinked and freed, so a second call returns 2. So `0x004f2880` = "status ≠ 0" is false **only while a tracked action is pending**. **Writers of `+0x4aa`:** the character's pending-action block `+0x4a8..+0x4ff` is template-filled from `0x012e14e0` (`+0x4a8` = `0x47` "none", `+0x4aa` = 0). There are two setters. `0x004f4d00(char, type, keep)` is used by `ai_do_scripted_advance/fire/rush/take_cover` and `character_take_human_shield_do`. When `keep` is 0 it allocates a fresh id through `0x006f62b0(char, 3, 0)`, which first frees any earlier kind-3 node of the same owner. The id is a 1..`0xfff` counter OR'd with (local peer index << 12). `0x004f4b90` is used by `ai_suggest_action`, the `force_throw_*` natives and `ai_set_in_scripted_cover`. It re-templates the block, then stores a caller-supplied id, or allocates one when its track flag is set (`ai_suggest_action`: yes; `ai_set_in_scripted_cover`: no, so `+0x4aa` becomes 0). Cleared to 0 by `0x004f4c90` (`ai_clear_scripted_action` and others; also releases the node via `0x006f6680`) and by `force_ai_mode_check_done` (`0x00a4a660`) once its poll sees a non-zero status. **Completion:** the shared AI "action finished" routine `0x004f4f50` calls `0x006f66d0(id)`. That call sets node bit 0 and runs the callback. It happens only when the finished action is the pending scripted one and the AI mode it maps to is the current mode. **Port rule:** each character gets an optional `{id, pending}` ticket. `ai_do_scripted_*` and `ai_suggest_action` create a ticket. The ticket becomes complete when that scripted action's AI behaviour ends. `ai_clear_scripted_action` deletes it. The lookup is non-null (true) unless a ticket exists and is still pending. A complete ticket is consumed on the first read.]**
 
 ### 7.29 `character_set_never_catch_fire` (`0x00a42430`)
 
@@ -5053,6 +5158,8 @@ state.
 resolver with §2.5) and reports whether it currently has a dialogue line playing. Subsystem: audio
 (Wwise-backed persona/dialogue). **[CONFIRMED — disassembly for the resolver identity and call chain;
 OPEN — `0x0094c9e0`/`0x0046afd0`'s own bodies were not opened this pass.]**
+
+**[Team B blocker sh02 `audio_persona_line_playing('#PLAYER1#')`, 2026-10-14, FINAL (one HIGH sub-point), CONFIRMED by disassembly:** `0x0070a440(h)` returns false if `h` is null. Otherwise it tail-calls `0x0046afd0(0x0094c9e0(h))`, and the null-handle return is a clean `xor al,al`, not garbage. **`0x0094c9e0` (thiscall on the human)** returns the human's per-entity 3D audio emitter handle cached at `+0xce0`. If that field is 0, it **creates the emitter on the spot** with `0x0045da50(&pos, "Human", 0)` at the human's position (`0x0094bc80`) and caches it, so this "pure query" can create an emitter as a side effect. This is the same emitter footsteps use (spec-audio-runtime). **`0x0046afd0(emitter)`** takes the audio lock `0x031f0260`, resolves the handle to its emitter record (`0x0045c720` → `0x004616b0`), and walks the record's list of attached sound instances (head `+0x24`, next `+0`). It returns **true iff some instance's flags dword `+0x18` has bit `0x01000000`** set, the "voice line" bit (spec-audio-runtime flag table). The dead bit `0x80000000` is not checked, so an ended line still counts until the voice tick frees its record. An unknown handle or an empty list returns false. **Port rule:** `audio_persona_line_playing(name)` is true while at least one voice/dialogue line instance is attached to the resolved character's 3D emitter: from the moment the line is started on that character until the audio tick frees the instance after it ends, stops or fails to post. It is false for an unresolved name or a character with no voice instances. For `#PLAYER1#`, resolve the local player and check the voice lines attached to it. HIGH, not traced: persona lines posted through the `_2d` natives are not attached to the character's emitter, so they never make this true.]**
 
 ### 8.5 `audio_persona_load_2d` (`0x00a3cea0`)
 
@@ -7592,6 +7699,8 @@ slot), and where the staged globals are actually consumed to perform the real re
 
 ### 11.13 Cross-function observations and open items carried forward
 
+**[Triage 2026-10-13, Team A OPEN sweep: every sub-question below concerns internal data shapes or unnamed gates inside natives whose Lua-visible behaviour is already specified. All LOW, deferred; none changes port behaviour.]**
+
 **A genuine correction to §1.2, found while documenting §11.3 above:** `0x00d9e140` (called by both
 `on_trigger`, §1.2, and `pcr_apply_morph_value`, §11.3) was independently decompiled this pass and
 is a deadline/timestamp computation (argument-plus-fixed-base, wrapped into a fixed range, written
@@ -8128,6 +8237,16 @@ has already documented for other systems).]**
 
 **Side effects/subsystem:** none — pure query. Subsystem: AI scripted-action state. **[CONFIRMED — disassembly for the resolver reuse and the two-branch structure; HIGH CONFIDENCE — inferred that this is an "animation/action tag currently matches" predicate; OPEN — the exact real-world meaning of the individual byte fields and the `0x012e1c64` lookup table, not independently traced past their own gating role.]**
 
+**Gate polarity, 2026-10-12, FINAL (dlc3_m03 reported `0x008addb0` as an "OPEN state").**
+- **`0x008addb0(obj)`, read from raw bytes:** if `obj` is null it returns **true**. Otherwise it tail-calls `0x00884760(obj+0x3c record, 0)`.
+- **`0x00884760`:**
+  1. If the network record is non-null and `0x00bc5610` reports it, the result is false.
+  2. If the record's owner byte `+3` is `0xff`, the result is **true**.
+  3. With the flag argument 0 and a null record, the result is **true**.
+  4. Otherwise the result is a local-session owner-slot comparison: `[[session]+0x1c]+0x5c`'s byte `+0x158` against the record's `+3`.
+- **Meaning:** "this machine has authority over the object". It is **true in single player** for every locally owned object, and false only for an object owned by a remote co-op peer.
+- **Port rule (single player):** the gate is true, so `0x004f39e0` always takes its second branch, the action-tag match against `0x012e1c64`. A host without scripted-action tags should return **false** ("no scripted action processing"), the result for a character whose action-tag fields are clear. It must not raise an error. This is the same gate §7.33 and the record-and-replicate idiom use, and the same polarity applies everywhere: true means apply locally.
+
 ### 13.8 `vehicle_ignore_repulsors` (`0x00a62660`)
 
 **Arguments:** 1 mandatory string (vehicle name). 1 mandatory boolean, no nil-gate (unconditional read).
@@ -8197,6 +8316,8 @@ has already documented for other systems).]**
 **Body:** resolves both names via `0x00a281a0`. If char 1 currently qualifies as "using a human shield" (`0x009aa260` — a real, somewhat elaborate double-branched predicate reading identity-pair fields at `+0x1890`/`+0x1894`/`+0x1898`/`+0x189c` and flag bytes at `+0x18dc`/`+0x18dd`, not fully traced past its own branching structure) AND is NOT in a specific excluded state (`0x009aa660` false — checks the SAME `0x18d4` state byte is in the range `[3,6]`), fetches char 1's actual currently-held-shield handle via `0x009aa130` (resolves either through the standard object-resolve chain `0x00458230`+liveness `0x00853b10`, or a network cross-machine identity lookup `0x004d7f30`, depending on the same `0x008addb0` authority-style gate) and compares it against char 2's resolved handle. Returns `true` (via `0x0059f8a0`, independently confirmed to be a thin 1-argument wrapper over `lua_pushboolean`) only on an exact match; `false` (via `lua_pushboolean` directly) otherwise.
 
 **Side effects/subsystem:** none — pure query. Answers "is char 2 SPECIFICALLY the person char 1 is using as a human shield," matching the registered name precisely. **[CONFIRMED — disassembly for the resolve chain, the two predicates' call structure, and the handle-comparison/return shape; OPEN — the exact bit/offset semantics inside `0x009aa260`'s own duplicated branches.]**
+
+**[Team B blocker dlc3_m01 + m12 `character_has_specific_human_shield`, 2026-10-14, FINAL, CONFIRMED by disassembly:** `0x00a41490`, `0x009aa260`, `0x009aa660`, `0x009aa130` and the grab-start routine `0x009acb20` re-read. Fields (per character): `+0x1890`/`+0x1894` = the shield partner's id pair; `+0x18d4` = shield state byte; `+0x18dc` bit `0x1` = "I am the hostage (the shield), not the holder"; `+0x18dd` bit `0x2` = a lock bit; `+0x1898`/`+0x189c` = a second (network) partner pair. **Grab start (`0x009acb20(holder, hostage)`):** it writes each party's id pair into the other's `+0x1890`/`+0x1894`, sets the hostage's `+0x18dc` bit 0, clears the holder's, and sets both states to **2**. §18.9 gives state 1 = holding and states 3/4 = being released or just released. **Gate `0x009aa260(char1, 0)`:** `0x008addb0` is the ownership check, true for every object in single player (see the §7.27 `character_is_ready` note). On that path the gate is true iff all of these hold: state `+0x18d4` ≠ 0; the partner pair resolves (`0x009aa130`: id-pair lookup `0x00458230` on table `0x024433a8`, not flagged removed (`+0x33` bit `0x10`), descriptor `+0xa` bit `0x1` = class 32, the human base class (`player`/`npc` parent), and alive (`0x00853b10` false)); the partner's own `+0x1890`/`+0x1894` equals char 1's id pair (mutual link); and char 1's `+0x18dc` bit 0 is **clear** (char 1 is the holder, not the hostage). The other branch (object owned by the other co-op machine) uses the `+0x1898` pair and `+0x18dd` bit 0 instead, and is never taken in single player. **Exclusion `0x009aa660`:** true when a partner resolves and the state is in **3..6**. **Final test:** the resolved partner handle equals char 2's resolved handle. **Port rule (single player):** return true iff char 1 is currently the holder of a human shield (state 2 = grab in progress, or 1 = holding; not 0 and not 3–6), the hostage is a live human linked back to char 1, and that hostage is char 2. Otherwise return false, including when either name does not resolve. In ordinary play it is **false until the player actually grabs that NPC as a human shield**. It becomes true from the start of the grab and false again once the release starts (state 3/4) or the hostage dies or despawns. A harness that cannot perform the grab will see false. For m12 (`NPC_JOSH`), dlc3_m01 (interrogate target), m05 and sh04, that is the native value too: these scripts poll until the player grabs. A harness that wants to progress must simulate "player grabs X": set holder/hostage links and holder state 2→1, as `0x009acb20` does.]**
 
 ### 13.15 `camera_shake_play` (`0x00a449f0`)
 
@@ -8471,6 +8592,8 @@ re-derived.
 **Body:** gated on the mission being active (global `0x014c8460` non-null) and NOT in one specific excluded game-mode state — **the exact literal for that exclusion, `0x014c7a14 != 8`, is pinned down here for the first time (§6.21 had only described "not in one specific game-mode state" without the value).** Also gated on a per-object-type descriptor-table bit (`0x02cc9900`, bit `0x8` at row offset `+0xc` — a new sighting alongside the already-catalogued bit `0x4` at the same offset for `mission_end_to_activity`, §6.20). The reward-name string is converted to a numeric id via ~~an unidentified string-canonicalization helper~~ the CRC-32 name hash (`0x00d9e8b0`, §11.8/§13.29; reused elsewhere in this batch), de-duplicated against a growing per-mission list of excluded-reward ids stored on the active mission object (count `+0x1a8`, array `+0x1ac`) — a duplicate is silently ignored; a new id is appended, then network-replicated via a **~~genuinely NEW opcode this document has not previously catalogued:~~ further site of opcode `0x44`** (first seen §13.4/§13.29) (tag `9`), through the single-target commit variant (`0x0086f1b0` with a literal-zero callback, per §9.21's own collapse-to-single-target rule), followed by a separate notify call (`0x00bd9cb0`, mission object + the original reward-name string).
 
 **Side effects/subsystem:** appends (with de-dup) a named reward to the active mission's excluded-reward list, network-replicated (opcode `0x44`, first seen §13.4). Mission/reward state. **[CONFIRMED — disassembly for the gating globals/literal, the descriptor bit, the dedup-append mechanism, and the opcode; OPEN — ~~`0x00d9e8b0`'s exact algorithm~~ (resolved: CRC-32 name hash, §11.8/§13.29) and `0x00bd9cb0`'s own role.]**
+
+**[Team B blocker m09 `mission_set_excluded_reward`, 2026-10-14, FINAL, CONFIRMED by disassembly:** the body is `0x006d2bf0` (the Lua entry `0x00a526f0` only passes the string on). Gates, in order: (1) the active-mission object pointer `0x014c8460` is non-null; (2) the mission phase `0x014c7a14` is not 8; (3) neither of the two mission-end debounce timers `0x012f2630`/`0x012f2634` is armed (`0x00d9e4c0` = "timer value ≥ 0"); (4) the descriptor row of the active-mission object (its type byte `+0x34` indexes `0x02cc9900`) has bit `0x8` at `+0xc`. **What that bit means:** descriptor bytes `+6` onward are an is-a bitset, bit *n* = "derives from class id *n*" (the same reading as the §7.27 `character_is_ready` note; cross-checks: `+0xb` bit `0x8` = class 43 `script_vehicle`, `+0xb` bit `0x4` = class 42 `script_npc`, `+0xa` bit `0x20` = class 37 `script_group`, `+7` bit `0x40` = class 14 `hood`). `+0xc` bit `0x8` = class id (0xc−6)·8+3 = **51 = `scripted_mission_start`** (registered at `0x006e33a0` with id `0x33`, parent `0x32`). The neighbours on the same byte are `+0xc` bit `0x4` = class 50, the shared parent of all three mission-start kinds; bit `0x10` = class 52 `activity_start`; bit `0x20` = class 53 `silent_mission_start`. So the reward is recorded only while the running content was started from a `scripted_mission_start` object, which means a story mission. Activities and silent missions are silently ignored. m09 is started from the `scripted_mission_start` object named `m09` (sr3_city_0 `awld_compact`, zone `sr3_city~f1914~al`). That `0x014c8460` holds this start object during a story mission is HIGH CONFIDENCE: it is consistent with §6.20/§15.9 and with the `activity_table` constructor's own class-52 test (`spec-extensionless-types.md` type 34), but the store that sets the pointer is indirect and was not traced. **Port rule (single player):** during m09, and every story mission, the gates pass. CRC-32 the reward name (`0x00d9e8b0`, lowercased, seed 0, no final XOR). If the id is already in the mission's excluded list, ignore it; otherwise append it. Return nothing. The list is per-mission and is dropped when the mission ends. While an activity or a silent mission is active, while no mission is active, in phase 8, or in the ~2 s after a mission end has been triggered, the call does nothing. The co-op replicate (opcode `0x44`, tag 9) is not needed in single player. The excluded ids are consumed when mission rewards are granted (the notify `0x00bd9cb0` and the reward-grant reader are OPEN and do not block the script, which needs no return value).]**
 
 ### 14.9 `mesh_mover_set_invulnerable` (`0x00a533b0`) — 18 calls
 
@@ -9075,6 +9198,8 @@ disassembly, both at the wrapper level and at the `0x00a273f0` body level.]** Fu
 
 ### 15.30 Open items flagged (not guessed past)
 
+**[Triage 2026-10-13: all LOW for porting. `character_is_ragdolled` port rule: return true when the state enum is neither 0 nor 6 (the confirmed test; the positive enum values don't matter). `vehicle_is_tank` port rule: class code 14 (HIGH CONFIDENCE). The rest are internal helper bodies.]**
+
 - `0x0094a960` (§15.1) and `0x004df990` (§15.4) — callee bodies not independently decompiled this pass; confidence rests on the confirmed call shape/offset, not their internal writes.
 - `qte_cleanup`'s deep helper `0x0060c3f0` — the many parallel `0x014b01xx` QTE-context arrays were not mapped field-by-field; the commit-less opcode-`0x59` record shape is a genuine open oddity.
 - `character_is_ragdolled`'s state-enum test is an exclusion (not `0`/`6`), not a positive "ragdolled" equality — the exact ragdoll enum value(s) are unconfirmed.
@@ -9351,6 +9476,12 @@ First part of the four-way split covering ranks 251-350 (peer TSV: `D:\Project C
 
 ### 17.5 `set_attack_enemies_flag` (`0x00a5f000`) — 13 calls / 7 scripts
 
+**[Port rule, 2026-10-12, FINAL as guidance (dlc3_m02): this native uses the same vtable
+`+0x68` predicate / `+0x70` record-accessor pair as `set_attack_player_flag`. Apply §7.10's
+call-shape reading and its labelled CHOSEN rule identically here: the predicate is true for a
+resolved live character, so both the local bit and the replicated AI flag ("attack enemies") are
+written. For any other object only the local bit is written. Do not raise an "OPEN state" error.]**
+
 **Arguments:** 1 mandatory string + 1 boolean, standard nil-gated idiom, default `true`.
 
 **Return:** none.
@@ -9424,7 +9555,7 @@ were not re-examined. Full detail:
 
 ### 17.7 `on_human_killed` (`0x00a56f00`) — 13 calls / 4 scripts
 
-**Arguments:** 1 optional string, standard nil-gated pointer-null check rather than the usual `lua_type` idiom (a human "kind"/type-name filter).
+**Arguments:** 1 optional string, standard nil-gated pointer-null check rather than the usual `lua_type` idiom ~~(a human "kind"/type-name filter)~~ **[Corrected 2026-10-14, see "Engine callback dispatch: death and destruction": the string is the CALLBACK NAME, interned straight into global slot `0xb`. It is not a filter. The callback receives `(victim_team, killer_or_nil, victim_name)`.]**
 
 **Return:** none.
 
@@ -9451,6 +9582,8 @@ were not re-examined. Full detail:
 **Body — raw disassembly checked directly.** Character resolves via the generic/`#PLAYER#` chain `0x00a281a0`. The persona-name string is converted through a thunk to `0x0046fd00` (a name→id lookup/hash, not independently decompiled — OPEN). Confirmed at the instruction level: the resolved character is loaded into ECX as the implicit `this` for a `__thiscall` to `0x0094e120`, with three explicit stack arguments pushed in order — the persona id, then a literal `0`, then a literal `1`. Inside `0x0094e120`: if a class-descriptor bit (`0x02cc9900`, row offset `+10`, bit `0x2`) is set, a notify call (`0x0070a570`) fires first. Then a SINGLE gate, `0x008addb0` (variant 2 — the same gate family as the player-controls/movement/animation-state/hit-points group, §7.7/§7.11/§7.22/§7.25/§7.27/§7.31), combined with the literal `0` argument (always true here): gate-false-and-arg-zero → opens a record, opcode `0x46`, tags `"human"` + `"persona"` — **this is now the THIRD confirmed instance of the single-gate-plus-opcode-`0x46`-string-tag cross-variant mix §7.33 flagged as unusual after seeing it once (`set_current_hit_points`, §7.31)**; otherwise → calls `0x0070dbf0(character, personaId, 1)` for the direct-apply path, storing its result at `+0x1c70`. Separately (gated on the class-descriptor bit from above, and independently re-checking the SAME single gate `0x008addb0`), a second, distinct opcode-`0x41` record can also fire, tagged with a fixed numeric mode `10` plus the character's identity (via `0x0050f790`) and a value from `0x00831970` — a second, parallel record path layered on top of the first.
 
 **Side effects / subsystem:** character persona/AI-personality assignment, partially network-replicated through two independent record paths. **[CONFIRMED — disassembly for the hidden-`this` call, the argument values, and the gate/tag structure; OPEN — `0x0046fd00`/`0x0070dbf0`/`0x0070a570`/`0x00831970`'s own bodies, and the real relationship between the two parallel record paths.]**
+
+**[Team B blocker dlc3_m01 `PAK3_Interrogation`, 2026-10-14, FINAL, CONFIRMED by disassembly plus data:** `PAK3_Interrogation` is **not a named object and must not go through the named-object resolver**. It is an **audio persona name**, used only as arg 2 of `character_set_persona` (dlc3_m01 lines 1661/1775/1873, through `DLC3_M01_interrogate.*.persona`; dlc3_m02/m03 use it as a persona-table name). `0x0046fd00(name)` (name in `ESI`) returns 0 for a null name, an empty name, or a case-insensitive match of `"none"`. Otherwise it widens the name to UTF-16 (`0x0046fc50`, ≤ 256 units) and returns `0x00f4c350(wide)`, the Wwise string-to-id hash: 32-bit FNV-1 over the lower-cased name. Check: FNV-1(`"pak3_interrogation"`) = **3989737946**, exactly the `<wwise_id>` of the `<Audio_Persona><Name>PAK3_Interrogation</Name>` row in `dlc3.vpp_pc` → `dlc3_audio_personas.xtbl`. **Port rule:** `character_set_persona(char, personaName)` resolves only arg 1 as a character. Arg 2 becomes `personaId = (name empty or "none") ? 0 : FNV1_32(lowercase(name))`, which is then applied to the character (`0x0070dbf0(char, personaId, 1)` → `+0x1c70`). The id is the Wwise persona/switch id from the `*_audio_personas.xtbl` tables. No zone, navpoint, trigger or group lookup is involved, and the dlc3 persona row comes from the DLC3 archive's own persona table.]**
 
 ### 17.10 `character_set_never_fall` (`0x00a424a0`) — 13 calls / 4 scripts
 
@@ -9491,6 +9624,8 @@ were not re-examined. Full detail:
 **Body:** character resolves via `0x00a281a0` (an unresolved character yields an early, no-op return inside the delegate). Delegates to `0x00a271b0`: looks up the prop's definition (`0x006cf0c0`, a network-session-scoped lookup) and a customization-item record (`0x00904c10`) by name; computes an attach socket via `0x008ff850`, writing into the CHARACTER's own `+0x40`/`+0x4c` fields (the same small-offset pair `character_show`/`character_ragdoll_set_last_resort_position` also use, §7.15/§7.18 — confirmed context-dependent, not a single consistent meaning across uses); resolves/prepares a matching mesh variant (`0x008fbc20`/`0x00da8790`/`0x004bc7d0`), then allocates a new object of type code `0x1e` (30) via `0x00456e30` and initializes it (`0x009215b0`), writing the owning character's own identity into the new object's `+0x180`/`+0x184` fields.
 
 **Side effects / subsystem:** creates and attaches a new worn/held prop object to the named character. **[CONFIRMED — disassembly for the overall dispatch shape; OPEN — the mesh/network-session bookkeeping calls' own bodies (`0x006cf0c0`/`0x00904c10`/`0x008ff850`/`0x004bc7d0`/`0x00456e30`/`0x009215b0`), none independently decompiled this pass.]**
+
+**[Team B blocker m19, 2026-10-13, FINAL, CONFIRMED by disassembly and packfile: `0x00a271b0` first requires the character, then a non-null singleton from `0x006cf0c0` (no arguments), then `0x00904c10(propName)`, the name resolver of the `items_3d.xtbl` catalogue (`spec-tables-vehicle-world.md` Â§16, array `0x025f5b98`). If any of these is null it jumps straight to the epilogue. `gasmask` RESOLVES in the BASE `items_3d.xtbl` (present identically in `misc_tables.vpp_pc` and `cutscene_tables.vpp_pc`; no DLC table needed). The row is `<Item><Name>gasmask</Name>`, flags `inherit_bone_transforms` and `use_npc_colorization`, `streaming_category` `Character Prop`, character mesh `cf_mask_gasmask.cmeshx`, rig `cf_mask_gasmask.rigx`, Anim_set `none`, editor category `Characters:Body_Props`. Port rule: `character_add_prop(char, "gasmask")` (m19 lines 920/1101/1583) attaches that prop mesh to the character, tagged with the owner identity, and returns nothing. When the character, the singleton or the item does not resolve, or when the rig lookup `0x004bc7d0` fails both its exact and its `-1` fallback, the call is a silent no-op: no error, no Lua result, and the thread continues. The mission does not branch on it. It runs next to `customization_item_wear("cm_gasmask", ...)`, which is a separate customization path.]**
 
 ### 17.14 `camera_shake_stop` (`0x00a44d50`) — 13 calls / 6 scripts
 
@@ -9610,7 +9745,7 @@ were not re-examined. Full detail:
 
 **Body:** target resolves via the generic/`#PLAYER#` chain `0x00a281a0` (which itself only recognizes the OTHER sentinel, `"#PLAYER#"` — meaning `"#PLAYER1#"` here almost certainly resolves through the ordinary registry-name path rather than the sentinel fast path, since it is not an exact byte match for `"#PLAYER#"`; OPEN, not independently traced). On success, dispatches to `0x00602530(itemName, 0, 0)` — **corrected after adversarial review: the implicit `this` is NOT the raw resolved target, but a computed sub-record, `target + 0x1b78`** (ECX is loaded with the resolved target's address plus `0x1b78` immediately before the call), matching this same tranche's own careful treatment of the vehicle `+0xc68` sub-record elsewhere (§17.1/§17.17). The identity pair this function reads sits at that sub-record's own `+0xb0`/`+0xb4` — absolute target-object offset `+0x1c28`/`+0x1c2c`, not `+0xb0`/`+0xb4` directly, so this entry is not directly comparable to §7.33's `+8`/`+0xc`-style raw-object-relative offsets without noting the sub-record hop. Gate is single (`0x008ae480`-only, variant 3) combined with the literal `0` argument (always true): false → opens a record, opcode `0x41`, numeric subtype `0x29` (41), tagging the item name as a RAW string (via `0x0086f530`, the same raw-tag primitive §17.15 uses — not the interned-string form) plus a boolean; true → looks up the item's definition (`0x008dcb10`→`0x005feaa0`) and, if found, applies the removal via `0x00602020` (not independently decompiled). **This is a FOURTH confirmed user of the single-gate-`0x008ae480`-only idiom, correcting §7.33's "used only by the two leash functions" claim** (§17.16 above is the third correction).
 
-**Side effects / subsystem:** per-character inventory-slot removal, network-replicated via a raw string-tagged opcode-`0x41` record. **[CONFIRMED — disassembly for the resolve/dispatch/gate/tag structure; OPEN — `0x00602020`'s own body, and whether `"#PLAYER1#"` is independently handled anywhere else.]**
+**Side effects / subsystem:** per-character inventory-slot removal, network-replicated via a raw string-tagged opcode-`0x41` record. **[CONFIRMED — disassembly for the resolve/dispatch/gate/tag structure; OPEN — `0x00602020`'s own body, and whether `"#PLAYER1#"` is independently handled anywhere else.]** **[Team B blocker dlc3_m03, 2026-10-13: `DLC_fireball` is not a base `items_inventory.xtbl` row; the base table has no "fireball" text at all. It is a real DLC3 row. `dlc3.vpp_pc` contains `dlc3_items_inventory.xtbl` with `<Inventory_Item><Name>DLC_fireball</Name>`, DisplayName `DLC3_WPN_FIREBALL`, Bitmap `ui_hud_inv_dlc_fireball`, Cost 50, Default/Max 1, `Info_Slot_Index` 101, Framework `dlc3`. `dlc3_weapons.xtbl` has the matching `<Weapon>` row (class `thrown`, explosion `dlc3_fireball`) for §4.10. The preceding dlc3 row (KB gloves) also says `Info_Slot_Index` 101; whether the DLC loader places rows by that index was not traced. Port rule: with DLC3 loaded, `0x008dcb10` resolves `DLC_fireball` to the dlc3 row. `inv_item_remove` (dlc3_m03 line 4519, just before `inv_weapon_add_temporary`) then removes it if the player holds it, and is a silent no-op on a fresh player who does not. Without the dlc3 row the lookup fails and the removal is skipped silently. Either way the mission proceeds, and the real grant is §4.10's weapons-table path. HIGH CONFIDENCE (row content CONFIRMED from the packfile; slot placement not traced).]**
 
 **Item lookup source (2026-10-12, FINAL; for ports reporting `0x008dcb10/0x005feaa0['none']` as
 "no spec gives its value", e.g. m16):** `0x008dcb10` is the `_stricmp` name resolver over the
@@ -9744,6 +9879,8 @@ Final part of the four-way split covering ranks 251-350 (peer TSV: `D:\Project C
 
 **Side effects/subsystem:** none (pure query). Subsystem: synced-action/animation state. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly, including both per-character branches; OPEN — the real-world meaning of the shared "elapsed time" tag `0x1d54` beyond its own gating role.]**
 
+**[Team B blocker m07 `action_play_synced_is_finished` ("animation-controller has an active synced state"), 2026-10-14, FINAL, CONFIRMED by disassembly:** `0x00a3c0c0`, `0x00487e80`, `0x00957080`, `0x00956fd0`, `0x004b4c70` and the animation-instance accessors `0x004bdcf0`/`0x004bdca0`/`0x004be0c0`/`0x004bd880` re-read. (1) **`0x00487e80` is a one-instruction getter, `return controller->+0x20`.** It does not use its stack argument; callers push one and clean it up themselves. `+0x20` of the character's animation controller (`+0xd24`→`+0x10`) holds the handle of the controller's current action animation instance, or −1 when none is playing. That handle is the "active synced state". The handle indexes a pool of 0x3a0-byte instance records (base `0x0344c924`, count word `0x0344c91a`). A handle is valid only if it is in range and the record's own `+0x50` equals the handle. (2) **Progress (`0x00957080(char, 0x1d54)`):** `0x004b4c70` looks tag `0x1d54` up in the controller's track table (`+0x4c`, 0x84-byte entries) and gets that track's slot (−1 if absent or the entry has flag `0x10`). `0x00956fd0` then returns **0.0** if the instance handle is invalid or that track's state bit 0 (`+0x10`) is set; **1.0** if the remaining time (`0x004bdca0`) is ≤ 0; otherwise **(duration − remaining) / duration**, where duration comes from `0x004bd880`. So it is the 0..1 playback fraction of the synced animation. (3) **Per character:** finished = (handle == −1) OR (fraction ≥ threshold). Threshold = optional arg 3, default 1.0 (`0x01117a4c`). Since the fraction is exactly 1.0 only when the remaining time reaches 0, the default means "fully played out". The result is the AND over both characters. An unresolved name returns false. (4) **Why m07 needs it:** m07 calls the library wrapper `action_play_synced` (system library). That wrapper loops on `action_play_synced_do` (§33.3) until it returns truthy, then yields and loops `until action_play_synced_is_finished(attacker, victim)`, using the default threshold. **Port rule (single player):** when `action_play_synced_do` succeeds, give both characters an active synced instance with start time *t0* and duration *D*, the length of the named synced animation. Clear it (handle −1) when it plays out, or when `action_stop_synced_state`/death/ragdoll interrupts it. `action_play_synced_is_finished(a, b, thr=1.0)` = for each character: no active instance → finished; else fraction = 1.0 if (now − *t0*) ≥ *D*, else (now − *t0*)/*D*; finished iff fraction ≥ thr; return finished(a) AND finished(b). In ordinary play this is **false while the pair animation is playing and true once it has played out**. For m07 that means `action_play_synced` blocks for exactly the animation's length. Do not return a constant: m02 polls `== true` with threshold 1.0 to wait for the animation to *start*, then waits with fractions 0.08–0.96 for cue points, so a constant true or a constant false hangs one of the two missions. If the port has no animation lengths yet, a fixed stand-in *D* (for example 3 s) keeps both patterns progressing (CHOSEN stand-in, not native).]**
+
 ### 18.6 `spawn_override_change_hood_alternate_spawning` (`0x00a5fab0`) — 10 calls / 5 scripts (from the TSV row order, this and the next were the exact 6th/7th picks)
 
 **Arguments:** 1 mandatory string (a "hood"/city-zone name). 1 optional boolean, standard nil-gated idiom, default `true`.
@@ -9795,6 +9932,8 @@ Final part of the four-way split covering ranks 251-350 (peer TSV: `D:\Project C
 **Body:** arg 1 resolves via the generic resolver `0x00a280c0`; on failure, pushes `false`. If arg 2 was given, it resolves through the vehicle resolver `0x0062a190` (already-established bit `0x8`@`+0xb` of `0x02cc9900`), liveness-gated (`0x00853b10`), then a vtable `+0x70` producer call. If arg 2 was absent, the character's own cached vehicle-association fields (`+0x16d8`/`+0x16dc`) are instead resolved through `0x004dcf00`. Either way, the resulting vehicle handle's own `+8`/`+0xc` position pair is compared against the character's own driver-seat position cache (`0x00a77a50`, `+0x1df0`/`+0x1df4`) for an exact match, which is the returned boolean.
 
 **Side effects/subsystem:** none (pure query — "is this character currently in the driver's seat of this [or their associated] vehicle"). **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly for both resolve paths.]** This is also the pass that resolved an existing OPEN item — see cross-function note below on `0x004dcf00`/`0x00458230`.
+
+**[Team B blocker m20 `player_is_rc_driver`, 2026-10-14, FINAL, CONFIRMED by disassembly:** `0x00a5a9e0`, `0x00a77a50`, the setter `0x00a77a30`, the RC-control start routine `0x00a93070` and the stop routine `0x00a934b0` re-read. **Correction to the Body above:** the comparison runs the other way. `0x00a77a50` is called with the **vehicle** as its receiver and returns the **vehicle's** `+0x1df0`/`+0x1df4` pair, the id pair of the character remote-controlling it. That pair is compared with the **character's** own id pair `+8`/`+0xc`. So the query is "is this character the RC controller of that vehicle". **Writers:** (a) RC start `0x00a93070(vehicle, character)`. It bails if the character already has an active vehicle (its `+0x16d8`/`+0x16dc` pair resolves). Otherwise it sets the character's `+0x16d8`/`+0x16dc` to the vehicle's id pair, sets the vehicle's RC-mode flag (`0x00a77a20(1)`), and sets the vehicle's `+0x1df0`/`+0x1df4` to the character's id pair. (b) RC stop `0x00a934b0` writes the null id pair (`0x01180f80`/`0x01180f84`) into the vehicle's `+0x1df0`/`+0x1df4` and clears the RC-mode flag. (c) Vehicle init (`0x00a7ea30`) also writes the null pair. Ordinary driving never writes `+0x1df0`, so a player sitting in the driver's seat is **not** an RC driver. **Paths:** with arg 2, the vehicle comes from the vehicle resolver `0x0062a190` (`+0xb` bit `0x8` = class 43 `script_vehicle`), must be alive, and goes through vtable `+0x70`. Without arg 2, the character's active-vehicle pair `+0x16d8`/`+0x16dc` is used. Unresolved character or vehicle → false. **Port rule (single player):** keep a per-vehicle "RC controller" id, null by default. Set it to the player when the player takes remote control of the vehicle with the RC gun (`weap_rc_vehicle`, which m20 gives at lines 560/620 via `inv_weapon_add_temporary`; entry is allowed by `set_player_can_enter_exit_rc_vehicles`, §12.27). Clear it when RC control ends: the player exits RC, signal is lost, or the vehicle is destroyed. `player_is_rc_driver(LOCAL_PLAYER, v)` = (v's RC controller == the player). In ordinary play it is **false until the player actually RC-possesses `rc_car`/`my_rc_boat`/`rc_heli`/`stag_tank`**. m20 then waits (for `rc_car`, under a 45 s HUD timer whose expiry fails the step), so a harness that cannot fire the RC gun must simulate the possession event to progress. Physically driving the vehicle does not count.]**
 
 ### 18.11 `on_incapacitated` (`0x00a58070`) — 9 calls / 2 scripts
 
@@ -10314,6 +10453,8 @@ Authoritative branch: populates a shared per-slot QTE-context array family alrea
 
 ### 20.14 `mission_is_complete` (0x00a525a0) ~~**[OPEN — address conflict with §20.14/§27.2, to be re-derived]**~~ **[Resolved 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz` (with `20261001T021721-team-a-hjzz` for the name strings, as §27.2): 0x00a525a0 is one function registered under two names — `mission_is_complete` in the gameplay registrar 0x00a20840 (pair stored at 0x00a233ca/0x00a233d5) and `cell_is_mission_complete` in the cellphone wrapper 0x0083bd90 (pair stored at 0x0083bdc2/0x0083bdca; §27.2). Its reference list holds exactly those two data references. The heading address is right. CONFIRMED — disassembly.]**
 
+**[Port pointer, 2026-10-12, FINAL (m22 `mission_is_complete('m23')` reported as "OPEN state"): the completion bit (`+0x88` bit `0x4`) is written by `0x006d6870` (see the "FOUND, 2026-10-08" block below) when a mission completes. Restoring it from the save's mission-progress data on load is HIGH CONFIDENCE, not traced here. On a new game, or in a harness starting a mission directly, **no mission is complete: return false** unless the host's own save state says otherwise.]**
+
 **Arguments:** 1 mandatory string (mission name).
 
 **Return:** 1 boolean, pushed via lua_pushboolean.
@@ -10585,6 +10726,8 @@ The (very large) authoritative/local branch applies a long chain of multiplicati
 
 ### 20.34 Open items flagged (not guessed past)
 
+**[Triage 2026-10-13: all LOW (helper internals). Item 32 is superseded by spec-hud-runtime §7: death runs through the damage sink, then `0x009bc0d0` and `0x00963530`.]**
+
 - item 2: 0x00a9f4f0's own full internals (vehicle repair's apply-primitive), and 0x007553b0's identity.
 - item 9: the shared 0x014b01xx QTE-context array family's own field layout (unchanged open item from §15.6/§15.30), and 0x005e4660's slot-0x18 callback's exact real-world trigger.
 - item 15/19: 0x00a017c0's own body (now sighted a further two times, joining §18.6's original open citation). **[Resolved: identity-serializer, §15.10.]**
@@ -10730,6 +10873,15 @@ Fourth part of the fresh four-part "ranks 351-450" tranche's own gameplay side (
 **Body:** resolves as a method call on the singleton 0x02442750 via 0x005e4e30 (the SAME resolver item 21.5 uses — see item 21.5's own cross-reference discussion of this resolver's real scope), liveness-gated. Reads the trigger's own +0x8c shape-kind field: kind 0 computes the radius as half the Euclidean distance between two 3-float corner vectors obtained from a zero-visible-argument virtual call at vtable +0x60; kind 1 reads a fixed float at +0x94; kind 2 reads a fixed float at +0x90; any other value defaults to 0.0. Pushed via `lua_pushnumber`.
 
 **Side effects / subsystem:** none (pure query) on a trigger's own shape-kind/shape-data fields. **[CONFIRMED — disassembly for the full three-kind branch and the corner-distance formula.]**
+
+**[Team B blocker m22, 2026-10-13 (round 2), FINAL, CONFIRMED by disassembly of `0x00a618b0`, `0x0093bfc0` and `0x00dbe050`; `0x012a2dc0` = 0.5. CORRECTION to the Body above: the kind-1 and kind-2 offsets are swapped. Shape code `+0x8c`:
+- **1 (sphere):** returns `+0x90`, the radius.
+- **2 (capped cylinder):** returns `+0x94`, the cylinder RADIUS. `0x00dbe050` uses `+0x90` as the axis LENGTH (projection limited to 0..`+0x90`) and compares the squared perpendicular distance with `+0x94`². This also fixes the inverted wording in the 2026-10-09 trigger-regions scratchpad.
+- **0 (oriented box):** gets two corners from vtable `+0x60` (HIGH CONFIDENCE that they are opposite corners; the same call feeds box containment `0x00dbdc90`). Returns 0.5 × sqrt(dx²+dy²+dz²), which is half the diagonal (the bounding-sphere radius), not the largest half-extent. Each step is computed in double and rounded to float.
+- **Anything else, a nil name, or an unresolved or dead trigger:** returns 0.0.
+It always pushes exactly one number. In m22 the value is only the battle-area minimap circle radius. **Port rule:** as above.]**
+
+**[Team B question 2026-10-13 (zone loader or containment uses param1, but trigger_get_radius uses +0x94=param2; which is right?), FINAL, CONFIRMED by disassembly of `0x0093bfc0` and `0x00dbe050`:** `0x0093bfc0` loads `+0x94` first and `+0x90` second before `call 0x00dbe050`, so in that call **arg 2 = `+0x90` and arg 3 = `+0x94`**. `0x00dbe050` compares the axis projection t with arg 2 (at `0x00dbe0fd`: reject if t < 0 or t > arg 2), so **arg 2 / `+0x90` is the cylinder's axis length**. Arg 3 (`+0x94`, at `0x00dbe114`) feeds the perpendicular-distance test, so `+0x94` is the **radius**. Containment and `trigger_get_radius` therefore agree: the radius is `+0x94`. **Port rule:** whichever zone-file field the host's loader calls param1/param2, the containment test must use `+0x90` as the length and `+0x94` as the radius. If the host's containment uses param1 as the radius, the host loader has the two swapped. The zone-file field order for cylinders was not re-derived here.]**
 
 ### 21.14 `spawning_allow_cop_ambient_spawns` (0x00a5dc90)
 
@@ -11466,7 +11618,7 @@ and by the AI-runtime action-39 candidate search alike.
 
 **Body:** unconditionally calls 0x005eae60, which calls an ~~un-decompiled~~ zero-argument helper, 0x0101b570, then clears a global, 0x012ec964, to 0. **[2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: 0x0101b570 is a two-instruction `return 1` stub (one of its listed call sites is inside 0x005eae60); the call is inert, so the only effect is the clear of 0x012ec964. CONFIRMED — disassembly.]** **[2026-10-01, job `20261001T170909-team-a-nbjm`: both `0x00a42b30` and `0x005eae60` are now dumped directly and match this description exactly — `0x00a42b30` reads `lua_gettop` (unused) then unconditionally calls `0x005eae60`, whose own body is exactly the stub call plus the clear of `0x012ec964`. CONFIRMED — disassembly for both entries.]**
 
-**Side effects/subsystem:** unconditionally stops/clears the continuous-explosion system's state, regardless of any argument. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly — genuinely zero-argument-sensitive.]** **[Reconciled with §28.16, 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: there is a single global continuous explosion, not one per instance. Its start (0x005eb6c0, §28.16) acts only while the byte 0x012ec964 is 0 and then sets it to 1, so a second start while one runs is ignored; this stop clears the same byte, which re-enables the next start. CONFIRMED — disassembly for the start side as read in §28.16. The stop does not reset the definition row (0x012ec8f0) or the position (0x012ec950); the start overwrites them.]**
+**Side effects/subsystem:** unconditionally stops/clears the continuous-explosion system's state, regardless of any argument. **[CONFIRMED — disassembly, full raw-disassembly read matches pseudocode exactly — genuinely zero-argument-sensitive.]** **[Reconciled with §28.16, 2026-10-01, jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`: there is a single global continuous explosion, not one per instance. Its start (0x005eb6c0, §28.16) acts only while the byte 0x012ec964 is 0 and then sets it to 1, so a second start while one runs is ignored; this stop clears the same byte, which re-enables the next start. CONFIRMED — disassembly for the start side as read in §28.16. The stop does not reset the definition row (0x012ec8f0) or the position (0x012ec950); the start overwrites them.]** **[Team B blocker m23, 2026-10-13, already specified: 0x012ec964 is a single "continuous explosion running" bool, in zero-fill .data, so it starts false. Port rule: hold one global bool, initially false. `continuous_explosion_start(def, target)` resolves the row (§28.16; 'Daedalus' is a `continuous_explosions.xtbl` row) and the target position. Only if the bool is false does it record the row and position, reset its three counters (0x012ec8f4/0x012ec908 = 0, 0x012ec960 = −1), and set the bool true. `continuous_explosion_stop()` sets it false unconditionally (m23 calls it at lines 971 and 2110). Nothing Lua-visible reads it back, so the mission flow never waits on it. CONFIRMED.]**
 
 **Review status (2026-10-01):** helper and shared state re-derived (jobs `20261001T021703-team-a-pwgq` / `20261001T021707-team-a-jxxz`): 0x0101b570 is an inert stub; 0x012ec964 is the one global running flag shared with §28.16 — CONFIRMED. ~~The entry 0x00a42b30 and 0x005eae60 were not re-dumped (0x005eae60 is attested only as a caller of the stub); NOT yet cleared for implementation.~~
 
@@ -12053,6 +12205,8 @@ On a match, calls 0x00a56df0 — again a raw-disassembly-confirmed hidden `this`
 
 **Side effects/subsystem:** registers an "on HUD screen exit" hook on a specific named HUD screen, resolved through a new, dedicated HUD-screen-name registry singleton (0x012fced8) and a newly-confirmed sibling wrapper (0x00a56df0) of the already-known hook-slot-array family. **[CONFIRMED — disassembly for the whole chain, including both hidden-`this` findings and the sibling-wrapper identification.]**
 
+**[Team B blocker m16 HUD screen `msn_text_adventure`, 2026-10-14, FINAL (resolution and registration), CONFIRMED by disassembly:** `0x007b4ad0`, the screen base constructor `0x007b5ff0`, the static initializer at `0x00ffb180`, the per-screen init `0x00841120` and the registry builder `0x007b4d70` re-read. (1) **What the native checks:** only that some registered screen's cached name hash (`+0x74`) equals the CRC-32 (`0x00d9e8b0`, lowercased, seed 0) of the given name. It is a linear scan of the registry's pointer array (count `+0x2c`, entries from `+0x30`; the builder zero-fills 0x118 bytes, i.e. room for 70 entries). Nothing about whether the screen is currently pushed, visible or loaded is tested. (2) **`msn_text_adventure` always resolves:** it is a static screen object at `0x023176a8`. A static initializer (`0x00ffb180`) constructs it with the name `"msn_text_adventure"` (string at `0x01161c30`); the constructor copies the name to `+0x34` and stores its CRC-32 in `+0x74`. The HUD-screen registry builder `0x007b4d70` (called once from start-up code at `0x005d2540`) runs its init (`0x00841120`: screen id `+0x30` = `+0x10` = **0x3c (60)**, flag bits set at `+0x1c`/`+0x1d`) and appends it to the `0x012fced8` array unconditionally, unless a screen with the same hash is already present. So from boot onward the lookup succeeds, in every game mode. (3) **Native effect:** register (or, with an empty/nil callback name, clear) hook slot 0 of the screen's hook record at screen `+0x8`, through the shared hook primitives (`0x005e4520`/`0x00a1fcc0`/`0x00a29920`). No Lua return value. **Port rule:** `on_hud_screen_exit(cb, "msn_text_adventure")` always resolves. Store `cb` as that screen's exit hook (an empty string clears it, as m16's cleanup at line 1345 does) and return nothing. When the text-adventure screen is popped (the player finishes or exits it), call the stored callback. m16's own handler is declared `m16_UI_text_complete(screen_name, player_name)`, returns early unless `screen_name == "msn_text_adventure"`, and passes `player_name` to `player_controls_enable`, so a port should call it with (`"msn_text_adventure"`, the exiting player's name, `LOCAL_PLAYER` in single player). Those argument values are taken from the script's own use. The native firing site and its exact pushed values are part of the separate, still-OPEN callback-dispatch item and are not settled here. m16 then waits until `UI_completion[LOCAL_PLAYER]` is true, so a harness that does not drive the text-adventure UI must pop the screen (fire the hook) itself to progress.]**
+
 ### 24.25 `on_character_grabbed` (0x00a578f0)
 
 **Arguments:** 1 mandatory string (callback name). 1 mandatory string (target name or special token).
@@ -12145,6 +12299,8 @@ Second part of the fresh four-part "ranks 451-550" tranche's own gameplay side (
 
 **Side effects/subsystem:** sets and/or queries a single global "mission store purchased" flag — the exact set/get semantics of 0x00a015f0 (whether it stores the input and echoes it back, or returns the PRIOR value) were not independently decompiled this pass. Subsystem: mission/store state. **[CONFIRMED — disassembly for the argument shape (no hidden `this`, no other side effects at this outer layer); OPEN — 0x00a015f0's own internal read/write semantics.]**
 
+**[Team B blocker mm_p_03, 2026-10-13, FINAL, CONFIRMED by disassembly. This corrects the "sets and/or queries" reading above. `mission_store_purchased(bool)` is a pure QUERY, and the boolean is a KIND selector, not a value to store. mm_p_03 passes `false` for the storefront step (line 322) and `true` for the property step (line 359). `0x00a015f0` calls `0x00a01460(kind)`, which walks the shop/property record list (manager `0x03171a64`: count `+0x180`, index list `+0x178`, record table `+0x58`). It takes the first record with `+0x90` bit `0x40` set (the mission-tagged flag) whose descriptor `[+0x88]+0x2c` is `== 7` for `true` (property) or `!= 7` for `false` (store). It returns `record+0x92 & 1`. If no such record exists, it returns `1` (true, already purchased). Only `0x00a01680(record)` sets bit `0x1` of `+0x92`. It does so once: if the bit is clear it sets it, increments the owning group's purchased counter `[+0x88]+0xc` (capped at `+0x8`), and fires the stat/notification hooks `0x00710e40(0x17)`, `0x00710ed0(0x45)` and `0x007059f0(9)`. Its callers are `0x005e9814` (the purchase path, which runs after the liveness check and `0x00a004c0`), `0x00a03538` and `0x00b9ac85`. The record constructor `0x00a00fe0` zeroes `+0x92`. `0x00a01610`, called from `0x00b9abd4`, clears bit `0x1` on every record (the reset). Initial value: `false` on a fresh game for any record that exists. Port rule: keep a `purchased` flag on each store/property record, initially false, and set it when the player completes the buy at that location. The flag is sticky and has no unset path other than the global reset. `mission_store_purchased(isProperty)` returns the flag of the first mission-tagged record of that kind, or `true` when no such record is loaded. The mm_p_03 `while not mission_store_purchased(...)` loops then exit on purchase, and a missing record skips the step. (Which store/property mm_p_03's tagged record is, and the meaning of descriptor kind 7 as "property" rather than store, are HIGH CONFIDENCE, inferred from the script's own `false`=store/`true`=property usage.)]**
+
 ### 25.4 `mission_set_next_mission` (0x00a53b40)
 
 **Arguments:** 1 mandatory string (activity/mission name).
@@ -12174,6 +12330,8 @@ Second part of the fresh four-part "ranks 451-550" tranche's own gameplay side (
 **Body:** arg 1 resolves via the door/4th-kind resolver already established at §1.10 (0x006434a0) — **raw-disassembly-confirmed here to ALSO be invoked as a method on the fixed singleton 0x02442750** (a further new sighting). Liveness-gated (0x00853b10), then the SAME field §1.10 already reads as "this door has an attached lock" (offset +0xc8, there non-zero = locked) must be ZERO here, and a second field at +0xc4 (a "mover-control sub-record" pointer) must be non-null — consistent with movers and doors sharing the same underlying handle/resolver but being mutually-exclusive variants keyed by which of +0xc4/+0xc8 is populated. If arg 3's real Lua type is boolean: reads it and dispatches to 0x0064a1f0. If arg 3's type is a number: reads it as a float and, ONLY if a 4th argument is present AND (per its own type/boolean gates) true, truncates the float to an integer-valued float and dispatches to 0x008cb380; otherwise (4th arg absent or false) dispatches the untruncated float to 0x008cb400. **Raw disassembly confirms a hidden `this` at ALL THREE of these dispatch calls, dropped entirely from the decompiled pseudocode** (which shows e.g. a 2-visible-argument call): the real `this` in every case is the mover-control sub-record at the resolved handle's own +0xc4, with the control-name string and a pointer to the boolean/float value as the two genuine explicit arguments.
 
 **Side effects/subsystem:** writes a named control parameter (boolean- or float-valued, with an integer-truncation mode for the float case) onto a resolved mesh mover's own control sub-record. Subsystem: mesh-mover/physics scripting. **[CONFIRMED — disassembly for the full type-dispatch structure and all three corrected hidden-`this` sites, plus the new singleton-`this` sighting on 0x006434a0; OPEN — 0x0064a1f0/0x008cb380/0x008cb400's own internal field writes.]**
+
+**[Team B blocker m01, 2026-10-13 (round 2), FINAL, CONFIRMED by disassembly and RTTI:** the object resolved by `0x006434a0` is a `script_mover` (vtable `0x0117ee9c`). `+0xc4` is a **link pointer** to the target mesh mover. Only vtable slot 4 (`0x00a32820`) writes it: that function looks up the target handle at `+0xb8`/`+0xbc` and files the target by kind (door → `+0xc8`, mesh mover → `+0xc4`, third kind → `+0xc0`). For a door target, `+0xc4` becomes the door's own linked mover instead. The native writes the control into the anim graph of the `+0xc4` mover only when the name resolves, the object passes `0x00853b10`, `+0xc8` is 0 and `+0xc4` is non-null. **Port rule:** if the link is absent, the object is door-linked, or the name doesn't resolve, the call is a silent no-op: no write, no error, no return value, and the thread continues. For m01 (`Horsie`, `is statue broken`), model the link as present and record the bool on the mover. Treating it as absent is also safe, because the value only feeds that mover's animation. (That `Horsie` is mover-linked at run time is HIGH CONFIDENCE; it depends on zone data.)]**
 
 ### 25.7 `item_hide` (0x00a51ce0)
 
@@ -12386,6 +12544,8 @@ re-traced for this kind).]**
 **Body:** resolves via the generic/`"#PLAYER#"` chain (0x00a281a0). On success, queries 0x009634f0(character) — plain call, no hidden `this` — and pushes the boolean result; on resolve failure, pushes `false`.
 
 **Side effects/subsystem:** pure query — is the resolved character currently playing a scripted "combat move" animation. Subsystem: AI/combat animation. **[CONFIRMED — disassembly for the resolve/query/push chain; OPEN — 0x009634f0's own internal check.]**
+
+**[Team B blocker m16 `character_playing_combat_move`, 2026-10-14, FINAL, CONFIRMED by disassembly:** `0x009634f0` is 4 instructions: **true iff the human's u16 at `+0x1358` (current combat-move index) ≠ `0xffff`**. **Set:** only by the combat-move start routine `0x00964b00(human, moveIndex, …)`. It returns at once for index `0xffff`. Otherwise it writes the index to `+0x1358` (and `+0x1370`) and starts the move's animation states. Its helper `0x00964230` writes the same pair. It has 45 call sites: the player melee input path (`0x009a9c42`–`0x009ad9ce`), AI melee/brute modes (`0x00518641`–`0x005332a4`), the `0x005e6xxx`/`0x0060cxxx` scripted takedown code, and the Lua native **`character_play_combat_move`** (`0x00a430e0`: name, number → index, then `0x00964b00(char, index, 0, -1, 0, 1, 0)`). **Cleared to `0xffff`:** only by `0x00967f60`. Its callers are the per-frame combat-move update `0x0096dcd0`, which ends the move when its animation is no longer running, the abort path `0x009682d0` (also behind `character_clear_combat_move`, §30), and one more tail. Every terminator writes `0xffff`, so a freshly spawned human is "no move" (HIGH; the constructor store was not located). **Port rule:** each human has `currentCombatMove = none`. Set it when a melee attack, takedown, special combat move or `character_play_combat_move` starts. Reset it to none when that move's animation finishes or is cleared or aborted. `character_playing_combat_move` returns `currentCombatMove != none`. For m16's `LOCAL_PLAYER` poll this is false unless the player is mid melee attack or takedown.]**
 
 ### 25.28 `character_is_released` (0x00a45e90)
 
@@ -14714,6 +14874,8 @@ all — the two should not be conflated.) Readers (natives, CONFIRMED): `vehicle
 with the `vehicle+0x100` record it merely gates access to. Full detail:
 `scratchpad/heli_ai_record_0x2c_2026-10-09.md`.
 
+**[Team B blocker m09 `Girls_heli` / `0x00ad31a0`, 2026-10-14, FINAL, CONFIRMED by disassembly plus a spec cross-reference:** `+0x2c` is **not** an AI drive-mode, and no scripted call writes it. `vehicle+0xbf4` points to the vehicle's own `vehicles.xtbl` entry (table `0x027C87B0`, stride `0xB80`, spec-vehicle-data §7.3 cross-spec confirmation). Entry `+0x2C` is that entry's **`Vehicle_Type` class**, written once when the table loads. The reader tries the child tags in order and stores the index (spec-vehicle-data §7.5): `0` Automobile, `1` Motorcycle, `2` Airplane, `3` Helicopter, `4` Vtol, `5` Watercraft. This also closes the "`1`/`5`/`6`" OPEN above: 1 = Motorcycle, 5 = Watercraft, and 6 is never stored (the clamp range is wider than the enum). `Girls_heli` is a placed `script_vehicle` in `` sr3_city~fm09`.czn_pc `` (m09.str2_pc, object #446, (2105.073, 4.598, -250.6144)). Its xtbl type is a Helicopter-class vehicle, so the gate passes from spawn. **Port rule:** `0x00ad31a0(veh)` = `veh != null && vehicleType(veh).class ∈ {Helicopter, Vtol}`. It is a static per-vehicle-type property read from the vehicle's xtbl `<Vehicle_Type>` child. Nothing at runtime (`helicopter_fly_to`, `vehicle_chase`, pathing) sets it. The port should never "set it to 3/4"; it should spawn `Girls_heli` with its real helicopter vehicle type. OPEN, data-only: the exact `vehicles.xtbl` row name for `Girls_heli` is not visible in the zone object table. Any Helicopter- or Vtol-class row satisfies the gate.]**
+
 **Side effects/subsystem:** sets a helicopter's own "fly-to" goal direction, ~~either as an absolute resolved-target offset~~ either as the target's third orientation vector [2026-10-01, jobs pwgq/jxxz] or as a computed delta from the helicopter's current position, after first priming ~~a local default-position buffer~~ the local 36-byte orientation buffer [2026-10-01, jobs pwgq/jxxz] via the same fixed-transform-constant mechanism (0x01321400) §20.24 already tracks. Subsystem: vehicle AI/pathfinding (helicopter). **[CONFIRMED — disassembly, full chain, including the 0x00da4130/0x01321400 cross-reference and the clean 0x00b3f6d0 4-arg check; ~~OPEN — 0x00b3f6d0/0x00ad31a0's own full internals.~~ 0x00b3f6d0 re-checks 0x00ad31a0 and only stores when the helicopter's AI record (0x00a79470) has +0x4b0 == 1; it then sets bit 0x2 of byte +0x298 and writes the vector to +0x430..+0x438. [CONFIRMED — disassembly.] ~~OPEN — the meaning of +0x4b0/+0x298 and which axis the third orientation row is.~~ [2026-10-01, jobs pwgq/jxxz] [2026-10-01, job 20261001T165637-team-a-tabs, Q15, CONFIRMED — disassembly: per §28.1, `0x00a79470`(vehicle) = `vehicle + 0x100`, so these fields are the vehicle's own `+0x398` (the `+0x4b0` gate), `+0x298` (the bit `0x2` byte) and `+0x530`..`+0x538` (the vector) — not a separate record. OPEN — what those offsets mean and which axis the third orientation row is.]
 
 ~~**Review status (2026-09-30): NEEDS-EXE: 0x00da4130 destination buffer and arg 2/arg 3 defaults unsettled — desk review only (checked against the other specs, not re-derived from the executable); NOT yet cleared for implementation. Executable re-derivation queued (bridge jobs 20260930T215532-team-a-cnbg, 20260930T220434-team-a-tajw).**~~
@@ -14851,6 +15013,8 @@ The final dispatch, 0x00a48af0(&localBuffer, luaState), is confirmed via raw dis
 
 **Review status (2026-10-01):** re-derived from the executable (jobs 20261001T021703-team-a-pwgq / 20261001T021707-team-a-jxxz): CORRECTED (argument role, return value, effect identity) — cleared for implementation, except the OPEN items still listed in this entry (meaning of request +0x6c), which are not cleared.
 
+**[Team B blocker sh02 gamepad flag `0x0141250d`, 2026-10-14, FINAL, CONFIRMED by disassembly:** the getter `0x005bc5d0` is `mov al, [0x0141250d]; ret`, and the strings were re-read: `0x0116e190` = `"vfx_xbox_Icon"` (flag set) and `0x0116e184` = `"vfx_pc_Icon"` (flag clear). **What the flag is:** the "last active input device is a gamepad" byte. It is the same byte `game_is_active_input_gamepad` returns (§2.6) and lives at `+0x9f5` of the control context `0x01411b18`. Its value is 0 at load (zero-filled `.data`), and the start-up lazy-init `0x005bc830` zeroes it again. Its only writer is the input latch `0x005bc9d0` (chain `0x00707440` → `0x005be880` → `0x005bcde0` → `0x005bc9d0`, §2.6). The latch clears it when no pad input is active, sets it on gamepad activity, and clears it again on keyboard/mouse activity (sticky in between). **Default on PC with keyboard and mouse:** **0 (false)**. With no controller, or with the keyboard/mouse used last, `effect_play_finisher` plays **`vfx_pc_Icon`**. It switches to `vfx_xbox_Icon` only after gamepad input, and the choice is made once, when the effect is started; an already-playing icon does not swap. **Port rule:** keep one "gamepad active" boolean, initially false. Set it on any gamepad button/axis activity and clear it on keyboard/mouse activity. Use it here, for `game_is_active_input_gamepad` (§2.6), and wherever else `0x005bc5d0` is called. For sh02's two `effect_play_finisher(NAV_HACKING[n], 2.5)` calls in ordinary keyboard-and-mouse play, use `vfx_pc_Icon` at the navpoint's position plus 2.5 on the middle (height) component. Return the effect handle as this entry's Return line says, or −1.0 if the effect name or target does not resolve.]**
+
 ### 28.10 `dlc3_m03_set_sprint_waning` (0x00a46fd0)
 
 **Arguments:** 1 mandatory boolean, no nil-gate, no name argument.
@@ -14943,6 +15107,12 @@ So **opcode `0x45`'s sub-types are 2 = unlock, 3 = level change, `0x1d` = owned-
 **Review status (2026-10-01):** re-derived from the executable (jobs 20261001T021703-team-a-pwgq / 20261001T021707-team-a-jxxz; six of the stronghold-unlock helpers' bodies added by job 20261001T165637-team-a-tabs, Q14): CONFIRMED (body of 0x005f1cc0 added) — cleared for implementation, except the OPEN items still listed in this entry (0x00bd2950, 0x00bd3510, 0x00710910, 0x005e8b30, 0x008d6ba0's polarity, 0x008da510/0x008da550, 0x004d47e0, 0x006055d0, 0x0084a6c0/0x0084a710/0x0084a7f0, 0x009601d0), which are not cleared.
 
 ### 28.16 `continuous_explosion_start` (0x00a46340)
+
+**[Port pointer, 2026-10-12, FINAL (m23 `'Daedalus'` reported as "OPEN state"):** the rows
+`0x005eb390` scans (`0x014a0310`, stride `0x64`, count `0x014a02f0`) are exactly the
+`continuous_explosions.xtbl` rows loaded at init. That table's full schema and loader are in
+`spec-tables-weapons-combat.md` §10.2, and no DLC carries it. A port resolves the name against that
+table's `Name` field. A name that matches no row is a silent no-op (§4.13.0).]**
 
 **Arguments:** 2 mandatory strings — arg 1 a continuous-explosion type/definition name, arg 2 a target/position reference name.
 
@@ -15137,6 +15307,8 @@ Whether a given producer's record ends up named is simply whether that record ca
 No Lua-bound function can choose a name for an object it creates: Lua-reachable creation is either unnamed (`spawn_wieldable_prop`, `character_add_prop`, `human_skydive_create_npc_backpack`) or engine-named with a generated, uniquified suffix (`commando_spawn` → `<def-name>_NNN`). Engine code separately registers a handful of literal names (`"homies"`, `"shopkeepers"`, `"-- Cutscene Script Group --"`) and the special-cased `"#PLAYER1#"` literal — none of which is a mission-specific character name. **[Corrected 2026-10-08: the original "`#PLAYER1#`/`#PLAYER2#` pair" framing here was not byte-verified and is wrong for the `#PLAYER2#` half — a direct raw-byte search of the whole executable finds zero occurrences of `#PLAYER2#` (or even the bare substring `PLAYER2`) anywhere; `#PLAYER1#` is the only one of the pair that is a real string (confirmed single occurrence, 22 code xrefs, §3 front matter's sentinel-inventory closure). How a second local co-op player is ever addressed, if by a name-like literal at all, is OPEN, not `#PLAYER2#`.]**
 
 **A mission character addressed by a fixed authored name is therefore a placed object whose zone record carries that name as its `ctg_object_name` property (§29.1-§29.3) — i.e. producer (1) of §29.2.** That record lives inside the `.czn_pc` object-placement interior (the `0x2234` top-level record), which **stays PARKED pending the project owner's own direct word** (standing instruction, unrelated to this write-up). **This is where the trail stops: no `.czn_pc` bytes were opened or requested to produce this section** — everything above was established purely from the registry/record code's own call graph and literal data, not from reading any real zone file. A reader that wants to resolve a mission name such as `'Killbane'` would need to parse the `0x2234` record's per-object heads and their `ctg_object_name` property — which requires that parked interior to be opened first.
+
+**[Team B blocker m19 `chem_02_brute` (and `chem_03_brute`), 2026-10-14, FINAL for identity/location, HIGH for spawn timing, CONFIRMED by zone data plus the §29 name map:** both are **placed `Script_Npc` objects in m19's own mission zone**, `` sr3_city_0.vpp_pc/m19.str2_pc/sr3_city~fm19`.czn_pc ``. `Chem_02_brute` is object #228 at (870.2513, 8.1661, -9.6436). `Chem_03_brute` is #227 at (1079.3693, 8.1861, -131.7787). Each has its own `script_group` in the same zone: `Chem_02_brute_group` (#61) and `Chem_03_brute_group` (#63). The authored names are capitalised (`Chem_…`) and the Lua (`M19_group.chem_0N_brute.brute`) uses lower case. That still matches, because the §29 name map is case-insensitive (`0x00dab330` hash + `_stricmp`). **Lifecycle (m19.lua):** the brute is created only by `group_create("chem_0N_brute_group")` inside the container spawn-trigger callbacks (`m19_chem_0N_spawn_cb`, when `M19_initial_brute_down == false`). Mission cleanup (`on_detection("", …)`/`on_death("", …)`) and the brute callbacks (`character_exists`, `character_kill`) also name brutes whose group may never have been created. **Port rule:** register `Chem_02_brute`/`Chem_03_brute` from m19's `.czn_pc` as `Script_Npc` members of their groups, looked up case-insensitively. Until `group_create` of the owning group has spawned them, resolution fails: `character_exists` is false, and the `on_*("")` clears and `character_kill` silently do nothing. That failure is expected, not a port error. HIGH, not re-traced: placed `Script_Npc` members become live, resolvable characters only when their group is created.]**
 
 ## 30. Ranking tranche 03 — 25 previously-unspecced Lua-bound names, by real runtime call-count priority (2026-10-02)
 
@@ -15376,6 +15548,8 @@ Three Lua-reachable crash paths were found in this tranche and are flagged, not 
 
 **`vehicle_set_sirenlights` (`0x00a64490`).** 1 string + 1 boolean (no nil-gate). Re-resolves the vehicle by id pair (bypassing the normal resolver) and requires body-active byte `+0xbd0`==1. Switches on a vehicle-class enum at `(vehicle+0xbf4)+0x4c4`: classes 3/5/6/7/8/11 get both flashing headlights (byte `+0x1d7c` bit `0x10`) and siren lights (bit `0x8`); class 12 gets siren lights only; every other class gets both only if a per-class record flag allows it, otherwise both are forced off with no further effect. Except on the forced-off path, also drives the actual siren **sound** (starts/stops a Wwise event on the vehicle's emitter, tracked by a byte flag) to match the boolean.
 
+**[Team B blocker m10 vehicle class enum `(vehicle+0xbf4)+0x4c4`, 2026-10-14, FINAL, CONFIRMED by disassembly + data:** the apply routine `0x00ad55a0` and its jump table re-read (index bytes at `0x00ad56ac`, targets at `0x00ad56a0`). **Source:** `+0xbf4` is the vehicle's definition record (parsed `<name>_veh.xtbl`), and `+0x4c4` is its **`Special_Vehicle_Type`** field (`spec-vehicle-data.md` field table, the `+0x4C4` row; the same field `spec-player-runtime.md`'s `0x00ad3140` tests `== 14` for Tank). Values: none 0, Bus 1, Limo 2, Firetruck 3, Tow Truck 4, SWAT Van 5, Police 6, FBI 7, Ambulance 8, News Van 9, Taxi 10, Meter Maid 11, Industrial 12, ATV 13, Tank 14. A missing tag is 0. **Switch:** the code computes `type − 3` and compares it unsigned against 9, so the table covers types 3..12. Types **3, 5, 6, 7, 8, 11** (Firetruck, SWAT Van, Police, FBI, Ambulance, Meter Maid) set both light bits (`0x00a7c660` then `0x00a7c4f0`, each with the Lua boolean). Type **12** (Industrial) calls only `0x00a7c4f0`. Types **4, 9, 10** (Tow Truck, News Van, Taxi) and every type outside 3..12 (0, 1, 2, 13, 14) take the default path: if bit `0x2` of byte `+0x50` of the vehicle's **customisation record** (`vehicle+0xa88`, the per-instance "applied customisation" record, `spec-physics-runtime.md`; this is per vehicle instance, not per class) is set, both bits follow the boolean; otherwise both are forced **off** and the function returns without touching the siren sound. The default path dereferences `+0xa88` without a null check. Every non-default path then calls `0x00559b40(vehicle id pair, bool)`, the siren-sound start/stop. **m10's vehicles:** `veh_containment_cop_car 001`…`009` and `veh_emt_cop_car 001` are all authored in the m10 mission zone (`sr3_city~fm10`.czn_pc`, objects #256–#285 and #324) with vehicle type **`car_4dr_police02`**. Its `car_4dr_police02_veh.xtbl` has `<Special_Vehicle_Type>Police</Special_Vehicle_Type>` = **6**. **Port rule:** read the vehicle's `Special_Vehicle_Type` from its `_veh.xtbl` and map it with the enum above. Types {3,5,6,7,8,11}: set flashing headlights and siren lights to the boolean, and start/stop the siren sound. Type 12: set the light bit `0x00a7c4f0` writes and start/stop the sound. Other types: if the instance customisation has the light-bar option (`+0xa88`→`+0x50` bit `0x2`), do the same as {3,…}; otherwise force both off and leave the sound alone. The vehicle must also resolve, be alive and have body-active byte `+0xbd0` == 1, else nothing happens. No return value. **For m10 in ordinary play every target is type 6 (Police): lights and siren on.** Shipped vehicles by type, from the 123 `_veh.xtbl` files: Police = `car_4dr_police02`, `car_4dr_nyte01`; SWAT Van = `van_2dr_riot02`; Firetruck = `truck_2dr_fire01`; Ambulance = `sp_ambulance01`; Bus = `sp_shortbus01`; Limo = `sp_limo01`; News Van = `van_4dr_news01`; Taxi = `car_4dr_taxi01`; Industrial = `heli_standard_02`, `sp_apc01`, `truck_2dr_cleaner01`, `truck_2dr_construct01`, `truck_2dr_flatbed01`, `truck_2dr_garbage01`; ATV = `sp_atv01`; Tank = `sp_tank01/02/03`, `sp_tank03_reward`, `sp_tank03_saints`, `sp_mdsphere2`; all others None (0).]**
+
 **`vehicle_set_ambient` (`0x00a62ad0`).** 1 string + 1 optional number, default −1.0. No return. Marks the vehicle (byte `+0x16c0` bit `0x1`), puts its AI sub-record into **mode 6, sub-mode 0x11**, with no target (HYPOTHESIS: ambient/traffic driving) — authority-gated the usual way (opcode-`0x42` sub-code 12 if not authoritative). If the number is ≥ 0.0, also caps the vehicle's speed (clamped to at most 1000.0) via the same setter this document's existing `vehicle_speed_override` entry uses — **but passes the number unconverted**, while that other entry multiplies by the mph→m/s factor 0.44704 first; so the two take different units into the identical setter. Mode 6/sub-mode 0x11's meaning is OPEN.
 
 **`vehicle_spotlight_is_target_spotted` (`0x00a65e70`).** 1 string (vehicle or its driver) + 1 string (target, via the general object resolver). 1 boolean. **Not a pure query**: it first writes the target's id pair into the vehicle's spotlight object (re-aiming it) as a side effect, every call, before testing anything. Requires body-active byte `+0xbd0`==1 and a live spotlight. The test itself: range ≤ 80 units, a ≤10° cone from the light's forward axis, and an unobstructed ray cast to a point 1.85 units above the target's own origin.
@@ -15407,6 +15581,8 @@ All four resolve their character argument through the established `#FOLLOWER#`-f
 **`audio_play_for_navpoint` (`0x00a3edf0`).** 1 sound/event-name string + 1 object-name string (via the third-tier by-name resolver) + 1 optional string that is **read and discarded**, never used (the same "read but inert" pattern this document already records elsewhere). Returns 1 number: the playing instance's id, or 0 on failure. Plays a sound event positioned on the named object through this document's own shared audio-play core.
 
 **`audio_any_conversation_playing` (`0x00a3c640`).** No arguments. Returns 1 boolean: true if any session member currently has a valid, non-0xff slot in the global **"mission_conv"** per-session channel — **this settles this document's own previously-OPEN identity question for that channel global** (created by a dedicated helper against the session object, named literally "mission_conv"). The same per-member 5-byte-slot layout this document's existing session-conversation entry already reads on a different channel offset is confirmed as a generic, reusable mechanism — "mission_conv" is just one such channel among possibly several.
+
+**[Team B blocker m11, 2026-10-13 (round 2), FINAL, CONFIRMED by disassembly:** the `mission_conv` active slot is byte `+0` of the local member's 5-byte channel element. At mission-module init, `0x006de8e0` creates the channel and calls `0x00878570(0xff)`, which sets enabled byte `+2` = 1 and value byte `+0` = `0xff` (no conversation). `audio_conversation_play(id)` sets byte `+0` = id (`0x008788e0`, only while enabled). `audio_conversation_end` (`0x006debc0`) and natural completion (`0x006dedc0`) write `0xff` back, but only if the slot still holds that conversation's key. **Port rule (single player):** keep one byte, `activeConv = 0xff`, before any mission script runs. Play sets it to the id; end or finish resets it to `0xff` only on a match. `audio_any_conversation_playing()` returns `activeConv != 0xff`, so it is **false at m11 start**. Caveat: that the slot key equals the Lua id on the local play path comes from §2.10 and was not re-derived here.]**
 
 ### 33.5 Other (3 functions)
 
@@ -15486,6 +15662,8 @@ This matches §3.5's existing CONFIRMED text exactly, with the `+0xe3` bit now p
 **Practical reading:** a freshly spawned character, by the same code-only spawn chain §34.1 already establishes, reads as "not dead, not gone" by `0x0096f4f0` — **spec-able now, with the one honest gap being `+0xe3`'s default resting on an unconfirmed (though HIGH-confidence) zero-fill assumption rather than an explicit write.** If Team B's missions are seeing characters test "dead/gone" at spawn or shortly after, the cause is not a zone-data-sourced initial value for either field (none was found); it is more likely either genuine gameplay state (something elsewhere in the 564-caller surface of `0x0096f4f0`, or the AI update's own bail-out path, `spec-ai-runtime.md` §1.4 step 1, which treats the same two conditions as "dead or incapacitated" and short-circuits the character's update entirely) or a merge-side ordering issue outside this document's scope.
 
 **Review status (2026-10-03):** the predicate body and the `+0xcc8` default are CONFIRMED by direct disassembly. The `+0xe3` default is HIGH CONFIDENCE (absence of any write in the traced spawn chain, not a positive confirmation of the allocator's zero-fill behaviour — OPEN if that matters to a specific failing mission). The zone-independence finding is CONFIRMED for both fields against §34.1–§34.4's own already-traced override surface.
+
+**[Team B blocker m07 / m20, 2026-10-13 (round 2), FINAL, CONFIRMED by disassembly:** `0x0096f4f0` returns 1 (dead or gone) when the object is null, when `+0xcc8` == 5, or when byte `+0xe3` bit 0 is set. Otherwise it returns 0, which includes downed characters (state 6). `0x0096f540` is the variant that also counts state 6. A whole-image scan found one character-side setter of `+0xe3` bit 0: `or dword [obj+0xe0],0x1000000` at `0x0096f935`, run unconditionally inside the death-trigger path `0x0096f8c0`. So the bit is a death-processing latch. **Port rule:** `alive = obj != null && state != 5 && !(byte_e3 & 1)`. Both fields start at 0 at spawn (HIGH CONFIDENCE, zero-filled allocation). Set the latch when the death path runs and set state 5 in the kill finalizer (§3.15). If m07 or m20 sees a character as gone at spawn, the cause is a host ordering bug or an early death-path call, not missing engine state.]**
 
 ## 35. `teleport_coop` and the scripted-request completion pool (2026-10-02)
 
@@ -15587,6 +15765,8 @@ Three entries (`vehicle_enter_do`, `vehicle_enter_guardian_angel`, `vehicle_ente
 **`vehicle_hidden` (`0x00a62610`).** 1 string. 1 boolean: the object's hidden bit (byte `+0x3b` bit 0) — **but an unresolved name answers `true`**, so a bad name, a destroyed vehicle, or a character name all read as "hidden." Same bit `vehicle_show`'s existing entry clears.
 
 **`vehicle_anim_playing` (`0x00a62050`).** 1 string. 1 boolean (false if unresolved). True only if the vehicle's body is active (`+0xbd0`==1) and any entry of its animation-set object has "active" set without "finishing/paused" (HYPOTHESIS on the exact bit meanings).
+
+**[Team B blocker m10 vehicle `+0xbd0`, 2026-10-14, FINAL, CONFIRMED by disassembly:** a full-binary sweep finds exactly four byte stores to `[vehicle+0xbd0]`; every other hit is a stack slot. (1) The vehicle constructor (`0x00a82fe0`) sets it to 1 only around one internal call and leaves it at **0**. (2) The vehicle's **activate override `0x00a87010`** sets it to **1**. That routine is vehicle vtable slot `+0x10` (vtable `0x01180c44`) and is reached only through the generic object activate routine `0x00457270`. The generic routine sets the object's `+0x33` bit `0x08`, calls the slot, and clears the bit again if the slot fails. It is called from the object add-to-world path (`0x008544b0` / `0x00854110`). Inside `0x00a87010`, the store happens once the base activation `0x0091f300` succeeds. The vehicle is then moved off the "not set up" list `0x027c2eb0` onto the active list chosen by `0x00ac2380` (`0x027c2eb4`/`0x027c2eb8`/`0x027c2eac` by `+0x16c8` flags), and its sub-components (seats, spotlight, `+0x688` paint/part object, `+0xa78` anim state) become valid. (3) The **destructor `0x00a83cb0`** (vtable slot 0 via `0x00a86ff0`) sets it to **0**. The deactivate slot (`+0x14`, `0x00a84160`) does **not** touch it, so a deactivated but not destroyed vehicle keeps 1. **Port rule:** `bodyActive = false` at construction. Set it to true the first time the vehicle is successfully activated into the world (spawned by script/group or streamed in and added to the world), before any script can address it. Set it back to false only on destruction. Every normally spawned or streamed vehicle a mission script can resolve has `+0xbd0` = 1. `vehicle_anim_playing`/`vehicle_anim_is_finished` and the `+0x688`-based natives should treat their `== 1` gate as always passing for a live vehicle.]**
 
 **`vehicle_engine_check_running` (`0x00a63e50`) — return-value defect.** 1 string. On failure (unresolved, or a specific object flag clear) pushes `false` and returns 1 value; **on success it calls the engine-running-bit getter, discards the result, and returns 0 values** — so this query can never answer `true`; a script sees `nil` for every running vehicle and `false` for every non-running one. A reimplementation that wants byte-for-byte behavior must also return nothing on success; one that wants the evident intent should return the bit instead.
 
@@ -16582,7 +16762,14 @@ Sets a Wwise RTPC (by name, resolved through the Wwise name hash, or by numeric 
 
 ### 55.4 Forced combat actions (4 functions, gameplay registrar)
 
-All four resolve a character name through the generic character resolver and drive the tranche 03 combat-action-entry (CAE) record. **`force_fire_do`/`force_fire_target_do`** resolve a target (navpoint-like, or object-kind depending on which of the two) and **commit CAE action 0 (`fire`) immediately** — unlike the throw bindings, they do not reset the staged action block first, so stale staged fields from an earlier suggestion can be committed alongside the new target, and there is no "busy" test, so a running action is simply overridden. **`force_throw_do`** only *stages* CAE action 4 (`throw grenade`, same pattern as `ai_suggest_action`) and requires the character to have a throwable item equipped/held; it is null-safe throughout.
+All four resolve a character name through the generic character resolver and drive the tranche 03 combat-action-entry (CAE) record. **`force_fire_do`/`force_fire_target_do`** resolve a target (navpoint-like, or object-kind depending on which of the two) and **commit CAE action 0 (`fire`) immediately** — unlike the throw bindings, they do not reset the staged action block first, so stale staged fields from an earlier suggestion can be committed alongside the new target, and there is no "busy" test, so a running action is simply overridden. **`force_throw_do`** only *stages* CAE action 4 (`throw grenade`, same pattern as `ai_suggest_action`) and requires the character to have a throwable item equipped/held; it is null-safe throughout. **[Port rule, 2026-10-12, FINAL (sh04 reported this check as an "OPEN state"):**
+- ~~What is OPEN / CHOSEN rule~~ **RESOLVED 2026-10-12 (second pass, raw bytes):** the test is `0x005fe490(this = character + 0x1b78)` being non-null. That is the character's inventory sub-object, the same `+0x1b78` bucket §4.10 uses.
+  1. `0x005fe490` first takes the item handle that `0x005fe3e0(0)` reads from the sub-object's `+0x90`/`+0x94` pair (the other mode reads `+0x98`/`+0x9c`). It accepts that item when `0x00b81600(item + 0x19c)` is true.
+  2. `0x00b81600(weapon_def)` is true when the def is non-null **and** either its `Weapon_Class` (`+0x4c`) **== 5 (`thrown`**, `spec-tables-weapons-combat.md` §2.5) or `0x00b88610(def)` holds.
+  3. Otherwise it falls back to a held object at the sub-object's `+0x88`/`+0x8c` (kind row `+0x9` bit `0x80`, alive), i.e. a carried throwable prop.
+- **Port rule:** true when the character's current or equipped inventory item is a `thrown`-class weapon, or when it is holding a throwable prop. `0x00b88610`'s own extra condition stays OPEN (it is the same secondary predicate §4.10 cites).
+- **When false:** `force_throw_do` stages nothing and returns normally. It must never be an error.
+- **Why this is enough for missions:** mission NPCs given grenades by script (`inv_weapon_add_temporary`, §4.10) then pass the test.]**
 
 **`force_throw_char_do` — real derived-pointer-before-null-test crash.** Computes `character + 0x40` as a position pointer for the target resolver **before** the character is null-checked. When the character name fails to resolve (unknown name, or a character that is already dead — the resolver rejects dead objects) that pointer is literally **address `0x40`**; if the target argument is `"#PLAYER#"` or `"#CLOSEST_PLAYER#"`, the special-name resolver measures every player's squared distance to that "position," reading address `0x40`. Any other target name is harmless. **Fix:** check the character for null before resolving the target — the order its own sibling `force_throw_do` already uses.
 
@@ -16687,6 +16874,8 @@ Re-read in full; **confirms tranche 19's finding stands**: an argument of 0, nil
 **`cutscene_play_check_done` reports "done" prematurely.** For a scene-type cutscene whose underlying scene is still loading, the start routine leaves the state machine in a "scene loading" state with **no manager object allocated yet** — and this query treats "no manager" as equivalent to "finished," returning true while the cutscene has not actually started. A script polling "start, then wait until done" can proceed as if the cutscene already played.
 
 ### 57.2a Architecture: the unified cutscene pipeline (2026-10-08)
+
+**[2026-10-14: the cutscene-to-Bink chain this section calls open is CLOSED: the movie is opened at load by the state-7 handler `0x0072bff0`; the kind only selects camera script vs none, and Bink is an extra layer on a real-time Story scene. See spec-cutscene-camera-format.md "## In-game cutscene playback, end to end (2026-10-14)".]**
 
 **Native addresses, per this project's own `lua_register`-table convention** (the gameplay registrar
 `0x00a20840`'s own 1,014-name array): `cutscene_play_do` = `0x00a46bb0`, `cutscene_play_check_done` =
@@ -17007,7 +17196,7 @@ above). Both return 1 number (0 on failure) and dispatch through the shared requ
   3. When the line-up images must stream in, it is set `false` immediately after `game_peg_load_with_cb("store_character_line_up_is_loaded", 1, "ui_bms_store_line_up")`.
   4. The end of the line-up setup path sets it `true`.
 - **Behaviour:** the native is **false until the `store_character` document is loaded**, true once it is up, and briefly false while the `ui_bms_store_line_up` peg streams.
-- **Port requirement:** a mission that polls `customization_screen_is_ready()` (mm_m1_5) needs the `store_character` document actually pushed and its script run. A host without that UI should stub the native as "true once the customization screen has been opened", not as a constant. A constant false hangs the poll; a constant true skips the wait the real game has. `mip_streaming_pause` has a real cross-script collision (the Lua path always passes bit index 0, aliasing with every other script's own pause reference on the same bit, so one script's resume call can release every other script's pause); `object_spawn_pause` is the shared no-op stub.
+- **Port requirement:** a mission that polls `customization_screen_is_ready()` (mm_m1_5) needs the `store_character` document actually pushed and its script run. A host without that UI should stub the native as "true once the customization screen has been opened", not as a constant. A constant false hangs the poll; a constant true skips the wait the real game has. **[Team B blocker mm_m1_5, 2026-10-13, already specified: the backing flag is the same one `Store_lineup_is_loaded` reports (§60.1). Port rule: false until the `store_character` screen is pushed and its line-up set up, then true. CONFIRMED.]** `mip_streaming_pause` has a real cross-script collision (the Lua path always passes bit index 0, aliasing with every other script's own pause reference on the same bit, so one script's resume call can release every other script's pause); `object_spawn_pause` is the shared no-op stub.
 
 ### 60.2 Twelve corrections to existing Lua-bindings/behaviour entries (UI-state family, §18-§21/§31.2)
 
@@ -17220,6 +17409,416 @@ body (shop resolver); the field-`0x88`/`0x8c`/`0x92` store-def and crib-record l
 offsets read here (no independent struct trace attempted).
 Full detail: `spec-building-purchase-runtime.md`.
 Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
+
+## Engine callback dispatch: death and destruction (2026-10-14)
+
+**[LIVE CONFIRMATION 2026-10-14 14:20–14:37: user played m04, one read-only session; 60 callback launches logged through the Lua call helper `0x00e0ca80`. Return address → kind:**
+
+| Return into | Kind | Callbacks seen |
+|---|---|---|
+| `0x00a1f9e5` | the shared "fire a stored callback" helper | `m04_enemy_killed` (reached from `0x00972ff0` ← `0x00884792`, the kill/death path), `m04_ms_attack_line_cb` (from `0x009d1514`), `m04_mechanic_purchase_cb` / `m04_clothes_purchase_cb` (store purchase paths `0x005e44ea` / `0x0082ec94`) |
+| `0x00a1fe75` (← enter trampoline, ret `0x00a1fecf`) | trigger ENTER | `m04_reached_*` (mechanic, clothes, notoriety, safehouse) |
+| `0x00e0f6ca` | script-side thread starts (Lua `thread_new`) | `m04_convo`, `m04_play_convo_1`/`_2`, `m04_force_notoriety` |
+| `0x006d5631` | mission start, from the marker start routine `0x006d5460` | `m04_start` |
+| `0x006d98b8` | mission teardown | `m04_cleanup` |
+
+**This confirms that every engine callback is a new script thread queued through `0x00e0ca80`, and that it is not called inline**, as the sections below specify.]**
+
+**Scope.** Team B blocker (`TEAM B/HANDOFF.md`, "ENGINE FACTS NEEDED" items 1 and 6): when and how the engine calls the Lua callbacks registered by `on_death`, `on_human_killed`, `on_vehicle_destroyed` and `on_mover_destroyed`, plus `on_take_damage`, `on_damage` and `on_detection`, which use the same mechanism. Registration natives are already in §3.2, §3.3, §3.13, §7.4, §7.16, §7.23, §10.8 and §17.7. This section covers the **firing side**. Everything here comes from fresh disassembly of the addresses cited (tools: `tools/scratchpad/cbdeath_tool.py`, `cbdeath_ctx.py`, `cbdeath_bits.py`). Each item is labelled FINAL, PARTIAL or OPEN.
+
+### A. Shared mechanism: slot, deferred thread, typed arguments (FINAL)
+
+1. **Storage.** Each object kind has a hook-slot record: an array of 32-bit hook references indexed by a slot number, where `-1` means empty, plus a two-dword network identity used for co-op forwarding. The kinds and their registration helpers are:
+   - character: identity at `+0x68`/`+0x6c`, helper `0x005e4660`;
+   - vehicle: `+0x30`/`+0x34`, helper `0x00a56d50`;
+   - mover: `+0x20`/`+0x24`, helper `0x00a56d00`;
+   - one global record at `0x026e9528`: `+0x40`/`+0x44`, written inline by `on_human_killed`.
+
+   Registration first clears the slot (`0x005e4520`: on the host this also drops the old reference, `0x00a1fc60`). If the callback name is non-empty, it then interns the name in a 350-row table at `0x026e83e8` (`0x00a1fcc0`). Each row is 12 bytes: packed id = row index << 16 | generation, name hash, heap copy of the name. Per-row reference counts are at `0x026e7e70`. **Only the function NAME is stored.** There is no closure and no extra script arguments, so the arguments the callback receives come entirely from the engine (below). One slot holds one callback: a new registration replaces the old one, and `""` clears it. **Registration is persistent, not one-shot.** Nothing in any fire path below clears a slot after firing. Shipped scripts clear it themselves, for example `on_death("", enemy)` inside the callback (`m02.lua:3525`, `sh04.lua:2000`).
+2. **Firing never calls Lua synchronously.** Each kind has a fire helper:
+   - character: `0x004d4b90`;
+   - vehicle: `0x0069ccf0`;
+   - mover: `0x008d4e00`;
+   - global record: `0x005e44c0`.
+
+   On the session host (singleton `0x0087ba20`, `+0x5c` == `+0x58`; single player is always host), a helper reads the slot. If the slot is not `-1`, it resolves the stored name, checks that the Lua global is a function (`0x00e0cef0`), and **creates a new script-thread record** in the mission state `0x026e7e6c` (`0x00e0ca80` → `0x00e0c720`). It returns that record, or null when the slot is empty, the global is missing or the 256-entry thread table is full. In each of those cases the event is silently lost. The fire site then appends the arguments with typed pushes: string `0x00e0cfb0`, nil `0x00e0ce60`, number `0x00e0ce20`, boolean `0x00e0ce00`. **None of the fire sites below calls the run primitive `0x00e0cd00`.** The record is left pending, with its "not started" byte `+0xc` = 1. On a co-op client, the helper instead queues a forward of (kind tag, identity pair, slot) to the host (`0x00a295a0`, at most 63 queued), and the host fires it.
+3. **When the Lua runs.** The per-frame script pump `0x00e0cf50` walks the thread table (`0x02a42d10`, stride `0x20`) in index order and re-reads the count on every step. For a pending record, the resume step (`0x00e0cba0`) looks up the global **by name at that moment**, inserts it under the queued arguments and resumes the thread. Consequences:
+   - (a) The callback runs as a full script thread, so it may `delay()`.
+   - (b) It never runs inside the native or damage call that caused it. A thread that calls `character_kill(x)` continues past that call, and x's `on_death` callback runs only after the calling thread yields. (Section B shows that for character death the callback is not even queued until the next per-human update.)
+   - (c) New records are appended at the end of the table. **Callbacks therefore run in the order they were created**, after every older thread in the same pump pass. A record created during the pump runs later in the same pass.
+   - (d) A callback that was already queued still runs even if the script clears the registration before the pump reaches it, because the record holds its own copy of the name.
+
+   HYPOTHESIS: a callback whose global is removed between queueing and first resume fails at resume. Not traced.
+
+### B. `on_death`: registration, firing and arguments
+
+**Registration (FINAL, §3.2/§10.8).** `on_death(callback, name)`.
+- A player name resolves to slot 0 of the player's record at player `+0x1f00`.
+- Any other name resolves through the script-NPC resolver to slot 0 at that object's `+0xf8`. The engine reaches the same record from the human through human `+0x1da8`, the script-NPC record pointer.
+- Ambient humans without a script record cannot be registered.
+- A name that matches the player chain but does not resolve does nothing; there is no NPC fallback.
+- A target that is not a string (such as a table) reads as a null name and the native does nothing.
+
+**Firing for NPCs (FINAL).** The chain is:
+1. **HP reaches zero.** Any HP decrease reaches the HP setter `0x0094cfc0`, either from the damage sink `0x0096fa20` through `0x0094d520`, or directly from a native that sets HP.
+2. **The human is marked dying.** If HP ≤ 0, and the human is neither "downable" (`0x00973d40`) nor already down or dead (`0x0096f540`), the setter calls `0x0096f8c0`. That function sets the dying bit `+0xe3` bit 0 (the dword at `+0xe0`, bit `0x1000000`) and does kill-stat work.
+3. **The next per-human update finalizes the death.** At the very start of the per-human update `0x0099bcb0`, if the dying bit is set and the human is locally owned (`0x008addb0`), the update calls the death finalizer `0x00952760(human, 0)`. Other callers of the finalizer are:
+   - the per-frame AI pass `0x009d9190`;
+   - the ragdoll/death-stage machine (call at `0x0098d154`);
+   - the forced-finalize path behind `character_kill`'s fourth argument (call at `0x009a7896`);
+   - eight more sites listed in the full xref (`0x005375a7`, `0x008b449e`, `0x008b5c6d`, `0x00955900`, `0x00972cfd`/`0x00972d5c`/`0x00972feb`/`0x00973081`, `0x00973449`, `0x009d3c9d`).
+
+The death is never dispatched inside the damage call itself.
+
+**Finalizer gates and order (FINAL):**
+1. It returns at once if the human is null or has already been finalized this frame (`+0x1a0c` equals the frame counter `0x029f4da4`). Unless its second argument is non-zero, it also requires local ownership.
+2. If the human is a non-player NPC (kind is-a bit `0x22`), the death-callback latch `+0xe8` bit 0 is clear, and the human is locally owned, then **(i)** it fires the global `on_human_killed` (§C), **(ii)** if the human has a script record (`+0x1da8` ≠ 0), it fires that record's slot 0, which is **`on_death`**, and **(iii)** it sets `+0xe8` bit 0.
+3. It then performs the rest of the death (writes `+0xcc8` = 5 and the rest, §3.15).
+
+So for one NPC, `on_human_killed` always runs before its `on_death`. Several NPCs that die in the same frame are queued in the order of the per-human pass. This is the manager's index list, not distance or damage order.
+
+**Arguments to the `on_death` callback (FINAL): `(victim_name, killer_name_or_nil)`**:
+- **Victim name.** Comes from `0x00a353d0`: the player's script name, the NPC record's name (`+0x18`), or `"#FOLLOWER#"` for an unrecorded follower.
+- **Killer.** The object whose handle the damage sink wrote to the victim's `+0x1570`/`+0x1574`, resolved through `0x004d7f30`. The sink rewrites this pair on **every** application. With no attacker it stores the null handle (`0x00970744`–`0x00970797`), so the killer is the attacker of the killing blow. Once the dying bit is set the sink bails out (`0x0096f4f0`), so later hits cannot overwrite it.
+- **When the killer is nil.** The killer is nil when the killing blow had no attacker: `character_kill`, `character_damage` without its 4th argument, or attacker-less falls and impacts. It is also nil when the attacker object no longer exists.
+- **Other parameter lists.** 6 callbacks are written as `(victim, attacker)`, 4 as `(victim, killer)` and 34 as `()`. All of them are compatible with these two arguments.
+
+**Firing for players (PARTIAL).** Players are never handled by the finalizer's callback block. The gameplay per-frame update `0x00703c00` (game state 5) walks the player list. For each player whose timer `+0x1ef4` is armed and expired (`0x00d9e1e0`), and whose latch `+0xe8` bit 0 is clear, it sets the latch and fires slot 0 at player `+0x1f00` with **`(player_name, killer_name_or_nil)`**. Here the killer is only passed if it is a live object of is-a bit `0x20`. Respawn clears the latch and resets the timer (`0x009e738c`). OPEN: which code arms `+0x1ef4` on an ordinary player death. The arming sites found (`0x006d0e00`, `0x006d1a10`, `0x006d78a0`, `0x006d89a0`, all 0 ms) are fail and downed paths. The last of them force-kills a downed local player through `0x009a7610` and then arms the timer. **[2026-10-14 RESOLVED: on an ordinary death, `0x00702810(player)` arms the timer at `0x00702897` (`0x00d9e140`). The delay is **`respawn_delay_ms` = 4000 ms**, read live from `0x014A1370` (`gameplay_constants.xtbl` → `Death_and_busted`, loader `0x005f5bc0`). The same routine sets player `+0x1d99` bit `0x08` (`spec-player-runtime.md` §15.4). The chain is: death finalizer `0x00952760` → call `0x00952d0a` → kill bookkeeping `0x00950320` → `0x009504bf`, gated on the victim's class-flag byte `+0xa` bit `0x2` (player). `0x00702810` does nothing in four cases: the timer is already armed, `0x00706b90()` == 4, `0x006cec70()` or `0x006cec90()` is true, or an active activity's record lacks `+0x41` bit `0x40`. So the player's `on_death` is queued by `0x00703c00` about 4 s after the finalizer runs, not on the killing frame. The busted path `0x00703770` (called from `0x009dab20`) arms the same timer with the same 4000 ms at `0x007037bf`, and fires `+0x1f00` slot `0xa` at once.]**
+
+**Extra path (FINAL).** When a scripted NPC falls through the world (`0x0099c8a1`; the log string reads "Scripted NPC "%s" destroyed because it fell through the world"), the engine applies lethal `-1.0` damage and then fires `on_death` slot 0 directly with `(victim, killer_or_nil)` before deleting the NPC. This path does not check the `+0xe8` latch.
+
+**Not fired (FINAL):**
+- on a co-op client (the event is forwarded to the host);
+- for an NPC without a script record (`on_human_killed` still fires);
+- a second time for the same life;
+- when the slot is empty or the global is missing at fire time;
+- when the thread table is full.
+
+### C. `on_human_killed` (FINAL; corrects §17.7)
+
+**Registration.** `on_human_killed(callback_name)` (handler `0x00a56f00`). **The single argument is the callback NAME, not a type filter.** It is read with `lua_tolstring` and interned straight into global slot `0xb` (`0x026e9554` = `0x026e9528` + `0xb`·4). §17.7's "type filter" reading is wrong, and its "identity pair `0x026e9568`/`0x026e956c`" is simply the global record's `+0x40`/`+0x44` network identity. There is one global registration: the last call wins, and `""` or nil clears it. All 10 shipped calls pass a callback name or `""`.
+
+**Firing.** It fires inside the finalizer (§B, step (i)), for **every** locally-owned NPC that dies, whether named or ambient. Players are excluded: is-a bit `0x22` is the NPC bit, the same bit the damage sink's NPC-to-NPC multiplier tests (`spec-weapons-runtime.md` §4.5.4 step 15). The `LOCAL_PLAYER` checks in the shipped callbacks are defensive.
+
+**Arguments: `(victim_team_name, killer_name_or_nil, victim_name)`.**
+- The team is the victim's team byte `+0x1ca8` (the `script_npc_team` value), mapped to its name through the team table `0x02623a80` (`0x0094f3c0` → `0x0094dc60`).
+- The killer follows the same rule as in §B.
+
+The shipped scripts confirm this order and meaning: `dlc3_m03.lua:2834` `(killed_team, killer_name, killed_name)`, `m16.lua:3111` `(npc_team, killer_name, npc_name)`, `m22.lua:3707` `(team, killer)` compared with `"Civilian"`/`"Saints"`.
+
+### D. `on_vehicle_destroyed` (FINAL for the fire sites; PARTIAL for argument 2)
+
+**Registration (§3.3).**
+- A named vehicle registers into slot 0 of its script-vehicle record. The resolver returns that record; the engine reaches it from the vehicle at `+0xbf8` and adds `+0xb0` to get the slot array.
+- `"#PLAYER#"` (or a player name) registers into the player's `+0x1f00` slot `0x12`.
+
+**Fire rule, the same at every site.** If the vehicle has a script record (`+0xbf8` ≠ 0), the engine fires that record's slot 0. Otherwise, if a player is aboard (`0x00ac2ea0`: a seat holder with is-a bit `0x21`), it fires the **local** player's slot `0x12`. The fire sites are:
+1. **`0x00a9eb60`, destruction.** It is called from the vehicle damage handler `0x00a9ee70`, which `vehicle_detonate` also reaches (`0x00a64af0` → `0x00a9f4f0` → `0x00a9ee70`). Gates: the readiness byte `[+0x1e00]+0x70` == 1, `+0xbd0` == 1, locally owned, and `+0x16c8` bit 0 clear. **The callback thread is created before** the destruction trigger `0x00a9e1d0` runs (explosion, occupant kill and fling). Occupants killed by the explosion are finalized by later per-human updates, so the vehicle's callback always runs before their `on_death`/`on_human_killed` callbacks.
+2. **`0x00a87b50`, sinking.** If the vehicle is in water (`+0xc8` bit 0, depth `+0xc4` ≥ threshold) with no driver, a 10-second timer `+0x1a48` is armed. When the timer expires on the owner, `0x00a846f0` runs and then the hook fires.
+3. **`0x0069f8e0`, an activity routine.** It removes the activity's vehicle (handle `+0x7a8`). Which activity this is: OPEN.
+
+**Arguments: `(vehicle_name, extra)`.**
+- The vehicle name comes from `0x00a3a140`.
+- `extra` comes from `0x00b1f5c0`. It is a **number** equal to byte `+0x25a` of the vehicle's AI-directive record `+0xc68` when that record's kind byte is 7, and **nil** otherwise. The meaning is OPEN.
+- No attacker is passed.
+
+Shipped callbacks take `(vehicle)`/`(vehicle_name)`/`()`, so none reads `extra`.
+
+**One fire per vehicle: HIGH CONFIDENCE, not proven.** It relies on the readiness gates changing once the vehicle is a wreck, because `0x00a9e1d0` sets and then clears `+0x16c8` bit 0 (`spec-vehicle-damage-runtime.md` §2).
+
+### E. `on_mover_destroyed` (FINAL)
+
+**Registration (§7.16).** Slot 0 of the mover's script record (resolver result `+0x90`). The engine reaches the record from the mover at `+0x130`.
+
+**Firing.** The mover damage handler is `0x00a09ab0`. After it applies damage, the mover's HP (`+0x138`, unsigned) decides the outcome:
+- **HP still > 0:** the handler fires slot 2 (`on_take_damage` for movers) with `(mover_name, attacker_or_nil, hp_fraction, kind == 1, kind == 4, kind == 9)`.
+- **HP has gone from > 0 to 0:** the handler first runs the destroy call (`0x00704630`, or `0x00a05220` on its alternate branch). Then, if the mover has a script record and is locally owned, it fires slot 0 with **`(mover_name, attacker_name_or_nil)`**. **The killing hit does not also fire `on_take_damage`.**
+
+Shipped callbacks match: `dlc2_m03.lua:2396` `(mover_name, attacker_name)`, plus 3 × `(mover_name, attacker)`.
+
+OPEN: whether `mesh_mover_kill` (§14.10, through its vtable-`+0x80`/`0x00a315b0` paths) reaches `0x00a09ab0`.
+
+### F. Hooks that share the mechanism
+
+**`on_take_damage`, characters (FINAL).** It fires inside the sink `0x0096fa20` (`0x009701db`–`0x00970313`) for every application on the owner, unless the flags word has bit `0x200`.
+- A player victim uses `+0x1f00` slot 4.
+- A scripted NPC uses record slot 6, and must also pass `0x0094f690` and `0x00a367f0`.
+
+Arguments: **`(victim_name, attacker_or_nil, hitpoints, from_explosion, from_melee, from_sonic)`**:
+- `hitpoints` = (current HP `+0x1cb8` − the final, modified damage) / max HP `+0x1cac`. This is a fraction, and it is ≤ 0 on the lethal hit.
+- The three booleans are bits `0x8`, `0x1` and `0x4000` of the flags word.
+
+The names are the authored ones from `m18.lua:1744-1750`. Tension, flagged rather than resolved: `spec-weapons-runtime.md` §4.5.1 reads bit `0x1` as "ranged/bullet-class" (HIGH), while the script names it `from_melee`. A port should pass the bits through unchanged. **[2026-10-14 RESOLVED: the script is right. Bit `0x1` is set only by the melee-move hit `0x00969090` (request `0x40` at `0x0096911f`, mapped to F bit 0 by `0x00968380` → `0x0096f3b0`). The bullet, burn, explosion, impact and vehicle-hit producers never set it. `spec-weapons-runtime.md` §4.5.1 is corrected. `from_explosion` (`0x8`) comes from the explosion producer `0x0096ba8c`. `from_sonic` (`0x4000`) is set by that same producer when the explosion row has `Causes Vomit` or `Panic_Reaction` id 5.]** The on_take_damage callback fires before the death chain, so the lethal hit still produces it, with `hitpoints` ≤ 0.
+
+**`on_damage` (FINAL).**
+- **Characters.** The registered threshold T is stored at player `+0x28a8` or record `+0x17c`. The hook fires when the health fraction crosses from above T to at or below T on one application. It is a slot-3 or slot-5 thread with **no arguments**: nothing is pushed after `0x009706c8`/`0x00970722`. Compare `m06.lua`'s `m06_ball_brute_damage_cb()`.
+- **Vehicles.** Slot 1 at `0x00a9f055` carries `(vehicle_name, attacker_or_nil)`.
+
+**`on_detection` (FINAL).** NPC record slot 9, fired from `0x004e4fed` with `(detector_name, target_name)`.
+
+**What the kill natives fire:**
+
+| Native | Death callbacks | `on_take_damage` | Notes |
+|---|---|---|---|
+| `character_kill` (§3.15) | yes: `on_human_killed`/`on_death` with **killer nil**, queued at the next per-human update | yes: attacker nil, `hitpoints` ≤ 0 | lethal sink call, no attacker, flag `0x100` only |
+| `character_damage` (§20.32) | yes, when the damage is lethal | **no** with its default third argument `true` (flag `0x200` set); yes when `false` is passed | — |
+| `set_current_hit_points(x, 0)` | yes (HIGH) | — | goes straight to the HP setter; killer is whatever attacker was last stored, possibly stale or nil |
+| `vehicle_detonate` | `on_vehicle_destroyed` | — | — |
+
+OPEN: whether flag `0x200` also suppresses `on_damage`.
+
+### G. Kill by damage kind (m18 "sonic") (FINAL for the mechanism, OPEN for the producer)
+
+No damage kind reaches `on_death`, `on_human_killed` or `on_vehicle_destroyed`. Within these hooks the kind exists only as the three `on_take_damage` booleans (characters: flag bits; movers: kind codes 1/4/9). m18 does exactly this:
+- It registers `on_take_damage("m18_cb_gooing_people", grunt)` (`m18.lua:1522`).
+- The callback acts only when `from_sonic == true and hitpoints <= 0` (`m18.lua:1847-1848`).
+- The doors use the same pattern with `from_sonic` and then `set_current_hit_points(door, 0)` (`m18.lua:1750-1757`).
+
+A "sonic kill" is therefore the `on_take_damage` call of the lethal hit with argument 6 = true. OPEN: which producer sets flag `0x4000` for the `Special-SonicGun` weapon.
+
+### H. Test vectors
+
+1. **m02 sky goons (`on_death`).** `m02.lua:3012` registers `on_death("m02_cb_sky_goon_killed", char.name)`.
+   1. The player shoots a goon, and the HP setter marks it dying (`0x0096f8c0`).
+   2. The next per-human update runs the finalizer `0x00952760`. The global `on_human_killed` slot is empty in m02, so nothing is queued there.
+   3. Slot 0 is queued and the script pump calls **`m02_cb_sky_goon_killed("<goon name>", "<player name>")`** (`m02.lua:3523`). The callback clears its own registration (`:3525`).
+2. **dlc3_m03 ambush (`on_human_killed`, then `on_death`).** `dlc3_m03.lua:2706` registers `on_human_killed("dlc3_m03_ps_human_killed_cb")`.
+   1. The player kills a brute, and the finalizer queues, in order, **`dlc3_m03_ps_human_killed_cb("<team name>", "<player name>", "<brute name>")`** (`:2834`).
+   2. After that comes the brute's own `on_death` callback, if one is registered.
+   3. If the brute dies from `character_kill`, the second argument is **nil**, and the callback's `killer_name ~= LOCAL_PLAYER` test returns early.
+3. **sh01 retail vehicle (`on_vehicle_destroyed`, cascading into `on_death`).** `sh01.lua:845` registers `on_vehicle_destroyed("sh01_vehicle_killed", SH01_group.retail_grunts_002.vehicle)`.
+   1. The vehicle's HP reaches zero, `0x00a9ee70` → `0x00a9eb60` queues **`sh01_vehicle_killed("<vehicle name>", nil)`** (`extra` is nil unless the AI-directive kind is 7), and then `0x00a9e1d0` explodes the vehicle.
+   2. The callback (`:1362`) calls `character_kill(SH01_group.retail_grunts_001.members[1])`.
+   3. That NPC is registered at `:840` with `sh01_enemy_killed`. It is finalized at a later per-human update, after which the engine calls **`sh01_enemy_killed("<grunt name>", nil)`**. The second definition at `:1357` is the one in effect.
+4. **dlc2_m03 shields (`on_mover_destroyed`).** `dlc2_m03.lua:2148` registers `on_mover_destroyed("dlc2_m03_shield_destroyed_cb", shield)`. The shield's HP goes from > 0 to 0, `0x00a09ab0` destroys it and then queues **`dlc2_m03_shield_destroyed_cb("<shield>", "<attacker name>" or nil)`** (`:2396`).
+5. **m18 goo (damage kind).** `m18.lua:1522` registers `on_take_damage("m18_cb_gooing_people", grunt)`. A sonic hit queues **`m18_cb_gooing_people("<grunt>", "<player>", <fraction>, false, false, true)`**. The lethal hit has `<fraction>` ≤ 0, so the callback's branch at `:1848` runs.
+
+### Team B wiring
+
+1. Add a per-object (and one global) map from **(object, slot) to callback name**. Registration stores only the name; `""`/nil clears; a second registration replaces the first. **Never clear the slot after firing.** The latches below provide the one-shot behaviour.
+2. Do not call Lua inside `character_kill`/`character_damage`/damage. Instead, **append a thread `(name, args...)` to the script-thread table**, look up the global by name when it first resumes, and run pending threads in creation order in the normal per-frame pump. Skip the event silently if the global is missing at queue time or the table already holds 256 threads.
+3. NPC death:
+   1. When HP ≤ 0 and the NPC is not downable and not already down or dead, set the dying bit.
+   2. On the NPC's next update (once per frame, owner only, latch `+0xe8` bit 0 clear), queue `on_human_killed(team, killer|nil, victim)` if it is registered.
+   3. Then queue `on_death(victim, killer|nil)` if the NPC has a script record.
+   4. Then set the latch.
+4. **Killer** is the attacker of the most recent damage application, or nil if it had none. Record it on every application, and stop recording once the victim is dying.
+5. Player death: fire `on_death(player, killer|nil)` once per life from the gameplay frame update, and clear the latch on respawn. The exact arming delay is OPEN; queuing on the frame after death is a safe stand-in.
+6. Vehicle destroyed: when vehicle HP reaches zero, and also when it has sunk for 10 s with no driver, queue `on_vehicle_destroyed(vehicle_name, nil)` on the vehicle's slot. If there is none and a player is aboard, queue it on the player slot. Do this **before** occupant deaths.
+7. Mover destroyed: when HP goes from > 0 to 0, queue `on_mover_destroyed(mover, attacker|nil)`. Do not fire `on_take_damage` for that same hit.
+8. Character `on_take_damage(victim, attacker|nil, hp_fraction_after, explosion, melee, sonic)` fires on every non-`0x200` hit, including the lethal one. `character_damage(...)` with its default `true` suppresses it.
+9. Character `on_damage` gets no arguments and fires on the threshold crossing. Vehicle `on_damage` gets `(vehicle, attacker|nil)`.
+10. For m18, tag sonic-gun damage with the sonic flag, and make the lethal hit deliver `on_take_damage` with `hitpoints ≤ 0, from_sonic = true` before the death callbacks.
+
+Cleanroom self-check: strict regex 0 hits.
+
+## Engine callback dispatch: vehicle entry/exit, phone calls, triggers, group vehicles (2026-10-14)
+
+**Why.** Team B's mission sweep stalls on missions that wait for engine-fired callbacks (Team B `HANDOFF.md`, "ENGINE FACTS NEEDED" items 2-5): `on_vehicle_enter`/`on_vehicle_exit` (m11, m17, m23, dlc2_m01, dlc3_m02; m03/m04 poll `character_is_in_vehicle` instead), group-spawned vehicle naming (dlc3_m02 `start_truck`), the cellphone call-end callback (m03, m13, m14, mm_p_07), and the trigger "already inside" rule (m22). **Method:** static reading of the executable (pefile + capstone, read-only; scripts `tools/scratchpad/cbveh_*.py`), the dlc3 zone record heads (`cbveh_zone.py`), and the mission scripts in `scratchpad/lua_dumps`. Everything is CONFIRMED by disassembly unless marked otherwise.
+
+### V.0 Shared mechanism (FINAL)
+
+This is the same mechanism as death-section A above.
+- **Slots.** Every family below stores an interned callback id in a slot (350-slot table `0x026e83e8`). Firing never clears the slot. All registrations are therefore **persistent**: they fire on every event until the script overwrites them or clears them with `""`.
+- **Firing.** The fire helper turns the id back into the global name. It checks that the global is a Lua function (`0x00e0cef0`; a missing or non-function global is a silent no-op). It then creates a **new script thread** for that function (`0x00e0ca80`) and pushes the arguments onto it:
+  - a string, or nil for a null pointer (`0x00e0cfb0`);
+  - or a number (`0x00e0ce20`).
+
+  The function body runs at the next script resume, not inside the engine event.
+- **Network.** On a co-op client (session `+0x5c` ≠ `+0x58`) the helper forwards the event over the network (`0x00a295a0`) instead. Single player always takes the local path.
+- **Fire helpers by record type:**
+
+  | Record | Slot location | Fire helper |
+  |---|---|---|
+  | Player | player `+0x1f00` | `0x004d4b90` |
+  | Script-NPC record | record `+0xf8` | `0x004d4b90` |
+  | Script-vehicle record | record `+0xb0` | `0x0069ccf0` |
+  | Trigger | `+0xf8` (enter) / `+0xfc` (exit) | `0x00a1fe10` |
+  | Cellphone record | `+8` / `+0xc` | `0x00a374f0` → `0x00a1f990` |
+
+- **Name arguments.** Engine-supplied names are converted from objects as follows.
+  - **Character** (`0x00a353d0`):
+    - a player gives its own object name (`+0x18`). This is the same string trigger callbacks already receive (§1.14), and it must compare equal to `LOCAL_PLAYER`/`REMOTE_PLAYER`;
+    - any other human gives the name of its script-NPC record (human `+0x1da8` → `+0x18`). This is the authored zone or group-member name, with its authored capitalisation;
+    - a follower without a record gives `"#FOLLOWER#"`;
+    - anything else gives nil.
+  - **Vehicle** (`0x00a3a140`):
+    - a vehicle with a script-vehicle record (vehicle `+0xbf8`) gives the record's name (`+0x18`). This is the very string the script registered with;
+    - otherwise it gives the name of the first player whose current-vehicle handle (`+0x16c0`/`+0x16c4`) is this vehicle;
+    - otherwise nil.
+
+### V.1 `on_vehicle_enter` / `on_vehicle_exit` (FINAL)
+
+**Registration** (re-confirmed; §4.12, §12.15). Arg 1 is the callback name and arg 2 is the object. The object is tried against three resolvers in order:
+
+| Arg 2 resolves via | Hook record | `on_vehicle_enter` slot | `on_vehicle_exit` slot |
+|---|---|---|---|
+| generic player / `#PLAYER#` resolver `0x00a280c0` | player `+0x1f00` | `0x16` | `0x17` |
+| script-NPC resolver `0x005e4dd0` | NPC record `+0xf8` | `0x17` | `0x18` |
+| script-vehicle resolver `0x0062a190` | vehicle record `+0xb0` | `7` | `6` |
+
+- An unresolved name is a silent no-op (§4.13.0), so a registration made before the object exists is lost.
+- **Correction to §12.15:** its "event code `0x17`/`0x18`/`6` posted" are these slot numbers. Exit registration posts nothing, exactly like enter.
+
+**Engine event: enter.** The callback fires in exactly one place: the **seating commit `0x00afbd90`**. That is the on-entry handler of seat entry-state 9 ("seated") in the per-seat state machine of `spec-player-runtime.md` §7.5 (seat record = vehicle `+0x6a0` + `0x100`·seat, state at record `+0xc`).
+- **Per-frame driver.** The phase tick `0x00af9260` runs `0x00b01f90` for every seat each frame. It is called from the world tick `0x00702a50` and from `0x007b05f0`, where it runs just before the script resume `0x00e0dfc0`.
+- **Animated get-in.** The state-4 update `0x00afeeb0` (and the state-4 on-entry `0x00afabd0`) moves to state 9 once `0x00b0b3f0` reports that the vehicle's seat-occupancy entry names this character. That is the end of the get-in sequence, not its start.
+- **Other routes.** States `0x0b`/`0x0f` (on-entry) and `0x07`/`0x11`/`0x13` (per-frame) go straight to 9. Instant and teleport entries therefore commit with no animation delay. HIGH: which route each `vehicle_enter_teleport` call takes. Either way the commit is the only fire site.
+- **`vehicle_enter_do` / `vehicle_enter_group_do`** only submit the request (state 0, §38.1). They never fire the callback themselves.
+
+**Inside the commit, in order:**
+1. **Gate** (`0x00afc99d`-`0x00afc9ed`). The occupant must:
+   - pass the network-authority test `0x008addb0(occupant, 0)`, which always passes in single player;
+   - and either be a player (is-a type `0x21`), or pass `0x00921060` and be a human (is-a type `0x22`).
+2. **Vehicle hook.** If the vehicle has a script record (`+0xbf8`), slot 7 of record `+0xb0` fires.
+3. **Character hook.** If the occupant is a player, that player's `+0x1f00` slot `0x16` fires. Otherwise, if it has a script-NPC record (`+0x1da8`), record `+0xf8` slot `0x17` fires.
+4. **Seated state.** Later in the same call, the commit sets ride state `0x22` (`0x00b09ff0` → `0x00b099d0`), which writes **human `+0x16d4` = 3 (seated)**.
+
+**Arguments: exactly 3, `(occupant_name, vehicle_name, seat)`.**
+- `occupant_name` and `vehicle_name` are strings, or nil (V.0).
+- `seat` is a number: seat record `+0x2c`, copied from `+0x6c` at commit (`0x00afbe3f`). **0 = driver**; the commit runs its driver-only steps when it is 0 (`0x00afbfac`, `0x00afcbcb`).
+- Script corroboration: dlc2_m01.lua:4306-4310 documents "human_name: … (not necessarily a player)", "seat: Seat index (driver == 0, passenger1 == 1, etc.)".
+- Both hooks can fire for one entry, the vehicle hook first.
+
+**Which occupants fire which hook:**
+- **Vehicle hook:** any human that passes the gate, in any seat (players, script NPCs, and recordless NPCs with name nil or `"#FOLLOWER#"`).
+- **Player hook:** that player entering any vehicle, in any seat.
+- **NPC hook:** that script NPC entering any vehicle.
+
+**Engine event: exit.** The exit hook fires in the exit commit `0x00b03d80`, the on-entry handler of exit state `0x19` ("out"). That commit is reached after the animated exit states, or directly (`spec-player-runtime.md` §6.11 step 12 — the "script and HUD events" there are this dispatch).
+- **Gate:** the exiter is the local player (`0x0091f5e0`), or it passes `0x00921060` and is a type-`0x22` human.
+- **Order:**
+  1. vehicle record slot 6;
+  2. then either the **local** player's `+0x1f00` slot `0x17` (taken from `0x009da4e0`, not from the exiter — so an exit hook registered on `REMOTE_PLAYER` only fires on that player's own machine), or the NPC record's slot `0x18`.
+- **Arguments:** the same 3.
+- **Timing:** it fires before the slot release that zeroes `+0x16d4` (`0x00b086d0`, §6.11 step 15).
+- OPEN: whether death or vehicle destruction with occupants always routes through state `0x19`.
+
+**Ordering against the polling natives.** `vehicle_enter_check_done` (§22.3), `vehicle_enter_group_check_done` (§38.1) and `character_is_in_vehicle` (§3.10) all test `+0x16d4 == 3`. The commit creates the callback threads (steps 2-3) and then writes 3 (step 4), in one engine call. So at the first script resume after the commit, the callback thread exists **and** every poll already answers "seated". The relative order of the new callback thread and an existing polling thread within that resume pass follows thread-table position. That order is OPEN, and no shipped script was found to depend on it.
+
+**Cross-spec note.** `spec-player-runtime.md` §8.2 step 19 ("a three-value report … HYPOTHESIS: a statistics or dialogue event") is this `on_vehicle_enter` dispatch.
+
+### V.2 Group-spawned vehicle naming (FINAL)
+
+`start_truck` is a **placed `script_vehicle` object, #440**, in dlc3_m02's own mission zone `` dlc3.vpp_pc/dlc3_m02.str2_pc/sr3_city~fdlc3_m02`.czn_pc ``, at (-1299.3744, 2.1602, 249.9946).
+- Its record head's owner handle (`0b9ffa69:033c80eb`) is `script_group` #398, `start_group`. The same group also owns `Script_Npc` `start_pierce` (#439) and `start_torbit` (#441).
+- The script name is the object's **own authored name** (`ctg_object_name`). It enters the global name map when the object is created (§29.1-§29.3). It is not a group-member alias and has no generated suffix.
+- `group_create("start_group", true)` (dlc3_m02.lua:1343, inside the checkpoint's `start_groups` loop) creates the group's placed members. The script-vehicle resolver `0x0062a190` (is-a `script_vehicle` `0x2b`) then finds `start_truck`, case-insensitively, for `on_vehicle_enter`/`on_vehicle_destroyed`/`teleport_vehicle`/`vehicle_enter_teleport` (dlc3_m02.lua:1360-1388).
+- **Two objects are involved.** The named `script_vehicle` object is what resolvers return; it owns the `+0xb0` hook record and the `+0x18` name. The live vehicle it spawns points back to it through vehicle `+0xbf8`. The enter/exit/destroy fire sites go vehicle → `+0xbf8` → record.
+- The same rule covers m23's `veh_daedalus_vtol 001` (§4.12) and m19's brutes (§29.4 note).
+- **Port rule:** register every placed `script_vehicle`/`Script_Npc` of a mission zone under its authored name when its owning `script_group` is created.
+
+### V.3 Cellphone call-end callback, cb2 (FINAL; extends §12.2)
+
+- **Native.** `audio_play_for_mission_cellphone` (`0x00a3daa0`), arg 5. Arg 4 (cb1) fires on answer/connect. Mission call sites:
+  - mm_p_07.lua:113;
+  - m13.lua:4186;
+  - m14.lua:2262;
+  - m03.lua:1202 (passes nil for arg 4).
+- **"Call end" — cb2 fires on any of these** (§12.2):
+  - the conversation finished, or can no longer continue (`0x00a381b0` → `0x00a375a0`);
+  - 8 unanswered rings;
+  - removal of the record by the per-frame driver;
+  - player reset/respawn (`0x00a38070`, from `0x006d4a10`);
+  - clear-all (`0x00a37ff0`, from `0x0083c990`).
+  - On a normal end cb2 can fire twice.
+- **New, CONFIRMED: no cb2 when the script removes the call itself.** `audio_remove_mission_cellphone` (`0x00a3c710` → `0x00a37ec0` → teardown `0x00a37b60`) clears both slots with `0x005e4520` and never calls the fire helper. The fire helper `0x00a374f0` has exactly four callers: `0x00a375a0`, `0x00a38070`, `0x00a380e0` and the driver `0x00a38770`.
+  - The m03/m13/m14/mm_p_07 cleanup functions therefore never receive cb2.
+  - A mission failure produces cb2 only if the call is dropped through the reset/clear-all paths above.
+- **Arguments: none.** `0x00a1f990` → `0x00e0ca80(L, name, 0, 0)`, and nothing is pushed.
+- **Frame.** The per-frame driver `0x00a38770` runs inside the gameplay world tick (`0x00702a50` → `0x0058b470` → `0x00a1f880`). cb2's thread is created in the tick in which the dialogue ends, and its body runs at the next script resume.
+- **Correction to §12.2 (arg 6).** Arg 6 is the **persona handle**: the integer from `audio_persona_load_2d` (m03.lua:1202, m13.lua:4186, m14.lua:2262).
+  - The native converts it to an integer and passes it as the 5th parameter of `0x00a38f30`. That function resolves it through the persona table (`0x0070a290`, handles 1-110, table `0x01504088`); this is the "persona attached" case that lengthens the pre-dialogue delay.
+  - The parameter position §12.2 associated with the co-op-suppression flag receives a literal 0 from this native.
+
+### V.4 Trigger enter rule and "already inside" (FINAL)
+
+**The real Lua path.** The enter/exit Lua dispatch does **not** go through `0x00a29e40`.
+- **Event source.** Every world tick (`0x00702a50` → `0x0078a340`, call site `0x00702c82`), each live trigger phantom (trigger `+0xd4`) is queried for overlapping objects. Each phantom keeps its own tracked-overlap list:
+  - a newly seen overlap is added and produces an **ENTER** event;
+  - a tracked overlap that is no longer seen is removed and produces an **EXIT** event.
+- **Event processing.** Events are processed in the same pass (`0x0078a0c0`): enter → `0x00940270`, exit → `0x009405a0`. Only humans (is-a type `0x20`) are passed on.
+- **Lua dispatch.** `0x0093b3c0(object, mode)` calls trigger action row `+0x14` (enter) or `+0x18` (exit) with **(trigger, object)** in both modes. This corrects §1.14's "mode 0 … zero arguments". Row 0's handlers are the Lua trampolines `0x00a1feb0`/`0x00a1ff10` → `0x00a1fe10` (enter slot `+0xf8`, exit slot `+0xfc`).
+- **`0x00a29e40`.** That dispatcher is a different, by-kind path, so §1.14's open question about its caller does not block `on_trigger`.
+
+**Arguments: exactly 2, `(character_name, trigger_name)`, both strings.** The trampoline pushes `0x00a353d0(object)` (V.0), then trigger `+0x18`, which is the trigger's registered name. This confirms §1.14's port rule and closes its open question about argument types.
+
+**Phantom lifetime = enabled lifetime:**
+- **`trigger_enable(t, true)` on a disabled trigger** (`0x0093d320`) sets `+0xe4` bit `0x01` and resets the re-fire deadline `+0x88` to now. When the trigger object is in the world (`+0x33` bit `0x08`), it **creates a new phantom** (`0x0093b510`; sphere `0x00789c70`, cylinder `0x00789d20`, box `0x00789b80`).
+- **`trigger_enable(t, true)` on an already-enabled trigger** does nothing.
+- **`trigger_enable(t, false)`** (`0x0093bde0`) destroys the phantom (`0x0078a300` → `0x0078a180`). That emits **EXIT events for every tracked overlap**, then clears the enable bit.
+- **Bringing an enabled trigger's object into the world** (`0x0093c950`/`0x0093c9b0`/`0x0093e520` → `0x0093b510`) also creates a fresh phantom.
+- **A new phantom reports everything already inside.** It starts with an empty tracked list, and its "suppress initial overlaps" option is off. The creator's flag byte `+0x12` has bit `0x02` = first pass and bit `0x01` = suppress, and every trigger creator passes 0 for suppress. The first pass therefore reports every human already inside as a fresh ENTER.
+
+**Enter handling (`0x00940270`).**
+- **Deferred case.** If `0x0093b4c0` says the trigger is deferred for this object, the trigger goes into the 8-entry pending list `0x02623620`. That list is retried every tick by `0x00940c90` until it fires or the object exits. A trigger is deferred when the object is the local player and either:
+  - trigger flags `+0x7a` include `0x10` while the player is in a vehicle;
+  - `+0x7a` includes `0x20` while the player is on foot;
+  - `+0x7a` includes `0x40` or `0x02`;
+  - or the trigger's action row is 6.
+- **Otherwise there is one immediate attempt.** It requires all of:
+  - local authority;
+  - the trigger is enabled;
+  - the object is a player, or `+0x7a` bit `0x01` is set for an NPC;
+  - the vehicle/on-foot flags allow it;
+  - the fire count `+0x84` is below the maximum `+0x7c` (when that maximum is non-zero);
+  - the deadline `+0x88` has passed;
+  - the object is not dead, unless `+0x7b` bit `0x08` is set.
+
+  Then the enter hook is fired. **If no callback is registered at that moment, the attempt fails and the event is consumed.**
+
+**Rules (answers to item 5):**
+- **(a) Already inside an enabled trigger when `on_trigger` is registered:** no fire — neither immediately nor on the next tick. It fires only on a fresh entry (exit, then re-enter) or after a disable/enable cycle. `on_trigger` (`0x00a58680`) only writes the slot and resets `+0x88`. It also registers only when `+0xa8` (action row) is 0 (§1.2).
+- **(b) Already inside a disabled trigger when `trigger_enable(t, true)` runs:** it fires on the **next world tick** (the new phantom's first overlap pass), with that human as arg 1. This holds if the callback is registered by then. Calling `on_trigger` before or after `trigger_enable` in the same script step makes no difference.
+- **(c) `trigger_enable(t, false)` while inside:** fires `on_trigger_exit` for each human inside, during the disable call. The enable bit is still set at that moment.
+- **(d) Deferred-flag triggers (d above) for the local player:** they keep retrying while the player is inside, so a callback registered late still fires on the next tick.
+
+### V.5 Test vectors
+
+| # | Registration (mission:line) | Engine event | Exact Lua call the engine makes |
+|---|---|---|---|
+| 1a | dlc3_m02.lua:1374 `on_vehicle_enter("dlc3_m02_play_bounce_cb", "start_truck")` | :1378 `vehicle_enter_teleport(LOCAL_PLAYER, "start_truck", 0)` → seat 0 commits | `dlc3_m02_play_bounce_cb(<LOCAL_PLAYER string>, "start_truck", 0)` (vehicle slot 7). The handler then arms `on_vehicle_exit` and clears enter (:3655-3656). |
+| 1b | dlc2_m01.lua:4209 `on_vehicle_enter("dlc2_m01_get_away_car_entered_cb", vehicle_name)` | :4267 `vehicle_enter_teleport("npc_kwilanna_01", vehicle_name, 0, true)` | `dlc2_m01_get_away_car_entered_cb("npc_kwilanna_01", vehicle_name, 0)`. For a player forced to seat 1 (:4203), the call is `(…player string…, vehicle_name, 1)`. |
+| 1c | m23.lua:1594 `on_vehicle_enter("m23_player_entered_vehicle_cb", LOCAL_PLAYER)` | local player finishes entering any vehicle (player slot `0x16`), e.g. the driver seat of `veh_daedalus_vtol 001` | `m23_player_entered_vehicle_cb(<LOCAL_PLAYER string>, "veh_daedalus_vtol 001", 0)`. m17.lua:1190 behaves the same, but `m17_heli_entered()` ignores the arguments. |
+| 1d | dlc2_m01.lua:4210 `on_vehicle_exit("dlc2_m01_get_away_car_exited_cb", vehicle_name)` | an occupant reaches exit state `0x19` | `dlc2_m01_get_away_car_exited_cb(<occupant name>, vehicle_name, <seat>)` |
+| 2 | dlc3_m02.lua:1343 `group_create("start_group", true)` | placed `script_vehicle` #440 becomes live | `"start_truck"` resolves for the registrations at :1365/:1374 |
+| 3 | mm_p_07.lua:113 `audio_play_for_mission_cellphone(<pierce_call>, true, true, "", "mm_p_07_end_call")` | ring → auto-answer → dialogue plays to its end | `mm_p_07_end_call()` with no arguments; the loop at :115 exits. m13.lua:4186 → `m13_cellphone_call_cb()` works the same way. |
+| 4 | m22.lua:1990-1992 `on_trigger("m22_battle_area_triggered_cb", "Armory_Battle_Area")` + `trigger_enable(…, true)`, trigger previously disabled | the player is already inside `Armory_Battle_Area` (m22 zone #289, sphere r = 102.11 at (-881.26, 4.26, 213.98)); the next world tick's first overlap pass | `m22_battle_area_triggered_cb(<LOCAL_PLAYER string>, "Armory_Battle_Area")`. If the trigger was already enabled: no call until the player re-enters. m22.lua:1534-1536 (battle-zone triggers) follow the same rule. |
+
+### Team B wiring
+
+1. **Seating commit.** Implement one per-seat seating commit, run when an entry finishes: at the end of the get-in animation, or immediately for instant/teleport entries. In order:
+   1. fire the vehicle record slot 7;
+   2. fire the player slot `0x16` or the NPC record slot `0x17`;
+   3. set `+0x16d4` = 3.
+
+   Use 3 arguments: `(occupant_name, vehicle_name, seat)`, with seat 0 = driver.
+2. **Exit commit.** Do the mirror on exit completion:
+   1. fire the vehicle slot 6;
+   2. fire the local player's slot `0x17` or the NPC record's slot `0x18`;
+   3. clear the seated state.
+
+   Use the same 3 arguments.
+3. **Gate.** Fire only for players, or for live script-capable NPC humans.
+4. **Persistence.** Never auto-clear a vehicle or trigger hook after firing.
+5. **Deferred threads.** Every engine callback becomes a new script thread created at the event and run at the next script resume. A missing global function is a silent no-op.
+6. **Names.**
+   - Character: pass the player's own script name (equal to `LOCAL_PLAYER`/`REMOTE_PLAYER`) or the NPC's authored record name.
+   - Vehicle: pass the script-vehicle record name exactly as registered.
+   - Pass nil when there is no name. Do not pass handles.
+7. **Placed objects.** Register placed `script_vehicle`/`Script_Npc` objects under their authored zone names when their `script_group` is created. Resolution before that is a silent no-op.
+8. **Cellphone.**
+   - Fire cb2 with zero arguments when the dialogue ends, after 8 missed rings, or on player reset. Tolerate a second cb2.
+   - Do **not** fire cb2 from `audio_remove_mission_cellphone`.
+   - Treat arg 6 as the persona handle.
+9. **Triggers.**
+   - Edge-detect overlaps per trigger only while it is enabled.
+   - Enabling a disabled trigger starts a fresh overlap set, so humans already inside get `on_trigger(char, trigger)` on the next tick.
+   - Disabling a trigger emits `on_trigger_exit` for everyone inside.
+   - Registering `on_trigger` while someone is inside does nothing until a fresh entry.
+   - Pass 2 arguments `(character_name, trigger_name)`.
+
+Cleanroom self-check: strict regex 0 hits.
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 49 cross-references (e.g. §1.9→§1.7 in the §1 resolver lists, §33→§7.33, §14.3–11.5→§14.3–§14.5, §16.8→§16.11, §8.31/§16.30 in §22.3, placeholder "item N"/"D.N" refs in §11/§20, §23.7→§23.1); marked 47 stale OPEN/"unidentified"/"not traced" items resolved in place with pointers (extractor pair §4.1, `0x006434a0` §9.21/§14.6, `0x00a017c0` §15.10, 0x00e0xxxx family §26.23, `0x00d9e8b0` CRC-32, §2.9/§6.1/§12.20/§15.27/§16.7/§18.9 and others); annotated 127 stale or contradicted statements (spurious "new/first/not previously catalogued" claims for opcodes, bits, resolvers, primitives and hook bases; opcode-list errors such as `door_lock` in `0x43` and `inv_weapon_add_temporary` in `0x46`; commit-sibling inversion in §15.29; `"null"`→empty string at `0x0129a0e3`; `0x00d9e140`/`0x00d9e8b0` role misdescriptions; count slips) using strike-through plus pointer; reworded 13 clean-room problems (one `thunk_` Ghidra label, code-shaped expressions, a decompiler signature with an auto-type, inline raw x86 instructions); added 13 review markers for items needing a binary re-read (rounding semantics of `0x00ea2596` flagged OPEN in §4.1 with 3 pointers, the `0x00a525a0` address conflict at §20.14/§27.2, the `0x00a7a830` bit conflict at §3.7/§20.1/§21.30, setter-address-as-global OPEN notes at §18.2/§18.15), plus an in-spec §5.2 bullet for the §4.7/§4.8 header-address correction and one reworded draft self-correction in §20.29.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 2 `HANDOFF.md` §27.x references to the archived headings; 6 left (see review).
@@ -17897,3 +18496,13 @@ Cleanroom self-check: strict regex 0 hits, C-cast-dereference check 0 hits.
   per-class-id flag checker, not weapon-specific. The real per-player inventory-slot array and the
   world-pickup path both stay OPEN. Cleanroom self-check: strict regex 0 hits,
   C-cast-dereference check 0 hits.
+- 2026-10-14 (local, Team B "ENGINE FACTS NEEDED" items 1 and 6): new section "Engine callback
+  dispatch: death and destruction", placed before this changelog. It covers the fire side of
+  `on_death`/`on_human_killed`/`on_vehicle_destroyed`/`on_mover_destroyed`/`on_take_damage`/
+  `on_damage`/`on_detection`:
+  - Firing is deferred: the engine queues a script thread rather than calling Lua directly.
+  - The NPC death finalizer `0x00952760` fires the hooks; the player's own on_death goes through
+    `0x00703c00`.
+  - The section gives each hook's argument order and the m18 sonic flag `0x4000`.
+  §17.7 corrected: `on_human_killed`'s argument is the callback name, not a filter.
+  Cleanroom self-check: strict regex 0 hits.

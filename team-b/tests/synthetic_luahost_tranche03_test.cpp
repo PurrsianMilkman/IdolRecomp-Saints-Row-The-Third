@@ -226,12 +226,14 @@ int main() {
     ok(host, gp, "assert(vehicle_exit_group_do(true, false, false, {'npcE'}) == false)");
     CHECK(es.vehicleExitGroupNullThisGuardCount() == 5);
     es.getOrCreateCharacter("npcE").stateEnum.set(3);
-    fails(host, gp, "vehicle_exit_group_do(true, false, false, {'npcE'})", "+0x16c0");
+    // Team A sync 9c70c61: the link is null at construction, so state 3 with no vehicle builds the request and guards.
+    ok(host, gp, "assert(vehicle_exit_group_do(true, false, false, {'npcE'}) == true)");
+    CHECK(es.vehicleExitGroupNullThisGuardCount() == 6);
 
     // Resolves, state 3, AND a real vehicle link -> true, guard does NOT fire.
     es.getOrCreateCharacter("npcE").currentVehicleName.set("veh07");
     ok(host, gp, "assert(vehicle_exit_group_do(true, false, false, {'npcE'}) == true)");
-    CHECK(es.vehicleExitGroupNullThisGuardCount() == 5); // unchanged - a vehicle was found
+    CHECK(es.vehicleExitGroupNullThisGuardCount() == 6); // unchanged - a vehicle was found
 
     // THE core crash-guard case: resolves, state 3 (so an exit request IS
     // built and the call returns true), but the character's own vehicle
@@ -243,7 +245,7 @@ int main() {
     es.getOrCreateCharacter("npcD").stateEnum.set(3);
     es.getOrCreateCharacter("npcD").currentVehicleName.set(""); // explicitly "no vehicle"
     ok(host, gp, "assert(vehicle_exit_group_do(true, false, false, {'npcD'}) == true)");
-    CHECK(es.vehicleExitGroupNullThisGuardCount() == 6); // guard fired despite a TRUE return
+    CHECK(es.vehicleExitGroupNullThisGuardCount() == 7); // guard fired despite a TRUE return
 
     // ------------------------------------------------------------------
     // Sec30.5 vehicle_exit_group_check_done - the "polling partner". True
@@ -253,7 +255,7 @@ int main() {
     ok(host, gp, "assert(vehicle_exit_group_check_done() == true)");
 
     es.objectResolves().set("npcF", true);
-    fails(host, gp, "vehicle_exit_group_check_done({'npcF'})", "0x0096f4f0");
+    ok(host, gp, "assert(vehicle_exit_group_check_done({'npcF'}) == true)"); // e6691f1: alive predicate computed from lifeState/e3, no longer OPEN
     es.getOrCreateCharacter("npcF").isAlive.set(false);
     ok(host, gp, "assert(vehicle_exit_group_check_done({'npcF'}) == true)"); // not alive: skipped
     es.getOrCreateCharacter("npcF").isAlive.set(true);

@@ -422,7 +422,7 @@ enum class PrimaryBlockType : uint8_t {
     Giant1FullResTwin = 3,      // OPEN: giant1's own bit-level token format not given
     MotionHuffmanResidual4 = 4, // OPEN: motion-vector gap + tree-table values not given
     IntraIdct5 = 5,             // OPEN: quant-table bytes + AC index mapping not given
-    Unmapped6 = 6,              // OPEN: never individually named by any spec pass
+    SolidFill6 = 6,             // CONFIRMED (Sec5.3aj, 2026-10-13): solid 8x8 fill, 1 colour byte
     InterIdctResidual7 = 7,     // OPEN: same gaps as 5, plus the motion-vector gap
     PatternBlend4Bit8 = 8,      // OPEN: control-nibble-to-pixel spatial mapping not given
     PlainBlockCopy9 = 9,        // CONFIRMED (Sec5.3b): same as primary 0
@@ -558,6 +558,8 @@ struct BlockRecord {
     // `acExitBitPos` are set only for Case1SubType::DcAcIdctEngine2 (the only
     // case that calls decodeAcCoefficientTree()), std::nullopt otherwise.
     std::optional<size_t> dispatchBitPos;
+    // Spec 5.3af Q2: columns (8px cells) to advance after this dispatch; 1 unless the grid model is active.
+    int advanceCols = 1;
     std::optional<size_t> acEntryBitPos;
     std::optional<size_t> acExitBitPos;
 
@@ -633,6 +635,14 @@ inline void copyBlock8x8(PlaneView dest, const PlaneView* prev, int blockRow, in
     }
 }
 
+// Spec 5.3af Q1/Q2: secondary=3 writes a 16x16 footprint (clipped to plane bounds).
+inline void fillBlock16x16(PlaneView dest, int blockRow, int blockCol, uint8_t value) {
+    const int x0 = blockCol * kBlockSize, y0 = blockRow * kBlockSize;
+    for (int y = 0; y < 2 * kBlockSize; ++y)
+        for (int x = 0; x < 2 * kBlockSize; ++x)
+            if (x0 + x < dest.width && y0 + y < dest.height) dest.at(x0 + x, y0 + y) = value;
+}
+
 inline void fillBlock8x8(PlaneView dest, int blockRow, int blockCol, uint8_t value) {
     const int x0 = blockCol * kBlockSize;
     const int y0 = blockRow * kBlockSize;
@@ -699,16 +709,16 @@ inline void upsample2x2Store(PlaneView dest, int blockRow, int blockCol, const u
     }
 }
 
-// secondary=6: 64 raw bytes (8x8 core, row-major - OPEN/DERIVED: the spec
-// confirms a 16x16 footprint = 2x2 NN of an "8x8-equivalent source" but never
-// states the raw byte count; 64 = 8x8 core is the only count consistent with
-// that), each pixel = (int8_t)raw + 128 (CONFIRMED), then 2x2 NN upsample.
-inline bool rawCopyDualRowDuplicate8x8(BitstreamReader& br, PlaneView dest, int blockRow, int blockCol) {
+// secondary=6: exactly 64 source bytes (CONFIRMED, spec 5.3af Q1: all 250 live events advance the
+// source cursor by 64; src[8r+k] -> 2x2 pixel group, 16x16 footprint). The bytes come from the colour
+// pre-stage output cursor, not from 0x10019d10 (5.3ae answer 4). Pixel = the byte verbatim for BIKi
+// (5.3af Q3/5.3ag, `biasFree`); the legacy synthetic path keeps (int8_t)raw + 128.
+inline bool rawCopyDualRowDuplicate8x8(BitstreamReader& br, PlaneView dest, int blockRow, int blockCol, bool biasFree = false) {
     uint8_t core[kBlockSize * kBlockSize];
     for (uint8_t& px : core) {
         const uint8_t raw = br.readAlignedByte();
         if (br.ranOutOfData()) return false;
-        px = static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(raw)) + 128);
+        px = biasFree ? raw : static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(raw)) + 128);
     }
     upsample2x2Store(dest, blockRow, blockCol, core);
     return true;
@@ -878,12 +888,20 @@ inline bool twoLiteralPattern16x16(BitstreamReader& br, PlaneView dest, int bloc
 // Case1SubType::FlatDcFill's own case body below for exactly why that prior
 // behaviour was a real, concretely-evidenced bug for the real-data path
 // (not merely a structural nicety).
+// Spec 5.3af Q2 grid model (real pipeline only; null = legacy one-cell-per-dispatch).
+struct BlockGrid {
+    int blockCols = 0;
+    int blockRows = 0;
+    mutable size_t dcNext = 0;  // spec 5.3i/5.3p: secondary=2 DC words are read from a sequential per-row cursor (+2 bytes per read), not indexed by column
+};
+
 inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const PlaneView* prev, int blockRow,
                                    int blockCol, CaseSelectorScratchSource* caseSelector = nullptr,
                                    CaseSelectorScratchSource* caseSelectorB = nullptr,
                                    const DcDeltaArray* dcArray = nullptr,
                                    FlatFillPrestageCursor* flatFillCursor = nullptr,
-                                   Sibling19d10Cursor* twoLiteralControlCursor = nullptr) {
+                                   Sibling19d10Cursor* twoLiteralControlCursor = nullptr,
+                                   const BlockGrid* grid = nullptr) {
     BlockRecord rec;
     rec.blockRow = blockRow;
     rec.blockCol = blockCol;
@@ -928,6 +946,76 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
         return rec;
     }
 
+    if (grid != nullptr && rec.primary == PrimaryBlockType::IntraIdct5 && dcArray != nullptr) {
+        // Spec 5.3ai answer 3: primary=5 reads its 16-bit DC word from the SAME shared DC cursor as
+        // secondary=2 (one cursor, raster dispatch order, both block types), then the AC tree and a 4-bit
+        // quant-row nibble on the main reader, then the 8x8 intra IDCT (0x100244c0): 8x8 store, no upsample.
+        const size_t dcIdx = grid->dcNext++;
+        if (!dcArray->hasIndex(dcIdx)) {
+            rec.outcome = BlockOutcome::SourceExhausted;
+            return rec;
+        }
+        const uint16_t dcLiteral = dcArray->wordAt(dcIdx);
+        rec.dcLiteral = dcLiteral;
+        rec.acEntryBitPos = br.bitsConsumedSoFar();
+        const AcTreeDecodeResult ac = decodeAcCoefficientTree(br);
+        rec.acExitBitPos = br.bitsConsumedSoFar();
+        rec.acCoeffs = ac.coeffs;
+        const uint32_t quantNibble = br.readBits(4);
+        if (br.ranOutOfData()) {
+            rec.outcome = BlockOutcome::SourceExhausted;
+            return rec;
+        }
+        std::array<int16_t, 64> coeffs = ac.coeffs;
+        coeffs[0] = static_cast<int16_t>(dcLiteral);
+        const std::array<int32_t, 64> quantRow = unpackQuantRow(kIntraQuantCompiled, quantNibble);
+        uint8_t pixels[64];
+        idctBlock8x8(coeffs.data(), quantRow.data(), pixels);
+        const int x0 = blockCol * kBlockSize, y0 = blockRow * kBlockSize;
+        for (int r = 0; r < kBlockSize; ++r)
+            for (int c = 0; c < kBlockSize; ++c)
+                if (x0 + c < dest.width && y0 + r < dest.height) dest.at(x0 + c, y0 + r) = pixels[r * kBlockSize + c];
+        rec.outcome = BlockOutcome::Reconstructed;
+        return rec;
+    }
+    if (grid != nullptr && rec.primary == PrimaryBlockType::PatternBlend4Bit8 && flatFillCursor != nullptr &&
+        twoLiteralControlCursor != nullptr) {
+        // Spec 5.3ai answer 2: two colour bytes c0,c1 from the colour pre-stage cursor, then 8 consecutive
+        // bytes m[0..7] from the 0x10019d10 output cursor (shared with secondary=5). Pixel (r,x) = c1 if bit
+        // x (LSB = leftmost) of m[r] is set, else c0. 8x8 output, no upsample, no main-reader bits.
+        if (!flatFillCursor->hasAtLeast(2) || !twoLiteralControlCursor->hasAtLeast(8)) {
+            rec.outcome = BlockOutcome::SourceExhausted;
+            return rec;
+        }
+        const uint8_t c0 = flatFillCursor->readByte();
+        const uint8_t c1 = flatFillCursor->readByte();
+        const int x0 = blockCol * kBlockSize, y0 = blockRow * kBlockSize;
+        for (int r = 0; r < kBlockSize; ++r) {
+            const uint8_t m = twoLiteralControlCursor->readByte();
+            for (int x = 0; x < kBlockSize; ++x)
+                if (x0 + x < dest.width && y0 + r < dest.height) dest.at(x0 + x, y0 + r) = ((m >> x) & 1) ? c1 : c0;
+        }
+        rec.outcome = BlockOutcome::Reconstructed;
+        return rec;
+    }
+
+    if (grid != nullptr && rec.primary == PrimaryBlockType::SolidFill6 && flatFillCursor != nullptr) {
+        // Spec 5.3aj: primary=6 is a solid 8x8 fill with ONE colour byte from the shared colour pre-stage
+        // cursor (the same cursor primary=8 and the 16x16 fill blocks use). 0 main-reader bits, no DC/AC/pattern
+        // cursor use.
+        if (!flatFillCursor->hasAtLeast(1)) {
+            rec.outcome = BlockOutcome::SourceExhausted;
+            return rec;
+        }
+        const uint8_t c = flatFillCursor->readByte();
+        const int x0 = blockCol * kBlockSize, y0 = blockRow * kBlockSize;
+        for (int r = 0; r < kBlockSize; ++r)
+            for (int x = 0; x < kBlockSize; ++x)
+                if (x0 + x < dest.width && y0 + r < dest.height) dest.at(x0 + x, y0 + r) = c;
+        rec.outcome = BlockOutcome::Reconstructed;
+        return rec;
+    }
+
     if (rec.primary != PrimaryBlockType::SubDispatch) {
         // Primary 2/3/4/5/6/7/8: each individually named by Sec5.3b now
         // (see this file's own top comment for the per-case citation), but
@@ -939,6 +1027,19 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
         return rec;
     }
 
+    if (grid != nullptr) {
+        // Spec 5.3af Q2: primary 1 covers a 2x2 group of cells and advances 16 columns.
+        rec.advanceCols = 2;
+        if (grid->blockCols - blockCol < 2) {  // fewer than 16 columns remain: nothing written, advance 8
+            rec.advanceCols = 1;
+            rec.outcome = BlockOutcome::Reconstructed;
+            return rec;
+        }
+        if ((blockRow & 1) != 0) {  // odd stripe: primary byte only, cells already written by the even stripe
+            rec.outcome = BlockOutcome::Reconstructed;
+            return rec;
+        }
+    }
     uint32_t subRaw = 0;
     if (caseSelectorB != nullptr) {
         // spec-bink-codec.md Sec5.3h: zero-bit-cost read from descriptor B's
@@ -972,6 +1073,11 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
         return rec;
     }
     rec.sub = static_cast<Case1SubType>(sub);
+    if (grid != nullptr && grid->blockRows - blockRow < 2) {  // fewer than 16 rows remain: nothing written, advance 8
+        rec.advanceCols = 1;
+        rec.outcome = BlockOutcome::Reconstructed;
+        return rec;
+    }
 
     switch (*rec.sub) {
         case Case1SubType::SkipFlag1:
@@ -1034,8 +1140,10 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             // the full int8 range) - same residual-around-neutral-gray bias
             // convention the DC/AC (secondary=2) dequant/IDCT path already
             // uses for its own DC term.
-            const uint8_t pixelValue = static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(literal)) + 128);
-            fillBlock8x8(dest, blockRow, blockCol, pixelValue);
+            // spec 5.3af Q3/5.3ag: BIKi block bodies copy the colour pre-stage byte verbatim (no +128); legacy path keeps the old bias.
+            const uint8_t pixelValue = (grid != nullptr) ? literal : static_cast<uint8_t>(static_cast<int32_t>(static_cast<int8_t>(literal)) + 128);
+            if (grid != nullptr) fillBlock16x16(dest, blockRow, blockCol, pixelValue);
+            else fillBlock8x8(dest, blockRow, blockCol, pixelValue);
             rec.outcome = BlockOutcome::Reconstructed;
             return rec;
         }
@@ -1045,8 +1153,23 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             // bit-order choices): "reads two literal bytes, each broadcast
             // and stored", then the real case body consumes exactly 8 more
             // raw control bytes producing a fixed 16x16-pixel output block.
-            const uint8_t literal1 = br.readAlignedByte();
-            const uint8_t literal2 = br.readAlignedByte();
+            // spec 5.3ak (2026-10-14): on the BIKi grid path both literals come
+            // from the shared colour pre-stage cursor (no bias, read order
+            // lit1 then lit2); the 8 control bytes come from the 0x10019d10
+            // pattern cursor (twoLiteralControlCursor).
+            uint8_t literal1 = 0;
+            uint8_t literal2 = 0;
+            if (grid != nullptr && flatFillCursor != nullptr) {
+                if (!flatFillCursor->hasAtLeast(2)) {
+                    rec.outcome = BlockOutcome::SourceExhausted;
+                    return rec;
+                }
+                literal1 = flatFillCursor->readByte();
+                literal2 = flatFillCursor->readByte();
+            } else {
+                literal1 = br.readAlignedByte();
+                literal2 = br.readAlignedByte();
+            }
             if (br.ranOutOfData()) {
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
@@ -1064,7 +1187,19 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             // Sec5.3b (2026-10-08) CLOSES this sub-case: see
             // rawCopyDualRowDuplicate8x8()'s own doc comment for the full
             // citation and the one DERIVED traversal-order choice it makes.
-            const bool ok = rawCopyDualRowDuplicate8x8(br, dest, blockRow, blockCol);
+            if (grid != nullptr && flatFillCursor != nullptr) {
+                // Spec 5.3aj/5.3af/5.3ag: 64 verbatim bytes from the shared colour pre-stage cursor.
+                if (!flatFillCursor->hasAtLeast(64)) {
+                    rec.outcome = BlockOutcome::SourceExhausted;
+                    return rec;
+                }
+                uint8_t core[kBlockSize * kBlockSize];
+                for (uint8_t& px : core) px = flatFillCursor->readByte();
+                upsample2x2Store(dest, blockRow, blockCol, core);
+                rec.outcome = BlockOutcome::Reconstructed;
+                return rec;
+            }
+            const bool ok = rawCopyDualRowDuplicate8x8(br, dest, blockRow, blockCol, grid != nullptr);
             if (!ok) {
                 rec.outcome = BlockOutcome::SourceExhausted;
                 return rec;
@@ -1134,11 +1269,12 @@ inline BlockRecord decodeOneBlock(BitstreamReader& br, PlaneView dest, const Pla
             // flagged there, not invented silently).
             uint16_t dcLiteral = 0;
             if (dcArray != nullptr) {
-                if (!dcArray->hasIndex(static_cast<size_t>(blockCol))) {
+                const size_t dcIdx = (grid != nullptr) ? grid->dcNext++ : static_cast<size_t>(blockCol);
+                if (!dcArray->hasIndex(dcIdx)) {
                     rec.outcome = BlockOutcome::SourceExhausted;
                     return rec;
                 }
-                dcLiteral = dcArray->wordAt(static_cast<size_t>(blockCol));
+                dcLiteral = dcArray->wordAt(dcIdx);
             } else {
                 const uint8_t lo = br.readAlignedByte();
                 const uint8_t hi = br.readAlignedByte();

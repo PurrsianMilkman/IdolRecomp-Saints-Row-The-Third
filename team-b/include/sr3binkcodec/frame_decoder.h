@@ -517,10 +517,13 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // in main_menu_bg.bik's own Y-plane per block_dispatch.h's own top
         // comment), which this task's own "no regressions" requirement
         // forbids.
-        Sibling19d10Cursor* sibling19d10CursorPtr = nullptr;
-        for (int col = 0; col < blockCols; ++col) {
+        Sibling19d10Cursor rowSibling19d10Cursor(&rowPreStageGap.sibling19d10Array, 0);
+        Sibling19d10Cursor* sibling19d10CursorPtr = (decodeDcArray && rowPreStageGap.sibling19d10Array.size() != 0) ? &rowSibling19d10Cursor : nullptr;
+        const BlockGrid gridModel{blockCols, blockRows, 0};
+        for (int col = 0; col < blockCols;) {
             BlockRecord rec = decodeOneBlock(br, dest, prev, row, col, caseSelector, caseSelectorB, dcArrayPtr,
-                                              flatFillCursorPtr, sibling19d10CursorPtr);
+                                              flatFillCursorPtr, sibling19d10CursorPtr, caseSelector != nullptr ? &gridModel : nullptr);
+            col += rec.advanceCols;
             trace.blocks.push_back(rec);
             if (rec.outcome != BlockOutcome::Reconstructed) {
                 switch (rec.outcome) {

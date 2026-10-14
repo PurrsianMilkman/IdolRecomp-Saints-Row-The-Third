@@ -96,7 +96,7 @@ repeated name_count times:
 7. **Whether the two archives' coordinate ranges are truly non-overlapping halves of one grid**, or whether there's a more complex relationship (e.g. `sr3_city_1.vpp_pc` holding override/patch content for the same coordinates) — inferred from the ranges looking disjoint in the samples checked, not exhaustively verified.
 8. **`stream_grid.asm_pc`'s full 1,812-record content** was not enumerated — confirmed to use the established `.asm_pc` format, but not cross-checked entry-by-entry the way the smaller `sr3_city_missions.asm_pc` was in `spec-mission-packages.md`.
 
-None of these gaps block the core deliverable: the tile/coordinate/landmark naming scheme is now clearly documented, reliability is confirmed excellent (mode-(b) throughout, no blocked content found), every bundle's contents can be enumerated and its already-solved sub-formats (textures, effects, manifests) extracted with full confidence, and `sr3_city.grid_pc`'s own record structure is now decoded — only the terrain and static-prop-mesh formats *(their vertex layouts since decoded: `spec-vertex-format.md`)*, and the still-unlocated mechanism that actually places named landmarks at world positions, remain open.
+**[Triage 2026-10-13, Team A OPEN sweep:** #1, #2, #4 are closed by the referenced specs. #3 `.lightmult_pc` is asset type 38, "Light Curve" (siblings `.lightrot_pc` and `.lightpos_pc`; loader `0x008e6300`, unloader `0x008e5940`; `spec-asm-format.md` §9.3, `spec-extensionless-types.md`). Its payload layout is still OPEN under `spec-extensionless-types.md` item 7. #7 and #8 are LOW cross-checks: the port loads both city archives by tile name. Overlap between them has not been checked; if it exists, which archive wins is OPEN.]** None of these gaps block the core deliverable: the tile/coordinate/landmark naming scheme is now clearly documented, reliability is confirmed excellent (mode-(b) throughout, no blocked content found), every bundle's contents can be enumerated and its already-solved sub-formats (textures, effects, manifests) extracted with full confidence, and `sr3_city.grid_pc`'s own record structure is now decoded — only the terrain and static-prop-mesh formats *(their vertex layouts since decoded: `spec-vertex-format.md`)*, and the still-unlocated mechanism that actually places named landmarks at world positions, remain open.
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -525,6 +525,8 @@ bound.
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
 ### 8.8 Open items and concrete next steps
+
+**[Triage 2026-10-13: #1 and #2 are closed (§9.2, §9.4). #3 tier meaning and #4 pool sharing only size memory budgets, so they are LOW. **Port rule:** a port allocates generously and does not reproduce the tier budgets. #5 onward are replay-tool coverage notes (LOW).]**
 
 1. **`0x22`/`0x23`**: enumerate `0x00dd64b0`'s full caller list (bounded, not yet done)
    to close the "different caller" hypothesis completely. If that list contains only

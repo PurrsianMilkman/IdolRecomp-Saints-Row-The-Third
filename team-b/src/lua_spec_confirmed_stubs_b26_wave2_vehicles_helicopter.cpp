@@ -67,7 +67,7 @@ int stub_vehicle_anim_playing(lua_State* L) {
     bool result = false;
     if (st->objectResolves().get(name)) {
         VehicleState& v = st->getOrCreateVehicle(name);
-        if (v.bodyActive.known() && v.bodyActive.get() && v.animSetActiveNotFinishing.known()) {
+        if (v.bodyActiveOrDefault() && v.animSetActiveNotFinishing.known()) {
             result = v.animSetActiveNotFinishing.get();
         }
     }
@@ -118,7 +118,7 @@ int stub_vehicle_engine_start(lua_State* L) {
     v.engineRunning = false; // CONFIRMED: stopped first
     v.engineRunning = true;  // CONFIRMED: then restarted, unconditionally
     (void)instantOrSpinUp;   // HYPOTHESIS "start instantly vs spin-up" - no per-frame engine-audio simulation here
-    if (v.vehicleClass.known() && v.vehicleClass.get() == 4 && v.bodyActive.known() && v.bodyActive.get()) {
+    if (v.vehicleClass.known() && v.vehicleClass.get() == 4 && v.bodyActiveOrDefault()) {
         ++v.engineStartVtolAudioEventCount; // CONFIRMED: class 4 + active sub-object fires an audio event
     }
     return 0;
@@ -475,7 +475,7 @@ int stub_get_vehicle_speed(lua_State* L) {
     int32_t speed = 0;
     if (st->objectResolves().get(name)) {
         VehicleState& v = st->getOrCreateVehicle(name);
-        if (v.bodyActive.known() && v.bodyActive.get()) speed = v.speedMph.get();
+        if (v.bodyActiveOrDefault()) speed = v.speedMph.get();
     }
     lua_pushnumber(L, speed);
     return 1;

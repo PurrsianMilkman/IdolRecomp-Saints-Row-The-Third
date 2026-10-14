@@ -200,7 +200,7 @@ int stub_inv_weapon_add_temporary(lua_State* L) {
     int64_t arg8 = truncateEa2596(optionalNumberDefault(L, 8, 0.0)); // CONFIRMED default 0, Sec4.10
     EngineState* st = upState(L);
     if (!st->objectResolves().get(target)) return 0; // OPEN until set
-    if (!st->weaponDefinitionResolves().get(AsciiLowerFold(weapon))) return 0; // OPEN until set
+    if (!st->weaponDefinitionResolve(AsciiLowerFold(weapon))) return 0; // OPEN until set
     st->getOrCreateCharacter(target); // same "resolver also lazily tracks the character" convention project-wide
     WeaponTemporaryInventorySlot& slot = st->weaponTemporaryInventory()[target][AsciiLowerFold(weapon)];
     slot.temporaryGrant = true; // CONFIRMED marker
@@ -241,7 +241,7 @@ int stub_inv_weapon_remove_temporary(lua_State* L) {
     std::string weapon = argString(L, 2);
     EngineState* st = upState(L);
     if (!st->objectResolves().get(target)) return 0; // OPEN until set
-    if (!st->weaponDefinitionResolves().get(AsciiLowerFold(weapon))) return 0; // OPEN until set
+    if (!st->weaponDefinitionResolve(AsciiLowerFold(weapon))) return 0; // OPEN until set
     auto targetIt = st->weaponTemporaryInventory().find(target);
     if (targetIt == st->weaponTemporaryInventory().end()) return 0; // no existing slot - secondary-lookup fallback OPEN, not modeled
     auto slotIt = targetIt->second.find(AsciiLowerFold(weapon));

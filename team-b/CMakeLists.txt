@@ -484,6 +484,11 @@ add_executable(sr3weapons_tests tests/synthetic_weapon_fire_test.cpp)
 target_link_libraries(sr3weapons_tests PRIVATE sr3weapons)
 add_test(NAME synthetic_weapon_fire_test COMMAND sr3weapons_tests)
 
+# Damage model (spec-weapons-runtime.md Sec4.5/4.5.5a, spec sync 974bd21).
+add_executable(sr3weapons_damage_model_tests tests/synthetic_damage_model_test.cpp)
+target_link_libraries(sr3weapons_damage_model_tests PRIVATE sr3weapons)
+add_test(NAME synthetic_damage_model_test COMMAND sr3weapons_damage_model_tests)
+
 # Ground-follow helper (include/sr3player/ground_follow.h, header-only,
 # added 2026-10-08 for the live-playtest ground-missing fix) - see that
 # header's own file banner for the full CONFIRMED-contract-shape/CHOSEN-
@@ -2153,6 +2158,11 @@ add_executable(sr3luahost_sec8_sweep_tests tests/synthetic_luahost_sec8_sweep_te
 target_link_libraries(sr3luahost_sec8_sweep_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_sec8_sweep_test COMMAND sr3luahost_sec8_sweep_tests)
 
+# spec sync ce4556f FINAL answers (Sec7.27/7.28/8.4/25.27/29/38.1).
+add_executable(sr3luahost_ce4556f_answers_tests tests/synthetic_luahost_ce4556f_answers_test.cpp)
+target_link_libraries(sr3luahost_ce4556f_answers_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_ce4556f_answers_test COMMAND sr3luahost_ce4556f_answers_tests)
+
 # Team-A-cleared batch (commit 97a9b8d): spec-lua-api-behaviour.md Sec1.1
 # trigger_enable, Sec1.2 on_trigger, Sec1.4 objective_text_clear, Sec1.5
 # mission_end_failure, Sec1.6 mission_set_checkpoint, Sec2.1
@@ -2245,6 +2255,11 @@ add_test(NAME synthetic_luahost_b28_batch1_deferred6_test COMMAND sr3luahost_b28
 add_executable(sr3luahost_b29_sec6_notoriety_mission_tests tests/synthetic_luahost_b29_sec6_notoriety_mission_test.cpp)
 target_link_libraries(sr3luahost_b29_sec6_notoriety_mission_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_luahost_b29_sec6_notoriety_mission_test COMMAND sr3luahost_b29_sec6_notoriety_mission_tests)
+
+# Team A spec sync 9c70c61: mission-sweep OPEN blocker answers.
+add_executable(sr3luahost_sweep_blockers_9c70c61_tests tests/synthetic_luahost_sweep_blockers_9c70c61_test.cpp)
+target_link_libraries(sr3luahost_sweep_blockers_9c70c61_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_sweep_blockers_9c70c61_test COMMAND sr3luahost_sweep_blockers_9c70c61_tests)
 
 # b30 (2026-10-08): tranche-F close-out (character_kill, vehicle_is_destroyed)
 # + camera_restrict_set_active - see
@@ -2454,7 +2469,7 @@ endif()
 # and restrict fireConfirmedHooks() to each script's own real state - see
 # tools/lua_host_run.cpp's own `statetag` namespace for the full method.
 add_executable(lua_host_run tools/lua_host_run.cpp)
-target_link_libraries(lua_host_run PRIVATE sr3luahost vpp_container sr3lua sr3asm sr3tables_cutscene sr3tables_weapons sr3tables_progression)
+target_link_libraries(lua_host_run PRIVATE sr3luahost vpp_container sr3lua sr3asm sr3tables_cutscene sr3tables_weapons sr3tables_progression sr3tables_vehicle_world)
 
 # Integration check (cloud phase 2026-09-30): lua_host_run end to end on a
 # synthetic two-archive cache written by tests/lua_host_run_fixture.cpp
@@ -3996,3 +4011,13 @@ add_test(NAME synthetic_sr3agora_test COMMAND sr3agora_tests)
 # vehicle_enter_guardian_angel.
 add_executable(sr3luahost_vehicle_enter_eligibility_gate_tests tests/synthetic_luahost_vehicle_enter_eligibility_gate_test.cpp)
 target_link_libraries(sr3luahost_vehicle_enter_eligibility_gate_tests PRIVATE sr3luahost)
+
+# Mission-blocker rules from spec sync 897a7d5 (spec-lua-api-behaviour.md 2026-10-12 FINAL blocks).
+add_executable(sr3luahost_sweep_blockers_897a7d5_tests tests/synthetic_luahost_sweep_blockers_897a7d5_test.cpp)
+target_link_libraries(sr3luahost_sweep_blockers_897a7d5_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_sweep_blockers_897a7d5_test COMMAND sr3luahost_sweep_blockers_897a7d5_tests)
+
+# Team A spec sync e6691f1: mission-sweep round-2 OPEN value answers.
+add_executable(sr3luahost_mission_values_e6691f1_tests tests/synthetic_luahost_mission_values_e6691f1_test.cpp)
+target_link_libraries(sr3luahost_mission_values_e6691f1_tests PRIVATE sr3luahost)
+add_test(NAME synthetic_luahost_mission_values_e6691f1_test COMMAND sr3luahost_mission_values_e6691f1_tests)

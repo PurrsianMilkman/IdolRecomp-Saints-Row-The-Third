@@ -538,7 +538,8 @@ int main() {
     CHECK(es.getOrCreateCharacter("Bob").caeCommittedTargetName == "Object1");
     CHECK(es.getOrCreateCharacter("Bob").caeStagedActionIndex == 99); // CONFIRMED: staged block NOT reset first
 
-    fails(host, gp, "force_throw_do('Bob')", "has a throwable item"); // OPEN until a test sets it (no inventory model)
+    ok(host, gp, "force_throw_do('Bob')"); // Sec55.4 CHOSEN rule: no thrown-class weapon held -> stages nothing, no error
+    CHECK(es.getOrCreateCharacter("Bob").caeStagedActionIndex != 4);
     es.getOrCreateCharacter("Bob").hasThrowableItemEquipped.set(true);
     ok(host, gp, "force_throw_do('Bob', 'Target1')");
     CHECK(es.getOrCreateCharacter("Bob").caeStagedActionIndex == 4); // CONFIRMED literal: action 4 = throw grenade

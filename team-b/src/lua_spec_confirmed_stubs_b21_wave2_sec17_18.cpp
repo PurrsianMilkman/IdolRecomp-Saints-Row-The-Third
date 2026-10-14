@@ -219,7 +219,7 @@ int stub_set_attack_enemies_flag(lua_State* L) {
     if (!st->objectResolves().get(name)) return 0; // OPEN until set
     CharacterState& c = st->getOrCreateCharacter(name);
     c.attackEnemiesBitAc = v; // CONFIRMED unconditional, unreplicated
-    if (c.attackEnemiesSecondaryGatePredicate.get()) { // OPEN until set
+    if (c.attackEnemiesSecondaryGatePredicate.known() ? c.attackEnemiesSecondaryGatePredicate.get() : true) { // Sec17.5/Sec7.10 CHOSEN rule (2026-10-12): vtable +0x68 true for a resolved live character
         if (c.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
             c.aiDataFlags9.setBits(CharacterState::kAttackEnemiesOnSightBit9,
                                     v ? CharacterState::kAttackEnemiesOnSightBit9 : 0u);
@@ -436,7 +436,7 @@ int stub_character_add_prop(lua_State* L) {
     EngineState* st = upState(L);
     std::string resolvedName;
     if (!resolveFollowerAwareObject(st, name, resolvedName)) return 0; // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
-    if (!st->propDefinitionResolves().get(propName)) return 0; // OPEN until set
+    if (!st->propNameResolves(propName)) return 0; // items_3d catalogue once installed (f752324), else OPEN until set
     st->getOrCreateCharacter(resolvedName).attachedProps.push_back(propName);
     return 0;
 }
@@ -691,7 +691,7 @@ int stub_light_group_set_intensity(lua_State* L) {
     double intensity = lua_tonumber(L, 2); // CONFIRMED: mandatory raw float
     (void)optionalBoolDefault(L, 3, false); // CONFIRMED dead argument - read, never used
     EngineState* st = upState(L);
-    if (!st->lightGroupResolves().get(name)) return 0; // OPEN until set
+    if (!st->lightGroupResolve(name)) return 0; // Sec4.13.0: unresolved group is a no-op
     auto& group = st->lightGroup(name);
     group.flagBit2Set = true;
     group.intensity = intensity;
@@ -730,7 +730,7 @@ int stub_inv_item_remove(lua_State* L) {
         ++c.inventoryItemRemoveReplicateCount;
         return 0;
     }
-    if (st->inventoryItemDefinitionResolves().get(itemName)) { // OPEN until set
+    if (st->inventoryItemDefinitionResolve(itemName)) { // Sec17.25: "none" (not a row) resolves null; other unregistered names OPEN
         ++c.inventoryItemRemoveAppliedCount;
     }
     return 0;

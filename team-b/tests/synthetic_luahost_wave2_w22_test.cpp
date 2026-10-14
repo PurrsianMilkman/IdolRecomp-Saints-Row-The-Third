@@ -264,6 +264,13 @@ int main() {
     es.propDefinitionResolves().set("hat1", true);
     ok(host, gp, "character_add_prop('c8', 'hat1')");
     CHECK(es.getOrCreateCharacter("c8").attachedProps.size() == 1);
+    // f752324: items_3d catalogue installed -> complete table; unknown name = silent no-op, case-folded.
+    es.installItems3dNames({"GasMask"});
+    es.objectResolves().set("c9", true);
+    ok(host, gp, "character_add_prop('c9', 'gasmask')");
+    CHECK(es.getOrCreateCharacter("c9").attachedProps.size() == 1);
+    ok(host, gp, "character_add_prop('c9', 'nosuchprop')");
+    CHECK(es.getOrCreateCharacter("c9").attachedProps.size() == 1);
 
     // Sec17.14/17.15 camera_shake_stop/camera_shake_play_looping: kept
     // separate from the already-registered camera_shake_play.
@@ -373,6 +380,18 @@ int main() {
     es.inventoryItemDefinitionResolves().set("pistol", true);
     ok(host, gp, "inv_item_remove('pistol')");
     CHECK(es.getOrCreateCharacter("#PLAYER1#").inventoryItemRemoveAppliedCount == 1);
+    // installInventoryItemNames: case-insensitive, complete table -> unknown resolves false (no OPEN).
+    CHECK(!es.inventoryItemTableComplete());
+    es.installInventoryItemNames({"Rifle-Gang", "DLC_fireball"});
+    CHECK(es.inventoryItemTableComplete());
+    CHECK(es.inventoryItemDefinitionResolve("dlc_FIREBALL"));
+    CHECK(es.inventoryItemDefinitionResolve("RIFLE-gang"));
+    CHECK(!es.inventoryItemDefinitionResolve("no-such-item"));
+    CHECK(!es.inventoryItemDefinitionResolve("none"));
+    ok(host, gp, "inv_item_remove('DLC_fireball')");
+    CHECK(es.getOrCreateCharacter("#PLAYER1#").inventoryItemRemoveAppliedCount == 2);
+    ok(host, gp, "inv_item_remove('no-such-item')");
+    CHECK(es.getOrCreateCharacter("#PLAYER1#").inventoryItemRemoveAppliedCount == 2);
     es.getOrCreateCharacter("#PLAYER1#").forceFlagGatePasses.set(false);
     ok(host, gp, "inv_item_remove('pistol')");
     CHECK(es.getOrCreateCharacter("#PLAYER1#").inventoryItemRemoveReplicateCount == 1);

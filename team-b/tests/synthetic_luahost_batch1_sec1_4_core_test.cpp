@@ -201,10 +201,9 @@ int main() {
         ok(host, gp, "local r = door_open('Door1'); assert(r == true)");
         CHECK(es.getOrCreatePlacedObject("Door1").simpleOpenCount == 1);
 
-        // Rich path: arg4 present but anchor OPEN -> refuses.
+        // Rich path: arg4 present, anchor not known -> absent (Sec4.13.0): animation step skipped, pushes false.
         es.objectResolves().set("Char1", true);
-        refuses(host, gp, "door_open('Door1', false, true, 'Char1', 'AnimA')",
-                "door +0xc8 interaction-anchor sub-object present");
+        ok(host, gp, "local r = door_open('Door1', false, true, 'Char1', 'AnimA'); assert(r == false)");
 
         // Anchor present -> rich path applies, pushes true.
         es.getOrCreatePlacedObject("Door1").hasInteractionAnchor.set(true);

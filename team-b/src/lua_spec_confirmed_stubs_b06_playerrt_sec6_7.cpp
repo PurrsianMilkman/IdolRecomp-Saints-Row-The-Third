@@ -292,17 +292,26 @@ int stub_character_is_ready(lua_State* L) {
         return 1;
     }
     CharacterState& c = st->getOrCreateCharacter(resolvedName);
-    if (!c.isAlive.get()) { // OPEN until set (0x0096f4f0)
+    if (!c.aliveByPredicate()) { // OPEN until set (0x0096f4f0)
         lua_pushboolean(L, 0);
         return 1;
     }
-    if (st->characterReadyBlocked().get(resolvedName)) { // OPEN until set (0x009a1dc0)
+    // 0x009a1dc0 CONFIRMED (f752324): true iff pose-mode byte +0xcd2 is not
+    // 0/6 (ragdolled / physics-posed). Unseeded = standing NPC = false.
+    if (st->characterReadyBlocked().known(resolvedName) && st->characterReadyBlocked().get(resolvedName)) {
         lua_pushboolean(L, 0);
         return 1;
     }
-    throw OpenStateError(
-        "character_is_ready AND-chain (class-descriptor +10 bit 0x04 / debug flag 0x014ff6b8 / gate 0x008addb0 deep branch)",
-        "spec-lua-api-behaviour.md Sec7.27");
+    // ce4556f Sec7.27 FINAL port rule (single player): the remaining AND-chain
+    // is (a) the +0x4aa tracked-scripted-action lookup (0x004f2880): not ready
+    // while a ticket exists and is still pending; (b) the NPC-only AI-mode
+    // tests (Stunned / Idle+"trans to stand"), which this host does not track
+    // and so never fire for a spawned, standing NPC; (c) the 0x014ff6b8 debug
+    // flag (always 0 in retail) and gate 0x008addb0 (true = locally owned in
+    // single player). All pass for an ordinary standing NPC.
+    bool noPendingAction = c.scriptedActionLookupNonNull.known() ? c.scriptedActionLookupNonNull.get() : true;
+    lua_pushboolean(L, noPendingAction ? 1 : 0);
+    return 1;
 }
 
 // character_playing_combat_move (Sec25.27, 0x00a41c60). CONFIRMED: resolve
@@ -322,7 +331,9 @@ int stub_character_playing_combat_move(lua_State* L) {
         lua_pushboolean(L, 0);
         return 1;
     }
-    bool playing = st->characterPlayingCombatMove().get(resolvedName); // OPEN until set (0x009634f0)
+    // ce4556f Sec25.27 FINAL: true iff +0x1358 != 0xffff; a human starts at "none".
+    bool playing = st->characterPlayingCombatMove().known(resolvedName)
+                       ? st->characterPlayingCombatMove().get(resolvedName) : false;
     lua_pushboolean(L, playing ? 1 : 0);
     return 1;
 }
@@ -984,7 +995,9 @@ int stub_ai_scripted_action_is_complete(lua_State* L) {
     // Resolved via 0x00a28150 (Sec7.28) - wired 2026-10-08 (follower-
     // sentinel-resolver pass).
     if (resolveFollowerAwareObject(st, name, resolvedName)) { // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
-        complete = st->getOrCreateCharacter(resolvedName).scriptedActionLookupNonNull.get(); // OPEN until set
+        // ce4556f Sec7.28 FINAL: lookup non-null unless a ticket exists and is pending
+        const auto& lk = st->getOrCreateCharacter(resolvedName).scriptedActionLookupNonNull;
+        complete = lk.known() ? lk.get() : true;
     }
     lua_pushboolean(L, complete ? 1 : 0);
     return 1;

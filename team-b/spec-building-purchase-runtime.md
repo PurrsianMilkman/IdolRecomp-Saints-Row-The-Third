@@ -184,7 +184,52 @@ Static disassembly only, read-only project. This section joins up material that 
 (both stored scaled by a constant at `0x01117dc8`), `Ownership/Reward` → `+0x20`, `Use_Message`,
 `Minimap_Icon`, `Shop_Type`. At run time `+0x08` is the number of shops in the franchise and `+0x0c`
 the number owned (the discount tier in `spec-lua-api-behaviour.md` §62.2 compares them). The base
-copy of `shop_names.xtbl` is not in `tools/ai_base_xtbl/`, so the per-shop Income values are OPEN.
+copy of `shop_names.xtbl` ~~is not in `tools/ai_base_xtbl/`, so the per-shop Income values are OPEN~~ **was extracted 2026-10-12** from `misc_tables.vpp_pc` (21,919 bytes; extractor `tools/scratchpad/extract_one_xtbl.py`, now in `tools/ai_base_xtbl/shop_names.xtbl`). **Per-shop values, FINAL (data-derived):** 41 rows; `Ownership/Income` is 10% of `Ownership/Cost` in 39 of 41 rows. The two exceptions are `Apartments_Estates` (cost 100, income 100) and `Friendly_Fire_MMP03` (cost 100, income 500), which look like special or mission variants.
+
+| Shop (`Name`) | `Shop_Type` | `Ownership/Cost` | `Ownership/Income` |
+|---|---|---|---|
+| Impressions | clothing | 10000 | 1000 |
+| Friendly_Fire | weapon | 5000 | 500 |
+| Rim_Jobs | mechanic | 5000 | 500 |
+| Scratch_That | misc property | 5000 | 500 |
+| Image_as_Designed | surgeon | 5000 | 500 |
+| Rusty's_Needle | tattoo | 5000 | 500 |
+| Fangs_Memories | clothing | 5000 | 500 |
+| Leather_Lace | clothing | 10000 | 1000 |
+| Lets_Pretend | clothing | 10000 | 1000 |
+| Nobody_Loves_Me | clothing | 5000 | 500 |
+| Planet_Saints | clothing | 5000 | 500 |
+| PowerAndLight | misc property | 10000 | 1000 |
+| Organ_BlackMarket | misc property | 3000 | 300 |
+| MONEYLUANDERING | misc property | 2000 | 200 |
+| FACTORY | misc property | 10000 | 1000 |
+| Crack_House | misc property | 1000 | 100 |
+| COUNTERFITING | misc property | 2000 | 200 |
+| Casino | misc property | 10000 | 1000 |
+| Brothel | misc property | 1000 | 100 |
+| Brothel2 | misc property | 1000 | 100 |
+| Service_station | misc property | 1000 | 100 |
+| Service_station2 | misc property | 1000 | 100 |
+| Thunder_Pump | misc property | 1000 | 100 |
+| Cola_Factory | misc property | 10000 | 1000 |
+| Steel_Factory | misc property | 8000 | 800 |
+| Pawn_Shop | misc property | 1000 | 100 |
+| Pawn_Shop2 | misc property | 1000 | 100 |
+| Meth_Lab | misc property | 1000 | 100 |
+| Hostle | misc property | 1000 | 100 |
+| Hospital | misc property | 4000 | 400 |
+| Apartments_Flats | misc property | 2000 | 200 |
+| Apartments_Estates | misc property | 100 | 100 |
+| Chop_Shop | misc property | 1000 | 100 |
+| Chop_Shop2 | misc property | 1000 | 100 |
+| Bodega | misc property | 1000 | 100 |
+| Airport | misc property | 50000 | 5000 |
+| Warf | misc property | 6000 | 600 |
+| Condo | misc property | 1000 | 100 |
+| Motel | misc property | 1000 | 100 |
+| Apartment | misc property | 1000 | 100 |
+| Friendly_Fire_MMP03 | weapon | 100 | 500 |
+
 
 ### T.2 (a) Income per payout — `0x009ec4d0`, CONFIRMED (disassembly). NEW
 
@@ -226,7 +271,7 @@ return total_cents
 
 1. **Interval** = tweak `Cash_payout_interval_minutes` (registered by `0x010079b0` into
    `0x0263b164`; base `tweak_table.xtbl` value **15**) × 60,000 ms. **Clock:** the engine millisecond
-   timer `0x01320d94`. This is real elapsed time (it wraps at 1.8·10⁹), *not* the in-game time of day.
+   timer `0x01320d94`. This is elapsed play time (it wraps at 1.8·10⁹ ms), *not* the in-game time of day. **[Pause behaviour RESOLVED 2026-10-12, FINAL, from raw bytes:** the clock's only writer, at `0x00d9e04c`–`0x00d9e095`, runs only when the dword at `0x029c994c` is 0. It then adds the frame's millisecond delta and wraps by subtracting `0x6b49d200` (1,800,000,000) once past it. Every other reference in the binary is a read (the timer module `0x00d9e131`–`0x00d9e655`). So the clock **stops while `0x029c994c` is non-zero**. The gate is a **nesting pause counter**, not a flag: increment `0x00d9e0f0`, decrement `0x00d9e100`, reset to 0 `0x00d9e110`, read `0x00d9e120`. All 7 direct callers (`0x007074d2`, `0x007075a9`, `0x00708540`, `0x00708577`, `0x00708c0d`, `0x00708e0a`, `0x00708ff5`) are in the game-mode manager (`0x0070xxxx`, the same module as the mode-stack accessor `0x00706ab0`). That is CONFIRMED structurally. Its real-world trigger is HIGH CONFIDENCE: pushing or popping a pausing game mode such as the pause menu. **Port rule:** advance the payout clock only during unpaused play, so pausing does not accrue income.]
    The interval is not an in-game hour. Whether that counter stops while the game is paused was not
    checked (OPEN; see `spec-player-runtime.md` "Timers").
 2. **Arming:** `0x009ec4b0`, called from `0x00708330` (the world start/load path), arms the timer for
@@ -307,8 +352,8 @@ return total_cents
 7. Expose T.2 ÷ 100 through `get_world_income_dollars` and the crib-cash reply. Expose district %
    as owned area ÷ total area.
 
-**OPEN:** the per-shop `Income` values (base `shop_names.xtbl` was not extracted); the starting
-value of the shop scalar `+0x94`; whether the payout clock pauses with the game; any gang or
+**OPEN:** ~~the per-shop `Income` values~~ (closed 2026-10-12, table above); the starting
+value of the shop scalar `+0x94`; ~~whether the payout clock pauses with the game~~ (resolved 2026-10-12, above); any gang or
 notoriety change at 100% (script side); what consumes `district_income`.
 
 ## 8. Clean-room compliance note

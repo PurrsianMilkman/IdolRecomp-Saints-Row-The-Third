@@ -289,7 +289,8 @@ int main() {
     CHECK(es.getOrCreateVehicle("Heli1").largeDspiral);
 
     // --- Sec39.2 rc signal/roadblocks/spotlight -----------------------------
-    fails(host, gp, "rc_set_max_signal_range(100)", "RC max signal range");
+    ok(host, gp, "assert(rc_set_max_signal_range(100) == 200.0)"); // start-up value 200 (tweak RC_vehicle_gun_max_distance, Sec39.2)
+    CHECK(es.rcMaxSignalRange().get() == 100.0);
     es.rcMaxSignalRange().set(50.0);
     ok(host, gp, "assert(rc_set_max_signal_range(100) == 50.0)"); // returns the PREVIOUS value
     ok(host, gp, "assert(rc_set_max_signal_range(0) == 100.0)");

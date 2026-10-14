@@ -118,8 +118,11 @@ int stub_vehicle_is_destroyed(lua_State* L) {
     bool resolved = st->objectResolves().get(name); // OPEN until set (0x0062a190)
     bool destroyed = true; // CONFIRMED fail-safe default
     if (resolved) {
-        VehicleState& v = st->getOrCreateVehicle(name);
-        destroyed = v.destroyedFlag16c8.get(); // CONFIRMED: direct, unnegated read (tranche-F correction)
+        // f752324 FINAL: +0x16c8 bit0 is a re-entrancy latch set only while the
+        // destruction trigger runs, never observable from a script thread. A
+        // resolved live vehicle is therefore never "destroyed"; a removed /
+        // non-live one fails resolution and answers true above.
+        destroyed = false;
     }
     lua_pushboolean(L, destroyed ? 1 : 0);
     return 1;

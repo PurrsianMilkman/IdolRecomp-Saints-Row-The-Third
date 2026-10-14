@@ -35,6 +35,38 @@ void applySpecInitialState(EngineState& es) {
         es.tutorialState().set(EngineState::tutorialStateKey(i), i <= 188 ? 0 : 1);
     }
 
+    //    Descriptor flags byte +0x24 per index (Sec6.19, Team A sync 9c70c61,
+    //    CONFIRMED - stack simulation of 0x007178c0): every descriptor starts
+    //    at 0; the only later writers are OR-patches (0x0071a5a1-0x0071a89d).
+    //    Bit 0x04 is never set statically.
+    {
+        uint32_t flags[EngineState::kTutorialEntryCount] = {};
+        auto orRange = [&](int lo, int hi, uint32_t bit) {
+            for (int i = lo; i <= hi; ++i) flags[i] |= bit;
+        };
+        for (int i : {54, 136, 139, 184, 189, 190, 194}) flags[i] |= 0x02u;
+        orRange(20, 39, 0x02u); orRange(123, 130, 0x02u);
+        for (int i : {145, 147, 88, 89, 189, 190, 191, 194}) flags[i] |= 0x08u;
+        orRange(20, 39, 0x08u); orRange(123, 130, 0x08u);
+        for (int i : {148, 189, 190, 191, 194}) flags[i] |= 0x10u;
+        orRange(20, 39, 0x10u); orRange(123, 130, 0x10u);
+        for (int i = 0; i < EngineState::kTutorialEntryCount; ++i)
+            es.tutorialStart().flagsByte24.set(EngineState::tutorialStateKey(i), flags[i]);
+        // 0x006d2910 == -1 ("no activity running"): HIGH CONFIDENCE per the
+        // same sync for a story mission in single player (class flag 0x10
+        // object is the current activity, absent here).
+        es.tutorialStart().noMissionLive006d2910.set(true);
+    }
+
+    //    Continuous-explosion running bool 0x012ec964 (Sec22.24 / Sec28.16, Team A sync 9c70c61, CONFIRMED):
+    //    zero-fill .data, so it starts false.
+    es.continuousExplosion().active.set(false);
+
+    //    customization_screen_is_ready backing flag (Sec60.1, Team A sync 9c70c61, CONFIRMED): the native
+    //    reports the UI global Store_lineup_is_loaded, which only the store_character document sets. No such
+    //    document is loaded at start (and push_screen never pushes one here), so it is false.
+    es.customizationCreation().screenIsReady.set(false);
+
     // 3. vehicle-store flag 0x022cdf08 (Sec10.1, Sec26.28, CONFIRMED -
     //    disassembly): 0 at load, so store_vehicle_get_state returns 0.0.
     es.vehicleStoreActive().set(false);
@@ -388,6 +420,21 @@ void applySpecInitialState(EngineState& es) {
     //     the "no local player" path still does so via an explicit
     //     `.set(false)`/`.forget()` call, exactly as before this pre-seed.
     es.hasLocalPlayer().set(true);
+
+    // 17. Mission-blocker answers, spec-lua-api-behaviour.md (2026-10-12, FINAL):
+    //  - Sec6.19 step 1: tutorial byte 0x0151d5a6 starts 0 (zero-fill .data; set non-zero only by the
+    //    activity/mission code this host does not model).
+    //  - Sec6.19 step 6: byte 0x014f3d34 starts 0 (zero-fill .data; written only by the scripted-action
+    //    cluster this host does not model).
+    //  - Sec39.2: the RC max signal range global 0x0278CAD4 starts at the tweak_table.xtbl row
+    //    RC_vehicle_gun_max_distance = 200.
+    //  - Sec4.13.0: the sentinel "#CLOSEST_PLAYER#" is recognised only by the natives that test for it
+    //    (they redirect it before resolving); every other native passes the literal to its ordinary
+    //    resolver, where it matches nothing -> unresolved (the documented no-op path), never an error.
+    es.tutorialStart().suppressionByte0151d5a6.set(false);
+    es.tutorialStart().mode014f3d34.set(false);
+    es.rcMaxSignalRange().set(200.0);
+    es.objectResolves().set("#CLOSEST_PLAYER#", false);
 }
 
 } // namespace sr3luahost

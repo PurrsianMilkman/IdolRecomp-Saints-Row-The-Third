@@ -176,6 +176,8 @@ whatever outer system decides which diversion class to construct in the first pl
 
 ## 4. Completion/reward — partially answered, the reward-grant path is the open piece
 
+**[2026-10-14 CORRECTION, FINAL: the diversion respect/cash grant IS located. It is paid when the on-screen reward message closes (`0x007FA320` calls the award routine). Per stunt: respect = trunc(score fraction x `Max_Respect`), switching to round(fraction x `Max_Cash`) cash once the diversion's lifetime statistic reaches `Max_Lifetime_Respect`. Full detail and test vectors: spec-tables-progression.md "## Free-roam respect grants and level-up flow (2026-10-14)".]**
+
 - **Completion detection, CONFIRMED** (§2): a trick completes either by sustaining the maneuver past
   a stored duration threshold or by leaving the geometric volume; both converge on `0x00692270`.
 - **HUD notification on completion, CONFIRMED** (§2): `0x007f1ad0` with the activity's name/subtitle
@@ -611,7 +613,7 @@ persistent per-activity save record via `0x006170c0` (keyed by the hashed name).
 4. if a local player exists, grants **respect** through `0x009e2440(player, Props_Award, 0)`, then
    a second `0x009e2440` call with `round(Props_Award × (scale − k))`. Here `scale` comes from the
    same global respect-scale selector `0x007bdb70(0)` that `streaking` uses, and `k` is the constant
-   at `0x012a2d70` (HIGH CONFIDENCE 1.0, so the bonus is the difficulty/scale surplus). It then
+   at `0x012a2d70` (CONFIRMED 1.0, read as a double from the image, so the bonus is the difficulty/scale surplus). It then
    grants **cash** `Cash_Award` via `0x00960210` and the shared money primitive `0x0094d920`;
 5. posts HUD hint args `0x5b` (cash) and `0x5c` (respect) through `0x00710cb0`. Unless the
    `activity_types` record's flag byte (`0x014b2e2a + type×0x94`, bit3) is set, it also posts
@@ -635,8 +637,10 @@ each level` and `fail on death`. All except Escort also carry `remove noteriety 
 instead has `do initial warp`. Extra `Disable_flags` are `disable all stores` for all eight; Fraud
 adds `disable distant spawns` + `disable roadblocks`; Trafficking adds `disable crib`, `disable warp
 triggers` and `disable attack helis`; Tank Mayhem adds `disable roadblocks`. **Universal lose
-condition: player death.** Leaving the activity area or quitting also fails the run (OPEN: the
-area/abandon test was not located).
+condition: player death.** Area/abandon rules differ by type and are
+not a shared test (FINAL, 2026-10-12): Fraud never fails for leaving its hood (§6.2). Mayhem
+uses a 20 s leash countdown when the instance has an `Activity_Center` (§6.6/§6.7). Escort fails after a 10 s
+countdown out of the client's vehicle (§6.8).
 
 ### 6.2 Insurance Fraud (`_a_if_*`, per-type reader `0x00625630`)
 
@@ -646,20 +650,78 @@ area/abandon test was not located).
   200000/300/3/.3, 450000/420/4/.4. SW = 70000/225/2/.2, 200000/300/2/.3, 450000/420/3/.4.
   Constant across all instances: `Crazy_Chance .725`, `Crazy_Min/Max_Speed 20/40`,
   `Ring_Money_Percent 1.0`, `Bonus_Distance 9999`.
-- **Scoring:** the payout per hit is computed from `fraud_globals.xtbl`
-  (`spec-tables-diversions.md` §10). That table has a base `Damage_Multiplier` × `Money_Conversion`
-  with a `Min_Money` floor, and per-limb `Body_Multipliers` (Head/Chest/Groin/Arm/Leg). On top of
-  that sit the 11 combo categories: Vehicle, Airtime, Witness, Cop_Witness, Linear_Dist,
-  Civil_Vehicle, Crazy_Driver, Windshield, Surfing, Pinball and Cliff_Diver. Each is a
-  `Multiplier_Data{Minimum_X, Multiplier_Min, Multiplier_Max, Per_Multiplier}` tier (flat and/or
-  tiered grid). There are also `Luxury_Cars` and `On_Fire_Bonus` bonuses, and the Adrenaline grids.
-  Per instance, `Hoods/Hood/Bonus_Spots/Spot` adds zones (`Bonus_Center`, `Bonus_Radius` 50-75,
-  `Multiplier` 1.35-1.6, `Min/Max_Speed_Override`) that multiply payout inside the radius.
-  `Max_Spots` caps the active spots. "Crazy" traffic drivers (`Crazy_Chance`/`Crazy_Hit_Chance`,
-  speed 20-40) feed the Crazy_Driver category. A start car is spawned (`Start_Vehicle_Info`).
-- **OPEN:** the exact combination order (additive vs multiplicative stacking of categories), and
-  `fraud_globals`' three sub-readers (`0x0061f120`/`0x0061d280`/`0x0061d330`, still not
-  offset-mapped). The scoring code itself was not opened.
+- **Class (§1 pattern), CONFIRMED:** vtable `0x0112aaa4` (40 slots). Slot 36 (`0x0112ab34`) is
+  the per-instance reader `0x00625630`. Slot 11 (`0x0112aad0`) is the **per-frame tick
+  `0x00625a30`**. The same slot indices hold for Mayhem (`0x0112de04`) and Escort (`0x0113380c`).
+  Instance fields: `Goal` at `+0x58`, `Duration`×1000 (ms) at `+0x60`, `Max_Spots` at `+0x64`,
+  `Crazy_Hit_Chance` at `+0x28`, and the running score (float $) at `+0x44`.
+- **Scoring: port recipe (2026-10-12, FINAL; decompiled).** One "hit" is one player ragdoll
+  episode. The game's ragdoll begin/end hooks (`0x009a48e0`/`0x009a5520`) call `0x00623a00`, which
+  calls `0x00622aa0`. On ragdoll **begin** it clears the hit record and arms it. On ragdoll **end**,
+  if the hit is armed, it banks the hit via `0x00621670` and starts a 3000 ms cooldown.
+  1. **Per impact during the ragdoll** (`0x00623ad0`, called from the physics contact handler
+     `0x00781650`; the local player only):
+     - `t = 60·dt`, where dt is the frame-time global `0x0132a0ac` divided by the constant
+       `1/60` at `0x0112ad50`.
+     - `massMult = lerp(Mass_Min_Multiplier, Mass_Max_Multiplier, s)`, floored at 1.0. Here `s` is
+       the other body's mass, inverse-lerped and clamped over `[Mass_Min_Mass, Mass_Max_Mass]`.
+       It applies only when `s > 0` and every relative-velocity component exceeds `Mass_Min_Speed`.
+       Otherwise `massMult = 1`.
+     - `crush = |impact normal speed| × massMult × Crush_Damage_Per_Speed × t`.
+     - `scrape = |relative velocity|² × Scrape_Damage_Per_Speed × t`.
+     
+     Then `0x00623120` runs. It counts only while scoring is allowed: the player has reached the
+     active hood (latched by `0x00621e00`), or is inside a bonus spot, or Adrenaline mode is on.
+     - `raw = (crush + scrape) × Money_Conversion`.
+     - The impact is ignored unless `raw ≥ Damage_Multiplier × Min_Money`.
+     - Otherwise `hit.base += raw`, then `hit.base += round(Body_Multipliers[part] × raw)`.
+       Shipped values: Head 5, Chest 4, Groin 3, Arm 2, Leg 2. Unlisted parts use 1.0.
+     - Each accepted impact also sets the hit's base multiplier slot (`+0x58`) to 1.0. Vehicles
+       struck go into a per-hit list of at most 6 distinct vehicles (`0x00622360`), which feeds
+       Vehicle, Crazy_Driver and luxury-car. The witness count within `Witness_Bonus_Radius` comes
+       from `0x00620a80`.
+     - While the player is on fire, `hit.base += On_Fire_Bonus × dt` per frame (50 $/s).
+  2. **Category value** (`Multiplier_Data` grid, `0x0061dcc0`): `f(x)` is the maximum over up to 4
+     tiers of `x < Minimum ? 0 : min(Multiplier_Min + (x − Minimum) × Per_Multiplier,
+     Multiplier_Max)`. A non-positive `Multiplier_Max` means no cap. Only the `*_Element` blocks are
+     read; the same-named top-level grids in the file are ignored. The shipped blocks are:
+     - Airtime (seconds): `Cash_Instead`, tiers 1/3/5 s → $0-500 / 500-1500 / 1500-5000.
+     - Linear_Dist: `Cash_Instead`, tiers 1/10/20 → $0-180 / 180-580 / 580-5000.
+     - Windshield: `Cash_Instead`, $500 + 225 per extra, capped at 5000.
+     - Vehicle: multiplier, from 2 vehicles: 1 + 0.5 per extra.
+     - Surfing: multiplier 0 to 9, +0.15 per unit.
+     - Crazy_Driver: multiplier 1 to 2.
+     
+     Witness, Cop_Witness, Civil_Vehicle, Pinball and Cliff_Diver have no `*_Element` block in the
+     shipped `fraud_globals.xtbl`, so they contribute 0.
+  3. **Hit value** (`0x00621450` × `0x00621230`). Both sums are **additive**:
+     `hitValue = (base + Σ Cash_Instead categories) × (Σ multiplier categories + bonusSlots)`.
+     `bonusSlots` is the base 1.0 plus 2.0 for each of these per-hit slots: a luxury car
+     (`Luxury_Cars`) among the vehicles struck (`+0x6c`), the co-op chain (`+0x78`), the co-op team
+     hit (`+0x7c`), and the co-op gang bonus (`+0x80`). The banked
+     value is then clamped to the instance cap at `+0x5c` (its writer was not located). It is also
+     multiplied by `Adrenaline_Dollar_Multiplier` (1.0) when the hit's adrenaline flag is set.
+  4. **Bank** (`0x00621670`):
+     - `score(+0x44) += hitValue`. A bonus spot containing the player also accumulates
+       `spot.total += hitValue`, and once `spot.total > Goal × Ring_Money_Percent` the spot is
+       consumed (`ACT_FRAUD_BONUS_DONE`).
+     - HUD: `ACT_FRAUD_TOTAL_LAST_HIT`.
+     - **Adrenaline meter** (`0x00620020`): the meter gains the `Adrenaline_Grid` bonus,
+       interpolated by hit value (1000/10000/20000 → 0.05/0.075/0.10). The gain is multiplied by
+       `Adrenaline_InArea_Mult` (3) when the hit landed in a bonus spot. The meter is capped at 1.0,
+       and reaching 1.0 sets Adrenaline mode (`ACT_FRAUD_ADRENALINE_READY`).
+     - The in-run $ are **score only**: the integer clamp `0x00960160` is a display clamp, not a
+       grant. The reward is the §6.1 ladder.
+- **Win / fail (tick `0x00625a30`), FINAL.** Each frame:
+  - **Win:** if `score(+0x44) ≥ Goal(+0x58)`, the tick shows result HUD hint 9, waits a 1000 ms
+    timer (state `+0x40` = 2), then ends with success.
+  - **Fail:** once the `Duration` timer has expired, the tick fails ("fail time") unless the
+    player (or the co-op partner) is mid-ragdoll or Adrenaline mode is active. Those cases defer
+    the fail, so a hit in flight is always banked first.
+  - Leaving the hood never fails the run. It only stops scoring and posts
+    `ACT_FRAUD_GO_SCORING_AREA`. Death fails it via §6.1.
+- **OPEN (minor):** the writer of the per-hit cap `+0x5c`; the meaning of bonus slots `+0x70`,
+  `+0x74` and `+0x88`, which are summed into the multiplier but were never seen set.
 
 ### 6.3 Trafficking (`_a_dt_*`, `Deal_Use_Count` read at `0x0066ee10`, outside any defined function)
 
@@ -718,15 +780,91 @@ area/abandon test was not located).
   `Mover 0.02` per kill of that class, capped at `Combo_Max_Multiplier 2.0`. The combo window decays
   faster as the combo's $ grows: `Combo_Decay_Cutoffs` maps `Destruction_Value`
   4000/8000/16000/25000/35000/50000 to `Decay_Mult` 2-7 (with matching HUD `Start_Text_Intensity`).
-  Warning beeps play at 50/20/0 % remaining (1500/1000/500 ms). When the combo expires, its $ ×
-  multiplier is banked toward the goal. `Completion_Mult 4.5` is HIGH CONFIDENCE a payout factor on
-  completion (Tank Mayhem has 0.0). **OPEN:** the exact banking formula and what `Completion_Mult`
-  multiplies, since the scoring code (`0x00667c40` cluster) was not opened.
+  Warning beeps play at 50/20/0 % remaining (1500/1000/500 ms).
+- **Class, CONFIRMED:** one class serves Mayhem, Tank Mayhem and DLC Ball Mayhem. Its vtable is
+  `0x0112de04`: slot 36 is the reader `0x00667c40`, and slot 11 is the **tick `0x00664320`**. The
+  type is stored at `+0x34`: 10 = Mayhem, 9 = Tank Mayhem, 0x10 = Ball Mayhem. Weapons are loaded
+  only for 10; repair nodes and HVTs only for 9 and 0x10. A derived vtable `0x0112dea4` (reader
+  `0x00669240`: personas, `Combo_Beep_Thresholds`, HVT sightings, tank spawn) adds audio and HUD
+  extras only. Fields:
+  - goal `+0x9c`, banked $ `+0x98`
+  - level timer `+0x74`, combo timer `+0x80`, leash timer `+0x8c` (each `{deadline, paused-remaining,
+    clock}`)
+  - combo window `+0xa0`, combo kill count `+0xa4`, combo $ `+0xec`, combo multiplier `+0xf0`,
+    decay speed `+0xf4`, next-cutoff index `+0xcc`
+  - class multipliers `+0xd8`/`+0xdc`/`+0xe0`, `Completion_Mult` `+0xe4`,
+    `Combo_Max_Multiplier` `+0xe8`
+  - run state `+0x16c` (0 running, 1 wrap-up, 2 failed)
+- **Scoring: port recipe (2026-10-12, FINAL; decompiled).** Tweaks come from `tweak_table.xtbl`
+  (registered in-code; shipped values in brackets):
+  - `Tank_mayhem_human_base_value` [100]
+  - `Tank_mayhem_combo_start_time_ms` [15000]
+  - `Tank_mayhem_combo_max_time_ms` [30000]
+  - `Tank_mayhem_combo_increment_time_sp_ms` / `_coop_ms` [2500 / 2500]
+  
+  Despite the names, these tweaks apply to all three types.
+  1. **Per kill/destroy event** (`0x00660dc0(value, classMult)`): scores only if the leash timer
+     is paused (the player is inside `Activity_Center`, or the instance has none), the victim is
+     inside an assigned hood (`0x00662ac0`), and combos are enabled (`+0x170`).
+     ```
+     comboCount += 1
+     comboMult  += classMult;  if Combo_Max_Multiplier > 1: comboMult = min(comboMult, Combo_Max_Multiplier)
+     add        = round(value × comboMult)
+     banked    += add   (unsigned, saturating; this is the goal counter, credited immediately)
+     comboCash += add
+     ```
+     - **Combo timer** (`0x00660af0`): if the timer is running, extend it by
+       `min(round(increment / speed), window − remaining)`. Otherwise start it at
+       `min(round(start_time / speed), window)`.
+     - **Decay cutoffs:** while the next `Combo_Decay_Cutoff` has `comboCash ≥ Destruction_Value`
+       and `Decay_Mult ≥ 1`: `newSpeed = Decay_Mult`, plus `Completion_Mult` if the goal is already
+       met. Then apply `0x00660a20(newSpeed)`: `r = newSpeed / speed; speed = newSpeed;
+       window = round(window / r); remaining = round(remaining / r)`. Move to the next cutoff.
+       `Decay_Mult` is absolute, not cumulative.
+  2. **Event values by class:**
+     - **Human** (`0x00664dc0`): the human base value tweak, or the `Value` of an HVT member.
+       Multiplier: `Human_Combo_Multiplier`. Kills by NPCs flagged as non-player attackers are
+       excluded.
+     - **Mover/object** (`0x00664f70`): `min(sqrt(bbox volume) × 100 + 300, 1500)` (`0x006780e0`),
+       or the HVT `Value`. Multiplier: `Mover_Combo_Multiplier`.
+     - **Vehicle** (`0x006668c0`): the vehicle record's own value field (vehicle-info `+0x4ac`;
+       xtbl field name not matched), or the HVT `Value`. Multiplier: `Vehicle_Combo_Multiplier`.
+       The ×2 applied when the vehicle is burning/exploded affects only the floating HUD number,
+       not `banked`.
+  3. **Combo end** (combo timer expired, `0x00660bd0`):
+     - Show `ACT_TANK_MAYHEM_COMBO_TOTAL` = `comboCash`.
+     - Reset `comboCount = 0`, `comboCash = 0`, `comboMult = 1.0`, `cutoffIndex = 0`,
+       `window = max_time`, and `speed = 1.0` (plus `Completion_Mult` if the goal is met).
+     - Nothing extra is banked at combo end: the $ was already credited per event.
+     - **Answer:** `Completion_Mult` (Mayhem 4.5, Tank 0.0) only speeds up the combo timer after the
+       goal is reached, so the last combo winds down fast. It is not a payout.
+- **Win / fail (tick `0x00664320`), FINAL:**
+  - **Win:** `banked ≥ goal` → state 1 (wrap-up). The live combo speed is raised by
+    `Completion_Mult`. When the combo timer expires, the combo is closed. Completion is reported
+    by slot 4 (`0x006641c0` → `0x00663d70`). That function returns true when every HVT group leader
+    with class bit `+10 & 0x20` passes `0x00a2afc0`, or when there are no HVT groups. HIGH
+    CONFIDENCE "HVT objectives settled"; not traced further.
+  - **Fail** → state 2 (`ACT_MAYHEM_FAIL` "You're out of time" for type 10, `ACT_TANK_MAYHEM_FAIL`
+    for 9 and 0x10) when any of these happens:
+    1. The level timer `+0x74` expires (`Duration`).
+    2. The leash timer `+0x8c` expires: see §6.7.
+    3. Type 9 or 0x10: the player's (or partner's) tank is destroyed.
+    4. Death (§6.1).
+  - Leaving the assigned hoods is **not** a fail. It shows `ACT_TANK_MAYHEM_LEFT_HOOD` ("GET BACK
+    TO YOUR ASSIGNED AREA!") with a waypoint, and kills there score nothing.
 
 ### 6.7 Tank Mayhem (`_a_tm_*`, same `0x00667c40` reader)
 
 - **Win/lose:** as Mayhem, driving `Tank = sp_tank01` inside `Activity_Center` (`Radius 700`).
-  Leaving the radius is HIGH CONFIDENCE a fail or warning (OPEN).
+  **Leash, FINAL:** the reader arms the leash timer at 20000 ms and paused. Each frame the tick
+  takes the closer player's distance to `Center`:
+  - **Distance ≥ `Radius`:** if the timer is paused, it is resumed and reset to 20000 ms, and the
+    tick shows `ACT_TANK_MAYHEM_STRAYING_AWAY` ("GET BACK TO THE TARGETS!").
+  - **Distance < `Radius`:** if the timer is running, it is paused and the message is cleared. The
+    radius ring is shown from `0.75 × Radius`.
+  
+  So each exit gives a fresh 20 s, the countdown freezes while back inside, and **expiry fails the
+  run**. No events score while the countdown runs.
 - **Levels (`Goal`/`Coop`/`Duration`):** DT = 125000/225000/150, 350000/600000/120,
   400000/850000/210. NE = 250000/500000/120, 500000/1000000/210, 600000/1200000/210.
   NW = 150000/275000/240, 450000/800000/300, 350000/625000/400. Notoriety is police and gang 3-4.
@@ -734,7 +872,8 @@ area/abandon test was not located).
 - **Scoring:** the Mayhem combo with `Vehicle_Combo_Multiplier 0.05`, cutoffs
   5000/10000/20000/35000/50000/75000, and `Completion_Mult 0.0`. **Plus `High_Value_Targets`:**
   `Crowd` and `Convoy` groups, whose members carry a fixed `Value` (5000 for targets, 1000 for
-  convoy guards) added on destruction. **OPEN:** same as Mayhem.
+  convoy guards). The HVT `Value` replaces the class base value and is still × the combo multiplier
+  (§6.6). FINAL.
 
 ### 6.8 Escort (`_a_es_*`; text descriptor `0x00685f1f`; `Satisfaction_Time` read by `0x0068a040`)
 
@@ -751,8 +890,76 @@ area/abandon test was not located).
   NE = 2/60/3/50/3, 3/75/5/60/4, 6/90/7/50/5. SW (Tiger, no complications) = 2/65/6/25/0,
   3/75/8/20/0, 4/95/10/20/0. `Percent_penalty_for_wrong_move 1`. Escort constants are in
   `spec-tables-traffic-ai.md` §19.
-- **Scoring:** none beyond the satisfaction meter. Reward per §6.1. **OPEN:** the satisfaction
-  fill rate and the footage-accumulation rate (code at the `0x0068a040` cluster, not opened).
+- **Class, CONFIRMED:** vtable `0x0113380c`. Slot 36 is the reader `0x0068a040`; slot 11 is the
+  **tick `0x0068d430`**, which runs fail checks and then a phase switch on `+0x90`. Fields:
+  - satisfaction remaining `+0xdc` (ms, starts at `Satisfaction_Time`×1000)
+  - footage remaining `+0xe0` (ms, starts at `Footage_Limit`×1000; co-op `Coop_Footage_Limit`)
+  - HUD meters: satisfaction `+0x78 = 1 − sat/Satisfaction_Time`, footage
+    `1 − footage/Footage_Limit`
+  - variant `+0x218` (0 base, 1 Tiger, 2 Genki)
+- **Meters: port recipe (2026-10-12, FINAL; decompiled).** The main driving phase is `+0x90` = 3
+  (`0x0068c610`). Each frame, in order:
+  1. **Filming test** (`0x00687bd0`): for every live paparazzi or pursuer, take the distance `d`
+     to the client's vehicle.
+     - `d < 25.0` with a clear line of sight (ray test `0x0075df80`) means **filming**. Posts a
+       "footage" reaction at most every 500 ms.
+     - `25 ≤ d < 50` means only "near". Posts a client complaint line, on a 15 s cooldown.
+  2. **If filming:** `footage −= frame ms`. Below 5000 ms left, the tick shows the footage warning.
+     No satisfaction is gained this frame.
+  3. **Otherwise**, satisfaction is gained only when all of these hold: no complication is active
+     (`+0xb2`), no IRS/Spouse enemy is within 25.0 of the client (`0x00687a70`), and no
+     cutscene/HUD lock is up.
+     - **SP:** `sat −= frame ms` while the player is the driver of the client's vehicle
+       (`0x009b93d0`: seat state 3 in that vehicle). Speed and distance do not enter into it:
+       satisfaction is pure driving time.
+     - **Genki:** `sat −=` the per-frame amount `+0x84`, set by its own minigame.
+     - **Co-op:** the passenger minigame adjusts it instead. Each wrong move subtracts
+       `round(Satisfaction_Time / (Number_of_combos_to_advance + Num_Complications +
+       moves done))`; this phase also handles the success bonus.
+  4. **Complications:** an active request pauses satisfaction. A Tiger rage slap that fails
+     subtracts `Slap_Rage_Value` from **footage** (`+0xe0 −= +0x20c`).
+  5. **Satisfaction full** (`sat < 1`): the tick shows the drop-off checkpoint (`0x0068c180`) and
+     moves to phase 4, drive to drop-off. Later phases (5-0x12) handle arrival and the walk-in/exit
+     cutscene, then success.
+  6. **Fail: footage exhausted** (`footage < 0`, variants 0/2).
+  
+  The driving phase 2 (`0x00685ab0`) also drains `sat` and promotes to phase 3 once
+  `sat ≤ Satisfaction_Time − ceil(Satisfaction_Time / (combos + complications + moves)) × moves`.
+- **Fail checks in the tick, FINAL:**
+  1. The client (or the Tiger NPC) is dead.
+  2. The client's vehicle is destroyed, or the client is out of it with no recovery
+     (`CRITICAL_VEHICLE_DESTROYED_VEHICLE_TEXT`).
+  3. **Abandoning the client:** the player not in the client's vehicle during driving phases 1-8
+     and 0xd-0xf shows `ACT_ESCORT_GETBACK_MSG` and starts a **10000 ms** countdown, with
+     `ACT_ESCORT_GETBACK_COUNT_MSG` showing seconds. Expiry fails the run, and re-entering clears it.
+  4. Genki (`+0x4c` = 1): the player's distance metric from the vehicle exceeds 900.0 (metric
+     `0x00db9640`). **[RESOLVED 2026-10-12, raw bytes:** `0x00db9640(a, b)` returns
+     `(a[0]-b[0])² + (a[1]-b[1])²`, the squared distance over the first two floats (`+0`, `+4`) of
+     each vector, with no square root (x87 multiply-adds only). So the fail is **farther than 30
+     units**, i.e. 30 m (900 = 30²). Which world axes `+0`/`+4` are depends on the caller's
+     vectors, not traced here.]**
+  5. Death (§6.1).
+  
+  ~~The fail-reason strings are runtime-built (pointer table `0x01134360…`) and were not resolved.~~
+  **[RESOLVED 2026-10-12, raw bytes.]** How the table is built:
+  - `0x01134360` holds 16 pointers to 20-byte name records at `0x014bb450 + 0x14·k`, in zero-fill data.
+  - Static initializers (`0x00ff4a60`…`0x00ff5107`, one per record) number each record from the counter `0x014bb2bc` and link it into a list. Each stores a literal string pointer at record `+0x10`.
+
+  The entries, in index order:
+
+  | k | name | k | name |
+  |---|---|---|---|
+  | 0 | `fail client hit` | 8 | `stop` |
+  | 1 | `fail client dead` | 9 | `crash` |
+  | 2 | `fail stripper dead` | 10 | `air` |
+  | 3 | `fail car destroyed` | 11 | `kill` |
+  | 4 | `fail car underwater` | 12 | `drift` |
+  | 5 | `fail footage` | 13 | `near_miss` |
+  | 6 | `fail left car` | 14 | `button_mash` |
+  | 7 | `fan` | 15 | `stick_rotate` |
+
+  Entries 0–6 are the fail reasons. They add two not listed above: **client hit** and **car underwater** (and "stripper dead", the Genki/escort-variant client). Entries 7–15 are the escort's event names (fan, stop, crash, airtime, kill, drift, near-miss, button-mash and stick-rotate prompts). These are internal names (HIGH CONFIDENCE: event/voice-line keys), not localised UI text. Which condition raises "client hit" and "car underwater" was not traced.
+  Reward per §6.1.
 
 ### 6.9 Professor Genki's Super Ethical Reality Climax (`_a_rm_*`, `Running Man`; `Required_cash` readers `0x006509a0` / `0x00651e70`)
 
@@ -780,10 +987,11 @@ area/abandon test was not located).
 
 ### 6.10 Open items for §6 (summary)
 
-The exact in-run scoring arithmetic for Fraud, Mayhem/Tank Mayhem and Escort (data semantics
-given, code not opened); the area-leave/abandon fail test; `0x005e97a0`'s success gate; the
-"all instances complete" → `activity_types.Unlockables` path; the meaning of the `k` constant at
-`0x012a2d70`.
+Closed on 2026-10-12: the in-run scoring for Fraud, Mayhem/Tank Mayhem and Escort, and their
+area-leave/abandon fail tests (§6.2, §6.6-§6.8). The `k` constant at `0x012a2d70` is the double
+1.0 (read from the image), so the §6.1 respect bonus is `Props_Award × (scale − 1)`. Still open:
+`0x005e97a0`'s success gate; the "all instances complete" → `activity_types.Unlockables` path;
+Fraud's per-hit cap writer (`+0x5c`); and the Escort fail-string table contents.
 
 ## 7. Clean-room check
 
