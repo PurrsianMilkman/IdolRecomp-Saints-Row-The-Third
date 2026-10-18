@@ -214,11 +214,17 @@ int main() {
     // Sec17.7 on_human_killed: global hook, slot 0xb, optional filter.
     ok(host, gp, "on_human_killed()");
     CHECK(es.onHumanKilledCallback() == "");
+    // Retuned 2026-10-14 (spec sync bfe0542 section C): the string is the CALLBACK NAME, not a filter - it is
+    // stored as-is with no resolve step, the last call wins, and ""/nil clears.
     ok(host, gp, "on_human_killed('zombie')");
-    CHECK(es.onHumanKilledCallback() == ""); // filter unresolved -> cleared, stays empty
-    es.registerHumanKindForTesting("zombie");
+    CHECK(es.onHumanKilledCallback() == "zombie");
+    ok(host, gp, "on_human_killed('other_cb')");
+    CHECK(es.onHumanKilledCallback() == "other_cb");
+    ok(host, gp, "on_human_killed('')");
+    CHECK(es.onHumanKilledCallback() == "");
     ok(host, gp, "on_human_killed('zombie')");
-    CHECK(es.onHumanKilledFilterName() == "zombie");
+    ok(host, gp, "on_human_killed(nil)");
+    CHECK(es.onHumanKilledCallback() == "");
 
     // Sec17.8 mesh_mover_destroyed: reuses the +0xc0/+0xdc sub-object facts.
     es.objectResolves().set("mover1", true);
@@ -492,16 +498,20 @@ int main() {
     ok(host, gp, "boss_battle_matt_set_matt_flying(false)");
     CHECK(es.bossBattleMattFlying() == false);
 
-    // Sec18.3 ai_do_scripted_take_cover: no anchor + not-already-covering ->
-    // false; anchor given + resolved -> true, writes the shared destination
-    // field.
+    // Sec18.3 ai_do_scripted_take_cover (blocker m02/m10, FINAL 2026-10-15): the 0x00540b90 gate is true for a
+    // fresh NPC -> action committed and true; false only inside a cover stay-down window (no action, false);
+    // anchor given + resolved -> true, writes the shared destination field.
     es.objectResolves().set("c11", true);
-    es.getOrCreateCharacter("c11").alreadyCoveringTowardAnchor.set(false);
+    es.getOrCreateCharacter("c11").coverStayDownActive = true;
     ok(host, gp, "assert(ai_do_scripted_take_cover('c11') == false)");
+    CHECK(es.getOrCreateCharacter("c11").scriptedTakeCoverDispatchCount == 0);
+    es.getOrCreateCharacter("c11").coverStayDownActive = false;
+    ok(host, gp, "assert(ai_do_scripted_take_cover('c11') == true)");
+    CHECK(es.getOrCreateCharacter("c11").scriptedTakeCoverDispatchCount == 1);
     es.objectResolves().set("anchor2", true);
     ok(host, gp, "assert(ai_do_scripted_take_cover('c11', 'anchor2') == true)");
     CHECK(es.getOrCreateCharacter("c11").pendingScriptedMoveDestination == "anchor2");
-    CHECK(es.getOrCreateCharacter("c11").scriptedTakeCoverDispatchCount == 1);
+    CHECK(es.getOrCreateCharacter("c11").scriptedTakeCoverDispatchCount == 2);
 
     // Sec18.4 action_stop_synced_state: clears the SAME pairing
     // action_play_synced_state writes.

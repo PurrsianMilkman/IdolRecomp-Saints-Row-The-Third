@@ -490,9 +490,17 @@ int main() {
     // index or an unresolved target; success pushes 0x00a48af0's own value.
     // The icon name picked (hence which OPEN read comes first) depends on
     // the gamepad flag, read before the effect-index lookup.
-    fails(host, gp, "effect_play_finisher('target03')", "0x0141250d");
+    // Retuned 2026-10-14 (spec sync bfe0542, Sec28.9 blocker sh02): the gamepad flag 0x0141250d is answered (0 on PC
+    // keyboard/mouse, so the icon is vfx_pc_Icon); the next unmodelled value is the effect-index lookup for that icon.
+    fails(host, gp, "effect_play_finisher('target03')", "icon effect index");
     es.effectFinisher().gamepadMode.set(false);
     fails(host, gp, "effect_play_finisher('target03')", "0x005c50b0");
+    // The real effects tables' Name set (case-folded) answers the index lookup for a present name (vfx_pc_icon exists
+    // in effects.xtbl): index valid, so the next read is the target resolve.
+    es.installEffectNameTable({"vfx_pc_icon"});
+    CHECK(es.effectNameInTable("vfx_pc_Icon"));
+    fails(host, gp, "effect_play_finisher('target03')", "named-object resolution");
+    es.installEffectNameTable({});
     es.effectFinisher().effectIndexValid.set("vfx_pc_Icon", false);
     ok(host, gp, "assert(effect_play_finisher('target03') == -1.0)");
     es.effectFinisher().effectIndexValid.set("vfx_pc_Icon", true);

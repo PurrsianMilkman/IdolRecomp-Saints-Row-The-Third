@@ -363,6 +363,7 @@ public:
     // smoothing of its own, exactly like the constructor argument it
     // updates.
     void setGroundY(double groundY) { groundY_ = groundY; }
+    double groundY() const { return groundY_; }
 
 private:
     const ICollisionWorld& world_;

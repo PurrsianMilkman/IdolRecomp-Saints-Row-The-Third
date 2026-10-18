@@ -350,6 +350,9 @@ int stub_dlc_gis_film_grain_load(lua_State* L) {
     if ((mask & 0x1) && !st->dlcGisFilmGrainActive()) {
         st->dlcGisFilmGrainActive() = true;
         ++st->dlcGisFilmGrainLoadLatchSetCount();
+        // Sec17.29: the per-frame tick then loads the "gis_grain" document (id >= 0); this host has no frame
+        // tick for it, so the loaded state is recorded here (a blocking-menu delay is not modelled).
+        st->dlcFilmGrainAvailable().set(true);
     }
     if (mask & 0x2) {
         EngineState::replicateStateChange("dlc_gis_film_grain_load", "");

@@ -146,6 +146,12 @@ namespace sr3airuntime {
 struct SidewalkSegment {
     uint64_t id = 0;
     Vec3 start, end;  // the two resolved endpoint node positions (Sec20.1)
+    // Real sidewalk edge walkway width in metres (spec-zone-data-format.md
+    // Sec13.2a(l) edge +0x04 / 256; shipped 3/4/6). 0 = unknown (stand-in
+    // segments): the gates' single sidewaysOffsetDistance applies instead.
+    // When > 0, spec-ai-runtime.md Sec20.6.2(c) applies: lateral offset
+    // uniform in +-width/2 (rand[-0.5,0.5] x width).
+    double width = 0.0;
 
     double Length() const { return Distance(start, end); }
     Vec3 PointAt(double t) const { return start + (end - start) * t; }  // t in [0,1]
@@ -183,7 +189,8 @@ inline constexpr size_t kNearFieldPedMaxSpawnRetries = 3;  // Sec20.1 CONFIRMED:
 // player)". The spec's own text already carries the "~" (approximate, not
 // an exact disassembled literal) - kept as such, not rounded into a false
 // precision.
-inline constexpr double kNearFieldPedCameraNearRejectDistApprox = 90.0;
+// SUPERSEDED by spec-ai-runtime.md Sec20.6.2(c): NEAR reject is 10 m; 90 m is the FAR reject (gates.cameraFarRejectDist = 90).
+inline constexpr double kNearFieldPedCameraNearRejectDistApprox = 10.0;
 
 struct NearFieldPedSpawnGates {
     // OPEN: "a difficulty gate" is named but never characterised beyond that
@@ -305,12 +312,17 @@ inline NearFieldPedSpawnResult SelectNearFieldPedSpawn(const std::vector<Sidewal
         // Sideways offset: perpendicular to the segment direction, CHOSEN
         // planar (XZ) left-normal (Sec20.1 does not specify the offset
         // axis/sign) - documented, not confirmed.
-        if (gates.sidewaysOffsetDistance != 0.0) {
+        // Real edge width known (Sec20.6.2(c)): offset = width x rand[-0.5, 0.5].
+        double lateral = gates.sidewaysOffsetDistance;
+        if (seg.width > 0.0) {
+            lateral = (static_cast<double>(pickUniform(kTResolution)) / static_cast<double>(kTResolution) - 0.5) * seg.width;
+        }
+        if (lateral != 0.0) {
             const Vec3 dir = seg.end - seg.start;
             Vec3 normal{-dir.z, 0.0, dir.x};
             const double nLen = Length(normal);
             if (nLen > 1e-9) {
-                normal = normal * (gates.sidewaysOffsetDistance / nLen);
+                normal = normal * (lateral / nLen);
                 point = point + normal;
             }
         }

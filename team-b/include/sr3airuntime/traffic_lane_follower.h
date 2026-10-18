@@ -146,10 +146,9 @@
 // the new result back into the same cache fields. This is a THROTTLED
 // re-query mechanism, not a naive per-frame full graph-walk." Ported below
 // as LaneFollowState's own cachedQueryOriginX/Z/cachedTarget plus
-// LaneFollowConfig::reQueryDistanceThreshold - CHOSEN concrete threshold
-// VALUE (Sec18.5 names the mechanism, not the real 0x01117a60 constant's
-// own magnitude; this project's clean-room rule forbids reading that
-// address out of the shipped executable regardless), re-query mechanism
+// LaneFollowConfig::reQueryDistanceThreshold - the VALUE is now spec-given
+// (RG-12, spec-ai-runtime.md Sec20.6.3(d), FINAL): a double 15.0 m, LINEAR
+// (not squared) - supersedes the earlier CHOSEN 3.0; re-query mechanism
 // itself CONFIRMED and now actually load-bearing: StepLaneFollow() steers
 // at the CACHED lookahead target (state.cachedTarget), recomputed via
 // WalkLookahead() (item 1's own distance-accumulating walk, not merely the
@@ -439,6 +438,7 @@
 #include <optional>
 #include <vector>
 
+#include "sr3zone/road_graph.h"
 #include "sr3zone/traffic_graph.h"
 
 namespace sr3airuntime {
@@ -576,6 +576,28 @@ public:
             segments_.push_back(std::move(seg));
         }
         BuildAdjacency();
+    }
+
+    // Built from the REAL parsed road graph (sr3zone::RoadGraph, spec-zone-
+    // data-format.md Sec13.2a): each lane's polyline is its decoded point list
+    // (node A, interior shape points, node B), `rawKindField` is the full
+    // segment flags word, and adjacency is the ON-DISK successor list
+    // (spec-ai-runtime.md Sec20.6.6 "use the on-disk links"), not the
+    // geometric-coincidence rule of the record-based constructor above.
+    explicit TrafficLaneGraph(const sr3zone::RoadGraph& road) {
+        segments_.reserve(road.segments.size());
+        adjacency_.resize(road.segments.size());
+        for (size_t i = 0; i < road.segments.size(); ++i) {
+            TrafficLaneSegment seg;
+            seg.index = i;
+            seg.rawKindField = road.segments[i].flags;
+            seg.kind = static_cast<uint8_t>((road.segments[i].flags >> 28) & 0x3u);  // Sec13.2a(d): bits 28-29, 0 on disk
+            const auto poly = road.SegmentPolyline(i);
+            seg.polyline.reserve(poly.size());
+            for (const auto& p : poly) seg.polyline.push_back(sr3zone::TrafficPoint{p.x, p.y, p.z});
+            segments_.push_back(std::move(seg));
+            for (uint16_t s : road.Successors(i)) adjacency_[i].push_back(s);
+        }
     }
 
     size_t segmentCount() const { return segments_.size(); }
@@ -743,11 +765,12 @@ struct LaneFollowConfig {
     double arrivalRadius = 1.5;  // CHOSEN (world units) - a target point counts as "reached" within this distance
     double lookaheadDistance = 15.0;  // CHOSEN (world units) - Sec18.1's own lookaheadDist parameter; no real
                                        // shipped value recovered, this is this file's own default
-    // Sec18.5's own re-query distance-throttle threshold (world units,
-    // squared internally) - CHOSEN magnitude, CONFIRMED mechanism (the real
-    // 0x01117a60 constant's value is off-limits per this project's
-    // clean-room rule even if it could be found).
-    double reQueryDistanceThreshold = 3.0;
+    // Sec18.5's re-query distance-throttle threshold. FINAL (Sec20.6.3(d), RG-12): 15.0 m, compared linearly
+    // (0x01117a60, a double; not squared). A re-plan is also forced at drift > (... + 20 m) (0x01116998): not
+    // modelled here (the walk anchor is advanced at every re-query).
+    // CHOSEN (question to Team A): lookaheadDistance above stays 15 although Sec20.6.3(d) gives a 5000 m route
+    // walk; here the walk target IS the steer point, so 5000 m would aim the car across the map.
+    double reQueryDistanceThreshold = 15.0;
     uint32_t maskIncludeBits = kMaskIncludeAll;
     uint32_t maskExcludeBits = kMaskExcludeNone;
     // Sec18.6 step 4's own CHOSEN driving-throttle value for the
@@ -764,6 +787,10 @@ struct LaneFollowCommand {
     bool advancedSegment = false;  // true the tick the follower hopped segments (diagnostic)
     bool requeried = false;        // true the tick the cached-target throttle (item 4) actually re-ran the walk (diagnostic)
     bool aligned = false;          // Sec18.6 step 4's own alignment-AND-distance gate result (diagnostic)
+    // RG-12 follow-up: the heading half of that gate alone (dot >= cos 30 deg). The 5.0 distance half is measured from
+    // the last plan (CHOSEN reading above); with the spec 15 m re-query it would halt every car 5 m after each plan,
+    // so the real-graph viewer path drives on this heading-only flag (CHOSEN, question to Team A: what is the 5.0?).
+    bool headingAligned = false;
     bool overtakeGateFired = false;  // Sec18.6b's real gate result this tick (diagnostic) - true only when state.passSideFlag was actually rewritten
     double steer = 0.0;            // Sec18.6: CONFIRMED full-lock +-1.0 (or 0 when stuck) - feed into sr3physics::DriverInput::steer
     double throttle = 0.0;         // [0,1]  - feed into sr3physics::DriverInput::throttle
@@ -1066,6 +1093,7 @@ inline LaneFollowCommand StepLaneFollow(const TrafficLaneGraph& graph, LaneFollo
     // Sec18.5/18.6 cached-target mechanism rather than two unrelated
     // distances.
     cmd.aligned = (dot >= kAlignmentCosineThreshold) && (distFromCachedOrigin <= kAlignmentDistanceThreshold);
+    cmd.headingAligned = (dot >= kAlignmentCosineThreshold);
     cmd.overtakeGateFired = overtakeGateFired;
     // Sign: UNCHANGED, still the sole source Team A confirmed is real -
     // state.passSideFlag (Sec18.6a), recomputed above only behind the real

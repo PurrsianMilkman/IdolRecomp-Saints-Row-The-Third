@@ -343,7 +343,7 @@ int main() {
     // resolved but driver name unset -> OPEN; resolved + set -> name.
     es.objectResolves().set("NoCar", false);
     ok(host, gp, "assert(vehicle_get_driver('NoCar') == nil)");
-    fails(host, gp, "vehicle_get_driver('Car1')", "0x00ab5100");
+    ok(host, gp, "assert(vehicle_get_driver('Car1') == nil)"); // Sec12.14 (78fb40a): empty seat 0 -> nil
     es.getOrCreateVehicle("Car1").driverName.set("Bob");
     ok(host, gp, "assert(vehicle_get_driver('Car1') == 'Bob')");
 

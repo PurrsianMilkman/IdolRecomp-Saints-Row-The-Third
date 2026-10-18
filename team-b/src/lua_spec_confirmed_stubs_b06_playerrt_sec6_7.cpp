@@ -291,26 +291,10 @@ int stub_character_is_ready(lua_State* L) {
         lua_pushboolean(L, 0);
         return 1;
     }
-    CharacterState& c = st->getOrCreateCharacter(resolvedName);
-    if (!c.aliveByPredicate()) { // OPEN until set (0x0096f4f0)
-        lua_pushboolean(L, 0);
-        return 1;
-    }
-    // 0x009a1dc0 CONFIRMED (f752324): true iff pose-mode byte +0xcd2 is not
-    // 0/6 (ragdolled / physics-posed). Unseeded = standing NPC = false.
-    if (st->characterReadyBlocked().known(resolvedName) && st->characterReadyBlocked().get(resolvedName)) {
-        lua_pushboolean(L, 0);
-        return 1;
-    }
-    // ce4556f Sec7.27 FINAL port rule (single player): the remaining AND-chain
-    // is (a) the +0x4aa tracked-scripted-action lookup (0x004f2880): not ready
-    // while a ticket exists and is still pending; (b) the NPC-only AI-mode
-    // tests (Stunned / Idle+"trans to stand"), which this host does not track
-    // and so never fire for a spawned, standing NPC; (c) the 0x014ff6b8 debug
-    // flag (always 0 in retail) and gate 0x008addb0 (true = locally owned in
-    // single player). All pass for an ordinary standing NPC.
-    bool noPendingAction = c.scriptedActionLookupNonNull.known() ? c.scriptedActionLookupNonNull.get() : true;
-    lua_pushboolean(L, noPendingAction ? 1 : 0);
+    // The whole predicate (0x00a3bae0(c, 0): dead / hidden / ragdolled-or-posed / pending scripted action; the
+    // NPC-only AI-mode tests never fire for a standing NPC here) lives in characterReadyPredicate(), shared with
+    // move_to_do's arg-5-false gate.
+    lua_pushboolean(L, characterReadyPredicate(st, resolvedName) ? 1 : 0);
     return 1;
 }
 
@@ -698,7 +682,8 @@ int stub_character_exists(lua_State* L) {
     // project-wide "one shared name-resolves map" stand-in for every
     // per-kind resolver (Sec29's own finding), so both branches collapse
     // to one shared lookup here.
-    bool exists = upState(L)->objectResolves().get(name); // OPEN until set
+    // Sec7.9 (spec sync 78fb40a, FINAL): a name no zone/script registered never resolves -> false, never an error.
+    bool exists = upState(L)->objectResolves().known(name) && upState(L)->objectResolves().get(name);
     lua_pushboolean(L, exists ? 1 : 0);
     return 1;
 }
@@ -740,7 +725,7 @@ int stub_character_show(lua_State* L) {
     EngineState* st = upState(L);
     std::string resolvedName;
     if (resolveFollowerAwareObject(st, name, resolvedName)) { // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
-        (void)st->getOrCreateCharacter(resolvedName);
+        st->getOrCreateCharacter(resolvedName).hidden = false; // 0x008ccb90(obj, 0, 0): clears +0x3b bit 0 (spec 45.1 m16 note)
     }
     return 0;
 }
@@ -769,8 +754,9 @@ int stub_on_damage(lua_State* L) {
     logCall(L, upLog(L), "on_damage", upStateTag(L));
     std::string cb = argString(L, 1);
     std::string target = argString(L, 2);
-    (void)optionalNumberDefault(L, 3, 0.0);
+    const double threshold = optionalNumberDefault(L, 3, 0.0);
     upState(L)->getOrCreateCharacter(target).onDamageCallback = cb;
+    upState(L)->getOrCreateCharacter(target).onDamageThreshold = threshold;
     return 0;
 }
 
@@ -996,8 +982,8 @@ int stub_ai_scripted_action_is_complete(lua_State* L) {
     // sentinel-resolver pass).
     if (resolveFollowerAwareObject(st, name, resolvedName)) { // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
         // ce4556f Sec7.28 FINAL: lookup non-null unless a ticket exists and is pending
-        const auto& lk = st->getOrCreateCharacter(resolvedName).scriptedActionLookupNonNull;
-        complete = lk.known() ? lk.get() : true;
+        // spec-ai-runtime.md Sec21.5: the ticket (staged by ai_do_scripted_move) is pending until the mode finishes it.
+        complete = st->getOrCreateCharacter(resolvedName).scriptedLookupNonNull();
     }
     lua_pushboolean(L, complete ? 1 : 0);
     return 1;

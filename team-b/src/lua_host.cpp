@@ -76,6 +76,35 @@ Host::Host(const std::vector<RegisteredName>& allNames) {
     // both states. It is neither one of the 24 bare globals nor in the
     // registration list, so whether the engine provides it is OPEN (see
     // thread_scheduler.h's registerThreadClose()).
+    // Engine -> Lua callback spawner (spec-lua-api-behaviour.md "Engine callback dispatch", mechanism A / V.0):
+    // an engine event creates a NEW script thread for the callback's Lua global, with the engine-supplied typed
+    // arguments (string / nil / number / boolean). It never runs the function body here - the thread is resumed
+    // by the next scheduler pass, after every older record (new records are appended at the table end). A
+    // missing or non-function global, or a full 256-entry table, silently loses the event.
+    engineState_.setCallbackSpawner([this](const PendingCallback& cb) -> bool {
+        lua_State* L = gameplay_;
+        lua_getglobal(L, cb.name.c_str());
+        const bool isFunction = lua_isfunction(L, -1) != 0;
+        lua_pop(L, 1);
+        if (!isFunction) return false;
+        if (!lua_checkstack(L, static_cast<int>(cb.args.size()) + 4)) return false;
+        for (const CallbackArg& a : cb.args) {
+            switch (a.kind) {
+                case CallbackArg::Kind::Nil: lua_pushnil(L); break;
+                case CallbackArg::Kind::String: lua_pushlstring(L, a.text.data(), a.text.size()); break;
+                case CallbackArg::Kind::Number: lua_pushnumber(L, a.number); break;
+                case CallbackArg::Kind::Boolean: lua_pushboolean(L, a.boolean ? 1 : 0); break;
+            }
+        }
+        const int nargs = static_cast<int>(cb.args.size());
+        BareThreadTable::Record* rec = bareGlobals_.threads().allocate(L, cb.name, nargs, /*hasParent=*/false);
+        if (!rec) {
+            lua_pop(L, nargs); // table full: allocate left the arguments on the stack
+            return false;
+        }
+        return true;
+    });
+
     registerThreadClose(gameplay_, threadScheduler_, hitLog_, "gameplay");
     registerThreadClose(ui_, threadScheduler_, hitLog_, "ui");
 

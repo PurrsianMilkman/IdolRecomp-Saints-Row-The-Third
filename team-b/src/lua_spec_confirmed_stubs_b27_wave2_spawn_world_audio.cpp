@@ -69,12 +69,31 @@ int stub_assert_screen_is_faded_out(lua_State* L) {
 // action_nodes_shouldnt_flee (each of which IS documented, separately, and
 // already registered or implemented elsewhere under its own distinct name).
 // =======================================================================
+// UPDATE: spec-lua-api-behaviour.md Sec45.1 DOES carry a `flee` (0x00a49b30)
+// paragraph (promoted 2026-10-09): 1 mandatory actor name resolved via
+// 0x00a28150 (#FOLLOWER# or character name, NOT #PLAYER#), optional target
+// name (default "#PLAYER1#"), 2 optional booleans; posts an AI order (kind
+// 0x30) with flag dword 2 (3 if arg 3, |0x10 if arg 4); silently dropped on
+// pool exhaustion; no return value. Modelled exactly like flee_to_navpoint
+// above (this project has no AI order free-list): only the resolved actor
+// is gated, and a counter records the request. Bit meanings stay OPEN.
 int stub_flee(lua_State* L) {
     logCall(L, upLog(L), "flee", upStateTag(L));
-    throw OpenStateError("flee",
-                          "no entry for a native literally named 'flee' anywhere in spec-lua-api-behaviour.md "
-                          "or spec-lua-bindings.md (checked directly) - flee_to_navpoint/vehicle_flee/"
-                          "action_nodes_shouldnt_flee are documented but are different natives");
+    std::string name = argString(L, 1);
+    const std::string targetName = optionalStringDefault(L, 2, "#PLAYER1#");
+    (void)optionalBoolDefault(L, 3, false);
+    (void)optionalBoolDefault(L, 4, false);
+    EngineState* st = upState(L);
+    std::string resolved;
+    // Spec 45.1 (blocker m07/m12, FINAL): actor resolves via 0x00a28150, target via 0x00a281a0 (default
+    // "#PLAYER1#"); if EITHER fails the native returns silently with no order. Otherwise the order is posted
+    // (dead-recipient handling is not in the spec, so none is applied here).
+    std::string resolvedTarget;
+    if (name != "#PLAYER#" && resolveFollowerAwareObject(st, name, resolved) &&
+        resolveFollowerAwareObject(st, targetName, resolvedTarget)) {
+        ++st->getOrCreateCharacter(resolved).fleeRequestCount;
+    }
+    return 0;
 }
 
 // =======================================================================

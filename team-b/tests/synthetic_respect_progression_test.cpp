@@ -281,6 +281,34 @@ int main() {
         CHECK(es.respectGrantCount() == 2);
     }
 
+    // --- RP-6: with the real table injected, awards run sr3progression::AwardRespect (B.3 item 1). Level-up unlocks
+    // record L = the NEW level (the library), where the legacy test path used the row just paid.
+    {
+        std::vector<sr3tables_progression::RespectLevel> rows;
+        for (int i = 0; i < 50; ++i) {
+            sr3tables_progression::RespectLevel r;
+            r.respect.value = i < 49 ? 2115 + 115 * i : 0;
+            r.respect.present = true;
+            r.unlockables = {"U" + std::to_string(i)};
+            rows.push_back(r);
+        }
+        EngineState es;
+        es.setRealRespectTable(rows);
+        CHECK(es.realRespectTableActive());
+        es.awardRespect(2115 + 10);
+        CHECK(es.respectLevel() == 1);
+        CHECK(es.respectBanked() == 10);
+        CHECK(es.respectTotal() == 2125);
+        CHECK(es.respectUnlockApplied("U1"));
+        CHECK(!es.respectUnlockApplied("U0"));
+        CHECK(es.respectLevelCost(1) == 2230);
+        es.awardRespect(1 << 30);  // clamps to the lifetime cap, ends at the last level
+        CHECK(es.respectTotal() == static_cast<uint32_t>(es.respectLifetimeCap()));
+        CHECK(es.respectLevel() == 49);
+        es.awardRespect(0);
+        CHECK(es.respectAwardNonPositiveGuardCount() == 1);
+    }
+
     if (g_failures == 0) std::cout << "ALL respect-progression TESTS PASSED\n";
     return g_failures == 0 ? 0 : 1;
 }

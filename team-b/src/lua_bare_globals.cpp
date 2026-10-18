@@ -26,6 +26,9 @@
 // (lua_yield from bareGuard's frame). Lua code a body must run (a keyed read
 // that may hit __index, _GetAnyGlobalSilent, a thread body) runs under
 // lua_pcall/lua_resume, so its errors stay inside that call.
+#include <cstdio>
+#include <cstdlib>
+
 #include "sr3luahost/bare_globals.h"
 
 #include <cfloat>
@@ -894,6 +897,9 @@ int bare_thread_new(lua_State* L) {
         const char* st = upStateTag(L);
         upLog(L)->record("thread_new:THREAD_ERROR(error callback OPEN)", 0, "", st ? st : "");
     }
+    if (!alive && std::getenv("SR3_TRACE_NATIVES"))  // DIAGNOSTIC ONLY (opt-in)
+        std::fprintf(stderr, "[native-arg] thread_new('%s') -> completed or errored at once (errors=%zu)\n", name.c_str(),
+                     threads.errors().size());
     lua_pushnumber(L, alive ? id : BareThreadTable::kNoThread);
     return 1;
 }

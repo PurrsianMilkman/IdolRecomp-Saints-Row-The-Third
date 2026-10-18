@@ -325,7 +325,7 @@ int stub_vehicle_turret_base_to_do(lua_State* L) {
         return 1;
     }
     VehicleState& v = st->getOrCreateVehicle(vehicleName);
-    if (!v.seat0Occupied.get()) { // OPEN until set - gates the real null-read crash below
+    if (!v.seat0OccupantPresent()) { // spec 46.4 m06 note: default false (no occupant) - gates the real null-read crash below
         lua_pushboolean(L, 0);
         return 1;
     }
@@ -423,7 +423,10 @@ int stub_character_hidden(lua_State* L) {
     EngineState* st = upState(L);
     bool hidden = true; // CONFIRMED unresolved default
     if (st->objectResolves().get(name)) { // OPEN until set
-        hidden = st->getOrCreateCharacter(name).hiddenFlag.get(); // OPEN until set
+        // Spec 45.1 blocker m16 (FINAL): bit 0 of +0x3b, default 0 (visible) for a spawned NPC and the player;
+        // character_hide sets it, character_show / activation clear it. A test-set hiddenFlag still wins.
+        const CharacterState& hc = st->getOrCreateCharacter(name);
+        hidden = hc.hiddenFlag.known() ? hc.hiddenFlag.get() : hc.hidden;
     }
     lua_pushboolean(L, hidden ? 1 : 0);
     return 1;

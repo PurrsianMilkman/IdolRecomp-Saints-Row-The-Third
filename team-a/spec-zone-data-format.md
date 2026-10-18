@@ -3036,6 +3036,97 @@ This directly confirms, from the real consumer's own arithmetic rather than file
 
 **Review status (2026-10-11): CONFIRMED for the handler, registry mechanism, on-disk record format (population-wide), origin formula, the runtime sampler through the resolved grid index, the literal value read (no scale/bias), and that this content kind's own query chain has no rendering consequence. HIGH CONFIDENCE for height-value-equals-metres and the `~al`-spacing reconciliation. OPEN for the `-5.0` sentinel/legitimate-value ambiguity and for an exhaustive whole-binary search for any separate `0x2244` render path.**
 
+#### 13.5.1 Walkable ground source (2026-10-18)
+
+Answers SPEC-GAP GH-4 (`spec-conformance-review.md`, review of 2026-10-18) and the four questions in Team B's `results/freeroam_ground_height_20261018.md`. Static work only: executable read with capstone, tile bytes read from `sr3_city_0.vpp_pc` (memory-mapped, only the tile's own `.str2_pc` inflated). Scripts: `tools/scratchpad/walkground_2026-10-18/` (`extract_tiles.py`, `czn_collision.py`, `census.py`, `probe_pts.py`, `n1n2.py`, `xrefs.py`, `petool.py`).
+
+**(a) How the game puts a character on the ground. FINAL.** No character code reads a height field. The controller (`spec-player-runtime.md` §5.6.4 to §5.6.6) moves a Havok character proxy. Its support comes from contacts with the shapes in the Havok world (support query `0x0079d0b0`, §5.6.5). The vertical probes all go through the shared ray wrapper `0x0075d7e0`:
+- Fall test in the write-back `0x0099e2a0`: a ray from 0.5 m above to 0.6 m below the position. If it hits nothing (and there is no vehicle) after 200 ms unsupported, a fall starts (§5.6.6).
+- Ground snap `0x0075dfe0(&pos)`: a ray (kind `0x59`) from pos + (0, 0.05, 0) to pos + (0, −500, 0). The constants are `0x01115d6c` = 0.05 and `0x01153aa8` = −500.0. On a hit, pos is overwritten with the closest hit point and the hit's 16-bit surface id is returned. On a miss, `0xffff` is returned and pos is unchanged. Closest hit from just above the start = the topmost surface at or below start + 0.05 m. It has 22 call sites, among them:
+  - the engine teleport `0x009e69d0` (call at `0x009e6e6a`, once per offset follower position);
+  - the character routine `0x0099c850`. It walks a 10-slot ring of past positions at human `+0xdc0` (12-byte stride, cursor `+0xdbe`). It requires the zone at the point to be loaded (`0x00861aa0` → `0x00861ec0`) before it snaps (`0x0099cb06`).
+- The step-up and step-down probes of §5.6.5 (step-up limit about 0.52 m) use `0x0075d7e0` and the shape-cast wrapper `0x0075c880`.
+
+**(b) What those rays and the proxy collide with, in free roam. FINAL.**
+1. **The tail collision mesh of the `0x2237` record in each tile's `sr3_city~s<CCRR>.czn_pc`** (§13.6; the chain is in `spec-player-runtime.md` §5.6.5 under "RESOLVED, 2026-10-11"). Its byte layout is the `.clmesh_pc` hull layout of `spec-physics-format.md` §4.4.6, read by the same parser `0x007a79f0`/`0x0077a3e0`. The `~f<CCRR>` file is not a source: its `0x2237` is a 92-byte stub with no mesh in all 18 `~f` files checked. **The mesh is placed with identity:** `0x00864c60` passes the rotation at `0x01321424` (a 3×3 identity) and a zero translation to the wrapper `0x007a78a0`. The vertices are world-space metres. The trailing AABB equals the vertex bounds exactly (18/18 records).
+2. **Placed objects' `.clmesh_pc`** from the tile's `<CCRR>h0`…`h3.str2_pc` containers (`spec-world-streaming.md` §10.5/§10.6), with each object's placement (§11). These are buildings, kerbs and props. For 0915 the four containers hold 59/46/26/63 clmesh, all buildings or props (`house_14`, `warehouse01`, `sh_megabrothel`, `lamppoststr_b`, …). None of them is a road or terrain surface.
+3. Parking boxes `0x2250` (§13.4) share the world but are not ground.
+
+These are not ground sources:
+- the `0x2244` heightmap (see (d));
+- the `.gzn_pc` render channels. Team B's stand-in builds its ground triangles from the render mesh. For `~s0915` that render mesh is the 26-triangle near-origin content of §13.2, which is why it found nothing under the spawn.
+
+**(c) Collision mesh fields a port needs.** Layout: `u32 n1; float3 v[n1]; align4; u32 n2; u16 s[n2]; align16; u32 blobLen; align16; blob ('MOPP'); align4; float3 min; float3 max`.
+- **`n2 == n1` (FINAL):** this holds in 18/18 `~s` records decoded here. It resolves the "identical totals" OPEN item of `spec-physics-format.md` §4.4.6: the equality is structural.
+- **`s[]` is not an index list (FINAL):** the shape's surface-id accessor `0x00d54600(out, key)` returns `s[key & 0x3ffff]` when `key & 0x3ffff < n2`, and fails otherwise. `s` is the surface id of the triangle whose first vertex is that index. Value `0x38ff` is the most common (3549/11388 in `~s0916`) and is the value of `s[n1−2]` and `s[n1−1]` in 18/18 records. GUESS: "no triangle starts at this vertex".
+- **Triangle decode (FINAL):** a triangle is defined by its shape key alone. The child-shape getter is `0x00d55110` (container vtable `0x01246814`, slot 5):
+  - `v0 = key & 0x3ffff`
+  - `v1 = v0 + ((key >> 18) & 0x7f)`
+  - `v2 = v1 + ((key >> 25) & 0x3f)`
+
+  The key set exists only in the MOPP blob (§4.4.6(g)). Its bytecode is Havok's and is not specified by this project.
+- **GUESS stand-in without a MOPP walker:** use the triangles (v, v+1, v+2) for every v with `s[v] != 0x38ff`.
+  - In `~s0915` this gives 6513 triangles with a median longest edge of 4.3 m. The excluded set has a median of 6.4 m.
+  - It reproduces road-node Y within 0.06 m at the 3 node points it hits, but it leaves holes (2 of the 6 points below miss).
+
+**(d) The `0x2244` heightmap and the `−5` value. HIGH. This closes the §13.5 OPEN item: the distinction is not needed.**
+- **What the field is for:** aircraft clearance (a skyline height), not walking height. Two consumers read this pass show it:
+  - The placement routine `0x006c8170` uses `0x00b41670(pos)` + 20.0 (`0x01116998`) when the handle is an aircraft. The aircraft test is `0x00ad3240`: vehicle record `+0x2c` is 3 or 4, the helicopter modes of `spec-lua-api-behaviour.md` and `spec-player-runtime.md` §4.7 item 8. For anything else it uses the ground snap `0x0075dfe0`. `0x006c86d3` adds 20.0 the same way, and `0x00b3f107` adds 7.5 (`0x01186fa8`).
+  - `0x00b41530` returns max(floor, the 3×3 cell samples) + 5.0 (`0x012a2f20`). Neighbours outside the grid read as −5.
+
+  This matches Team B's measurement that `~s` sits 8 to 18 m above the street nodes (99.2% are at or above node Y).
+- **No character caller (FINAL, rel-call scan):** `0x00b41670` has 18 callers and `0x00b41530` has 1 (`0x00933b4e`). None is in the controller band (`0x0079xxxx` to `0x007axxxx`) or the human band (`0x0098xxxx` to `0x009axxxx`).
+- **What `−5` means:**
+  - `0x00b41670`/`0x00b41000` return −5.0 (`0x01131200`) for "no heightmap for this zone" or "outside the grid".
+  - The stored data holds −5 exactly where there is no land. On land tiles, every cell of the `~f` records is −5 (`~f0814`/`0815`/`0816`/`0914`/`1015`: 896/896; `~f0915`: 884/896). In coastal `~s` records the sea cells are −5 (`~s0715` 627/896, `~s1014` 199/896, `~s1016` 113/896). Inland `~s` records have none (0814/0815/0816/0914/0915/0916/1015: 0/896).
+  - No consumer compares a result against −5. The other 15 `.text` references to `0x01131200` are unrelated uses of the same literal. The engine treats −5 as an ordinary height, a sea-level floor.
+  - **Meaning: "no land surface here; floor at −5 m".** The sentinel collision is harmless because no `0x2244` value is ever character ground.
+- **Not settled:** which of `~f`/`~s` the runtime query reads. `0x00b41260` derives the zone id arithmetically from the position on the city grid (`0x00861aa0` with flag 1, grid globals `0x01301e08`…`0x01301e24`) and falls back to `0x0085be70(id)` (strips category `0x6000`). Which file's record is keyed by that id is not settled (Residual).
+
+**(e) Tile 0915. FINAL (bytes).**
+- **Source:** `sr3_city~s0915.czn_pc` (`sr3_city_0.vpp_pc` → `0915.str2_pc`). Its `0x2237` record is at file `0x30` (data `0x3c`, length 395,444).
+  - `n1` is at file offset `0x114a0`: 9,421 vertices, with `n2` = 9,421.
+  - MOPP is at `0x317f0`: version 301, blobLen 192,741.
+  - AABB: x[−1461.61, −1094.52] y[3.77, 42.56] z[−722.72, −379.97]. It contains the default spawn (−1280, −560).
+- **Variants:** the mission variants `~s0915^megab1`/`^megab2` carry their own 9,495-vertex mesh with the same AABB.
+- **The other files are not ground:** `~f0915`'s `0x2237` is the 92-byte stub. At the spawn the heightmap reads `~s0915` = 50 and `~f0915` = −5; neither is ground.
+
+Neighbouring `~s` collision AABBs, for streaming checks (x, then z, in metres):
+
+| tile | x | z | n1 |
+|---|---|---|---|
+| 0814 | −1615..−1264 | −449..−125 | 13581 |
+| 0815 | −1773..−1408 | −734..−388 | 9976 |
+| 0816 | −1621..−1257 | −1004..−689 | 8544 |
+| 0914 | −1343..−939 | −457..−114 | 7854 |
+| 0916 | −1300..−939 | −1038..−686 | 11388 |
+| 1015 | −1145..−711 | −736..−349 | 12746 |
+
+**Test vectors** (`sr3_city~s0915.czn_pc`; node Y from the §13.2a graph via Team B's probe):
+
+| point (x, z) | node Y | collision vertices within 4 m XZ: min / median / max (n) | GUESS-triangle hit Y (normal y) |
+|---|---|---|---|
+| (−1280, −560) spawn | — | 32.39 (1) | 32.68 (0.997) |
+| (−1272.0, −584.4) sidewalk | 32.15 | 32.00 / 32.15 / 32.15 (5) | miss |
+| (−1266.9, −584.4) road | 32.13 | 32.00 / 32.08 / 32.15 (4) | 32.17 (0.998) |
+| (−1282.8, −478.6) road | 36.06 | 35.93 / 36.13 / 36.18 (4) | 36.02 (0.998) |
+| (−1318.6, −681.3) road | 23.82 | 23.69 / 23.77 / 23.84 (2) | 23.85, 23.76 |
+| (−1311.1, −544.6) sidewalk | 28.75 | 28.60 / 28.75 / 28.75 (3) | miss |
+
+The collision vertices agree with node Y within 0.15 m at every point that has vertices. Ground at the spawn is about 32.4 to 32.7 m. Team B's player sinking to −5 there is the `~f` heightmap floor, not ground.
+
+**Port recipe.**
+1. **Load the sources:** for each resident tile, load the `0x2237` tail mesh of `sr3_city~s<CCRR>.czn_pc` (world-space, no transform). Use the `^name` variant file when that variant is active; skip `~f`. Add every placed `.clmesh_pc` from `<CCRR>h0`…`h3` with its object transform.
+2. **Triangles:** use the MOPP keys decoded as in (c) (exact). Otherwise use the GUESS strip stand-in, labelled CHOSEN in code.
+3. **Ground at (x, z) from a start height y0:** cast a ray from (x, y0 + 0.05, z) to (x, y0 − 500, z) and take the closest hit. That is the highest surface at or below y0 + 0.05, the same as `0x0075dfe0`. On a miss, leave Y unchanged.
+4. **Start height:** the engine always starts from a position it already has (script or teleport target, the past-position ring, the current position). It never casts from the sky. CHOSEN for a port that only has (x, z): y0 = nearest road/sidewalk node Y + 2 m, which keeps rooftops out. Otherwise use the collision AABB max Y + 1 m, which gives the topmost surface.
+5. **Walkable surface and step:** walkable when normal y ≥ 0.715 (≥ 0.7 when not moving). Slopes are removed below 0.7 and too steep below 0.55. Step-up is limited to about 0.52 m. Support is lost when nothing is within 0.6 m below for 200 ms, and the character then falls (`spec-player-runtime.md` §5.6.5/§5.6.6).
+6. **Before the tile is resident:** hold the character until the tile's `~s` zone is loaded (the engine gates its snap on `0x00861ec0`). Never use `0x2244` values as character ground.
+
+**Residual:** the exact MOPP key set (the true triangle list) is not enumerated, because that needs a MOPP bytecode walker this project does not specify; the strip stand-in misses 2 of 6 test points; it is not settled which of the `~f`/`~s` `0x2244` records the runtime keys under the grid-derived zone id.
+
+**Review status (2026-10-18): FINAL for (a), (b), the identity placement, `n1 == n2`, the surface-id accessor, the key decode and the tile-0915 bytes. HIGH for the heightmap's aircraft role and the `−5` meaning (§13.5's OPEN item is closed). GUESS for the `0x38ff` meaning and the strip stand-in.**
+
 ### 13.6 `0x2237`'s own Havok collision shape — cross-reference, full chain lives in `spec-player-runtime.md` §5.6 (2026-10-11)
 
 `0x2237` (already confirmed above and in §13.2 to carry street pavement's visible geometry) also
@@ -3054,6 +3145,14 @@ closes the "which file supplies ground collision" open item that section tracked
 ---
 
 ## Changelog
+
+- **2026-10-18 — new §13.5.1: walkable ground source (SPEC-GAP GH-4).** The character stands on
+  Havok collision: the world-space `0x2237` tail mesh of `sr3_city~s<CCRR>.czn_pc` plus placed
+  `.clmesh_pc` objects. The ground snap is `0x0075dfe0` (+0.05 m to −500 m, closest hit). The
+  triangle key decode is `0x00d55110`; `s[]` is a per-triangle surface id (`0x00d54600`) and
+  `n2 == n1`. The `0x2244` heightmap is an aircraft clearance field (+20 m, +5 m users); `−5` means
+  "no land, floor"; the §13.5 OPEN item is closed. Tile 0915's ground is `~s0915`'s mesh, about
+  32.4 m at the spawn. Residual: the MOPP key set and the `~f`/`~s` heightmap key choice.
 
 - **2026-10-14 — new §13.2a: Traffic (`0x2236`) and Sidewalks (`0x2238`) road/sidewalk graph made
   byte-complete** (SPEC TEAM, self, executable plus every shipped byte). Both sections live only in

@@ -5515,3 +5515,146 @@ consumer of `instance+0x13c`.
   when idle AND throughout an entire in-progress recording, true only in the brief stop/finalize
   window. Full detail: `scratchpad/bc5610_mislabel_correction_2026-10-10.md`. Cleanroom
   self-check: strict regex 0 hits.
+
+---
+
+## 18. Player vitals: health regeneration, death, respawn and penalties (2026-10-18)
+
+Closes the three Team B SPEC-GAPs of `spec-conformance-review.md` (PV-5/SPEC-GAP-1 regeneration, PV-8/SPEC-GAP-2 free-roam respawn, PV-9/SPEC-GAP-3 penalties) and answers PV-1 (the 4000 ms), PV-6 (difficulty damage scaling) and PV-7 (what a respawn resets). Static only: capstone listings of the executable, the shipped `tweak_table.xtbl` / `gameplay_constants.xtbl` / `difficulty_levels.xtbl` / `unlockables.xtbl` under `tools/ai_base_xtbl`, the shipped `hud.lua` / `screen_fade.lua` (`scratchpad/ui_lua_dumps`), and a read-only scan of every `.czn_pc` zone in `sr3_city_0.vpp_pc` (2068 zones) and `sr3_city_1.vpp_pc` (810 zones). Status tags: **FINAL** (read directly in code or data), **HIGH** (strong inference, one link not opened), **GUESS**.
+
+### 18.1 What was already on file (not re-derived)
+
+- **Regeneration is already specified** in `spec-weapons-runtime.md` §4.5.4 step 19 (the wait timer) and §4.5.5 (the tick). `spec-tables-progression.md` §10.2's "no runtime consumer traced" note on `player_health` is out of date; §4.5 superseded it on 2026-10-12. This section adds the remaining names, the unlockable values and test vectors.
+- **Difficulty damage scaling** is §4.5.4 step 7 of the same file: the record picker `0x005f4a50` returns `0x014A1130 + 0x28·level` (single-player) or `0x014A10B8 + 0x28·level` (co-op, ≥ 2 session members), `level` = global `0x012ece10` (0 easy, 1 normal, 2 hard). Field layout: `spec-tables-progression.md` §7.2; values: §14.7 and `spec-expected-table-values.md` lines 14-15.
+- **Death trigger and timer**: §15.4 above and `spec-lua-api-behaviour.md` "Firing for players" (2026-10-14 RESOLVED note): `0x00702810` arms player `+0x1ef4` with `respawn_delay_ms`, and the gameplay frame update `0x00703c00` fires `on_death`. **What was missing, and is new here:** what happens after `on_death` (the free-roam respawn routine `0x00703840`), the respawn-point data, the penalty and the revive routine `0x009e6f20`.
+- The busted path `0x00703770` (caller `0x009dab20`) is named in the same Lua note; the bust trigger and its penalty are new here.
+
+### 18.2 Constants
+
+| Name | Value | Address / source | Status |
+|---|---|---|---|
+| `respawn_delay_ms` | 4000 | `0x014A1370`, `gameplay_constants.xtbl` → `Death_and_busted` | FINAL |
+| `restore_wait_time_ms` | 6000 | `0x014A13E4` | FINAL |
+| `restore_per_sec_sp` | 125 HP/s | `0x014A13CC` | FINAL |
+| `restore_per_sec_vampire_sp` | 500 HP/s | `0x014A13D0` | FINAL value; HIGH that it applies while the player holds a human shield (`0x009aa4e0`) |
+| `restore_max_pct_sp` | 1.0 | `0x014A13D4` | FINAL: regeneration runs to **full** max HP |
+| `full_restore_time_ms` | 2000 | `0x014A13EC` | FINAL: **no reader** besides its loader (`0x005f5088`) |
+| `restore_per_sec_mp` 50, `restore_per_sec_vehicle_mp` 20, `restore_max_pct_mp` 1, `restore_wait_time_ms_mp` 10000 | — | `0x014A13D8`…`0x014A13E8` | FINAL: loader-only (`spec-weapons-runtime.md` §4.5.5); ignore |
+| `Death_cost` | 500 (dollars) | tweak, float at `0x014FF6B4` (registrar `0x00ff7560`), "The amount of cash you lose by dying." | FINAL |
+| `Busted_cost` | 500 (dollars) | tweak, float at `0x014FF6B0` (registrar `0x00ff7580`) | FINAL |
+| `Bust_HP_Pcnt` | **0.6** | `0x014A155C`, read from `Combat_AI` → `Bust` | FINAL. The top-level `Bust` copy (0.3) in the same file is the unread orphan of `spec-tables-progression.md` §14.9 |
+| Difficulty SP (L0/L1/L2) | `Damage_Received_Mult` 0.3/0.75/1.5; `Health_Regen_Wait_Mult` 0.6/1.0/1.3; `Health_Regen_Speed_Mult` 1.3/1.0/1.0 | record `+0x00`/`+0x04`/`+0x08` | FINAL |
+| Difficulty co-op (L0/L1/L2) | received 0.5/0.95/1.75; wait 0.85/1.0/1.5; speed 1.1/1.0/1.0 | same fields, set at `0x014A10B8` | FINAL |
+| `Health_Regen_1`…`_4` (unlockable type 11 `Health`) | `Modifier` 1.25 / 1.5 / 1.75 / 2.0 | applied to player `+0x2770` (the regen-speed factor) | FINAL |
+| `Player_Health_1`…`_4` (type 44 `Player_Health_Bonus`) | `Modifier` 1.25 / 1.5 / 1.75 / 2.0 | max-HP bonus; apply routine not traced | values FINAL; how it scales `+0x1cac` GUESS (multiply) |
+
+The difficulty record field at **`+0x14` is `Homie_Revive_Timer_Mult`** (SP 1.33/1.0/0.5), the downed-homie revive window scale; it never touches player HP. `+0x18` `Vehicle_Damage_Received_Mult` (SP 0.3/0.8/1.2) is for vehicles, not the player's HP. [FINAL, layout from `spec-tables-progression.md` §7.2]
+
+### 18.3 Health regeneration: formulas
+
+Both halves are already in `spec-weapons-runtime.md`; restated as a port contract.
+
+1. **Wait (re-armed by every damaging hit that reaches the apply step):** unless the character's `dont_regen_health` force flag (`+0x1c98` bit `0x2`) is set: `wait_ms = trunc((6000 − reduction) × Health_Regen_Wait_Mult)`; `reduction` is 3000 when global cheat word `0x014F71E8` bit `0x10000` is set, else player `+0x276C` (always 0 in practice: its setter `0x009db390` has no caller or pointer in the image); `wait = 0` while holding a human shield. Arm `+0x19c0 = now + wait_ms`. [FINAL]
+2. **Tick (per character update `0x009a02a0`, fixed 1/30 s step `0x0132a0ac`):** if timer `+0x19c0` has expired and `HP < maxHP × 1.0`: `HP += rate / 30`, `rate = 125 × Health_Regen_Speed_Mult × player+0x2770` (500 instead of 125 when holding a human shield), clamped to `[0, maxHP]` by the shared setter. Regeneration therefore always runs **to full**; there is no partial cap in single-player. [FINAL]
+3. A separate "full restore" timer `+0x19c4`, when it expires, snaps HP to max (`0x009a0860`). While it is armed the player takes no damage (§4.5.4 step 10d). Its arming site is not found, and the 2000 ms constant has no reader, so do not implement it for free roam. [FINAL that the constant is unread; arming site OPEN]
+4. **Damage taken (PV-6):** the received multiplier is applied **inside the damage sink**, not in vitals: for a player victim (or a follower of the local player) with `dmg > 0`, `dmg ×= Damage_Received_Mult`, then the player-only block (avatar ×0.4 in m16, the low-health damage-assist curve below 30 % HP), then the rest of §4.5.4. Team B's fix belongs in the engine sink, in the §4.5.4 order. [FINAL]
+
+### 18.4 Death and respawn: order of events (free roam, single-player, local player)
+
+SR3 has no "Wasted" text. The death overlay is the HUD group `Hud_smoked_busted`. The shipped `hud.lua` sets its text to a blank (`"You're Smoked"` and `"Busted"` were removed) and starts the full-screen interface effect `"smoked"` (busted: `"busted"`). [FINAL]
+
+| t | Step | Where | Status |
+|---|---|---|---|
+| 0 | Lethal hit; the finalizer reaches `0x00702810(player)` (§15.4). Bails if `+0x1ef4` is already armed or one of the four exceptions in `spec-lua-api-behaviour.md` applies | `0x00702810` | FINAL |
+| 0 | Arm `+0x1ef4 = now + respawn_delay_ms` (4000); set `+0x1d99` bit `0x08` (controls disabled) | `0x00702897`, `0x0070289c` | FINAL |
+| 0 | Local player only: camera mode 9; mission-failure call `0x006da400` with `"You died."`. **That routine does nothing without an active mission** (first gate `0x006cf930`) | `0x007028b7`…`0x007028f8` | HIGH (gate read, its meaning inferred) |
+| 0 | Unless game mode is 27 or 14: `0x007f0280(1)`: HUD element "Death Display", audio event `Player_Dies`, Lua `hud_busted_fade_in(true, 4.0, 4.0)` (shows the blank smoked group, effect `"smoked"`) | `0x00702923` → `0x007f0280` | FINAL |
+| ≈4000 | First gameplay frame with `+0x1ef4` expired: set latch `+0xe8` bit 0, fire `on_death(player, killer)`, keep its script thread in `+0x1f70` | `0x00703c00` | FINAL |
+| ≥4000 | Each frame: wait while the `on_death` thread runs. When it ends: `+0x1f70 = 0xffff`; if the player is local and `+0x1a10` bit `0x10` is set (set by default in the character constructor `0x00955420`): call `0x00703840(player)` | `0x00703d3c`…`0x00703d79` | FINAL |
+| same frame | **Phase 1** of `0x00703840` (screen-transition target ≠ 3): retry next frame if UI gate `0x007bfa70` holds; else, unless game mode 14, start `screen_fade_do(1 = ALPHA, 1 = OUT, respawn_delay_ms)`: a **4000 ms fade to black** (`0x0059f8c0`; target state := 3, current := 1) | `0x00703870`…`0x007038c9` | FINAL |
+| ≈8000 | Lua `Screen_fade_transition_complete` (`0x005a0110`) sets current state 3. **Phase 2** runs on the next call: pick the respawn point (§18.5), dismiss followers (§18.6), apply the penalty (§18.7), then revive at the point (`0x009e6f20`) | `0x007038e5`…`0x00703bdd` | FINAL |
+| after | Revive `0x009e6f20`: HUD reset (`hud_player_reset_complete`, `hud_hit_clear_all`, audio `Player_Respawned`), teleport, the resets of §18.6, fire hook slot 5 on `+0x1f00` | `0x009e6f20` | FINAL (hook name not paired) |
+
+**PV-1 verdict.** `respawn_delay_ms` = 4000 is the right value and the right source, but the engine **uses it twice**: 4000 ms from death to `on_death`, then a 4000 ms fade to black that starts when the `on_death` script returns. The teleport happens when the fade completes. **Death to respawn ≈ 8000 ms plus the `on_death` script time** (one frame or so in free roam), not 4000. [FINAL on structure; exact milliseconds HIGH, frame-quantised]. How the screen fades back in after the teleport was not traced. [OPEN]
+
+**Busted variant (exists in SR3).** Cop AI may bust the player (`0x004d4040`…) when the player is ragdolled (`0x009a1dc0`), not dead, and `HP / maxHP ≤ Bust_HP_Pcnt` (0.6), plus further gates not opened. The bust action calls `0x009dab20` (from `0x0098d58b`), which does nothing if `+0x1d94` bit 2 is already set. Otherwise it sets `+0x1d94` bit 2 (busted), bumps profile stat 11 "arrests" (`0x00710e40(11)`, HIGH that it adds 1), calls `0x00703770` and sends mission failure `"You got busted."`. `0x00703770` arms the same `+0x1ef4` timer with `respawn_delay_ms`, sets `+0x1d99` bit `0x08`, shows `0x007f0280(0)` (busted overlay, effect `"busted"`) and fires hook slot `0xa` at once. From there the respawn chain is the same `0x00703c00` → `0x00703840`. Script control: `set_player_can_be_busted` (Lua). [FINAL for the chain; HIGH for the ragdoll and HP-ratio reading of `0x004d4040`]
+
+### 18.5 Respawn point selection (`0x008e8c00`)
+
+**Data source: `level_respawn` world objects** (class id `0x14`, RTTI `.?AVlevel_respawn@@`, constructor `0x008e9050`) placed in zone files. Properties: `level_respawn_bmin`, `level_respawn_bmax` (a box, shipped ±0.5/0..1), and `level_respawn_flags`, a flag-name string parsed by the bitfield table built at `0x008e8a90`: **`death` 0x1, `busted` 0x2, `indoor` 0x4, `passed_out` 0x8, `npc` 0x10, `vehicle` 0x20, `watercraft` 0x40**, stored at object `+0x7c`. Position is at object `+0x40`, a 3×3 orientation at `+0x4c`. [FINAL]
+
+**Shipped points (complete for both city archives, read-only scan):** exactly four, all with flags `"death"` only:
+
+| Name | Zone | Position (x, y, z) | Orientation quaternion |
+|---|---|---|---|
+| `ne_hospital` | `sr3_city~f0815~al` | −1641.3849, 8.5352, −644.6879 | 0, −0.7071, 0, 0.7072 |
+| `dt_hospital` | `sr3_city~f1313~al` | 117.5149, 12.15, 52.4055 | 0, 0.7071, 0, 0.7071 |
+| `sw_hospital` | `sr3_city~f1609~al` | 859.4623, 6.0703, 1080.6064 | 0, −1, 0, 0 |
+| `nw_hospital` | `sr3_city~f1713~al` | 1375.2847, 26.1484, 64.979 | 0, −0.7071, 0, 0.7071 |
+
+[FINAL; DLC archives not scanned]
+
+**Algorithm** (`0x00703840` passes `flags` = 2 if `+0x1d94` bit 2 (busted), else 1 if dead, else 3):
+
+1. If the current game mode's table entry (`0x012f45d8 + 0x74·mode`, slot `+0x40`, via `0x007048c0`) has a respawn override, use it. The slot is null for all four static modes (Activity, Diversion, Normal, Mission). [FINAL]
+2. If player `+0x27b0` (a respawn provider installed by activity code: `0x006c8e36`, `0x006cdd55`, `0x006cac32`, `0x006cc20a`) is set, `0x00703840` calls it **instead of** the picker. It returns position, orientation and an apply-penalty byte; the one opened (`0x006c8930`) clears that byte. Null in free roam. [FINAL for the call; HIGH that free roam never sets it]
+3. Otherwise `H` = the hood under the player (`0x0084bb20`, `spec-ai-runtime.md` §20.6.8) and `T` = its island type (hood `+0x5c`; enum `ocean` 0, `mainland` 1, `prison` 2, `power plant` 3, registered at `0x00ffb630`); no hood gives −1. [FINAL for the enum; HIGH that `+0x5c` holds it]
+4. For every `level_respawn` object (world list `[0x03171a64]` index `+0x154`, count `+0x15c`): it qualifies if `(flags & 1 and obj & 1) or (flags & 2 and obj & 2) or (flags & 8 and obj & 8)`. Island rule: if `T` is 2 or 3, the point's hood must have the same type; otherwise the point must **not** lie in a type-2/3 hood (a point in no hood is fine). Keep the qualifying point with the **smallest distance** (`0x00d9fc80`, initial best FLT_MAX). [FINAL]
+5. In co-op (`0x00867830`): offset the position by 1.5 m along orientation row 0, negated (×−1.0) on the non-host. Then `0x008e8870(position)` runs (a fix-up, not opened; GUESS: ground snap). [FINAL for the offset]
+6. **No point qualifies** → `0x00703840` falls back to the single registered start object (`0x00708010(0)`: table `0x01503e1c`, capacity 1, filled by `0x00707690` for world objects carrying load flag 8, the same list the new-game step `0x00708330` reads). If there is none, the player stays at the current position and orientation. [FINAL for the code; which object is the start object is OPEN]
+
+**Consequences:** death in free roam → **nearest of the four hospitals** (3-D distance, island rule). **Busted → no `busted`-flagged point exists in the shipped city**, so the picker fails and the fallback applies. [FINAL from code plus data]
+
+### 18.6 What a respawn resets (`0x00703840` phase 2 + `0x009e6f20`)
+
+- **Followers:** `0x009e2bc0(player, 0)` repeatedly dismisses one follower (`0x009db1b0(player, 1)`, the dismiss call `spec-cellphone-menu-runtime.md` names) until none remain. A downed follower is finished through `0x009a7610`. [HIGH]
+- **Health:** `+0x1cb8 := +0x1cac` (current HP = max). [FINAL]
+- **Control and state flags cleared:** `+0x1d99` bits `0x40` and `0x08` (controls back on), `+0x1d94` bit 2 (busted), `+0x1d96` bit 0, `+0xe8` bit 0 (the `on_death` latch), `+0x1ef4 := −1` (death timer disarmed), `+0x1d97` bit 7 (one-shot penalty waiver, below). Ragdoll is stopped (`0x009a1e10`), and a downed state is cleared (`0x00973700`). [FINAL for the flag writes; HIGH for the ragdoll and downed readings] This confirms most of Team B's "inverse of the finalizer" list (PV-7). The engine does not write `+0xcc8` here directly; it is reset through calls not opened. [HIGH]
+- **Weapons are kept.** No inventory-removal call in either routine. The only inventory call is `0x00600720(inventory +0x1b78; 0, 1, 0, 0)`, which selects slot 0 (empty-handed, OPEN 64's reading). [FINAL that nothing is removed; HIGH on "slot 0 = unarmed"]
+- **Notoriety:** single-player (`0x00867830` false, and the session singleton `0x024d8534` present with the local member as host): `0x006097a0(0, 0)` clears the 40-entry alert ring `0x014A4C50` (count `0x014A4580` := 0) and calls the `notoriety_reset` helper `0x00609030(track, 0, 0)` for **tracks 0-3 (three gangs + police) → all notoriety to 0**. Co-op or client: instead `0x00605150` arms the track-5 "just cleared" timer `0x012ED168` for 30000 ms, and notoriety is not reset here. [FINAL for both branches; HIGH that single-player always has a host session, because the mission loader and `0x00609030` itself require one]
+- Released handles: `+0x2800`, `+0x2808`, `+0x2810` (each released if it is a live object of a given class, then nulled). [FINAL; their meaning OPEN]
+
+### 18.7 Death penalty
+
+Applied in phase 2 when the apply-penalty byte is 1 (always, unless an activity provider cleared it) and player `+0x1d97` bit 7 is clear. The bit is cleared afterwards; no direct writer that sets it was found. Cash is player `+0x1ca0`, an int in **cents**.
+
+```
+cost      = Death_cost (died) or Busted_cost (busted)        ; float dollars, both 500
+if cost > cash/100.0:  penalty = cash                         ; everything you have
+else:                  penalty = int(cost * 100.0)            ; 50000 cents
+cash_setter(player, -penalty, reason 10)                      ; 0x0094d920
+profile_stat_add(4 "hospital bills" | 5 "bail money", penalty/100.0)   ; 0x00710cb0
+tutorial_hint(14 "smoked" | 13 "busted", 2000)                ; 0x007169e0, the 210-entry table
+```
+
+Cash never goes below 0. The amount does not depend on difficulty, notoriety or which hospital is used. [FINAL; float-to-int rounding of `0x00dad900` HIGH, irrelevant for the shipped 500]. Cross-check: a real save's stat 4 "hospital bills" = 15,500.0 (`spec-save-format.md`), which is 31 deaths × $500. [FINAL arithmetic, empirical]
+
+**Other penalties: none.** No weapon or ammo loss, no respect loss. Notoriety is reset (§18.6). Followers are dismissed. [FINAL for the two routines read; anything the `on_death` Lua script does is outside the engine]
+
+### 18.8 Port recipe
+
+1. In the damage sink: `dmg ×= Damage_Received_Mult[set][level]` for the player and the player's followers (`dmg > 0`), in `spec-weapons-runtime.md` §4.5.4 order. After any applied damage, re-arm `regenAt = now + trunc((6000 − 0) × Health_Regen_Wait_Mult)` unless `dont_regen_health` is set.
+2. Fixed 30 Hz: if `now ≥ regenAt` and `hp < maxHp`: `hp = min(maxHp, hp + 125 × Health_Regen_Speed_Mult × healthUnlockMod / 30)` (`healthUnlockMod` = 1.0 by default, or 1.25/1.5/1.75/2.0).
+3. On death: arm `deathTimer = now + 4000`, disable controls, death camera mode 9, show the blank smoked overlay with the `"smoked"` effect. Busted: the same, with the busted overlay, `+0x1d94` bit 2 and the arrests stat.
+4. When `deathTimer` expires: fire `on_death(player, killer)` once (latch). When its script returns: start a 4000 ms fade to black. When the fade completes, run steps 5-8 in this order.
+5. Point: run §18.5 over the four hospitals with flags 1 (died) or 2 (busted); for busted, or if nothing qualifies, use the start object, else stay in place.
+6. Dismiss all followers.
+7. Penalty: §18.7.
+8. Revive: HP = max; clear controls-disabled, busted flag, latch, timer, ragdoll and downed state; select inventory slot 0 (keep the inventory); single-player: notoriety tracks 0-3 = 0; teleport to the point (position + orientation); hide the overlay; fire the respawn hook (slot 5). Then fade back in (CHOSEN: 0.25 s, the `screen_fade_do` default per its doc comment, until traced).
+
+### 18.9 Test vectors
+
+| # | Setup | Expected |
+|---|---|---|
+| 1 | SP normal, maxHP 1000, hit at t=0 leaves 400, no unlocks | regen starts t=6000 ms; +4.1667 HP per 1/30 s tick; HP 1000 after 144 ticks ≈ t=10800 ms |
+| 2 | SP easy, same hit | wait 3600 ms; rate 162.5 HP/s (5.4167/tick); full after 111 ticks ≈ t=7300 ms |
+| 3 | SP hard + `Health_Regen_4` | wait 7800 ms; rate 125 × 1.0 × 2.0 = 250 HP/s |
+| 4 | SP normal, regenerating, second hit at t=8000 | regen pauses; restarts at t=14000 |
+| 5 | Raw 100 damage to a full-HP player (1000/1000, no other modifiers) | SP easy 30, normal 75, hard 150; co-op hard 175 |
+| 6 | Die with cash 123456 (cents) | cash 73456; stat 4 += 500.0; hint 14 |
+| 7 | Die with cash 32000 | cash 0; stat 4 += 320.0 |
+| 8 | Busted with cash 1,000,000 | cash 950000; stat 5 += 500.0; stat 11 += 1; hint 13; no `busted` point → start object (or stay in place) |
+| 9 | Die at (1300, 20, 100), mainland hood | `nw_hospital` (≈ 83.3 m) chosen over `dt_hospital` (≈ 1183 m) |
+| 10 | Die at t=0 in free roam, `on_death` returns at once | `on_death` ≈ t=4000; fade 4000 ms; teleport ≈ t=8000; HP = max; notoriety 0 on tracks 0-3; weapons unchanged, slot 0 selected; cash − $500 |
+
+**Residual:** OPEN (none blocks free-roam vitals): the post-respawn fade-in; the arming site of the full-restore timer `+0x19c4`; how `Player_Health_Bonus` scales max HP; the writer that sets `+0x1d97` bit 7; which object is the fallback start object; `0x008e8870`'s fix-up; `level_respawn` objects in DLC archives; the hook names for slots 5 and `0xa`; how mission death interacts with this respawn chain. Clean-room: capstone listings and shipped data only, no decompiler output; game files only read. Scripts: `tools/scratchpad/pv_dis.py`, `pv_xref.py`, `pv_opscan.py`, `pv_respawn_scan.py`.

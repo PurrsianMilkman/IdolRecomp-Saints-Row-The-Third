@@ -28,6 +28,7 @@
 // text while implementing this batch - every OPEN internal below is a
 // missing/undecompiled detail, not a confirmed crash shape, so no
 // HARDENED-divergence counter was needed this pass.
+#include <cstdlib>
 #include "lua_spec_confirmed_stubs_common.h"
 #include "lua_spec_confirmed_stubs_sections.h"
 
@@ -327,10 +328,13 @@ int stub_audio_play_for_mission_cellphone(lua_State* L) {
     (void)optionalBoolDefault(L, 3, true);
     std::string cb1 = optionalStringDefault(L, 4, "");
     std::string cb2 = optionalStringDefault(L, 5, "");
-    (void)optionalNumberDefault(L, 6, 0.0);
+    double personaHandle = optionalNumberDefault(L, 6, 0.0); // spec V.3 correction: the audio_persona_load_2d handle
     auto& record = upState(L)->missionCellphoneAudio(id);
     if (!cb1.empty()) record.hookSlot1 = cb1;
     if (!cb2.empty()) record.hookSlot2 = cb2;
+    record.personaHandle = personaHandle;
+    // Call lifecycle (spec V.3): cb1 fires on answer, cb2 on the end of the call - from those events, not here.
+    upState(L)->beginMissionCellphoneCall(id);
     return 0;
 }
 
@@ -718,7 +722,7 @@ int stub_vehicle_get_driver(lua_State* L) {
         lua_pushnil(L);
         return 1;
     }
-    const std::string& driver = st->getOrCreateVehicle(name).driverName.get(); // OPEN until set
+    const std::string driver = st->getOrCreateVehicle(name).seat0OccupantName(); // Sec12.14 FINAL
     if (driver.empty()) {
         lua_pushnil(L);
         return 1;
@@ -743,7 +747,12 @@ int stub_on_vehicle_exit(lua_State* L) {
     std::string vehicleOrSeat = argString(L, 2);
     EngineState* st = upState(L);
     if (st->objectResolves().get(vehicleOrSeat)) { // OPEN until set; collapsed 3-tier resolver, see doc comment
-        st->onVehicleExitEvents().push_back({occupant, vehicleOrSeat});
+        st->onVehicleExitEvents().push_back({occupant, vehicleOrSeat}); // legacy raw record (arg 1 is really the callback name)
+        // Spec V.1 (FINAL, bfe0542): arg 1 is the callback name, arg 2 the object; the same three resolvers as
+        // on_vehicle_enter -> player slot 0x17 / NPC record slot 0x18 / vehicle record slot 6. Persistent.
+        // Stored by target NAME (a hook on that object, whichever record kind it is): the exit commit looks the
+        // vehicle and the occupant up by name, so no object is created here and no record-kind guess is needed.
+        st->setOnVehicleExitHook(vehicleOrSeat, occupant);
     }
     return 0;
 }
@@ -982,6 +991,7 @@ int stub_get_current_hit_points(lua_State* L) {
             hp = st->drawOrGetCurrentHitPoints(name); // Sec34.2: starts at the table/max value
         }
     }
+    if (std::getenv("SR3_TRACE_NATIVES")) std::fprintf(stderr, "[native-arg] get_current_hit_points('%s') = %g\n", name.c_str(), hp);
     lua_pushnumber(L, hp);
     return 1;
 }

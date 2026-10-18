@@ -428,6 +428,24 @@ void testStepLaneFollowCachedQueryThrottle() {
 // overtake-gate-18.6b task (2026-10-11): with no overtakeCandidate given at
 // all, the gate can never pass - state.passSideFlag must stay at its CHOSEN
 // default (false, file header item 5a) across repeated ticks.
+// RG-12, Sec20.6.3(d): the cached-target re-query threshold is a linear 15.0 m (0x01117a60), not 3.0.
+void testStepLaneFollowRequeryThresholdIs15Metres() {
+    CHECK(LaneFollowConfig{}.reQueryDistanceThreshold == 15.0);
+    std::vector<SegSpec> segs = {
+        SegSpec{0, {{0, 0, 0}, {200, 0, 0}}},
+    };
+    std::vector<uint8_t> buf;
+    TrafficRecord rec = BuildLaneGraphFixture(segs, buf);
+    TrafficLaneGraph graph(rec);
+    LaneFollowConfig cfg;
+    cfg.lookaheadDistance = 40.0;  // the cached target stays far beyond the arrival radius over the test
+    LaneFollowState state = LaneFollowState::Begin(graph, 0);
+    CHECK(StepLaneFollow(graph, state, 0.0, 0.0, 0.0, cfg).requeried);
+    CHECK(!StepLaneFollow(graph, state, 10.0, 0.0, 0.0, cfg).requeried);  // moved 10 m: cache still fresh
+    CHECK(!StepLaneFollow(graph, state, 14.9, 0.0, 0.0, cfg).requeried);
+    CHECK(StepLaneFollow(graph, state, 15.5, 0.0, 0.0, cfg).requeried);   // moved beyond 15 m
+}
+
 void testStepLaneFollowDefaultPassSideFlagWithNoCandidate() {
     std::vector<SegSpec> segs = {
         SegSpec{0, {{0, 0, 0}, {4, 0, 0}}},
@@ -725,6 +743,7 @@ int main() {
     run("testStepLaneFollowAlignedThrottlesAndSteersNearZero", testStepLaneFollowAlignedThrottlesAndSteersNearZero);
     run("testStepLaneFollowThrottleZeroWhenMisaligned", testStepLaneFollowThrottleZeroWhenMisaligned);
     run("testStepLaneFollowCachedQueryThrottle", testStepLaneFollowCachedQueryThrottle);
+    run("testStepLaneFollowRequeryThresholdIs15Metres", testStepLaneFollowRequeryThresholdIs15Metres);
     run("testStepLaneFollowDefaultPassSideFlagWithNoCandidate",
         testStepLaneFollowDefaultPassSideFlagWithNoCandidate);
     run("testStepLaneFollowGateForwardDivergenceBlocksSameDirection",

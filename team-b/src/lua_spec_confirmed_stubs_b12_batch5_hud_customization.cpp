@@ -361,7 +361,14 @@ int stub_vehicle_is_tank(lua_State* L) {
         lua_pushboolean(L, 0);
         return 1;
     }
-    lua_pushboolean(L, st->getOrCreateVehicle(name).isTankClassPredicate.get() ? 1 : 0); // OPEN until set
+    VehicleState& v = st->getOrCreateVehicle(name);
+    // A test/override of the whole predicate wins; otherwise it is the SAME field vehicleClass holds
+    // ((+0xbf4)+0x4c4 = Special_Vehicle_Type, 14 = Tank; spec-player-runtime.md 13.4 step 5).
+    if (!v.isTankClassPredicate.known() && v.vehicleClass.known()) {
+        lua_pushboolean(L, v.vehicleClass.get() == VehicleState::kVehicleClassTank ? 1 : 0);
+        return 1;
+    }
+    lua_pushboolean(L, v.isTankClassPredicate.get() ? 1 : 0); // OPEN until set
     return 1;
 }
 

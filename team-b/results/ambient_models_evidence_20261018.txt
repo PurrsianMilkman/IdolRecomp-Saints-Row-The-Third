@@ -1,0 +1,11 @@
+﻿BEFORE (--no-ambient-models) 1800 frames headless: wall 73.3 s, external peak working set 3669 MB (mapped archives included)
+ambient-models-trace: disabled (--no-ambient-models)
+AFTER 1800 frames headless: wall 73.8 s, external peak working set 3667 MB
+ambient-models: 31 categories, 61 groups, 382 character rows, 372 vehicle models in archive, 542 character containers
+ambient-models-trace: ready=1 distinct_vehicle_models=8 (cap 8) distinct_ped_characters=16 (cap 16) load_ms_total=341.3 cache_hits=44 cache_misses=24 vehicle_assignments=11 ped_assignments=33 vehicle_load_failures=0 ped_load_failures=0 streamed_sets_built=2 peak_working_set_bytes=3845386240
+ambient-models-trace: vehicle_use: bike_rocket02_0=1 car_2dr_luxury04_0=2 car_2dr_standard03_0=1 car_2dr_standard06_0=2 car_4dr_compact01_0=2 car_4dr_standard03_0=1 minivan_4dr_01_0=1 wagon_4dr_sprt01_0=1
+ambient-models-trace: ped_use: alfred=2 amanda=2 brianne=2 frieda=2 hoissy=4 joey=2 john4=3 lisa=2 lucille=3 mitch=3 selma=2 selma2=2 tasha=3 violet=1
+m01 --mission-timeout=60: exit 0
+ambient-models-trace: ready=1 distinct_vehicle_models=8 (cap 8) distinct_ped_characters=16 (cap 16) load_ms_total=334.9 cache_hits=16 cache_misses=24 vehicle_assignments=7 ped_assignments=9 vehicle_load_failures=0 ped_load_failures=0 streamed_sets_built=2 peak_working_set_bytes=3917250560
+ambient-models-trace: vehicle_use: bike_rocket02_0=1 car_2dr_luxury04_0=1 car_2dr_standard03_0=1 car_2dr_standard06_0=1 car_4dr_compact01_0=1 car_4dr_standard03_0=1 wagon_4dr_sprt01_0=1
+ambient-models-trace: ped_use: alfred=2 amanda=1 brianne=1 hoissy=1 joey=1 lucille=1 selma=1 selma2=1

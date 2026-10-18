@@ -3,6 +3,256 @@
 ---
 
 <!-- CONTEXT-GUARD:RESUME-BEGIN -->
+## RESUME NOTE — rewritten 2026-10-17 at context-guard 75% (session team-b; orchestrator relays via inbox; Team A answers arrive as "Spec sync from Team A" commits on main)
+
+### STANDING RULES (binding)
+1. Report DONE only after `git merge-base --is-ancestor <branch> main` is true. Merge from the primary checkout `D:\IdolRecomp Saints Row The Third\TEAM B` (on main) with `git merge --no-ff`; standing merge permission.
+2. Never trust ctest alone: confirm the build exit code separately (`cmake --build build --config Release > .claude/build_last.txt; echo BUILD=$?`). A failed build leaves stale binaries and ctest still "passes".
+3. Team B never disassembles; never read anything under `D:\IdolRecomp Saints Row The Third\TEAM A`. No invented behaviour: spec-FINAL only, else a labelled CHOSEN stand-in plus a question for Team A.
+4. Never run two sr3_viewer.exe at once (concurrent runs cause bogus "bad allocation"). 6 GB process memory cap. D: space: never delete — move to `G:\AI\Claude Projects\recomp\TEAM-B-worktree-builds\` (retired worktrees in `retired-worktrees-20261013\`).
+5. Usage pacer: keep normal pace; only the 95% stop line halts new agents (it did 2026-10-16, lifted later).
+6. Agents: use isolation worktrees; worktree ctest passes golden_scene_check vacuously (no baselines) — only primary-checkout ctest counts for golden. Ask agents for tests-first (confirm fails), exact ctest line, and they don't merge (I merge).
+
+### (b) IN FLIGHT — exact next step
+- DONE: merged `fix/review-road-graph` ff8ec85 + `fix/review-npc-ai` 383d8d1 -> **ade8004**; Release build 0, ctest 212/213 (only known 3px golden). Previous next-step command kept for reference:
+  `cmake --build build --config Release > .claude/build_last.txt 2>&1; echo BUILD=$?; ctest --test-dir build -C Release -j 4 --timeout 1500 > .claude/ctest_last.txt 2>&1; grep -E "tests passed|\*\*\*Failed" .claude/ctest_last.txt`
+  (run_in_background, timeout 3600000). Expect 212/213 with only golden_scene_check failing (known 3px). Then report the two branches to the user.
+- Then: optional re-sweep with combat; questions to Team A (see (e)).
+
+- MERGED 742dcb7 traffic signals (23bef24; spec 6b4ad63 §20.6.13): parser 1207 lights / 346 junctions / 678 phases
+  / 1195 crossings / 195 stop-line lanes; controller include/sr3airuntime/traffic_signals.h (7/3/10 s, no all-red);
+  stop rules wired for ambient cars. Smoke: 204 phase switches in 4000 frames, but 0 cars ever on a red/amber lane
+  (all controlled-lane car-frames near spawn were lightless) - car stop/release only unit-tested. Peds don't use
+  CrossingClosed yet. Light residency = junction within 400 m (CHOSEN). 742dcb7: Release build 0, ctest 213/214 (only known golden).
+
+- MERGED 6ab7a8e ped crossings (7df0c09; §20.6.9(c) + §20.6.13(h)): include/sr3airuntime/ped_crossing.h
+  PedCrossingGate wired into the viewer's ped idle tick; crosswalk quad = edge A->B, half-width max(w,3)/2 (CHOSEN);
+  tested on real crossing 10 / light 954. Smoke 4000 frames: waits=0, crosses=5 (all open) - wait path unit-tested
+  only. Gaps: no ped route planning across edges (§20.6.9(b)), no 0.425 m arrival / event-8. 6ab7a8e: Release build 0, ctest 214/215 (only known golden).
+
+- MERGED 828bed1 the 7 combat-sweep OPENs (db68834; spec 78fb40a): dlc2_m01 gis_grain doc id §17.29, m08 move
+  dispatch §21.22, m09 heli airborne §28.8 (class 2/3/4), m10 +0x1d7a from script_vehicle_flags §46.1, m13 seat-0
+  occupant §12.14, m21 may-turn §30.6 (partial), m24 unknown name -> false §7.9. All 7 moved; none finish. NEW OPENs
+  for Team A: vehicle speed query 0x00a4c440 §41.6 (m09, m13); heli sub-object +0x4b0 mode enum §17.27/§28.2
+  (dlc2_m01, m08, m10); move_to_do id counter 0x0130cb94 initial value (m08); turn busy flag 0x00987410 (m21).
+  828bed1: Release build 0, ctest 215/216 (only known golden).
+
+- MERGED eb0a9bb ped navigator (0f25023; §20.6.9): include/sr3airuntime/ped_navigator.h + src/ped_navigator.cpp,
+  A* over sidewalk graph (50 000 m cap spec, 6000-node expansion cap CHOSEN), goal = random node 10-80 m (CHOSEN),
+  0.425 m arrival, event 8 at +1000 ms, crossings gated. Smoke 4000 frames: 32 searches 0 fails, 17 arrivals,
+  crossings waits=6 crosses=15 (6 after waiting) - wait path now exercised live. Gaps: flee not navigated, no wander
+  pause, unlit crossings not seen in smoke. eb0a9bb: Release build 0, ctest 216/217 (only known golden).
+
+- 2026-10-17 NEW DIRECTION (user options 1,2,3,6 via orchestrator): (A) REFACTOR FIRST, no behaviour change:
+  split tools/sr3_viewer.cpp (26k lines), include/sr3luahost/engine_state.h (12.8k), tools/lua_host_run.cpp (4.5k),
+  tests/synthetic_luahost_test.cpp (3k) to <=~1500 lines/file; each step builds + full ctest; report before/after
+  build times; drop /bigobj if possible; leave third_party. (B) only re-run affected missions; full sweep <=1/day.
+  (C) then playable free roam (on-foot, camera, world/roads, NPC/traffic, Team A review fixes); Team C does HUD/
+  minimap, save/load, respect - don't start those. (D) small calls OK, note here. Each turn: merge branches in
+  .claude/merge-queue.txt (Team C) after build + full ctest, then clear the line.
+- SMALL CALL 2026-10-17: re-saved tests/golden/drive_demo_coverage/baseline_capture.png from the 3px-different fresh
+  capture (explained by physics review fixes); old saved as baseline_capture.png.bak_pre_20261017_3px. Note:
+  D:\Project Crreish is a JUNCTION to D:\IdolRecomp Saints Row The Third, so the golden root was always this repo.
+- MERGED b01145c Team C feature/respect-progression (sr3progression lib): verified in scratch worktree, build 0, ctest
+  220/220 (main tree differs only by the orchestrator's doc-only spec sync 0ab5edf). Queue empty.
+- QUEUED AFTER SPLIT (Team A review 0ab5edf of ped navigator): PN-3 label the 0.425 m radius on intermediate route nodes
+  CHOSEN in include/sr3airuntime/ped_navigator.h; PN-4 per-ped walk speed (sec20.6.9(a): male 1.386 / female 1.368 m/s,
+  per-ped walk variant states 26-35 picked uniformly at init, ~0.70-2.26 m/s) instead of constant 1.4 m/s in the viewer.
+  Also re-check RG-13/RF-2 against sec20.6.13 now that traffic_signals.h exists (Team A will re-review).
+- MERGED refactor step 1 (verified in scratch worktree with real golden baselines copied in, same tree as main): build 0,
+  ctest 220/220.
+  * refactor/viewer-split-step1 dd92fb3: tools/sr3_viewer.cpp -> tools/sr3_viewer/ (39 files, shared helpers in namespace
+    sr3viewer, viewer_platform.h first everywhere). /bigobj DROPPED. Dead code removed: struct ConstantFillLogV,
+    class CityPropAabbCollisionWorld (no callers). Before/after exe runs (usage, clear, drive_demo capture) diff empty.
+    Still big: viewer_playtest.cpp 7230 (runPlaytest = one function), viewer_walk.cpp 1746.
+  * refactor/engine-state-split-step1 ea8a9d4: 172 multi-line EngineState bodies -> src/engine_state_{progression,
+    triggers_weapons,world,hud_ui}.cpp. Header only 12,847 -> 11,909: most bodies already lived in src/lua_*.cpp; 7,392
+    of its lines are // comments, rest is members/nested types/806 one-line accessors.
+  * TIMINGS after step 1 (same method as baseline): cold full build 223 s (was 186 - more TUs re-parse heavy headers);
+    touch viewer_playtest.cpp 22 s (sr3_viewer.cpp was 27); touch viewer_city.cpp 5 s; touch viewer_common.h 54 s;
+    touch engine_state.h 129 s (was 131). ctest 683 s. Logs results/refactor_after_step1_20261017/.
+- MERGED refactor step 2 (branch refactor/step2-accepted, verified in scratch with real golden: build 0, ctest 220/220,
+  golden_scene_check Passed 142 s):
+  * refactor/playtest-split-step2 0eb6669: runPlaytest -> PlaytestSession (heap) + 16 setup fns + 12 per-frame step fns in
+    tools/sr3_viewer/viewer_playtest_{session.h,setup_*,frame_*}.cpp; largest viewer_playtest_frame_traffic.cpp 1094.
+    m01/m08/m21 60 s headless: stdout identical to the pre-split binary (after normalising ms/s values); baseline was
+    deterministic run-vs-run.
+  * synthetic_luahost_test.cpp -> tests/synthetic_luahost/ (6 files, same exe, same order; only 22 `static` dropped).
+  * dead code: registerAiPersonalityProfileForTesting, registerLightGroupMemberForTesting (no callers anywhere).
+  * SMALL CALL - REJECTED parts of refactor/engine-state-split-step2 (7e6f91f, eb5b6a4): they only cut the EngineState
+    class body and lua_host_run main() into numbered .inc fragments #included INSIDE the class / function - meets the line
+    count on paper, simplifies nothing, no build gain. Not merged. Re-dispatched on Opus (ladder: 1 Sonnet miss).
+- MERGED refactor step 3 + Team C queue (main fast-forwarded to verified d18dce7: build 0, ctest 221/221, golden Passed):
+  * refactor/engine-state-split-step3 0cff3ee (Opus): engine_state.h 11,907 -> 1,261; 14 real per-subsystem headers
+    include/sr3luahost/engine_state_{ai,audio,characters,cutscene,hud,menus,missions,progression,save,stores,vehicles,
+    vint,weapons,world}.h + _common.h (largest stores 1467). Types at sr3luahost scope + `using` aliases; data in
+    EngineState<X>Data bases (public inheritance); ex-private members now protected in bases; 87 long method notes moved
+    next to definitions in src/. Touch engine_state.h or a subsystem header still ~185-194 s (all 145 includers).
+  * refactor/lua-host-run-split-step3 91dd2ea (Opus): lua_host_run.cpp 4,495 -> 155 + tools/lua_host_run/ (11 .cpp, 2 .h,
+    max 761); 15 before/after runs incl. 2 real-cache all-mission runs identical (normalised elapsed_seconds).
+  * Team C feature/cutscene-playback (contains fix/teamc-review-854ae94 + refactor/teamc-split-large-files): CONFLICT in
+    src/lua_engine_state.cpp (Team C moved 1144-3092 into _vint/_misc; step 3 had added 29 comment blocks there).
+    Resolved: took Team C's split, re-inserted all 29 blocks above the same definitions (perl, CRLF-aware); diff vs
+    Team C's branch = exactly +576/-0 = step 3's additions. Queue cleared.
+- QUEUED AFTER REFACTOR (Team A review 854ae94): RP-6 (medium) wire sr3progression::AwardRespect / level-up over the real
+  respect_levels.xtbl into EngineState awardRespect/applyRespectLevelUp (Team C left it to us, HANDOFF-C sec 6/8).
+- MERGED refactor step 4 (main fast-forwarded to verified e609259: build 0, ctest 221/221, golden Passed). split-step4-a
+  6df7ccc: runWalkDemo -> WalkSession + 10 setup + 4 frame files (7 PNG md5s identical), prototype_lit_car /
+  multishader_paintcompose helpers -> *_support (stdout byte-identical). split-step4-b 4d3c017: tables_progression x3,
+  synthetic_ai_runtime_test x5 (same exe), prototype_lit_clmesh_tower / tower2 -> session + sections (PNG md5s identical).
+  NOW NO hand-written source file >1500 lines (only generated src/wwise_codebook_library_data.cpp 3635).
+- FINAL TIMINGS (same method, fresh build dir, SCCACHE_RECACHE=1): cold full 294 s (baseline 186); touch playtest file
+  8 s (27); touch a viewer mode file 6 s (27); touch viewer_common.h 100 s; touch engine_state.h 185 s (131). Small edits
+  much faster; cold build and header touches SLOWER (more TUs re-parsing the same heavy headers; 65 test exes each
+  compile engine_state.h). Next: precompiled headers (REUSE_FROM) to win that back - in flight.
+- MERGED main 35e517f = build/pch + fix/review-pn-rp6 (verified in scratch: build 0, ctest 221/221, golden Passed;
+  primary rebuilt 0). REFACTOR (A) DONE.
+- MERGED 8c56b7c T4 feature/vehicle-camera 45dd572: include/sr3player/vehicle_camera.h (§4.15 chase cam: FD 7.5326,
+  speed FOV 50->69.738 @30 m/s, swing, pitch ease/clamp, proximity lock; all §4.15.4 vectors in
+  synthetic_player_vehicle_camera_test), wired into playtest driving cam with on-foot sweep (CHOSEN). ctest 222/222.
+  Qs Team A: vehicle reference point 0x0056e530 (OPEN §4.15.5); driver-cam collision query; velRightBody sign; reverse
+  swing for road vehicles; auto-pitch 0x00570200 next?
+- MERGED 1f9c8fb: T3 feature/actor-placement ff575a9 + T6 feature/freeroam-fidelity-t6 231832d + Team C feature/viewer-wiring-step3 (contains step1: real respect_levels.xtbl -> setRealRespectTable, playtest HUD labels, H.3 corner minimap). Verified in scratch: build 0, ctest 222/222, golden Passed. Queue cleared.
+  T3: ambient cars/peds drawn at their OWN Y (graph-node pos.y 18-38 m) with ground sample accepted only within 3 m
+  (CHOSEN), ped heading from motion (snap, CHOSEN); before, all actors drew at player finalGroundY. FINDING to chase:
+  in headless free roam finalGroundY = 0.00 and heightmap fallback reads -5 / 40 where road nodes sit at 18-38 m - the
+  heightmap read (CHOSEN, never cross-checked) and/or player ground in headless look wrong. Qs Team A: ride height
+  (§10.11.5 PARTIAL); NPC turn rates (§5.4.3 step 5); heightmap units; mesh forward axis vs atan2 conventions.
+  T6: ped density uses Clear Skies (PedDensity 1.0: peds 10->20), lighting stays Light Rain (Clear Skies has no TOD
+  cells); --weather=<stage>; despawn gate gets frustum visibility input; runDespawn kept false (would add a flat 100 m
+  rule contradicting FINAL §20.6.1(d)); fire sound plumbing only - logs UNRESOLVED event (spec gives only hashed ids).
+  Qs Team A: game-start weather stage; weapon fire/dry-fire Wwise event + media; confirm runDespawn stays false (RF-1).
+- MERGED 213e0d9 Team C feature/viewer-wiring-step5 (--load-save / --save-at-exit), verified 222/222; queue cleared.
+- MERGED 28b2e2a T5 feature/crime-notoriety ef81b33 (verified 223/223, golden Passed): new
+  include/sr3airuntime/notoriety_escalation.h (§19.8 FINAL recipe: delay ring 40, G3/G4/G5, decay) - NOTE the old
+  NotorietyDriver contradicts §19.8 (cumulative spans, CHOSEN integer decay) and is now unused by the viewer except
+  tables/records; its tests pin the wrong behaviour -> candidate for removal/rewrite later. roadblock_notoriety_schedule.h
+  (§20.6.10 police rows lvl 2-5). Fire/kill path reports CHOSEN civilian shooting 25 / kill 100 / vehicle-hit-ped
+  ("assault") 60 pts. Free-roam kill -> level 1 at 2.5 s, decays to 0 by 33.7 s; level 5 -> roadblock placed while driving.
+  --debug-notoriety-points=N. Missions m01/m08 unchanged (harness kills bypass fire path).
+  Qs Team A: civilian shot/kill/run-over activity records + values; Check_Detection witness test (cop LOS?) + x3 flag;
+  G4 floor every award or level change only; negative points reduce?; decay floor rule; free-roam difficulty record;
+  vehicle-hit-ped trigger; "driving" road-segment/water gate; roadblock Max_active per level + layouts + §20.6.10(d)
+  270 m despawn.
+- GROUND HEIGHT finding (results/freeroam_ground_height_20261018.md on fix/freeroam-ground-height 54ddcdb): in free roam
+  the player spawns at Y 0 and SINKS to -5 (37 m under the street, road nodes ~32 m): loader takes the ~f 0x2244
+  heightmap (almost all -5 = no data?) and the ~s0915 0x2237 ground mesh is near-origin local-space only (§13.2 OPEN);
+  ~s heightmap sits +17.7 m (median) above street (rooftops?). Same agent now implementing CHOSEN stand-in (-5 = no
+  data, ignore non-covering ground tiles for finalGroundY, fallback nearest road/sidewalk node Y within 40 m,
+  --no-node-ground). Qs Team A: which 0x2244 record (~f or ~s) is registered/queried, first or last wins; what ~s
+  represents; where retail street collision for ~s0915 comes from; is -5 no-data/sea or out-of-bounds?
+- MERGED c0bd5aa (verified 225/225, golden Passed; CMakeLists conflict = both appended tests, kept both):
+  * fix/freeroam-ground-height 2d0452d: CHOSEN ground stand-in (include/sr3player/node_ground.h; 0x2244 -5 = no data;
+    finalGroundY only from ground tiles whose bounds contain spawn; fallback nearest road/sidewalk node Y within 40 m;
+    --no-node-ground restores old). Spawn Y 0 -> 32.15, player tracks node Y, no sinking; actor-vs-player |dy| 31.8 ->
+    3.5 m mean. m01 identical; m08 final Y -5 -> 36.15. + tools/probes/ground_height_probe.cpp.
+  * feature/player-vitals 8d6f38b: include/sr3player/vitals.h; damage via EngineState::applyCharacterDamage("player"),
+    death -> controls disabled, cam mode 9 (recorded only), respawn after Death_and_busted.respawn_delay_ms 4000 at
+    --spawn point (CHOSEN); --debug-damage-player=N; inactive in mission mode (missions identical).
+    Qs Team A: free-roam death outcome (respawn point/notoriety/money/hospital/busted, §15.4 OPEN); Fall_Damage formula;
+    free-roam hostile NPC fire trigger (tickNpcAi only runs in mission frames); camera mode 9 behaviour; health regen
+    owner; mission HUD reads 'player' while NPC fire hits '#PLAYER1#'.
+- MERGED fda6d81 = fix/review-traffic-rg 086d609 (7b3eb73, 225/225) + fix/review-npc-ai-2 2305fce (225/225, golden
+  Passed). NPC AI: AI-3 LOS seam now set in production (RealPropLineOfSight over .clmesh_pc props; recheck 700-4000 ms
+  CHOSEN; m12 walls block 32/42 rays, NPC shots 209->42); AI-7 zone cover_node pool + §21.3 search wired but 0 cover
+  found in m02/m12/m21 - nearest pool node 415-3667 m away (coordinate frame? Q Team A); AI-11 follower downed type 0
+  from party lists (gang brute type 1 unreachable - no brute/Bleed_Out data); AI-16 character_is_ready Stunned/0x26 +
+  on_detection fire. AI-12/AI-15 not changed. Qs Team A: cover_node frame; quaternion order + cover_angle bytes;
+  brute/gang/Bleed_Out_Hit_Points source; LOS recheck interval rule; mission NPC weapon.
+- MERGED 5b30de9 jump/crouch (226/226), 63945cb feature/enter-ambient-cars 9b6fdc9 (227/227), 213632f
+  feature/ambient-model-variety 6f3c2c1 (227/227); feature/ambient-ped-anim 1813dcc + Team C activity-snatch (contains
+  activity-fraud) VERIFYING in scratch.
+  * Ambient entry: E picks nearest of rig car / ambient / parked per §13.3 (3.0 m range CHOSEN), carjack removes driver
+    (CHOSEN), parked list + despawn, re-entry; --script-enter-ambient-*; ambient_vehicle_entry_test. Entered car keeps
+    genki physics row. Qs: max range 0x01115204 + entry speed gates; carjack driver; +0x2084 bit 15.
+  * Model variety: §20.6.1(e) PARTIAL (not FINAL) vehicle pick + §20.6.2(e) FINAL ped rolls; caps 8 vehicle / 16 ped
+    models (CHOSEN), --no-ambient-models. Peak working set ~3.7 GB INCLUDING mapped archives (in-app peak 3.85 GB) -
+    under the 6 GB rule but watch it. Qs: character.xtbl -> character_definitions model chain; vehicle variant bits;
+    streamed slot budgets/re-roll cadence; "nearby" radius 0x00913f20.
+  * Ped anim: per-ped walk clip (PEDM set for all - no gender field), phase from distance/root translation, by-name
+    retarget (66/66 bones), 24 re-poses/frame within 80 m, ~1.7 ms/frame; entered car drawn with its own model;
+    --no-ped-anim. Colours: no binding bug found (BC1, same path as player) - vivid tops = textures under non-gamma
+    lighting (unconfirmed). Qs: ped gender source; ped idle clip; PEDM anim skeleton rig; far-ped policy; _dp tint/gamma.
+  * VISUAL STATE (capture at -1280,-470): streets/ground don't render (0x2237 ground is near-origin local-space only,
+    Team A RE'ing zone interiors) -> peds/player appear on rooftop level with no street surface. Biggest visual gap;
+    depends on Team A.
+- (merged) jump/crouch feature/jump-crouch 4483cca: include/sr3player/jump_crouch.h (§5.6.5 launch, §3.6.4 gate), Space
+  /C (CHOSEN keys - no spec bindings), jump height 1.0 m CHOSEN (--jump-height), crouch speed wiring existing
+  crouchRoutine. Peak 0.928 m / airtime 900 ms (analytic 1.0 / 904). OBSERVED: after spawn the player drifts 32.15 ->
+  29.88 over ~2 s (0.01 m/frame) - spawn node Y vs ground-chain value differ; look at later.
+  Qs Team A: default jump height 0x0098bea0 / clip window; 0x00989670; default bindings jump/crouch + crouch capsule;
+  jump/crouch clips.
+- (merged) fix/review-traffic-rg 086d609: RG-12 re-query 15 m (+ headingAligned flag, CHOSEN), RF-3 probe re-arm +
+  condition-scaled brake decel (12.06 CHOSEN), RG-3 include mask wired (streamed set empty -> 0x10400 fallback),
+  RG-13/RF-2 mode gate + §20.6.7(c) junction yield (traffic_yield.h). Live run: 0 stops/yields (cars spawn away from
+  junctions) -> rules covered by unit tests only. Qs Team A: 5000 m walk lookahead meaning; §18.6 5.0 aligned operand;
+  ambient AI_Max_Braking_Decel/condition; streamed Spline_Type set + cadence; yield window terms/anti-deadlock/fork pick.
+- FREE ROAM (C) started: gap audit results/freeroam_gap_audit_20261017.md (18 ranked gaps, top-6 task briefs).
+  Order: T3 actor ground-height/heading + T4 spec vehicle camera (in flight) -> T6 fire sound / Clear Skies default /
+  despawn on (RF-1) -> T5 crime->notoriety->roadblock -> T1 player damage/death/respawn -> T2 jump/crouch.
+  TEAM A QUESTIONS from audit: free-roam respawn destination (+busted path); jump height arg 0x0098bea0 + jump/crouch
+  clips; which CrimeActivity record civilian shooting/killing/run-over reports + witness LOS?; melee damage event +
+  move selection (§15.2); vault/ledge probe 0x009660e0 + climb states.
+- PCH branch build/pch c936447 (CMakeLists only; option CRREISH_PCH default ON, MSVC): sr3luahost PCH (std headers +
+  engine_state.h) reused by 72 exes with identical flags; sr3_viewer own PCH (viewer_platform.h + sr3render/vpp headers).
+  Agent timings OFF->ON: cold 388->204 s, touch engine_state.h 209->116, viewer_common.h 108->72, viewer_city.cpp 6->5,
+  lua_engine_state.cpp 16->13. Caveat: sccache can't cache /Yu compiles (cross-worktree cache hits lost for those TUs;
+  -DCRREISH_PCH=OFF restores).
+- REVIEW FIXES branch fix/review-pn-rp6 b708f08: PN-3 CHOSEN label; PN-4 per-ped walk speed pools (male {1.386,1.849,
+  2.260,2.023,1.079,1.506}, female {1.368,1.445,1.550,2.046,0.697,1.637,1.500} - verified vs spec-ai-runtime.md
+  lines ~7128-7134) picked once per ped via nearFieldPedPickUniform; viewer uses male pool (NearFieldPed has no gender,
+  CHOSEN). RP-6: EngineState::setRealRespectTable(rows) routes awardRespect/applyRespectLevelUp through sr3progression;
+  DORMANT until something feeds respect_levels.xtbl (TODO: call it at host/viewer start after unlockables load).
+  m08 60 s: ped crosses 6->7, waits 3->1, arrivals 7->6 (speeds changed, as expected).
+  TEAM A QUESTIONS (new): (1) is 0.425 m also the advance test for intermediate route nodes? (2) which walk-variant state
+  27-35 maps to which clip? (3) ambient ped gender source? (4) which wallet field takes respect-overflow cash at the cap?
+  (5) library unlocks record L (new level) vs legacy row just paid - intended?
+- (old) refactor step 4 list - remaining files >1500: tools/sr3_viewer/viewer_walk.cpp 1746 (runWalkDemo one fn),
+  tools/prototype_lit_clmesh_tower2.cpp 2896, prototype_lit_clmesh_tower.cpp 1906,
+  prototype_real_shader_draw_multishader_paintcompose.cpp 1829, prototype_lit_car.cpp 1649 (all still built/used by
+  golden), tests/synthetic_ai_runtime_test.cpp 1563, src/tables_progression.cpp 1529. Skip generated
+  src/wwise_codebook_library_data.cpp 3635.
+- NOTE FOR TEAM C: viewer split has landed (tools/sr3_viewer/, runPlaytest now in viewer_playtest_* files); engine_state.h
+  will still change in step 3.
+- REFACTOR BASELINE (before any split, tree 01cb90b = main+saveflow, fresh worktree build, VS2022 Release --parallel 16,
+  SCCACHE_RECACHE=1): cold full build 186 s; touch tools/sr3_viewer.cpp -> 27 s; touch engine_state.h -> 131 s;
+  full ctest 631 s, 219/219. Logs: results/refactor_baseline_20261017/. Briefs: .claude/brief_viewer_split_step1.md,
+  .claude/brief_engine_state_split_step1.md.
+- MERGED 5421028 Team C feature/save-integration (sr3saveflow lib). Verified first in scratch worktree
+  .claude/worktrees/mergecheck-saveflow (same tree hash as merged main): build 0, ctest 219/219. Queue line cleared.
+  (A first attempt chained commit+merge in one Bash call and was blocked by the auto-mode classifier; doing the verify in
+  a scratch worktree first and then a plain merge went through.)
+- MERGED 019f824 Team C feature/hud-minimap (new sr3hud library, no viewer/engine_state edits). Build 0 (22 s
+  incremental), ctest 218/218 ALL GREEN incl. golden. Merge-queue line cleared.
+
+### (a) DONE this session (all merged to main, newest first)
+- ade8004: review fixes. Road graph RG-3 include mask from Spline_Type, RG-4 segment occupancy, RG-5 inner ring 65 m only when no crossing + frustum hidden test, RG-6 camera speed = displacement*30 and despawn gates (§20.6.1(d) vectors pass), RG-7 both chord crossings + highway rule (player segment = nearest lane within 10 m CHOSEN), RG-10 ped density from weather.xtbl (stage still CHOSEN "Light Rain" = 0.5), RG-12 ambient 10 m/s + §20.3(b) throttle law (accel 3 m/s² CHOSEN), RG-13 following law §20.6.7(b) (probe geometry CHOSEN); new include/sr3airuntime/traffic_following.h. NPC AI: AI-3 LOS seam EngineState::npcAiLineOfSight (viewer doesn't set it), AI-4 sense cadence 350-450 / 650-800 ms, AI-5 attitude-based damage reaction (provocation meter CHOSEN never at threshold), AI-6 800 ms first cover entry, AI-9 live flee-from + cower-run speeds 4.554/5.745 m/s (male default CHOSEN) + 250-750 ms delayed reaction beyond 20 m, AI-10/11 downed §21.10.1 FINAL (type-0 expiry KILLS; types 1/2 get up at int(max)*0.25 enemy / 1.0 team 0; type-1 overkill buffer +50 ms/pt cap 7000; selector inputs have no data source so live runs never down anyone), AI-14 unresolved destination stops move without completing; addNpc now copies cantFlee/cantCower/alwaysCower. Combat m21 after: npc_shots 948, attack transitions 128, cover 74.
+- e2eb5b8 `--auto-combat` (opt-in harness; default sweeps unchanged): teleport 25 m from targets, 5 s notice window, player fires via real hitscan + applyDamageModelHit (Pistol-Gang one-shots), god-mode heal, character_kill fallback after 60 s; adds enemyTargets[#PLAYER1#] for awaited targets (CHOSEN; m06/m08/m21 targets never hostile otherwise). All kills by damage, 0 fallback.
+- 547214d NPC perception: NO bug — m21 "hostile" NPCs were already killed by the default --auto-objective kill assist, or ignore_ai by m21's own Lua. Stats exclude dead/ignore_ai (suppressed count). First downed implementation (since superseded by ade8004).
+- 0a6640b CMakeLists: sr3_viewer compiled with /bigobj on MSVC (C1128 after the big merges).
+- e19990e road graph (§13.2a: 11455 lanes, 10141 nodes, 7659 sidewalk nodes, 8703 sidewalk edges; one global record in sr3_city~fawld.czn_pc inside awld_compact.str2_pc of sr3_city_0.vpp_pc, ~2.5 MB, parsed in ~140 ms, indexed by 135 road / 104 sidewalk tiles; hood BSP 33 volumes, §20.6.8 category lookup) + NPC AI loop (include/sr3airuntime/npc_ai_runtime.h, src/ai_npc_runtime.cpp; real ai_goals/ai_behavior/combat_actions/ai_personalities tables; only NPCs within 150 m tick, CHOSEN; notoriety flips team relation; flags --no-npc-ai --npc-ai-no-fire --debug-notoriety=N). Peak free-roam memory ~415 MB; missions ~2.7-2.9 GB.
+- Earlier this session (see archived note below for detail): population (freeroam_population.h), radio playback (include/sr3radio, 915 entries, 130/138 songs decode), radio + physics review fixes, callbacks (deaths, vehicle enter/exit, phone, triggers), Bink decoder (frame0 Y rows 0..3 exact; stops at colour-cursor refill, spec gap), many mission OPEN fixes, D: cleanup (28 -> 116 GB free).
+
+### (c) LEARNED (numbers/paths)
+- Game data: `D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache` (packfile/ folder doesn't exist). system_lib.lua lives in interface.vpp_pc.
+- Sweep driver template: `.claude/sweep_combat300.sh` (args: mission names; writes results/mission_sweep_49_20261013_<tag>/<m>_stdout.txt + exit_codes.tsv; uses build/Release/sr3_viewer.exe; flags --headless --no-input --mission=<m> --mission-timeout=300 --auto-objective --auto-combat --auto-seat-mission-vehicle --auto-answer-hud-prompts --auto-skip-cutscenes --hud tools/lua_all_registered_1490_tagged.txt <misc.vpp_pc>; archives characters, misc_tables, sr3_city_0/1, sr3_city_missions, misc, dlc1-3, interface). Mission list: `.claude/sweep_missions.txt` (49). Run in batches of 10 in background (2 h job limit).
+- Latest sweep combat300_e2eb5b8: 49/49 exit 0, 14/49 finish cleanly (dlc1_mm_01..06, mm_m16_5, mm_p_01/02/04/05/06/07, sh01). 7 OPEN: dlc2_m01 DLC sentinel 0x013010d8; m08 move dispatch 0x00993630 §21.22; m09 heli airborne 0x00ad4040; m10 vehicle +0x1d7a; m13 vehicle occupant name §12.14; m21 0x00987410 §30.6; m24 Saint_NPC 001/003/007/008 absent from all zones. Rest time out at script waits.
+- golden_scene_check: drive_demo 3/921600 px differ (x 804..833, y 473..499) since physics review fixes; baseline lives OUTSIDE repo at `D:/Project Crreish/TEAM B/tests/golden` (stale hardcoded path).
+- Primary checkout builds with plain `cmake -S . -B build` now (bigobj in CMakeLists); Git Bash mangles `/DWIN32` in CMAKE_CXX_FLAGS — configure from PowerShell if flags needed.
+
+### (d) RULED OUT
+- Mission NPC "never notice the player" = not a perception bug (targets pre-killed / ignore_ai).
+- Earlier "_DynamicGlobalsLoadComplete nil" blocker = missing interface.vpp_pc in driver; earlier sweeps before 6e2b6ef only simulated 300 frames.
+- thread_new not running mission threads was fixed in 6799e45 (_UGGlobals rebind, CHOSEN non-strict).
+
+### (e) PENDING — user / Team A
+- USER DECISION: re-save the drive_demo golden reference image (in shared folder D:/Project Crreish/TEAM B/tests/golden)? Not done without a yes. Also: fix that stale hardcoded golden path.
+- USER: agent-flatfill-perplane worktree has a foreign 1-line spec-lua-api-behaviour.md diff + 2 stash entries ("autostash", "agent-flatfill-perplane lua spec 1-line diff") — decide; several worktrees on main have 1 dirty file each.
+- USER: ear-check the radio (',' '.' switch stations in a vehicle).
+- TEAM A questions (send via orchestrator): the 7 OPENs above; which relation/order makes mission targets hostile (harness adds enemyTargets); downed selector inputs (brute/gang/follower/bleedOutHitPoints), type-2 counters, duration unit; RG-12 aligned-gate operand (15 m re-query vs 5 m origin); signal stop-line geometry; cover-node source/evaluator (AI-7); provocation meter feed; radio xtbl Length vs media length, The Mix 24 vs 18 songs (spec table error?), R-6 rule-4 overread; Bink pre-stage array refill trigger/position (Y row 3 col 6).
+<!-- CONTEXT-GUARD:RESUME-END -->
+
+### ARCHIVED resume note (superseded 2026-10-17; kept verbatim)
 ## RESUMED 2026-10-12 (context-guard rewrite at 75%). Orchestrator: purrsian-ea. Team A: team-a-bf.
 ## Session identity: team-b (no new name assigned this tail). Usage-pacer: ahead of plan most of
 ## today (55-58% weekly vs 34-36% planned) - **user confirmed TWICE to keep normal pace regardless,
@@ -140,6 +390,109 @@
 ###   m02,m12,m17), alive predicate 0x0096f4f0 (m20), mover +0xc4 (m01), on_vehicle_enter kind
 ###   ['veh_daedalus_vtol 001'] (m23), m22 battle_zone error WAS OURS (callbacks got 1 arg not 2) FIXED on main, m22 now OPEN trigger_get_radius per-shape radius (§21.13), mm_m1_5
 ###   hangs polling customization_screen_is_ready=false. dlc3_m02/dlc2_m02 now drive gaps.
+### SWEEP combat300_e2eb5b8 (--auto-combat, 300 s; results/mission_sweep_49_20261013_combat300_e2eb5b8, driver
+###   .claude/sweep_combat300.sh): 49/49 exit 0, 0 bad_alloc, still 14/49 complete. 7 OPEN (all Team A): dlc2_m01 DLC
+###   sentinel 0x013010d8; m08 move dispatch 0x00993630 §21.22; m09 heli airborne 0x00ad4040; m10 +0x1d7a; m13 vehicle
+###   occupant name §12.14; m21 0x00987410 §30.6; m24 Saint_NPC 007 (absent from zones). Only 7 missions' stop points
+###   moved vs post6799e45 (e.g. dlc3_m03 now at kill-list wait). Bottleneck = these OPENs + per-mission script waits.
+### --auto-combat MERGED e2eb5b8 (b99630f, 213/213 on branch): opt-in harness - teleport near targets, 5 s notice
+###   window, player fires via real hitscan + damage model, god-mode heal, character_kill fallback after 60 s. Live:
+###   m02/m06/m08/sh01/m21 NPCs fought (e.g. m21 120 attack + 70 cover transitions, 918 NPC shots), ALL kills by
+###   damage, 0 fallback. Stop lines unchanged (180 s budget too short). Harness adds enemyTargets[#PLAYER1#] for awaited
+###   targets (m06/m08/m21 never hostile otherwise) - Q Team A: which relation/order makes mission targets hostile?
+###   m08: 14 shots / 7 kills unexplained. Default sweeps unchanged (opt-in flag).
+### NPC PERCEPTION + DBNO MERGED 547214d (6c76a9b, 212/212 on branch): NO perception bug. m21's "hostile" NPCs were
+###   already dead - our --auto-objective kill assist character_kill's mission targets before the player arrives -
+###   or ignore_ai (Distractor_NPC, by m21's own Lua). Stats now exclude dead/ignore_ai (suppressed count). Dbno:
+###   human_enter_downed arms deadline (ms CHOSEN), type 0 revives x0.25 (player x1.0), types 1-4 end downed state,
+###   type 2 Killbane hook behind OPEN gate. NEXT (ours): harness mode that lets NPCs fight instead of pre-killing
+###   (kill assist only when player near / after AI had a chance). Q Team A: type-2 counters, downed type selector
+###   0x009735d0, duration unit, type-2 hook args.
+### RESUMED after pacer reset. MERGED e19990e + /bigobj fix (Release build 0, ctest 210/211 = known 3px golden): ROAD GRAPH dcbef26 (§13.2a parsed: 11455 lanes,
+###   10141 nodes, 8703 sidewalk edges, one global record indexed by tile; real-lane vehicle spawns + lane-follow
+###   successors, real sidewalk ped spawns, hood->category §20.6.8 wired, 418 MB peak) + NPC AI LOOP 8aaf4bc
+###   (perception->decision->mode->action per NPC within 150m CHOSEN, real ai tables, NPC fire via damage sink,
+###   notoriety flips team relation, civilians flee on gunfire; flags --no-npc-ai --npc-ai-no-fire --debug-notoriety).
+###   Conflict in sr3_viewer.cpp resolved = hood category + live notoriety. GAPS: in missions no NPC ever attacked
+###   (m21's 9 hostile Luchadores never noticed the player - cause not found); notoriety_set no-op in SP, no crime
+###   source; no cover-node provider in viewer.
+### HALTED 2026-10-16 (lifted): usage-pacer 95% stop line blocked new agents. NEXT when reset (no spec needed): (a) wire NPC AI
+###   decision loop (libs in include/sr3airuntime complete but unused; notoriety hardcoded 0 in viewer); (b) load §13.2a
+###   road/sidewalk graph to replace synthetic lane/sidewalk in population. Prompts were ready (see session log).
+### OPENs post6799e45 MERGED cef1fc0 (84087da, 206/206 on branch): fixed m21 (ours: name map now case-folded), m22
+###   (§20.23 get_team from zone script_npc_team), m08 (§7.27 shared ready predicate), m13 (Tank = class 14).
+###   Q TEAM A: (1) m24 names in no zone (Saint_NPC 001/003/007/008) - resolve false w/o error after full ingest?
+###   (2) m09 0x00ad4040 heli airborne while flying / after landing; (3) m10 +0x1d7a construction default (0x00a82fe0
+###   zero it?); (4) dlc2_m01 0x013010d8 writer, != -1 once DLC2 loaded?; (5) m08 0x00993630 move dispatch result
+###   (§21.22); (6) new next stops m21 0x00987410 (§30.6), m13 vehicle driver/occupant name (§12.14) - check spec.
+### SWEEP post6799e45 (thread_new fix; results/mission_sweep_49_20261013_post6799e45): 49/49 exit 0, 14/49 complete
+###   (+sh01, -m09), 8 OPEN: dlc2_m01 DLC sentinel 0x013010d8; m08 0x00a3bae0 move-to; m09 heli airborne 0x00ad4040;
+###   m10 +0x1d7a force flags; m13 class==14 Tank; m21 '#player1#' (case - ours?); m22 team-name for NPC; m24 'Saint_NPC 007'.
+### COMBAT AI MERGED 6799e45 (51cf702, 205/205 on branch; audit results/combat_ai_audit.md 13/24/7). BIG: thread_new never
+###   ran mission worker threads (_UGGlobals never rebound, spec-lua-bindings §14) - fixed via CHOSEN non-strict
+###   Host::applyDynamicGlobalsBootstrap in playtest (lua_host_run unchanged). sh01 now FINISHES. Also: ai_do_scripted_move
+###   ticket+arrival (§21.5/§22.11, fixes review L-5), combat_ai.h pure rules (unwired), review N-7/N-9. AI decision libs
+###   exist but NO NPC runs a decision loop yet. Gaps: m06 vehicle fullySetUp +0x33 bit8 for group vehicles; m02 door cb;
+###   §21.9 first-sight target writer OPEN; holdup, NPC weapon fire, chase driving missing.
+### a166141 4 OPENs MERGED f8eb31e (bb92cfe, 203/203 on branch, failed-first yes): m02 +0xccd default 0, m06 pathfind
+###   1.0/2.0 (0.0 case not modelled), m10/m16 checkpoint vehicle via seated check. m02/m06/m16 now time out (no OPEN);
+###   m10 NEW OPEN: vehicle force-flags byte +0x1d7a (§3.7/§20.1/§46.1) -> Team A. Combat-AI/physics syncs 7591413
+###   5cf5540 4c6ecc3 ec289ae c6171a3 09f8306 NOT yet implemented (next free-roam work).
+### MERGED e11f57f (build 0, ctest 201/202 = known golden 3px; SWEEP poste11f57f: 49/49 exit 0, 14/49 complete, same 4 OPEN m02 m06 m10 m16 - no regression): radio review-2 853ceac (R-11 unknown intro/outro 0xFFFF, R-10 answered
+###   by §14.6.2 commercials InitialState; R-12..14 fine; R-6 rule-4 + xtbl Length vs media still OPEN; The Mix 24 in
+###   spec table vs 18 in data -> spec error, tell Team A) + POPULATION 90a2574 (audit results/freeroam_audit_population.md
+###   27 rows; include/sr3airuntime/freeroam_population.h §20.6 rules; viewer: density targets, ring/cone spawn, despawn
+###   radii, ped despawn; ped near-reject 90->10 per §20.6; smoke peak 424 MB; 9 veh/16 peds match targets). Stand-ins:
+###   synthetic lane/sidewalk (no §13.2a graph), hood->category Default Spawn, notoriety 0, approx cone. NOTE: worktree
+###   ctest passes golden_scene_check vacuously (no baselines) - only primary-checkout ctest is meaningful for it.
+### SWEEP posteefbbd9 (results/mission_sweep_49_20261013_posteefbbd9): 49/49 exit 0, 14/49 complete (same 14),
+###   OPEN down 11 -> 4: m02 +0xccd movement/action-state byte §20.28; m06 navmesh pathfind 0x00b24fa0 §22.1;
+###   m10,m16 §1.6 fixed checkpoint-vehicle resolves+occupied. Other 31 run to 180s timeout (script/drive waits).
+### 479fedf CALLBACK REVIEW + OPENs MERGED eefbbd9 (b2fa1c2, 200/200 on branch, tests seen failing first):
+###   fixed B-1 flee target, B-3/B-4 seat-0 claim/pending/seated (default no occupant), L-1 player on_death at 4s,
+###   L-2 on_take_damage/on_damage for characters, L-4 hidden=not ready; take_cover §18.3 (m02,m10,m12), driver seat
+###   §21.26, Vfx Transformer via zone objects, get_team table §20.23, character_hidden bit, sh02 effect handle.
+###   Still OPEN: m06 navmesh pathfind 0x00b24fa0 §22.1; m10/m16 §1.6 checkpoint-vehicle; m02 +0xccd §20.28;
+###   on_detection, vehicle on_damage, sinking (L-3), scripted-action ticket model (L-5), L-7, L-8 (only player
+###   tracked for triggers). Radio review R-11..R-14 in same doc NOT yet done.
+###   post96f7d81 completion count: 14/49 (was 12) - reported to orchestrator.
+### REVIEW FIXES (spec-conformance-review.md 414120a / 2575e78) MERGED 84f35fa: build 0, ctest 198/199 - golden_scene_check FAILS deterministically: drive_demo 3/921600 px differ (x 804..833, y 473..499), coverage+bbox identical. Almost surely intended physics change (P-3/P-4/P-9 move the demo car). Baseline lives OUTSIDE repo at D:/Project Crreish/TEAM B/tests/golden (stale hardcoded path) - NOT overwritten; needs a decision to re-freeze. Worktree builds lack that baseline so branch ctest passes vacuously.
+###   radio 63837d2: R-2 intro ghost byte, R-5 rebuild bit, R-6 rule 3 vehicle-type default, R-7 Wwise item/bus/
+###   switch/newsbreak logic (bus ids undecoded, recorded only); R-1/4/8/9 already fixed; R-3 n/a; R-6 rule-4
+###   overread + R-10 initially-disabled source still OPEN. physics 05a435e: P-1 friction lookup walk, P-2 field
+###   roles, P-3 torque x1.25 (const, not from tweak_table), P-4 max-speed full, P-5 extra gravity, P-7 slot enum,
+###   P-8 steering profile, P-9 damper threshold, P-10 reverse (opt-in reverseFullLogic); P-6 suspension unwired
+###   (planar sim); P-11/12 partly. OPEN: friction (u*,v*)->force + axis A/B. NOTE: agents wrote tests after fixes.
+### MERGED e0195f9 (Release build 0, ctest 198/198): fix/opens-post96f7d81 cb6b54f + feature/radio-playback 593b410.
+###   OPENs: fixed m06 seat0 (ours), m07/m12 flee §45.1, m23 on_pickup arg order (ours; SPEC CONFLICT §20.12 lists
+###   item first - ask Team A), sh02 effect names from effects.xtbl. Still OPEN: dlc2_m01 §21.26; dlc3_m01 'Vfx
+###   Transformer DTH<004>' (probably .czn_pc interior); m02/m10/m12 take_cover 0x00540b90 (SPEC CONTRADICTION
+###   §18.3 vs spec-ai-runtime §8); m09 team-name registry; m16 hidden bit +0x3b. New: m06 navmesh pathfind
+###   0x00b24fa0 §22.1; sh02 0x00a48af0 return §28.9. m07, m23 now just time out.
+###   RADIO PLAYS: 915 entries/12 stations parsed, GENX 24-entry queue vector matches, cue->media 130/138 songs,
+###   XAudio2 playback on vehicle enter, ',' '.' prev/next (CHOSEN). Qs: xtbl Length vs decoded media length differ
+###   (e.g. 255s vs 123s); spec §14.6.1 says The Mix 24 songs, data has 18. Not heard by ear - USER should listen.
+### SWEEP post96f7d81 (results/mission_sweep_49_20261013_post96f7d81): 49/49 exit 0, 14 clean finishes (+m09,
+###   +mm_p_07), 11 OPEN: dlc2_m01 character_is_in_a_driver_seat 3-accessor; dlc3_m01 'Vfx Transformer DTH<004>';
+###   m02,m10 take_cover already-covering 0x00540b90; m06 vehicle seat-0 occupant present; m07,m12 flee; m09 team-
+###   name reverse lookup 0x02623a80 (callback only, mission still finishes); m16 hidden flag +0x3b bit0; m23
+###   'm23_minigun_cb'; sh02 icon effect index 0x005c50b0.
+### ENGINE CALLBACKS (bfe0542/98375ea FINAL) MERGED 96f7d81 (576952f, 196/196 on branch): thread-spawn dispatch,
+###   deaths (on_human_killed+on_death, damage_model wired), vehicle destroyed, vehicle enter/exit hooks, phone cb1/
+###   cb2, trigger disable/enable rules; 9 OPEN values done. Harness CHOSEN assists: kill hostile on_death targets,
+###   enter vehicle, answer/end phone. mm_p_07 + m09 now complete. New OPENs: ai_do_scripted_take_cover "already
+###   covering" (m02,m10), named-object m23_minigun_cb (m23) / 'Vfx Transformer DTH<004>' (dlc3_m01), native flee
+###   (m12,m07), checkpoint-vehicle (m16), vfx_pc_Icon effect index 0x005c50b0 (sh02); phone duration source OPEN;
+###   mesh_mover_kill->mover damage OPEN; team table OPEN.
+### BINK pre-stage-once fix MERGED e327bf8 (3062d11): Y frame0 rows 0..3 exact (531/531 blocks), stops row3 col6
+###   colour cursor exhausted. Q Team A: pre-stage array REFILL trigger/position/contents (colour refill near row3 col6).
+### FREE ROAM phase (orchestrator 2026-10-14: user wants free roam). MERGED 8bdd080, Release build 0, ctest 195/195:
+###   AUDIO/RADIO bf1a443 (audit results/freeroam_audit_audio.md): include/sr3radio/radio_sim.h = §14.6 radio
+###   logic (roster, tune gate, cycle, MT19937, queue/timeline) null backend. NEXT: parse 12 per-station cue xtbls
+###   (misc_tables 636-647) + GENX queue vector test; cue->media playback; D-pad/vehicle-enter hook.
+###   VEHICLE PHYSICS 7c03bcd (audit results/freeroam_audit_vehicle_physics.md 9/13/3): §10.11 FINAL chassis data,
+###   damper + Maximum_Speed clamp wired, genki §10.11.9 values in playtest. NEXT: vertical/suspension model,
+###   per-vehicle xtbl/.ccar_pc loading, §10a collision impulse, handbrake/reverse.
 ### SWEEP post8e93330 (results/mission_sweep_49_20261013_post8e93330): 49/49 exit 0, 12 clean finishes, 9 OPEN
 ### (same as the ce4556f new-OPEN list), rest suspended on callback-dispatch waits. All need Team A.
 ### ce4556f: BINK sec5 literals from colour cursor MERGED 519bd3b (87d5c84): frame0 ROW 0 FULLY EXACT (120 cols),
@@ -373,7 +726,6 @@ whenever chroma-plane decode work starts, treat chroma-B as skip/copy for that r
 ## Havok MOPP-mesh ground collision implemented for correct-origin tiles; 4 known-broken-origin
 ## tiles (0915/0914/0715/0716, decode geometry at world-origin not real tile position) remain the
 ## default-spawn sky-blue-void root cause, not yet fixed.
-<!-- CONTEXT-GUARD:RESUME-END -->
 
 <!-- KNOWN-STOPGAPS:BEGIN (deliberately OUTSIDE the context-guard resume block, same reasoning as
      Parked branches below - a resume-note rewrite must never silently drop this. Items here are

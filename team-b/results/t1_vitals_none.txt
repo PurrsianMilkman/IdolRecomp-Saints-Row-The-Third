@@ -1,0 +1,686 @@
+=== playtest v0: interactive player<->animation<->camera<->collision demo ===
+CONTROLS : W/A/S/D move (real moveSlot/composeVelocity, camera-relative via REAL
+           CameraSystem::movementRows()); hold Left Shift to sprint; mouse look
+           (real CameraSystem rotate()/elevate()->cameraHook->preUpdate->yawStep/
+           pitchStep seam); walk up to the parked car and press E to enter/exit it
+           (W/S throttle/brake, A/D steer while driving - unless --no-vehicle);
+           T skips the TOD clock forward 3 game hour(s) per press (CHOSEN manual
+           fast-forward, v0.3 polish task - a full in-game day now takes 24 REAL
+           minutes, too slow to just wait out during a play session); press R to
+           arm/disarm the police roadblock spawn (debug gate, OFF by default - see
+           this command's own doc comment's "THE HONEST NOTORIETY GATE" note); Esc
+           or close the window to quit.
+NOT IN V0: jump, crouch, gamepad/XInput (spec-tables-ui-controls.md documents the
+           real gamepad binding layer; not wired here - keyboard+mouse only, said
+           honestly rather than faking a controller path), ambient PEDESTRIAN
+           population (the distant/LOD human tier - no spec-confirmed pass wiring
+           it into playtest yet) - see this command's own doc comment above
+           runPlaytest() for the full breakdown. Vehicle entry/driving IS wired (ON
+           by default, --no-vehicle opts out), WITH real world collision (spec-
+           physics-runtime.md Sec10a, vehicle-world-collision follow-up task -
+           superseding this line's own former "no world collision" wording) - see
+           that same doc comment's own honest scope note (a CHOSEN simple chase
+           camera, one PLAYER vehicle only, no vehicle-vs-vehicle collision/damage).
+           Near-field AMBIENT VEHICLE TRAFFIC IS wired (ALWAYS on, no flag) and the
+           POLICE ROADBLOCK spawn IS wired (debug key 'R', OFF by default) - see
+           this command's own doc comment's 2026-10-09 update for the full CHOSEN
+           breakdown of both. The health/ammo/money/notoriety HUD overlay IS wired
+           (--hud, opt-in, off unless passed) - see that flag's own honest caveat in
+           this command's doc comment. The top-right corner minimap (v0.3 polish
+           task) is now part of that SAME --hud overlay - real live player/vehicle
+           position and heading feed updateMinimapLiveTransform(), flat per-tile
+           fallback colour only (no real minimap_CCRR texture lookup wired into this
+           command).
+character: brad, 68 bones (channel 0, group 0)
+weather  : weather_time_of_day.xtbl - 4 segment(s) loaded; TOD lighting stage (CHOSEN) = 'Light Rain'
+spawn    : spawn_info_categories.xtbl - 31 categories
+weather  : weather.xtbl PedDensity for stage 'Clear Skies' = 1.00
+weapon   : Brad equipped with real weapons.xtbl row 'Pistol-Gang' (Weapon_Class=0, 82 total rows parsed) - LMB fires it on foot
+npc-ai   : tables loaded - 17 goal rows (17 non-empty lists), 44 behaviours, 67 combat_actions rows; civilian flee_health_pct=50
+footstep : real left-foot/right-foot trigger frames for 'plym_ps_wlk' FOUND (1/1) - driving real footstep timing
+footstep : real anim_files.xtbl row for event='FOOTSTEP' MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (CHOSEN per purrsian-52) FOUND - clip='crsr_extb_jmoff_ridr.animx' frame=55. HONEST GAP: resolving this event+switch identity to a
+         specific Wwise media id requires walking Event(kind4)->Action(kind3)->
+         SwitchContainer, and NO switch-container HIRC layout is reverse-engineered
+         anywhere in this project (spec-audio-runtime.md Sec9.6/9.7/9.8 document
+         Event->Action->plain-Sound only) - guessing that binary layout here would be
+         exactly the kind of invented engine behaviour this project's no-invented-
+         fixes rule forbids. The demo therefore still plays the same real, proven-
+         decodable SFX clip findFirstPlayableSfxClip() resolves below, now correctly
+         labelled as a stand-in for a KNOWN real identity rather than an arbitrary pick.
+graphs   : 249 loaded from node_graph_files.xtbl
+graph    : 'player state machine' found (index 144 of 249 loaded)
+anim     : real locomotion clips from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/preload_anim.vpp_pc: run=loaded jog=loaded wlk=loaded
+footstep : walk clip durationTotal()=39 (30Hz units) - left-foot frames=[30,] right-foot frames=[11,]
+seatpose : vi_ride.xtbl 69 set(s); vehicle_interaction_info.xtbl demo row ('truck_2dr_classic01') found
+seatpose : real driver ride clip 'auto_ridel.anim_pc' loaded
+[hoods] 33 Hood volumes (hood_bsp_tree + hood_spawn_category) from sr3_city~fawld.czn_pc
+[roadgraph] sr3_city_0.vpp_pc :: sr3_city~fawld.czn_pc: 11455 lanes (segments), 10141 road nodes, 6216 shape points, 7659 sidewalk nodes, 8703 sidewalk edges; indexed into 135 road tiles / 104 sidewalk tiles; 135 ms (czn 2586376 bytes)
+spawn    : 33 hood volumes x 31 spawn categories -> hood category lookup ACTIVE
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+audio    : disabled (--headless)
+radio    : 915 content entries, 153 song records, 12 stations; media indexed (931 records)
+radio    : station 3 LOGO_GENX        queue=512 first=GENX_SWEEPER_01 -> media resolved
+radio    : station 4 LOGO_KRHYME      queue=512 first=KRHYME_YONKERS_FRONT_SELL -> media resolved
+radio    : station 5 LOGO_K12         queue=512 first=K12_KEVIN_AND_CARRICK___WALLFLOWERS -> media resolved
+radio    : station 6 LOGO_KLASSIC     queue=512 first=KLASSIC_LISZT___HUNGARIAN_RHAPSODY -> media resolved
+radio    : station 7 LOGO_ADULT_SWIM  queue=512 first=SWIM_INTRO_CEREBRAL_BALLZY -> media resolved
+radio    : station 8 LOGO_KABRON      queue=512 first=KABRON_SULTATE_Y_TOMA_FRONT_SELL -> media resolved
+radio    : station 9 LOGO_KRUNCH      queue=512 first=KRUNCH_TUGBOAT___SLOW_REVOLUTION -> media resolved
+radio    : station 10 LOGO_MIX         queue=512 first=MIX_SOCIAL_DISTORTION___BALL_AND_CHAIN -> media resolved
+radio    : station 12                  queue=512 first=KRHYME_AMERIE_ONETHING -> unresolved: cue not found in switch container
+character: head matlib attach+bind: 1 diffuse-role TextureRef(s) replaced with the matlib's own resolved name (CHOSEN role-suffix heuristic - see this block's own comment)
+character: body textured, head textured (real per-material diffuse textures)
+respect  : respect_levels.xtbl 50 levels, cap 238875
+weapons  : continuous_explosions.xtbl - 1 row name(s) installed
+  [loc] 10/11 US .le_strings tables loaded from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/misc.vpp_pc (10201 records total) -> objective-text keys resolved through them, raw key string on a miss (spec-localization-format.md Sec6.1/Sec7 item 2)
+hud      : enabled (--hud) - real health/ammo/money/notoriety + objective-text overlay via sr3luahost::Host (spec-hud-runtime.md §2-6.5); max hp=100. Objective slots 0/1 are set via the real objective_text native at frame 2, slot 1 cleared via objective_text_clear at frame 150 (scripted stand-in, no real mission content wired into this command). HONEST CAVEAT: v0 has no
+           combat/economy/notoriety gameplay wired, so those 4 values will not
+           actually change during play (see this function's own doc comment)
+npc-ai   : near-field ped AI loop ON (civilians: flee/cower when the player fires nearby; CHOSEN stand-ins in sr3airuntime/npc_ai_runtime.h)
+[stream] frame 0 focus (-1280.0, -560.0): wanted = {0915h0,0915h1,0915h2,0915h3}
+[tex] building TextureSearchCache for sr3_city_0.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_0.vpp_pc built: 21825 texture records indexed in 17.1 s
+[tex] building TextureSearchCache for sr3_city_1.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_1.vpp_pc built: 36851 texture records indexed in 22.1 s
+[tex] building TextureSearchCache for sr3_city_missions.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_missions.vpp_pc built: 0 texture records indexed in 0.0 s
+[tex] building TextureSearchCache for misc.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for misc.vpp_pc built: 119 texture records indexed in 0.0 s
+[tex] building TextureSearchCache for dlc1.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc1.vpp_pc built: 966 texture records indexed in 1.0 s
+[stream] frame 0 LOAD  0915h0   (sr3_city_0.vpp_pc, col 9 row 15 N 0) centre (-1360.0, -490.0): 59/59 props uploaded, 0 failed, textures 359/359, 42423 ms
+[tex] building TextureSearchCache for dlc2.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc2.vpp_pc built: 2014 texture records indexed in 1.5 s
+[tex] building TextureSearchCache for dlc3.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc3.vpp_pc built: 604 texture records indexed in 0.4 s
+[tex] building TextureSearchCache for interface.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for interface.vpp_pc built: 1249 texture records indexed in 0.1 s
+[stream] frame 0 LOAD  0915h1   (sr3_city_0.vpp_pc, col 9 row 15 N 1) centre (-1200.0, -490.0): 46/46 props uploaded, 0 failed, textures 171/172, 2347 ms
+[stream] frame 0 LOAD  0915h2   (sr3_city_0.vpp_pc, col 9 row 15 N 2) centre (-1360.0, -630.0): 26/26 props uploaded, 0 failed, textures 185/185, 268 ms
+[stream] frame 0 LOAD  0915h3   (sr3_city_0.vpp_pc, col 9 row 15 N 3) centre (-1200.0, -630.0): 63/63 props uploaded, 0 failed, textures 240/241, 557 ms
+[ground] frame 0 LOAD  tile 0915: sr3_city~s0915.czn_pc, 3 range(s), 26 triangles (collision tris=26 bounds x[-22.3,22.3] z[-10.4,13.0])
+ground-y : measured real ground bounds [-0.21, 0.21] across 1 loaded tile(s) - spawn/collision groundY = 0.00 (flat, street-level - not a rooftop)
+heightmap: real Sec13.5 sample at spawn (-1280.0 -560.0) = -5.00m (flat-plane fallback was 0.00m)
+groundmesh: NO real 0x2237 collision-mesh triangle resolved at spawn (-1280.0 -560.0) - falling back to the heightmap/flat-plane chain above
+camera   : camera_free.xtbl seeded (40 scalars, 61 submode row(s) applied)
+camera   : real follow camera active; committed eye after reset (-1280.00 1.70 -564.25), fov 60.00 deg
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+vehicle  : D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/dlc1.vpp_pc :: car_4dr_genki_0.ccar_pc parked at (-1280.0 0.0 -554.0) - walk within 3.0m and press E to enter
+traffic  : near-field ambient vehicle population ALWAYS ON (cap 48, spec-ai-runtime.md Sec17.4c)
+traffic  : lane graph = REAL road graph (11455 lanes, on-disk successor links)
+signals  : 346 junctions, 1207 lights, 678 phases initialised (Sec20.6.13(e))
+peds     : near-field ambient pedestrian population ALWAYS ON (cap 48, spec-ai-runtime.md Sec20)
+roadblock: police roadblock spawn OFF by default (8 slots: 4 ped + 4 vehicle [1 Spike_strip + 3 generic]) - press R to arm (spec-ai-runtime.md Sec19.7; debug gate, not tied to notoriety)
+vehicle  : no --vehicle-interaction-name given - occupant hide stays at its real-data default (shown; correct for the ordinary default vehicle, spec-render-pipeline.md Sec23.14)
+spawn    : (-1280.0 0.0 -560.0)
+vitals   : free-roam player vitals ON (max health 100 from engine drawOrGetMaxHitPoints('player'); respawn delay 4000 ms from gameplay_constants.xtbl Death_and_busted.respawn_delay_ms)
+[traffic] frame 0 near-field live=1/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1380.00,-643.06) heading=90.1deg seg=4697 valid=1
+[peds] frame 0 near-field ambient peds live=1/48
+[population] frame 0 vehicles live=1 (spawn passes 1, distance-despawned 0) peds live=1 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 0 vehicle gathers=1 candidates=5 (avg 5.0) lane-spawns=1; ped gathers=1 edges=49 (avg 49.0)
+[idle-trace] frame 0 ped id=1 pos=(-1302.60,31.41,-521.02) idleSubState=33
+[objective] slot 0/1 set via objective_text (frame 2)
+[vehicle] in range (2.7m) - press E to enter
+[vehicle] out of range
+[traffic] frame 30 near-field live=3/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.90,-433.21) heading=-90.0deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.64) heading=90.0deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.98,-482.25) heading=-89.8deg seg=4759 valid=1
+[peds] frame 30 near-field ambient peds live=4/48
+[population] frame 30 vehicles live=3 (spawn passes 4, distance-despawned 1) peds live=4 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 30 vehicle gathers=4 candidates=15 (avg 3.8) lane-spawns=4; ped gathers=4 edges=206 (avg 51.5)
+[idle-trace] frame 30 ped id=1 pos=(-1302.73,31.41,-522.47) idleSubState=34
+[idle-trace] frame 30 ped id=2 pos=(-1338.15,25.92,-543.49) idleSubState=34
+[idle-trace] frame 30 ped id=3 pos=(-1315.09,27.90,-551.13) idleSubState=34
+[idle-trace] frame 30 ped id=4 pos=(-1269.83,32.15,-585.21) idleSubState=34
+[traffic] frame 60 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.89,-435.90) heading=-89.8deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.61) heading=89.9deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.96,-483.83) heading=-89.0deg seg=4759 valid=1
+  [lane] id=5 pos=(-1379.97,-470.57) heading=90.2deg seg=4248 valid=1
+  [lane] id=6 pos=(-1266.86,-422.43) heading=-83.7deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.97,-474.39) heading=-89.8deg seg=4759 valid=1
+[peds] frame 60 near-field ambient peds live=8/48
+[population] frame 60 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=8 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 60 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=8 edges=433 (avg 54.1)
+[idle-trace] frame 60 ped id=1 pos=(-1302.86,31.41,-523.97) idleSubState=34
+[idle-trace] frame 60 ped id=2 pos=(-1339.85,25.92,-542.76) idleSubState=34
+[idle-trace] frame 60 ped id=3 pos=(-1314.41,27.90,-549.41) idleSubState=34
+[idle-trace] frame 60 ped id=4 pos=(-1271.24,32.15,-584.69) idleSubState=34
+[idle-trace] frame 60 ped id=5 pos=(-1277.61,36.15,-488.37) idleSubState=34
+[idle-trace] frame 60 ped id=6 pos=(-1271.76,32.15,-590.91) idleSubState=34
+[idle-trace] frame 60 ped id=7 pos=(-1270.78,36.15,-495.03) idleSubState=34
+[idle-trace] frame 60 ped id=8 pos=(-1256.65,36.15,-495.01) idleSubState=34
+[traffic] frame 90 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.84,-438.71) heading=-83.8deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.97,-476.61) heading=89.6deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.78,-487.50) heading=-84.1deg seg=4553 valid=1
+  [lane] id=5 pos=(-1380.01,-467.45) heading=92.1deg seg=4248 valid=1
+  [lane] id=6 pos=(-1266.41,-424.95) heading=-77.4deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.95,-476.39) heading=-89.2deg seg=4759 valid=1
+[peds] frame 90 near-field ambient peds live=12/48
+[population] frame 90 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=12 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 90 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=12 edges=668 (avg 55.7)
+[idle-trace] frame 90 ped id=1 pos=(-1303.16,31.41,-525.44) idleSubState=34
+[idle-trace] frame 90 ped id=2 pos=(-1341.53,25.92,-541.99) idleSubState=34
+[idle-trace] frame 90 ped id=3 pos=(-1313.37,27.90,-547.88) idleSubState=34
+[idle-trace] frame 90 ped id=4 pos=(-1271.62,32.15,-583.45) idleSubState=34
+[idle-trace] frame 90 ped id=5 pos=(-1277.64,36.15,-487.29) idleSubState=34
+[idle-trace] frame 90 ped id=6 pos=(-1271.81,32.15,-589.40) idleSubState=34
+[idle-trace] frame 90 ped id=7 pos=(-1271.65,36.15,-494.59) idleSubState=34
+[idle-trace] frame 90 ped id=8 pos=(-1258.67,36.15,-495.03) idleSubState=34
+[idle-trace] frame 90 ped id=9 pos=(-1264.80,32.15,-585.33) idleSubState=34
+[idle-trace] frame 90 ped id=10 pos=(-1251.96,32.15,-590.23) idleSubState=34
+[idle-trace] frame 90 ped id=11 pos=(-1250.72,36.15,-481.17) idleSubState=34
+[idle-trace] frame 90 ped id=12 pos=(-1301.93,31.37,-521.64) idleSubState=34
+[camera-collision] frame-local camera hit at (-1280.00 0.44 -523.58) normal (-0.00 -0.00 1.00) f=0.0476
+[camera-collision] frame-local camera hit at (-1280.00 0.44 -523.58) normal (-0.00 -0.00 1.00) f=0.1261
+[camera-collision] frame-local camera hit at (-1280.00 0.43 -523.58) normal (-0.00 -0.00 1.00) f=0.2045
+[camera-collision] frame-local camera hit at (-1280.00 0.42 -523.58) normal (-0.00 -0.00 1.00) f=0.2829
+[camera-collision] frame-local camera hit at (-1280.00 0.42 -523.58) normal (-0.00 -0.00 1.00) f=0.3614
+[camera-collision] frame-local camera hit at (-1280.00 0.41 -523.58) normal (-0.00 -0.00 1.00) f=0.4398
+[camera-collision] frame-local camera hit at (-1280.00 0.40 -523.58) normal (-0.00 -0.00 1.00) f=0.5182
+[camera-collision] frame-local camera hit at (-1280.00 0.39 -523.58) normal (-0.00 -0.00 1.00) f=0.5967
+[camera-collision] frame-local camera hit at (-1280.00 0.39 -523.58) normal (-0.00 -0.00 1.00) f=0.6751
+[camera-collision] frame-local camera hit at (-1280.00 0.38 -523.58) normal (-0.00 -0.00 1.00) f=0.7535
+[traffic] frame 120 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.58,-439.98) heading=-76.2deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.97,-475.66) heading=89.4deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.63,-488.51) heading=-73.8deg seg=4549 valid=1
+  [lane] id=5 pos=(-1380.13,-465.46) heading=109.0deg seg=4248 valid=1
+  [lane] id=6 pos=(-1266.41,-424.95) heading=-59.2deg seg=4376 valid=1
+  [lane] id=7 pos=(-1385.88,-478.73) heading=-84.0deg seg=4553 valid=1
+[peds] frame 120 near-field ambient peds live=16/48
+[population] frame 120 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=16 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 120 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=16 edges=899 (avg 56.2)
+[idle-trace] frame 120 ped id=1 pos=(-1303.62,31.41,-526.87) idleSubState=34
+[idle-trace] frame 120 ped id=2 pos=(-1343.19,25.92,-541.18) idleSubState=34
+[idle-trace] frame 120 ped id=3 pos=(-1312.32,27.90,-546.36) idleSubState=34
+[idle-trace] frame 120 ped id=4 pos=(-1271.63,32.15,-581.94) idleSubState=34
+[idle-trace] frame 120 ped id=5 pos=(-1277.66,36.15,-486.21) idleSubState=34
+[idle-trace] frame 120 ped id=6 pos=(-1271.87,32.15,-587.90) idleSubState=34
+[idle-trace] frame 120 ped id=7 pos=(-1271.74,36.15,-493.20) idleSubState=34
+[idle-trace] frame 120 ped id=8 pos=(-1260.69,36.15,-495.05) idleSubState=34
+[idle-trace] frame 120 ped id=9 pos=(-1266.30,32.15,-585.14) idleSubState=34
+[idle-trace] frame 120 ped id=10 pos=(-1250.89,32.15,-590.28) idleSubState=34
+[idle-trace] frame 120 ped id=11 pos=(-1250.57,36.15,-482.66) idleSubState=34
+[idle-trace] frame 120 ped id=12 pos=(-1302.51,31.37,-523.58) idleSubState=34
+[idle-trace] frame 120 ped id=13 pos=(-1313.84,33.38,-499.99) idleSubState=34
+[idle-trace] frame 120 ped id=14 pos=(-1297.51,35.45,-479.41) idleSubState=34
+[idle-trace] frame 120 ped id=15 pos=(-1318.82,31.21,-519.27) idleSubState=34
+[idle-trace] frame 120 ped id=16 pos=(-1255.33,36.15,-490.88) idleSubState=33
+[camera-collision] frame-local camera hit at (-1280.00 0.37 -523.58) normal (-0.00 -0.00 1.00) f=0.8320
+[camera-collision] frame-local camera hit at (-1280.00 0.32 -519.83) normal (-0.00 0.00 1.00) f=0.0291
+[camera-collision] frame-local camera hit at (-1280.00 0.32 -519.83) normal (-0.00 0.00 1.00) f=0.1075
+[camera-collision] frame-local camera hit at (-1280.00 0.31 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.36 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.30 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.37 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.29 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.38 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.28 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.39 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.27 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.40 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.25 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.42 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.24 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.43 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.23 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.44 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.22 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.45 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.21 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.46 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.20 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.47 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.19 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.48 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.18 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.49 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.17 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.50 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.16 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.51 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.15 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.52 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.13 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.54 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.12 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.55 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.11 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.56 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.10 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.57 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.09 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.58 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.08 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.59 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.07 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.60 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.06 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.61 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.05 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.62 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.04 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.63 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.03 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[objective] slot 1 cleared via objective_text_clear (frame 150)
+[traffic] frame 150 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.10,-441.69) heading=-63.1deg seg=4663 valid=1
+  [lane] id=3 pos=(-1379.95,-474.30) heading=89.1deg seg=4248 valid=1
+  [lane] id=4 pos=(-1384.94,-490.39) heading=-67.5deg seg=4549 valid=1
+  [lane] id=5 pos=(-1380.18,-465.37) heading=122.0deg seg=4248 valid=1
+  [lane] id=6 pos=(-1265.88,-425.65) heading=-50.6deg seg=4376 valid=1
+  [lane] id=7 pos=(-1385.74,-479.54) heading=-79.6deg seg=4553 valid=1
+[peds] frame 150 near-field ambient peds live=19/48
+[population] frame 150 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=19 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 150 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=19 edges=1070 (avg 56.3)
+[idle-trace] frame 150 ped id=1 pos=(-1304.08,31.41,-528.31) idleSubState=34
+[idle-trace] frame 150 ped id=2 pos=(-1344.67,25.92,-540.08) idleSubState=34
+[idle-trace] frame 150 ped id=3 pos=(-1311.27,27.90,-544.83) idleSubState=34
+[idle-trace] frame 150 ped id=4 pos=(-1271.64,32.15,-580.44) idleSubState=34
+[idle-trace] frame 150 ped id=5 pos=(-1277.68,36.15,-485.13) idleSubState=34
+[idle-trace] frame 150 ped id=6 pos=(-1271.93,32.15,-586.39) idleSubState=34
+[idle-trace] frame 150 ped id=7 pos=(-1271.83,36.15,-491.82) idleSubState=34
+[idle-trace] frame 150 ped id=8 pos=(-1262.72,36.15,-495.08) idleSubState=34
+[idle-trace] frame 150 ped id=9 pos=(-1267.79,32.15,-584.95) idleSubState=34
+[idle-trace] frame 150 ped id=10 pos=(-1250.33,32.15,-590.85) idleSubState=34
+[idle-trace] frame 150 ped id=11 pos=(-1250.42,36.15,-484.16) idleSubState=34
+[idle-trace] frame 150 ped id=12 pos=(-1303.11,31.37,-525.51) idleSubState=34
+[idle-trace] frame 150 ped id=13 pos=(-1314.42,33.38,-502.17) idleSubState=34
+[idle-trace] frame 150 ped id=14 pos=(-1298.97,35.45,-480.55) idleSubState=34
+[idle-trace] frame 150 ped id=15 pos=(-1318.62,31.21,-520.33) idleSubState=34
+[idle-trace] frame 150 ped id=16 pos=(-1255.59,36.15,-493.04) idleSubState=34
+[idle-trace] frame 150 ped id=17 pos=(-1271.22,34.23,-536.65) idleSubState=34
+[idle-trace] frame 150 ped id=18 pos=(-1301.62,35.03,-481.54) idleSubState=34
+[idle-trace] frame 150 ped id=19 pos=(-1273.12,32.65,-573.40) idleSubState=34
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.64 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.02 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.66 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 0.00 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.67 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.01 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.68 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.02 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.69 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.03 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.70 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.04 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.71 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.05 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.72 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.06 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.73 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.07 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.74 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.08 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.75 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.09 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.76 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.10 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.77 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.12 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.79 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.13 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.80 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.14 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.81 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.15 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.82 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.16 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.83 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.17 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.84 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.18 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.85 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.19 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.86 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.20 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.87 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.21 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.88 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.22 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.89 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.24 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.91 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.25 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.92 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.26 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.93 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.27 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.94 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.28 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.95 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.29 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.96 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.30 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[traffic] frame 180 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.07,-441.73) heading=-49.2deg seg=4663 valid=1
+  [lane] id=3 pos=(-1379.95,-474.26) heading=88.8deg seg=4248 valid=1
+  [lane] id=4 pos=(-1384.36,-491.63) heading=-59.7deg seg=4545 valid=1
+  [lane] id=5 pos=(-1381.20,-463.99) heading=128.9deg seg=4248 valid=1
+  [lane] id=6 pos=(-1264.38,-427.30) heading=-44.0deg seg=4509 valid=1
+  [lane] id=7 pos=(-1385.13,-482.11) heading=-73.5deg seg=4549 valid=1
+[peds] frame 180 near-field ambient peds live=20/48
+[population] frame 180 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=20 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 180 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=23 edges=1298 (avg 56.4)
+[idle-trace] frame 180 ped id=1 pos=(-1304.54,31.41,-529.74) idleSubState=34
+[idle-trace] frame 180 ped id=2 pos=(-1346.15,25.92,-538.97) idleSubState=34
+[idle-trace] frame 180 ped id=3 pos=(-1310.43,27.90,-543.19) idleSubState=34
+[idle-trace] frame 180 ped id=4 pos=(-1271.64,32.15,-578.93) idleSubState=34
+[idle-trace] frame 180 ped id=5 pos=(-1277.70,36.15,-484.05) idleSubState=34
+[idle-trace] frame 180 ped id=6 pos=(-1271.99,32.15,-584.89) idleSubState=34
+[idle-trace] frame 180 ped id=7 pos=(-1271.93,36.15,-490.44) idleSubState=34
+[idle-trace] frame 180 ped id=8 pos=(-1264.74,36.15,-495.10) idleSubState=34
+[idle-trace] frame 180 ped id=9 pos=(-1269.29,32.15,-584.76) idleSubState=34
+[idle-trace] frame 180 ped id=10 pos=(-1250.31,32.15,-591.93) idleSubState=34
+[idle-trace] frame 180 ped id=11 pos=(-1250.28,36.15,-485.66) idleSubState=34
+[idle-trace] frame 180 ped id=12 pos=(-1303.74,31.37,-527.43) idleSubState=34
+[idle-trace] frame 180 ped id=13 pos=(-1315.00,33.38,-504.36) idleSubState=34
+[idle-trace] frame 180 ped id=14 pos=(-1300.42,35.45,-481.70) idleSubState=34
+[idle-trace] frame 180 ped id=15 pos=(-1318.79,31.21,-521.37) idleSubState=34
+[idle-trace] frame 180 ped id=16 pos=(-1256.26,36.15,-494.85) idleSubState=34
+[idle-trace] frame 180 ped id=17 pos=(-1271.25,34.23,-534.80) idleSubState=34
+[idle-trace] frame 180 ped id=18 pos=(-1299.88,35.03,-480.50) idleSubState=34
+[idle-trace] frame 180 ped id=19 pos=(-1272.97,32.65,-574.90) idleSubState=34
+[idle-trace] frame 180 ped id=20 pos=(-1271.83,34.26,-535.54) idleSubState=34
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.97 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.31 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.98 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.32 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -1.99 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.33 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.00 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.34 -519.83) normal (-0.00 0.00 1.00) f=0.1859
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.01 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.36 -519.83) normal (-0.00 -0.05 1.00) f=0.1860
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.03 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.37 -519.83) normal (-0.00 -0.14 0.99) f=0.1862
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.04 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.38 -519.84) normal (-0.00 -0.24 0.97) f=0.1867
+[camera-collision] frame-local camera hit at (-1280.00 -0.38 -519.84) normal (-0.00 -0.24 0.97) f=0.0000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.05 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.39 -519.84) normal (-0.00 -0.33 0.95) f=0.1875
+[camera-collision] frame-local camera hit at (-1280.00 -0.39 -519.84) normal (-0.00 -0.33 0.95) f=0.0000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.06 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.40 -519.84) normal (-0.00 -0.42 0.91) f=0.1885
+[camera-collision] frame-local camera hit at (-1280.00 -0.40 -519.84) normal (-0.00 -0.42 0.91) f=0.0000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.07 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.41 -519.85) normal (-0.00 -0.51 0.86) f=0.1898
+[camera-collision] frame-local camera hit at (-1280.00 -0.41 -519.85) normal (-0.00 -0.51 0.86) f=0.0000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.08 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.42 -519.86) normal (-0.00 -0.60 0.80) f=0.1915
+[camera-collision] frame-local camera hit at (-1280.00 -0.42 -519.86) normal (-0.00 -0.60 0.80) f=0.0000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.09 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.43 -519.86) normal (-0.00 -0.69 0.73) f=0.1936
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.10 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.44 -519.88) normal (-0.00 -0.78 0.63) f=0.1963
+[camera-collision] frame-local camera hit at (-1280.00 -0.44 -519.88) normal (-0.00 -0.78 0.63) f=0.0000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.11 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.45 -519.89) normal (-0.00 -0.86 0.50) f=0.2000
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.12 -519.04) normal (0.00 0.00 -1.00) passes=2
+[camera-collision] frame-local camera hit at (-1280.00 -0.46 -519.92) normal (-0.00 -0.95 0.30) f=0.2056
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.13 -519.04) normal (0.00 0.00 -1.00) passes=2
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.15 -519.04) normal (0.00 0.00 -1.00) passes=2
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.16 -519.04) normal (0.00 0.00 -1.00) passes=2
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.17 -519.04) normal (0.00 0.00 -1.00) passes=2
+[collision] frame-local wall hit: surface 43012399 at (-1280.00 -2.18 -519.04) normal (0.00 0.00 -1.00) passes=2
+[traffic] frame 210 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1264.99,-442.79) heading=-42.2deg seg=4663 valid=1
+  [lane] id=3 pos=(-1379.88,-472.83) heading=84.7deg seg=4248 valid=1
+  [lane] id=4 pos=(-1382.97,-493.69) heading=-54.1deg seg=4545 valid=1
+  [lane] id=5 pos=(-1382.02,-463.01) heading=139.8deg seg=4313 valid=1
+  [lane] id=6 pos=(-1263.32,-428.16) heading=-36.7deg seg=4509 valid=1
+  [lane] id=7 pos=(-1384.78,-483.07) heading=-68.5deg seg=4549 valid=1
+[peds] frame 210 near-field ambient peds live=20/48
+[population] frame 210 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=20 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 210 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=27 edges=1526 (avg 56.5)
+[idle-trace] frame 210 ped id=1 pos=(-1305.01,31.41,-531.17) idleSubState=34
+[idle-trace] frame 210 ped id=2 pos=(-1347.63,25.92,-537.86) idleSubState=34
+[idle-trace] frame 210 ped id=3 pos=(-1309.58,27.90,-541.55) idleSubState=34
+[idle-trace] frame 210 ped id=4 pos=(-1271.65,32.15,-577.42) idleSubState=34
+[idle-trace] frame 210 ped id=5 pos=(-1277.73,36.15,-482.98) idleSubState=34
+[idle-trace] frame 210 ped id=6 pos=(-1271.99,32.15,-583.38) idleSubState=34
+[idle-trace] frame 210 ped id=7 pos=(-1272.58,36.15,-489.62) idleSubState=34
+[idle-trace] frame 210 ped id=8 pos=(-1266.76,36.15,-495.13) idleSubState=34
+[idle-trace] frame 210 ped id=9 pos=(-1270.78,32.15,-584.57) idleSubState=34
+[idle-trace] frame 210 ped id=10 pos=(-1250.28,32.15,-593.01) idleSubState=34
+[idle-trace] frame 210 ped id=11 pos=(-1250.13,36.15,-487.16) idleSubState=34
+[idle-trace] frame 210 ped id=12 pos=(-1304.37,31.37,-529.35) idleSubState=34
+[idle-trace] frame 210 ped id=13 pos=(-1315.58,33.38,-506.54) idleSubState=34
+[idle-trace] frame 210 ped id=14 pos=(-1301.88,35.45,-482.84) idleSubState=34
+[idle-trace] frame 210 ped id=15 pos=(-1319.10,31.21,-522.40) idleSubState=34
+[idle-trace] frame 210 ped id=16 pos=(-1258.52,36.15,-494.90) idleSubState=34
+[idle-trace] frame 210 ped id=17 pos=(-1271.29,34.23,-532.95) idleSubState=34
+[idle-trace] frame 210 ped id=18 pos=(-1298.15,35.03,-479.46) idleSubState=34
+[idle-trace] frame 210 ped id=19 pos=(-1272.82,32.65,-576.40) idleSubState=34
+[idle-trace] frame 210 ped id=20 pos=(-1271.84,34.26,-533.52) idleSubState=34
+[camera-collision] frame-local camera hit at (-1278.98 -0.65 -523.58) normal (-0.00 -0.00 1.00) f=0.9553
+[camera-collision] frame-local camera hit at (-1279.02 -0.66 -523.58) normal (-0.00 -0.00 1.00) f=0.8387
+[camera-collision] frame-local camera hit at (-1279.05 -0.67 -523.58) normal (-0.00 -0.00 1.00) f=0.7319
+[camera-collision] frame-local camera hit at (-1279.08 -0.68 -523.58) normal (-0.00 -0.00 1.00) f=0.6332
+[camera-collision] frame-local camera hit at (-1279.10 -0.70 -523.58) normal (-0.00 -0.00 1.00) f=0.5414
+[camera-collision] frame-local camera hit at (-1279.12 -0.71 -523.58) normal (-0.00 -0.00 1.00) f=0.4556
+[camera-collision] frame-local camera hit at (-1279.13 -0.72 -523.58) normal (-0.00 -0.00 1.00) f=0.3748
+signal   : t=7359 ms junction 125 (-1383,-424, 142 m from player) AMBER -> phase 0
+[camera-collision] frame-local camera hit at (-1279.14 -0.73 -523.58) normal (-0.00 -0.00 1.00) f=0.2984
+[camera-collision] frame-local camera hit at (-1279.15 -0.74 -523.58) normal (-0.00 -0.00 1.00) f=0.2258
+[camera-collision] frame-local camera hit at (-1279.16 -0.75 -523.58) normal (-0.00 -0.00 1.00) f=0.1565
+[camera-collision] frame-local camera hit at (-1279.17 -0.76 -523.58) normal (-0.00 -0.00 1.00) f=0.0902
+signal   : t=7491 ms junction 140 (-1264,-481, 41 m from player) AMBER -> phase 0
+[camera-collision] frame-local camera hit at (-1279.17 -0.77 -523.58) normal (-0.00 -0.00 1.00) f=0.0265
+[camera-collision] frame-local camera hit at (-1279.15 -0.78 -523.58) normal (-0.00 -0.00 1.00) f=0.9969
+[camera-collision] frame-local camera hit at (-1279.15 -0.78 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1279.10 -0.79 -523.58) normal (-0.00 -0.00 1.00) f=0.9913
+[camera-collision] frame-local camera hit at (-1279.10 -0.79 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1279.06 -0.81 -523.58) normal (-0.00 -0.00 1.00) f=0.9853
+[camera-collision] frame-local camera hit at (-1279.06 -0.81 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1279.02 -0.82 -523.58) normal (-0.00 -0.00 1.00) f=0.9790
+[camera-collision] frame-local camera hit at (-1279.02 -0.82 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.97 -0.83 -523.58) normal (-0.00 -0.00 1.00) f=0.9724
+[camera-collision] frame-local camera hit at (-1278.97 -0.83 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.92 -0.84 -523.58) normal (-0.00 -0.00 1.00) f=0.9654
+[camera-collision] frame-local camera hit at (-1278.92 -0.84 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.87 -0.85 -523.58) normal (-0.00 -0.00 1.00) f=0.9580
+[camera-collision] frame-local camera hit at (-1278.87 -0.85 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.82 -0.86 -523.58) normal (-0.00 -0.00 1.00) f=0.9501
+[camera-collision] frame-local camera hit at (-1278.82 -0.86 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.77 -0.87 -523.58) normal (-0.00 -0.00 1.00) f=0.9418
+[camera-collision] frame-local camera hit at (-1278.77 -0.87 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.72 -0.88 -523.58) normal (-0.00 -0.00 1.00) f=0.9331
+[camera-collision] frame-local camera hit at (-1278.72 -0.88 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.66 -0.90 -523.58) normal (-0.00 -0.00 1.00) f=0.9238
+[camera-collision] frame-local camera hit at (-1278.66 -0.90 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.60 -0.91 -523.58) normal (-0.00 -0.00 1.00) f=0.9139
+[camera-collision] frame-local camera hit at (-1278.60 -0.91 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.54 -0.92 -523.58) normal (-0.00 -0.00 1.00) f=0.9035
+[camera-collision] frame-local camera hit at (-1278.54 -0.92 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[traffic] frame 240 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1262.19,-445.04) heading=-35.6deg seg=4513 valid=1
+  [lane] id=3 pos=(-1379.76,-471.89) heading=72.3deg seg=4248 valid=1
+  [lane] id=4 pos=(-1382.70,-493.99) heading=-43.4deg seg=4543 valid=1
+  [lane] id=5 pos=(-1382.75,-462.52) heading=148.3deg seg=4313 valid=1
+  [lane] id=6 pos=(-1260.46,-430.12) heading=-33.7deg seg=4661 valid=1
+  [lane] id=7 pos=(-1383.42,-485.87) heading=-61.1deg seg=4545 valid=1
+[peds] frame 240 near-field ambient peds live=20/48
+[population] frame 240 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=20 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 240 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=31 edges=1752 (avg 56.5)
+[idle-trace] frame 240 ped id=1 pos=(-1305.47,31.41,-532.61) idleSubState=34
+[idle-trace] frame 240 ped id=2 pos=(-1349.11,25.92,-536.76) idleSubState=34
+[idle-trace] frame 240 ped id=3 pos=(-1308.73,27.90,-539.90) idleSubState=34
+[idle-trace] frame 240 ped id=4 pos=(-1271.66,32.15,-575.92) idleSubState=34
+[idle-trace] frame 240 ped id=5 pos=(-1277.75,36.15,-481.90) idleSubState=34
+[idle-trace] frame 240 ped id=6 pos=(-1271.99,32.15,-581.88) idleSubState=34
+[idle-trace] frame 240 ped id=7 pos=(-1273.96,36.15,-489.53) idleSubState=34
+[idle-trace] frame 240 ped id=8 pos=(-1268.79,36.15,-495.15) idleSubState=34
+[idle-trace] frame 240 ped id=9 pos=(-1271.64,32.15,-585.11) idleSubState=34
+[idle-trace] frame 240 ped id=10 pos=(-1250.25,32.15,-594.09) idleSubState=34
+[idle-trace] frame 240 ped id=11 pos=(-1249.99,36.15,-488.66) idleSubState=34
+[idle-trace] frame 240 ped id=12 pos=(-1305.01,31.37,-531.27) idleSubState=34
+[idle-trace] frame 240 ped id=13 pos=(-1316.07,33.38,-508.74) idleSubState=34
+[idle-trace] frame 240 ped id=14 pos=(-1303.33,35.45,-483.98) idleSubState=34
+[idle-trace] frame 240 ped id=15 pos=(-1319.42,31.21,-523.44) idleSubState=34
+[idle-trace] frame 240 ped id=16 pos=(-1260.78,36.15,-494.95) idleSubState=34
+[idle-trace] frame 240 ped id=17 pos=(-1271.32,34.23,-531.10) idleSubState=34
+[idle-trace] frame 240 ped id=18 pos=(-1296.40,35.03,-478.44) idleSubState=34
+[idle-trace] frame 240 ped id=19 pos=(-1272.67,32.65,-577.89) idleSubState=34
+[idle-trace] frame 240 ped id=20 pos=(-1271.85,34.26,-531.50) idleSubState=34
+[camera-collision] frame-local camera hit at (-1278.48 -0.93 -523.58) normal (-0.00 -0.00 1.00) f=0.8924
+[camera-collision] frame-local camera hit at (-1278.48 -0.93 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.41 -0.94 -523.58) normal (-0.00 -0.00 1.00) f=0.8807
+[camera-collision] frame-local camera hit at (-1278.41 -0.94 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.34 -0.95 -523.58) normal (-0.00 -0.00 1.00) f=0.8681
+[camera-collision] frame-local camera hit at (-1278.34 -0.95 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.27 -0.96 -523.58) normal (-0.00 -0.00 1.00) f=0.8548
+[camera-collision] frame-local camera hit at (-1278.27 -0.96 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.20 -0.98 -523.58) normal (-0.00 -0.00 1.00) f=0.8406
+[camera-collision] frame-local camera hit at (-1278.20 -0.98 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.12 -0.99 -523.58) normal (-0.00 -0.00 1.00) f=0.8254
+[camera-collision] frame-local camera hit at (-1278.12 -0.99 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1278.03 -1.00 -523.58) normal (-0.00 -0.00 1.00) f=0.8092
+[camera-collision] frame-local camera hit at (-1278.03 -1.00 -523.58) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.94 -1.01 -523.58) normal (-0.00 0.00 1.00) f=0.7918
+[camera-collision] frame-local camera hit at (-1277.94 -1.01 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.85 -1.02 -523.58) normal (-0.00 0.00 1.00) f=0.7732
+[camera-collision] frame-local camera hit at (-1277.85 -1.02 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.75 -1.03 -523.58) normal (-0.00 0.00 1.00) f=0.7531
+[camera-collision] frame-local camera hit at (-1277.75 -1.03 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.64 -1.05 -523.58) normal (-0.00 0.00 1.00) f=0.7315
+[camera-collision] frame-local camera hit at (-1277.64 -1.05 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.53 -1.06 -523.58) normal (-0.00 0.00 1.00) f=0.7082
+[camera-collision] frame-local camera hit at (-1277.53 -1.06 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.40 -1.07 -523.58) normal (-0.00 0.00 1.00) f=0.6830
+[camera-collision] frame-local camera hit at (-1277.40 -1.07 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.27 -1.08 -523.58) normal (-0.00 0.00 1.00) f=0.6555
+[camera-collision] frame-local camera hit at (-1277.27 -1.08 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1277.13 -1.10 -523.58) normal (-0.00 0.00 1.00) f=0.6257
+[camera-collision] frame-local camera hit at (-1277.13 -1.10 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1276.98 -1.11 -523.58) normal (-0.00 0.00 1.00) f=0.5931
+[camera-collision] frame-local camera hit at (-1276.98 -1.11 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1276.81 -1.12 -523.58) normal (-0.00 0.00 1.00) f=0.5573
+[camera-collision] frame-local camera hit at (-1276.81 -1.12 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1276.63 -1.13 -523.58) normal (-0.00 0.00 1.00) f=0.5180
+[camera-collision] frame-local camera hit at (-1276.63 -1.13 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1276.43 -1.15 -523.58) normal (-0.00 0.00 1.00) f=0.4745
+[camera-collision] frame-local camera hit at (-1276.43 -1.15 -523.58) normal (-0.00 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.28 -1.17 -523.22) normal (-0.02 0.00 1.00) f=0.1910
+[camera-collision] frame-local camera hit at (-1275.28 -1.17 -523.22) normal (-0.02 0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.11 -1.18 -523.21) normal (0.47 0.00 0.88) f=0.1551
+[camera-collision] frame-local camera hit at (-1275.11 -1.18 -523.21) normal (0.47 0.00 0.88) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.20 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.20 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.21 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.21 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.22 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.22 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.23 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.23 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.24 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.24 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.25 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.25 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.26 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.26 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.27 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.27 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.28 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.28 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[traffic] frame 270 near-field live=3/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1261.37,-445.60) heading=-23.3deg seg=4374 valid=1
+  [lane] id=6 pos=(-1255.79,-433.20) heading=-32.5deg seg=4599 valid=1
+  [lane] id=8 pos=(-1263.69,-652.66) heading=73.9deg seg=4927 valid=1
+[peds] frame 270 near-field ambient peds live=20/48
+[population] frame 270 vehicles live=3 (spawn passes 8, distance-despawned 5) peds live=20 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 270 vehicle gathers=8 candidates=29 (avg 3.6) lane-spawns=8; ped gathers=34 edges=1921 (avg 56.5)
+[idle-trace] frame 270 ped id=1 pos=(-1305.93,31.41,-534.04) idleSubState=34
+[idle-trace] frame 270 ped id=2 pos=(-1350.52,25.92,-535.56) idleSubState=34
+[idle-trace] frame 270 ped id=3 pos=(-1307.89,27.90,-538.26) idleSubState=34
+[idle-trace] frame 270 ped id=4 pos=(-1271.66,32.15,-574.41) idleSubState=34
+[idle-trace] frame 270 ped id=5 pos=(-1277.77,36.15,-480.82) idleSubState=34
+[idle-trace] frame 270 ped id=6 pos=(-1271.99,32.15,-580.37) idleSubState=34
+[idle-trace] frame 270 ped id=7 pos=(-1275.34,36.15,-489.44) idleSubState=34
+[idle-trace] frame 270 ped id=8 pos=(-1270.81,36.15,-495.18) idleSubState=34
+[idle-trace] frame 270 ped id=9 pos=(-1271.69,32.15,-586.62) idleSubState=34
+[idle-trace] frame 270 ped id=10 pos=(-1250.22,32.15,-595.17) idleSubState=34
+[idle-trace] frame 270 ped id=11 pos=(-1251.27,36.15,-488.95) idleSubState=34
+[idle-trace] frame 270 ped id=12 pos=(-1305.64,31.37,-533.19) idleSubState=34
+[idle-trace] frame 270 ped id=13 pos=(-1316.49,33.38,-510.97) idleSubState=34
+[idle-trace] frame 270 ped id=14 pos=(-1304.64,35.45,-485.27) idleSubState=34
+[idle-trace] frame 270 ped id=15 pos=(-1319.73,31.21,-524.47) idleSubState=34
+[idle-trace] frame 270 ped id=16 pos=(-1263.04,36.15,-495.00) idleSubState=34
+[idle-trace] frame 270 ped id=17 pos=(-1271.36,34.23,-529.25) idleSubState=34
+[idle-trace] frame 270 ped id=18 pos=(-1294.64,35.03,-477.43) idleSubState=34
+[idle-trace] frame 270 ped id=19 pos=(-1272.51,32.65,-579.39) idleSubState=34
+[idle-trace] frame 270 ped id=20 pos=(-1271.86,34.26,-529.47) idleSubState=34
+[camera-collision] frame-local camera hit at (-1275.07 -1.29 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.29 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.30 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.30 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.32 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.32 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.33 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.33 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.34 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.34 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.35 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.35 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.36 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.36 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.37 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.37 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.38 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.38 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.39 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.39 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.40 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.40 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.41 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.41 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.42 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.42 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.44 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.44 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.45 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.45 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.46 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.46 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.47 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.47 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.48 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.48 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.49 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.49 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.50 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.50 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.51 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.51 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.52 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.52 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.53 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.53 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.54 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.54 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.55 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.55 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.57 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.57 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.58 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.58 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.59 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.59 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.60 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.60 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+[camera-collision] frame-local camera hit at (-1275.07 -1.61 -523.22) normal (-0.00 -0.00 1.00) f=0.1461
+[camera-collision] frame-local camera hit at (-1275.07 -1.61 -523.22) normal (-0.00 -0.00 1.00) f=0.0000
+actor-placement-trace: actors=26 y_differs_from_player_ground=26 mean_abs_dy=31.767 median_abs_dy=32.150 max_abs_dy=36.475 sample_vs_node_gt1m=26 max_sample_vs_node=41.475 heading_nonzero=26 ground_samples=1193 frames=300
+traffic-overtake-gate-trace: frames=300 live_near_field_vehicles=6 overtake_gate_fire_count=1 net_displacement_range=[0.00,20.85]
+traffic-signals-trace: switches=0 amber_onsets=18 car_signal_stops=0 car_signal_releases=0 car_stopline_stops=0 car_stopline_releases=0 car_frames_on_controlled_lane=182 car_frames_on_red_or_amber_lane=0
+ped-crossings-trace: waits=0 crosses=4 crosses_after_wait=0 crosses_unsignalled=0
+ped-navigator-trace: path_searches=20 search_fails=0 route_nodes_reached=27 arrivals=0 event8_posted=0
+player-vitals-trace: damage_events=0 total_damage=0 deaths=0 respawns=0 min_health=100 max_health=100 final_health=100 dead_at_exit=0 respawn_delay_ms=4000
+npc-ai   : near-field ped loop summary: ped_ticks=4480 tracked_now=20 flee_entries=0 cower_entries=0 open_tick_skips=0
+npc-ai   :   OPEN action routine 37 ('follow to car') refused 290 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 38 ('follow other car') refused 290 time(s) (not implemented in the port)
+frames   : 300 presented (4 cell loads, 0 cell evictions, 4 cells/1 ground tiles resident); final player pos (-1274.49 -3.27 -522.99), locomotion state 0; near-field traffic live=6/48, roadblock armed=0 filled=0/8

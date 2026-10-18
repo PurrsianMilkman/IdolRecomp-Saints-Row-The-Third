@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "sr3physics/frame_contract.h"
+#include "sr3physics/vehicle_spec_data.h"
 
 namespace sr3physics {
 
@@ -218,6 +219,7 @@ VehicleTuning VehicleTuning::FromVehicleEntry(const sr3vehicleinfo::VehicleEntry
     if (entry.dragCoefficient.present) t.dragCoefficient = entry.dragCoefficient.value;
     if (entry.frontalArea.present) t.frontalArea = entry.frontalArea.value;
     if (entry.airDensity.present) t.airDensity = entry.airDensity.value;
+    ApplySpecChassisData(t, entry);
 
     // axles[0] = front, axles[1] = rear: CHOSEN assumption (spec: "Axle
     // order is positional" - not engine-enforced, but matches the shipped
@@ -245,6 +247,10 @@ VehicleTuning VehicleTuning::FromVehicleEntry(const sr3vehicleinfo::VehicleEntry
 VehicleSubstepSimulator::VehicleSubstepSimulator(VehicleTuning tuning)
     : tuning_(tuning),
       steeringLimiter_(tuning_.steeringRateRadPerSec, tuning_.steeringCenteringRateRadPerSec),
+      steeringProfile_(SteeringProfileParams{
+          tuning_.steeringRateRadPerSec, SteeringLimiterAccel(tuning_.steeringRateRadPerSec, tuning_.steeringTurnInDampAngleRad),
+          tuning_.steeringCenteringRateRadPerSec,
+          SteeringLimiterAccel(tuning_.steeringCenteringRateRadPerSec, tuning_.steeringReturnDampAngleRad)}),
       gearShift_(BuildGearShiftTuning(tuning_), /*startGear=*/1) {
     state_.engineRpm = tuning_.minRpm;
     state_.targetEngineRpm = tuning_.minRpm;
@@ -305,6 +311,16 @@ void VehicleSubstepSimulator::Step01_DriverInputStatusRelay(const DriverInput& i
     // always takes the CONFIRMED default (quadratic) path, never claiming
     // to know when the bypass would apply.
     state_.lastInput.throttle = ApplyThrottleResponseCurve(input.throttle, /*linearOverride=*/false);
+
+    // 10.3 reverse rule (command = throttle - brake). Only engaged when the
+    // "full logic" byte is on (source untraced, OPEN); otherwise inputs pass through unchanged.
+    if (tuning_.reverseFullLogic) {
+        const ReverseDecision d = DecideReverse(true, state_.lastInput.throttle - input.brake, state_.velForwardBody,
+                                                input.handbrake, tuning_.vehicleClass, state_.reverseFlag);
+        state_.reverseFlag = d.reverseFlag;
+        state_.lastInput.throttle = d.accel;
+        state_.lastInput.brake = d.brake;
+    }
 }
 
 void VehicleSubstepSimulator::Step02_WheelArrayRelay() {
@@ -363,7 +379,9 @@ void VehicleSubstepSimulator::Step03_SteeringRelay(double dt) {
     // harness already carries).
     const double baseAngle = SteeringBaseAngle(baseTuning, clampedSteer, state_.velForwardBody);
     state_.steeringAngleTargetRad = -baseAngle;
-    state_.steeringAngleCurrentRad = steeringLimiter_.Update(state_.steeringAngleTargetRad, dt);
+    state_.steeringAngleCurrentRad = (tuning_.steeringTurnInDampAngleRad > 0.0 && tuning_.steeringReturnDampAngleRad > 0.0)
+                                         ? steeringProfile_.Update(state_.steeringAngleTargetRad, dt)  // 10.11.7 min-time profile
+                                         : steeringLimiter_.Update(state_.steeringAngleTargetRad, dt);
 }
 
 void VehicleSubstepSimulator::Step04_SuspensionWheelStatusRelay() {
@@ -400,11 +418,12 @@ void VehicleSubstepSimulator::Step06_TransmissionForward(double dt) {
     // yet this step - Step08 runs later - so this uses the same "last known
     // RPM" every real automatic transmission would have available at this
     // point in its own update order).
-    gearShift_.Update(state_.engineRpm, dt);
+    if (!state_.reverseFlag) gearShift_.Update(state_.engineRpm, dt);  // 10.3: no shifting in reverse
     state_.currentGear = gearShift_.gear();
     const size_t idx = static_cast<size_t>(std::clamp(state_.currentGear - 1, 0, static_cast<int>(tuning_.gearRatios.size()) - 1));
     const double gearRatio = tuning_.gearRatios.empty() ? tuning_.gearRatio : tuning_.gearRatios[idx];
-    state_.drivetrainRatio = gearRatio * tuning_.diffGearRatio;
+    state_.drivetrainRatio = WheelTorqueRatio(state_.reverseFlag, state_.currentGear - 1, tuning_.reverseGearRatio, gearRatio,
+                                              tuning_.diffGearRatio);
 }
 
 // --- Phase 2 (Sec6.4 items 7-13, from 0x00ae7470) ---------------------------
@@ -454,7 +473,8 @@ void VehicleSubstepSimulator::Step08_ForceTorqueAccumulate(double dt) {
     // (CHOSEN - this model has no per-wheel rotational/slip state at all,
     // see the header's PLANAR SCOPE note) - but the RPM itself no longer
     // jumps discontinuously frame to frame.
-    const double wheelAngularSpeed = std::max(0.0, state_.velForwardBody) / tuning_.wheelRadius;
+    const double wheelAngularSpeed =
+        (state_.reverseFlag ? std::max(0.0, -state_.velForwardBody) : std::max(0.0, state_.velForwardBody)) / tuning_.wheelRadius;
     const std::array<double, 4> wheelAngularSpeeds = {wheelAngularSpeed, wheelAngularSpeed, wheelAngularSpeed,
                                                        wheelAngularSpeed};
     const std::array<double, 4> torqueSplitWeights = {tuning_.front.engineTorqueShare, tuning_.front.engineTorqueShare,
@@ -470,7 +490,7 @@ void VehicleSubstepSimulator::Step08_ForceTorqueAccumulate(double dt) {
     // unbounded" CHOSEN default this call site hardcoded before - see that
     // field's own doc comment, vehicle_substeps.h, for the HIGH-confidence
     // field-to-parameter mapping).
-    double targetRpm = ComputeTargetEngineRpm(wheelAngularSpeeds, torqueSplitWeights, state_.drivetrainRatio,
+    double targetRpm = ComputeTargetEngineRpm(wheelAngularSpeeds, torqueSplitWeights, std::abs(state_.drivetrainRatio),
                                                /*reactionTorqueNm=*/0.0, /*reactionTorqueToRpmGain=*/0.0,
                                                state_.targetEngineRpm, tuning_.maxRpmChangePerSec, dt,
                                                tuning_.minRpm, tuning_.maxRpm);
@@ -836,7 +856,7 @@ void VehicleSubstepSimulator::Step08_ForceTorqueAccumulate(double dt) {
     // reading that does not make the engine always produce zero torque.
     state_.currentEngineTorqueNm =
         EngineNetTorque(tuning_.ToEngineCurveTuning(), state_.engineRpm, state_.lastInput.throttle,
-                        /*attachedObjectPenalty=*/false);
+                        /*attachedObjectPenalty=*/false, tuning_.engineTorqueModifier);
 
     // Per-wheel normal load (Fz) via longitudinal+lateral load transfer
     // (CHOSEN - a standard simplified-vehicle-sim approximation, using the
@@ -979,14 +999,10 @@ void VehicleSubstepSimulator::ProcessAxle(const AxleAccelTuning& axle, int leftI
 
         WheelForce f = ComputeTireForce(driveForcePerWheel, brakeForcePerWheel, wheelLongVel, wheelLatVel,
                                          tuning_.corneringStiffness);
-        // WIRED 2026-10-08: axle.frictionSlipTable (Sec10.8's 16-entry
-        // table, std::nullopt by default - see AxleAccelTuning's own doc
-        // comment) becomes SolveFrictionEllipse()'s own curveFn seam when a
-        // caller has actively supplied one; otherwise this is the identical
-        // `nullptr` call this project's own prior equivalence argument
-        // already covers.
-        const FrictionEllipseCurveFn axleCurve =
-            axle.frictionSlipTable ? FrictionSlipTableCurve(*axle.frictionSlipTable) : nullptr;
+        // The per-axle friction table (10.11.6) is not applied here: the
+        // spec decodes its lookup (LookupFrictionSlipTable) but not how
+        // (u*, v*) becomes a force change, so the curveFn seam stays null.
+        const FrictionEllipseCurveFn axleCurve = nullptr;
         f = ApplyFrictionCircle(f, w.normalForce, axle.wheelFriction, axleCurve);
 
         w.longForce = f.longForce;
@@ -1130,10 +1146,8 @@ void VehicleSubstepSimulator::Step13_FinalPerWheelClamp() {
         const bool isFront = offsets[i].forward > 0.0;
         const AxleAccelTuning& wheelAxle = isFront ? tuning_.front : tuning_.rear;
         const double mu = wheelAxle.wheelMaxFriction;
-        // WIRED 2026-10-08: same per-axle FrictionSlipTable seam ProcessAxle
-        // already wires above - see that call site's own doc comment.
-        const FrictionEllipseCurveFn axleCurve =
-            wheelAxle.frictionSlipTable ? FrictionSlipTableCurve(*wheelAxle.frictionSlipTable) : nullptr;
+        // Same null curveFn as ProcessAxle (10.11.6 force application undecoded).
+        const FrictionEllipseCurveFn axleCurve = nullptr;
         WheelForce before{w.longForce, w.latForce};
         WheelForce after = ApplyFrictionCircle(before, refinedFz[i], mu, axleCurve);
         if (after.longForce != before.longForce || after.latForce != before.latForce) {
@@ -1169,6 +1183,22 @@ void VehicleSubstepSimulator::IntegrateChassis(double dt) {
     // Euler, the simplest integrator that is unconditionally stable for a
     // damped linear system at this timestep and - like every other method in
     // this file - a pure, deterministic function of its inputs.
+    // 10.11.8 extra-gravity action, coasting damping term (flat ground, all wheels grounded, throttle exactly 0).
+    {
+        ExtraGravityInput eg;
+        eg.vehicleClass = tuning_.vehicleClass;
+        eg.extraGravity = tuning_.extraGravity;
+        eg.mass = tuning_.mass;
+        eg.allWheelsInContact = eg.anyWheelInContact = true;
+        eg.throttle = state_.lastInput.throttle;
+        eg.velocity[0] = state_.velForwardBody;  // body frame: x forward, z right (y up)
+        eg.velocity[2] = state_.velRightBody;
+        eg.forward[0] = 1.0; eg.forward[1] = 0.0; eg.forward[2] = 0.0;
+        double f[3];
+        ComputeExtraGravityForce(eg, f);
+        state_.forceAccumX += f[0];
+        state_.forceAccumZ += f[2];
+    }
     const double ax = state_.forceAccumX / std::max(1e-6, tuning_.mass);
     const double ay = state_.forceAccumZ / std::max(1e-6, tuning_.mass);
     const double angAccel = state_.torqueAccumY / std::max(1e-6, tuning_.yawInertia);
@@ -1185,6 +1215,25 @@ void VehicleSubstepSimulator::IntegrateChassis(double dt) {
     state_.posX += worldVelX * dt;
     state_.posZ += worldVelZ * dt;
     state_.heading += state_.yawRate * dt;
+
+    // 10.11.8 velocity damper + 10.11.10 Maximum_Speed hard clamp (both FINAL), see vehicle_spec_data.h.
+    state_.yawRate = ApplyVelocityDamper(state_.yawRate, tuning_.normalSpinDamping, tuning_.collisionSpinDamping,
+                                         tuning_.collisionSpinThresholdRad, dt);
+    {
+        MaxSpeedLimiterState ls{state_.nitroBlend};
+        MaxSpeedLimitInput li;
+        li.maximumSpeed = tuning_.maximumSpeedMs;
+        li.maximumSpeedWithNitrous = tuning_.maximumSpeedWithNitrousMs;
+        li.overrideCap = tuning_.maxSpeedOverrideMs;
+        li.vehicleClass = tuning_.vehicleClass;
+        li.nitrousActive = state_.lastInput.nitrous;
+        li.wrecked = state_.wrecked;
+        double v3[3] = {state_.velForwardBody, 0.0, state_.velRightBody};  // planar sim: no vertical velocity
+        ApplyMaximumSpeedLimit(v3, ls, li);
+        state_.nitroBlend = ls.nitroBlend;
+        state_.velForwardBody = v3[0];
+        state_.velRightBody = v3[2];
+    }
 
     state_.prevAccelForwardBody = ax;
     state_.prevAccelRightBody = ay;

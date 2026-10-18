@@ -1,6 +1,7 @@
 #include "sr3luahost/stub_registry.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <stdexcept>
 
@@ -40,6 +41,9 @@ void HitLog::record(const std::string& name, int argc, const std::string& argTyp
     h.lastArgc = argc;
     h.lastArgTypes = argTypes;
     totalCalls_++;
+    // DIAGNOSTIC ONLY: opt-in SR3_TRACE_NATIVES prints every logged native call to stderr (off by default).
+    static const bool traceNatives = std::getenv("SR3_TRACE_NATIVES") != nullptr;
+    if (traceNatives) std::fprintf(stderr, "[native] %s (%s)\n", name.c_str(), argTypes.c_str());
 }
 
 namespace {

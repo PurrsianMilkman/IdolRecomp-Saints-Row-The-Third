@@ -373,6 +373,12 @@ int stub_ai_do_scripted_move(lua_State* L) {
         c.pendingScriptedMoveFlags.setBits(0x0Cu, (arg3 ? 0x04u : 0u) | (arg4 ? 0x08u : 0u));
         c.pendingScriptedMoveDestination = destination;
         ++c.scriptedMoveDispatchCount;
+        // spec-ai-runtime.md Sec21.5 / Sec22.11 (a166141): 0x004f4d00 commits action 24 at once and allocates the
+        // kind-3 ticket (freeing any earlier one); it stays pending until the mode's finish routine completes it
+        // (EngineState::tickScriptedOrders). Lua arg 3 (flagA) selects run over walk.
+        c.scriptedOrderTicket.stage(24);
+        c.scriptedMoveActive = true;
+        c.scriptedMoveRun = arg3;
     }
     lua_pushboolean(L, 1); // CONFIRMED hardcoded true - see doc comment above
     return 1;

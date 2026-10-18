@@ -6569,6 +6569,8 @@ farther than D from every player.
 | Currently visible | at least 140 m |
 | Special classes (`0x00ad3160`/`0x00ad31a0` + `0x00ad4040`), or mode 6 when visible | **250 m** (`0x011175d0`) |
 
+- **[2026-10-15 clarification: the "behind the camera" test of the 65 m row is not traced to its reference vector. Team B (e11f57f) uses dot(vehicle offset, camera velocity) < 0. Treat that as CHOSEN until the vector is read; for a moving camera it equals the cone axis of (c).]**
+  **[2026-10-15 closed: FINAL. In `0x0090f060`, delta = camera position `0x013c8740` minus previous-frame camera position `0x013c8800`; fwdSpeed = dot(camera forward `0x013c8780`, delta) x 30 (divide by 0.03333, `0x0132a0ac`; fixed 30 Hz, not the real frame time). "Moving" means fwdSpeed > 2.2352 m/s (5 mph, `0x0111f730`); only then is the delta vector passed to `0x00907160` (else null, which gives the 90 m / 140 m still-camera cases). In `0x00907160` (test at `0x009072a4`): off = vehicle position (+0x40) minus camera position `0x013c8740`; if not visible and dot(off, delta) < 0.0 (`0x0125e270`) then D = 65 m, otherwise 140 m. The reference vector is the camera displacement over the last frame (unnormalised, so only the sign matters), i.e. camera velocity direction, but the moving gate uses its component along camera forward. Port rule: moving = dot(camFwd, camPos - prevCamPos)*30 > 2.2352; behind = dot(vehPos - camPos, camPos - prevCamPos) < 0. Team B's test matches except it lacks the 2.2352 m/s forward-speed gate (and a sideways or backward-moving camera counts as still when the forward component is small). Test vector: camFwd (0,1,0), camPos (0,0,0), prev (0,-0.1,0) gives fwdSpeed 3.0 (moving); vehicle at (0,-50,0) gives dot -5 (D = 65 m, removed beyond 65 m); at (0,50,0) gives +5 (D = 140 m); with prev (0,-0.05,0) fwdSpeed 1.5 is below the gate (still camera, D = 140 m).]**
 - Check `0x009ea700`: D × scale for a player on foot (3-D distance). For a player in a vehicle it is
   **(D + 60 m)** × scale, horizontal distance (60.0 at `0x0111e478`).
 - A visible vehicle fades over 500 ms (`0x00a846f0`); an unseen one is deleted at once (`0x0090ccd0`).
@@ -7331,9 +7333,1735 @@ Scratch scripts (read-only, deletable): `tools/scratchpad/poptail_dis.py`, `popt
 Clean-room check: addresses are plain hex; property, table and string names are shipped data; no
 decompiler tokens.
 
+#### 20.6.13 Traffic lights: cycle, phases, stop rules — FINAL
+
+Static pass, 2026-10-17. Tags: **FINAL** = read end to end; **HIGH** = one inferred step; **GUESS** =
+not proven. Record layouts are in `spec-zone-data-format.md` §13.2a(b)/(i); this section adds the
+runtime. The data lives in the one whole-city Traffic section (`0x2236`) of `sr3_city~fawld.czn_pc`;
+the per-tile Traffic-signals sections (`0x2241`, 152 files) carry only the 72-byte light visuals.
+
+**(a) Controller structure — FINAL.** Singleton `0x02705fe0` (header of §13.2a(b)):
+
+| Header pair | Array | Used by the controller as |
+|---|---|---|
+| `+0x50`/`+0x54` | junction, 20 B | the intersection: `+0x0c` first phase, `+0x0e` current phase (u8), `+0x10` timer |
+| `+0x58`/`+0x5c` | phase, 6 B | `+0x00` first light-list index, `+0x02` first lane-list index, `+0x04` duration (u16, ms) |
+| `+0x60`/`+0x64` | u16 light list | the lights shown green in that phase |
+| `+0x68`/`+0x6c` | u16 lane list | the approach lanes released in that phase |
+| `+0x48`/`+0x4c` | light, 16 B | `+0x0e` vehicle state, `+0x0f` pedestrian state |
+
+- The intersection grouping is the junction record. Nothing is built at run time; the phase count is
+  the next junction's `+0x0c` minus this one's (`0x00a68fb0`), and the list lengths come the same way
+  (`0x00a69010` lights, `0x00a68fe0` lanes). No lane is listed twice (1,544 distinct).
+- The timer is the engine's dword deadline on the millisecond clock `0x01320d94`: `0x00d9e140(ms)` arms
+  it at now + ms, `0x00d9e1e0` = expired (now ≥ deadline; −1 = never), `0x00d9e210` = ms remaining.
+- Lane state = segment `+0x30` low nibble: 1 proceed, 2 amber, 3 stop. Five writers, all keeping the
+  high nibble: `0x00a69ed3` (old phase → 3), `0x00a69ffd` (new phase → 1), `0x00a6a0ad` (amber → 2),
+  `0x00a6a223` (hold → 3, (g)), `0x00a6aa5f` (init). (`0x00a69d1d`/`0x00a69d85` write `+0x30` of
+  synthetic route pieces, not of graph segments.) **The only reader of the nibble in `.text` is the
+  car test `0x00b52c25`** (whole-section sweep for a `+0x30` byte load followed by `and 0xf`).
+- Light writers `0x00a6f2f0` (vehicle) / `0x00a6f350` (pedestrian) store the byte and switch the glare
+  effect when the light's zone is resident (HIGH that these are the `effects.xtbl`
+  `Env_Stoplight_RedGlare`/`YellowGlare`/`GreenGlare` rows).
+
+**(b) The tick `0x00a69da0(junction)` → bool "touched" — FINAL.**
+```
+cur = phase[j.first + j.current]
+if lightCount(cur) == 0:                     return false   # lightless junction: frozen
+if !zoneResident(light[cur.lights[0]].+0x0c): return false  # 0x00861e60; not streamed in
+if expired(j.timer):                                        # switch
+    for l in cur.lights: veh(l)=3; ped(l)=2
+    for s in cur.lanes:  s.+0x30 = (s.+0x30 & 0xf0) | 3
+    j.current += 1; if j.current >= phaseCount(j): j.current = 0
+    nxt = phase[j.first + j.current]
+    arm(j.timer, nxt.duration)                              # 0x00a69f35
+    for l in nxt.lights: veh(l)=1; ped(l)=1
+    for s in nxt.lanes:  s.+0x30 = (s.+0x30 & 0xf0) | 1
+    touched = true
+elif remaining(j.timer) < 3000:                             # 0x00a6a01f, immediate 0xbb8
+    for l in cur.lights: veh(l)=2                           # pedestrian byte untouched
+    for s in cur.lanes:  s.+0x30 = (s.+0x30 & 0xf0) | 2
+    touched = true
+else: touched = false
+refresh every light of every phase (0x00a6f240)
+return touched
+```
+- Old red and new green are written in the same call: **there is no all-red interval** (FINAL).
+- **Amber is the last 3,000 ms of each phase, hard-coded**; green = duration − 3000 (FINAL).
+
+**(c) Scheduling — FINAL.** The world update `0x00702a50` calls `0x00a6ab30` once per frame (call at
+`0x00702c87`). It ticks junctions from the cursor `0x02705ffc` upward and **stops at the first junction
+whose tick returns true**, leaving the cursor after it; at the end of the array it resets to 0 on the
+next call. A junction in its amber window returns true on every visit, so a full lap takes about
+(number of resident junctions in amber or switching) + 1 frames. Every switch and the amber onset are
+therefore late by up to one lap, and the next phase is timed from the actual switch, so phases only
+lengthen (HIGH for the size: a few frames with the handful of junctions resident around the player).
+
+**(d) Phases and their order — FINAL for the code, HIGH for the geometry statistics.**
+- Phases run in record order 0, 1, …, wrap. There are no turn arrows and no protected-turn phase; the
+  turning connectors inside the junction are not in any list (they stay 1), so a turn across oncoming
+  traffic is a permissive turn settled by the junction yield (§20.6.7(c)).
+- Shipped classes (346 junctions; `tlight_stats*.py`):
+
+| Class | Count | Behaviour |
+|---|---|---|
+| lit, 2 phases, 10,000 / 10,000 ms | 259 | each approach: 7 s green, 3 s amber, 10 s red; cycle 20 s |
+| lit, 2 phases, 15,000 / 10,000 or 10,000 / 15,000 | 2 | 12 s / 7 s green; cycle 25 s (junctions 187, 231) |
+| lit, 2 phases, 10,000 / 0 | 1 | junction 162: phase 1 is green for one controller visit, never amber |
+| lit, 1 phase, 10,000 | 1 | junction 26: 7 s green, 3 s amber, repeating; the switch writes 3 then 1 in one call, so never red |
+| lightless (no light in phase 0) | 83 | never ticks; every listed lane stays 1 after init ((e)) |
+
+- Grouping of the 262 two-phase lit junctions: in 227 the two phases use disjoint road axes, and
+  phase 0 holds an opposing pair in 239. Typical: **phase 0 = both directions of one road,
+  phase 1 = the cross road** (one direction only in 127 junctions: T stems and one-way streets).
+  Lanes per phase 0–6 (mode 2); lights per phase 1–10.
+- Durations are data only: phase `+0x04`, read at `0x00a69f2c` (switch) and `0x00a6a93b` (init). The
+  exe has no light-timing tweak string and no `.xtbl` holds one (only the glare effects). **No
+  randomisation and no per-junction offset**: the controller's only random call is in the picker of (g).
+
+**(e) Initial state — FINAL.** `0x00a6a8a0`, called from world start/load `0x00708330` (at `0x0070848b`):
+1. every light: vehicle 3, pedestrian 2;
+2. every junction: current phase 0, timer armed with phase 0's duration — **all junctions start in step**;
+3. every phase p: lights 1/1 if p = 0 else 3/2; lanes: 1 if p = 0 **or the phase has no light**, else 3.
+On disk every listed lane is 3 and every light (3, 2) (§13.2a(i)); without this init the 83 lightless
+junctions would be red for ever. When a tile streams in, the `0x2241` loader matches its light records
+and pushes the stored live states to the visuals (`0x00a6f3b0`, §13.2a(i)). A junction whose zone was
+not resident keeps its absolute deadline; on the first visit after expiry it switches once and re-arms
+from that moment (HIGH).
+
+**(f) Per-car rules, consolidated — FINAL unless marked.**
+- Where: the stop target is the end node of the approach lane; the car stops **5 m** before it
+  (§20.6.11(c), law kind 2 of §20.6.7(b)).
+- Amber and red are one rule (states 2 and 3 share the branch `0x00b52c2c`–`0x00b52c38`): with d = distance
+  to the lane end (floored 0.001), **stop if v²/(2d) ≤ vehicle `+0xc58`, else drive through**
+  (§20.6.3(c)). No random red-runner exists. The waiting bit `+0xc70` bit 2 is set when the law brakes
+  or caps below 3 m/s.
+- Go: state 1 removes the source at once. The 300 ms memory entry of kind 2 keeps the junction yield
+  skipped for at most 300 ms; after that the yield (§20.6.7(c), every 150–300 ms) decides against the
+  conflict lists; there is no extra start-up delay.
+- Who obeys: the test needs `+0xc6c` bit 0 (`obey_traffic_lights`) and runs only inside the combiner
+  `0x00b57ab0` (sole caller of `0x00b52bc0`). The mode setter `0x00b24e40` sets the bit for modes 0, 7, 8,
+  15, keeps it for 11 and 14, clears it otherwise (jump table `0x00b24f84`, §18.7.1). The combiner runs
+  for mode 8 (§22.1) and, HIGH, for mode 14 (`0x00b50df8`). So: **ambient traffic obeys**; a held
+  car (mode 14) that came from mode 8 obeys; chase (4), flee (2), rejoin (6) and the other modes ignore
+  lights; modes 0/7/15 set the bit but never run the test (HIGH). `vehicle_set_obey_traffic_lights`
+  toggles the bit until the next mode change (`spec-lua-api-behaviour.md` §4.5a).
+- No vehicle-type or siren exception: ambient police and emergency cars in mode 8 stop; police in
+  pursuit (mode 4) do not. The player's car has no combiner, and with a single nibble reader there is
+  no red-light crime (HIGH).
+- `vai_force_flags` `no_signals` is **not** a traffic-light flag: it is `+0xc6e` bit 0x10, read only by
+  `0x00ad5460`, where it clears vehicle `+0x16c0` bits 0x800/0x1000. It suppresses the turn indicators
+  (class `vehicle_turn_signal_manager`), which settles the §20.6.7(d) guess for `0x00ad5460` (HIGH).
+
+**(g) Unsignalised junctions and stop signs — FINAL (code), HIGH (naming).**
+- Segment flag **bit 7 is a stop line**, not a "signalised approach" (corrects the §13.2a(d)
+  HYPOTHESIS). Reader: `0x00b50f80` tests the sign of the flags' low byte (`0x00b50fca`, `0x00b51016`) via
+  `0x00a6b0b0`, walking the route from the current entry and skipping entries already marked served
+  (route entry `+8` bit 0x10).
+- Rule `0x00b52740` (law kind 4), only when `+0xc6c` bit 0 and mode byte = 8:
+  - approach: kind 4 with a **3 m** stand-off (stops 3 m before the lane end);
+  - when the stop line is **< 4.0 m** away (`0x012a2f6c`) and speed **< 2.0 m/s** (`0x01187ebc`): mark
+    the entry served, set `+0xee1` bit 0x10, start timer `+0xfbc`;
+  - hold: while less than **1200 ms** has elapsed (`0x00b52792`, via `0x00d9e250`), brake demand
+    **100.0** (`0x0111645c`), cap 0; then clear the bit and drive on. The junction yield then decides.
+- Shipped: 195 bit-7 lanes, all in phase lists of junctions with no light in phase 0 except 2 (junction
+  162 phase 1). 58 of the 83 lightless junctions have them (**53 all-way stops**, 193 of 209 listed
+  lanes); the other 25 lightless junctions are uncontrolled (yield only). Unlisted lanes are always 1.
+- Segment states 0, 4–15 are never written; state 1 never stops a car.
+
+**(h) Pedestrians and crossings — FINAL (code), HIGH (geometry).**
+- A crossing is closed when its light's vehicle state is 2, 3 or 5, or its pedestrian state is 2
+  (`0x00bbf0e0`, sole caller `0x00a1bd01`). The controller gives **walk only during the 7 s green** of the
+  light's phase: amber leaves the pedestrian byte at 1 but the vehicle byte 2 closes it; there is no
+  separate pedestrian phase and no all-red walk. States 4 and 5 are visual slots (`0x00a6efd0`, 5 effect
+  handles) the controller never writes.
+- Peds wait at the curb and finish a started crossing (§20.6.9(c)). 818 of 876 lit crossings run
+  parallel (≤ 20°) to the green lanes of their light's phase, so peds walk beside the released flow;
+  319 crossings have no light and are always open.
+- Cars have no crosswalk rule; a ped in the lane is an obstacle of the probe (§20.6.7(a)).
+
+**(i) Overrides and queries — FINAL (code), GUESS (callers' purpose).**
+- Hold `0x00a6a170(junction)`: current phase lights 3/2, its lanes 3, timer disarmed (−1) → all-red
+  until released. Release `0x00a6a240`: arm 0, tick at once (switch to the next phase). A lightless
+  junction released this way is not ticked, so its phase-0 lanes would stay 3 (FINAL, latent bug).
+- The only holder is the flight-AI module (vehicle AI record `+0x100`, §22.8), `0x00b3cb90` called
+  from `0x00b3d62f`: when the craft is within 25 m of its target point `+0x244` (squared 625,
+  `0x01117c98`; |Δy| ≤ 25, `0x01115238`), it holds the nearest junction within **15 m** of that point
+  (`0x00b34b10`, `0x00a6a260`; junction kept at record `+0x4ac`, record `+1` bit 0x40). Released by the exits of
+  flight-AI modes 6 and 11 (`0x00b3cae0`, `0x00b3cb70`), `0x00b39f18` and `0x00abb555`. GUESS: a
+  helicopter or plane setting down at a street junction.
+- `0x00a6a2f0(pos, rMin, rMax, &out, needLanes, needByte0f)`: uniform pick among ≤ 40 junctions with
+  rMin ≤ distance ≤ rMax. The flight AI uses 10–50 m with the `+0x0f` filter (`0x00b3e31e`), which
+  names junction `+0x0f` as "eligible for that pick" (18 lit junctions have 0); `0x00694ce4` uses it
+  unfiltered. `0x00a6a260(pos, r)` = nearest junction within r (`0x00624718` uses 50 m).
+
+**(j) Port recipe.**
+1. Load junctions, phases, both lists and lights from the fawld Traffic section; at world start run
+   (e) exactly (phase 0, deadline = now + phase-0 duration, lightless phases released).
+2. Each frame run the cursor walk of (c) over all junctions, ticking (b); gate by "first light of the
+   current phase is in a resident tile" and skip junctions with no light in the current phase.
+3. Expose lane state 1/2/3 on the approach segments. In the mode-8 car combiner add the signal source
+   ((f), kind 2, 5 m) and the stop-line source ((g), kind 4, 3 m, 1.2 s hold), both behind the obey bit.
+4. Close a crossing on vehicle state ≠ 1 or pedestrian state 2.
+5. Provide hold/release for scripted flight AI; do not add an all-red gap, randomness or a ped phase.
+
+**(k) Test vectors.** Car = `car_4dr_standard03`, a_b = 12.06, a_lim = 10 (§20.6.12); t from world
+start, ignoring the cursor lag of (c).
+
+| # | Case | Expected |
+|---|---|---|
+| 1 | Junction 2, tile 1215, (−222, 26, −516), t = 0–6,999 ms | lanes 218, 54 = 1; 192, 191 = 3; lights 936–939 (1, 1); 954 (3, 2) |
+| 2 | same, t = 7,000–9,999 | 218, 54 = 2; lights 936–939 vehicle 2, pedestrian 1; crossing 10 (light 954) closed |
+| 3 | same, first visit at t ≥ 10,000 | 218, 54 = 3; 192, 191 = 1; light 954 (1, 1), crossing 10 open until t = 17,000; next switch at 20,000 |
+| 4 | v = 10 m/s, lane state 2 or 3, d = 4.0 m | 100/8 = 12.5 > 12.06 → drive through |
+| 5 | v = 10, d = 4.2 | 11.90 ≤ 12.06 → stop (full braking, overshoots the 5 m line, stops before the node) |
+| 6 | v = 10, d = 11 (dEff 6) | demand 8.33 > 7.5 → brake 0.691, cap 9.49 m/s |
+| 7 | v = 15, d = 9 / 10 | 12.5 → drive through / 11.25 → stop |
+| 8 | Junction 21, tile 1217, (−382, 14, −1023.3), lane 730 (flags `0x481`) | state 1 for ever; car stops 3 m before the end, holds 1,200 ms, then yields per §20.6.7(c) |
+| 9 | Junction 187 (15,000 / 10,000) | phase 0 lanes: 12 s green, 3 s amber, 10 s red; phase 1: 7 / 3 / 15; cycle 25 s |
+| 10 | Cursor: 5 resident junctions A–E, B and D in amber | frame 1 ticks A, B; frame 2 C, D; frame 3 E; frame 4 A, B → each visited every 3 frames |
+
+Residual: whether the clock `0x01320d94` stops in pause menus; whether `0x00861e60` turns false as soon
+as a light's tile streams out; the purpose of flight-AI modes 6/11 and of the callers `0x00694ce4` and
+`0x00624718`; why lit junction 162 carries a 0 ms phase.
+
+Scripts (read-only, deletable): `tools/scratchpad/tlight_stats.py` … `tlight_stats4.py`, `tlight_xref.py`,
+`tlight_scan.py`, `tlight_scan2.py`, `tlight_rd.py`, `tlight_tbl.py`, `tlight_str.py`; listing in
+`tools/scratchpad/tlight_out/`.
+
+---
+
+## 21. Combat and NPC behaviour, end to end (2026-10-15)
+
+**Purpose.** One port-ready reference that strings the earlier sections together into the behaviour a
+mission sees: how a human NPC decides, picks a target, takes cover, flees, and obeys a script order. It
+does not repeat what is FINAL elsewhere; it cites it and fills the gaps. Everything below was read from
+the executable (`SaintsRowTheThird.exe`, base `0x400000`) with `capstone`, or from the shipped tables
+extracted with `tools/scratchpad/extract_one_xtbl.py` into `tools/scratchpad/combat_xtbl/`
+(`ai_behavior.xtbl`, `ai_goals.xtbl`, `combat_actions.xtbl`, `ai_personalities.xtbl`). Scripts for this
+section: `combat_scan.py`, `combat_evtab.py`, `combat_consts.py`, `combat_beh.py`. Status tags: **FINAL** =
+read end to end; **PARTIAL** = the named part is OPEN.
+
+**Vocabulary bridge.** The engine has no mode called "alerted", "attack" or "surrender". The words map to
+the 44-row mode table (§6) and the goal layer (§9) as follows:
+
+| Word | Engine form |
+|---|---|
+| idle | mode 0 `Idle`, goal 16 `idle`, action 69 `idle` |
+| alerted (armed gang/cop) | still `Idle` or `Combat Movement`; the "alert" is a list-0 entry with flag `0x8` (§10.3) plus goal 14 `acquire target` |
+| alerted (civilian) | mode 17 `Gunfire wary` (§20.4) |
+| attack | modes 5 `Combat Movement`, 12 `Fire spray`, 15 `Grenade throw`, 23 `Melee`, 3 `Brute Melee`, 6 `Commando` |
+| cover | modes 8 `Cover stay` and 7 `Cover popout` |
+| flee / cower | modes 13 `Flee` and 9 `Cower` (no autonomous AI path ever requests 24 `Panic`; §20.4) |
+| surrender | **no such state exists in the decision layer.** Closest forms: 19 `Holdup`, 10 `Dbno`, 20 `Hostage`. Their roles are PARTIAL (21.4) |
+| stunned | mode 34 `Stunned`; forced from outside (damage/reaction), never chosen by a goal (§9.5) |
+
+### 21.1 The per-frame decision loop for a human NPC — FINAL for structure, PARTIAL for two routines
+
+**Frame order** (§1.4, restated): event delivery `0x004f5ae0`; perception tick `0x00507520`; event pump
+`0x004f5b90`; decision step `0x004f5210`; apply `0x004e8310` (mode switch, same frame); mode tick (slot
+`+0x0c`, skipped while `+0x44c` bit 0 "finished" is set).
+
+**Decision step** (§9.2, FINAL). Gate `0x004f5180` first (refuses on stunned-idle, `always_cower`, a pending
+`Stunned`/`Panic` request, down/dead, held-as-shield, player class, free-fall). It passes only when
+`+0x44c` bit 0 (action finished) or bit 1 (re-evaluate request, raised by mode code through `0x004f28a0`)
+is set. A running action is not re-evaluated unless its mode raises bit 1. A real action cannot be
+displaced before its `No_interrupt_ms` (timer `+0x438`) has run out. The chooser `0x004f3750` then walks
+goals 0..16 in fixed code order (§9.4), and inside a goal the action list in data order; **there is no
+scoring**. The first action that passes all of: not already tried this pass; ability enabled in the
+behaviour record; precondition mask (`on foot`, `in vehicle`, `in water`, `must have target`, `can do in
+cover`); per-action repeat timer `+0x320+4a` expired; and its routine returned true — wins.
+
+**What the shipped data makes of that** (`ai_goals.xtbl`, 17 goals, order lists as extracted; the full lists
+are in `combat_xtbl/ai_goals.xtbl`). Goal test, in code order, with the record fields it reads:
+
+| Goal | Test (short) | Action list head (data) |
+|---|---|---|
+| 0 change mode | always | roller blader change, zombie explode, move to post combat |
+| 3 survive | health / max health < `Survive/low_health_pct` | zombie eat, cover fire, cover stay down, cover take def |
+| 4 retreat | hostile closer than own weapon range value a | move to navmesh, cover take def, move retreat |
+| 6 suppress | event kind 108 queued and cover-mode state | cover popout, fire sweep, fire suppress, cover fire, fire, throw grenade |
+| 7 cover | see 21.3 | human shield grab, cover fire, cover stay down, cover take def |
+| 9 advance | target known, not reloading, not too close to own cover | move to navmesh, move to post combat, ..., cover advance, move advance |
+| 10 reload | clip fraction at or below `Reload/clip_pct` | human shield grab, melee, cover stay down, cover take def, reload |
+| 11 kill enemy | target seen within `Kill_Enemy/seen_in_last` | quick kill ... cover popout, throw grenade, fire sweep, move close in, fire, fire suppress ... |
+| 14 acquire target | no target, or its entry flagged lost; head entry hostile and seen within `Acquire_Target/seen_in_last` | move to navmesh, cover popout, pickup weapon, move to post combat, move sidestep, cover take off, follow acquire, move surround, move chase, move advance, taunt |
+| 15 investigate | candidate exists, seen within `Investigate/seen_in_last`, nothing in view | move to navmesh, move to post combat, investigate peek/move/look, move surround, move advance |
+| 16 idle | list 0 empty or head older than `Investigate/seen_in_last` | follow..., move to navmesh, follow browse, ..., idle |
+
+**Time scales** (FINAL, `ai_behavior.xtbl` seconds are stored x1000 as ms, §10 of `spec-tables-traffic-ai.md`).
+`Gang Average` (the common armed-gang behaviour; applies to `smg`/`rifle`/`shotgun`/`pistol` for Deckers,
+Luchadores, Morningstar): `Kill_Enemy` 4 s, `Flush_Out` 5 s, `Acquire_Target` 10 s, `Investigate` 20 s
+(already monotone, so no loader clamp), `low_health_pct` 0.4, `Reload/clip_pct` 0.2, dodge 80, can back-step
+fire and fire while walking true. Cover block: `stay_down_time` 3 s, `pop_up_time` 5 s,
+`find_new_cover_time` 15 s, `abandon_cover_time` 20 s, `advance_cover_time` 4 s, `squad_cover_pct` 60,
+`take_cover_when` = {shot at, grenade noticed, damaged}. **Note:** the file also carries a second,
+top-level copy of `stay_down_time` (3), `pop_up_time` (3), `find_new_cover_time` (10) and `squad_cover_pct`
+(50); the loader reads only the `Cover/...` children (HIGH), so the top-level copies are dead data.
+`Civilian Unarmed` (melee-weapon civilians): `Kill_Enemy` 2 s, `Acquire_Target` 15 s, `low_health_pct` 0.4,
+abilities melee (repeat 2-4 s) and move rush (6-8 s); no cover block, so the loader defaults apply
+(abandon 30 s, find-new 30 s, advance 30 s, stay-down 1 s, pop-up 30 s, `squad_cover_pct` 100).
+
+**Action table timing** (`combat_actions.xtbl`, FINAL for values; units ms): `No_interrupt_ms` is 250 for
+most actions, 500 for `cover fire`/`cover popout`/`cover stay down`/`cover take off`/`cover advance`,
+750 for `move sidestep`, 1000 for `cover take def`, `hold position`, `move advance`, `move chase`,
+`move retreat`, `move regroup`, `move surround`, `move to post combat`, and 0 for `idle`. `Min_repeat_time`
+is non-zero only for `move to navmesh` (2000), `pickup weapon` (1000) and `cover popout` (2000).
+`Auto_abort_ms` and `refresh_desire_interval` are loaded but have no reader (§9.7), so a port should ignore them.
+Finishing an action rolls a cool-down between the ability's `Repeat_min` and `Repeat_max` and can only
+lengthen the per-action timer (§4.1).
+
+**Perception thresholds that start the loop** (FINAL, §10, §12): default view cone 45 m x 150 degrees x
+80 degrees (35 m low variant is unused); spotted cone 90 m x 190 x 140; in cover 50 m x 220 x 180; zombie
+20 m x 80 x 80. A target within the 25.0 proximity test is noticed without sight. The sense pass runs every
+650-800 ms (350-450 ms for a non-civilian below activity level 6); line-of-sight is asked asynchronously with a
+re-check of 700-4000 ms (+500 ms after a visible answer). Seen entries expire from list 1 after 40 s; list 16
+(damage) lives 30 s.
+
+**What is NOT an input (FINAL, negative).** Notoriety does not enter the NPC decision loop, the gate, any
+goal test, perception, or the attitude function. Hostility is the team matrix `0x009b7100`
+(`byte[0x0262d940 + a*8 + b]`; 9 gives 2; 0 hostile, 1 unfriendly, 4 allied) plus force flags
+(`attack_player_on_sight`, `attack_non_player_enemies_on_sight`, `attack_pedestrians_on_sight`,
+`dont_react_to_player`, `ignore_attacks`) and the provocation meter. Notoriety (19) only drives who is
+*spawned* (police, roadblocks, §19.8). The force flag `ignore_notoriety` (`+0x2bc` bit 2) is read by the
+notoriety code, not by AI. Ammo enters only through goal 10 `reload` (clip fraction) and the `reload`
+action; there is no "out of ammo" retreat transition.
+
+**PARTIAL.** The routines of the 70 actions are read only in the families of §11 (11.3); the exact first
+action for goal 14 depends on `move to navmesh` (id 25), which is not read. The goal tests `suppress`
+(`0x00540a70` cover-point test) and `advance` step 6 (`0x004e68e0`) are not read.
+**[2026-10-15 closed: action 25 `move to navmesh` (`0x00538270`) is a four-instruction gate: it returns
+bit 7 of human `+0xc38`. That bit is the "off the navmesh polygon" flag, rewritten once per call of
+`0x00a124f0` (callers `0x005460e9`, `0x00950a93`, `0x00993a4b`) from `0x00a122b0`, which clears it while the
+cached polygon still contains the position or a re-locate succeeds, and sets it only when both fail.
+FINAL: an NPC standing on the mesh refuses action 25, so it never wins for a normal spawn. The goal 14 /
+15 / advance lists then fall to their next entries (see TV1). `0x00540a70(human, snap, radius_vec)` is
+FINAL as: true iff the human owns a cover object (`0x004e5e60`, node owner handle `+0x70/+0x74` equals the
+human's handle) **and** the squared distance from the human (optionally snapped through `0x00992800` when
+`snap` is set) to the node point (`+0x3c`, or a default point when node `+0x8d` bit 3 is clear) is at most
+the squared radius held in the 16-byte vector at the third argument (`0x024fb1d0`, zero in the image, so
+filled at run time; the take-def radius `0x024fb1c0` is the same kind). `0x004e68e0(human, handle, flag,
+x)` is PARTIAL: it looks the handle up with `0x004fe390`, returns true (1) when unknown, and for a
+vehicle/on-foot split compares positions in a box `0x01115d20` or defers to `0x004df080`; its result
+feeds advance step 6, role not decoded further.]**
+**[2026-10-15 closed: FINAL for advance step 6. `0x004e68e0(human, handle, melee_flag, out_point)` returns 1
+when the human is not a live human-typed object or the handle has no actively known perception entry
+(`0x004fe390(+0x510, &entry, handle, 0, 1)`). When the human is down or dead (`0x0096f540`) or in state
+`0x009a1dc0`, it also returns 1 unless the entry position lies within 2.0 of the human on every axis (box
+`0x01115d20` = 2.0). Otherwise it returns the weapon-band test `0x004df080(human, &human_pos, &entry_pos,
+melee_flag, out_point)`: with a = minimum and b = maximum range from `0x004dd530` and d2 the squared
+distance (`0x00da1330`), it returns -1 when d2 < a^2 (compare at `0x004df12a`; out = entry_pos +
+unit(human_pos - entry_pos) * (a + 0.1 * (b - a))), +1 when d2 > b^2 (`0x004df1b7`; out at a + 0.9 * (b - a)),
+else 0 (out = human_pos). So step 6 ("must return exactly 1") means: the target is beyond the maximum weapon
+range b, or not known. This matches the §11 `0x004e68e0` bullet, which already resolved it. Consequence for
+22.2: the chase sub-state 0x10 exit also fires when the target is merely beyond the driver's range b. Port
+rule: `band(h, T) = !known(T) ? 1 : (downed_or_9a1dc0(h) && !within_axis_box(h, P, 2.0)) ? 1 : d2 < a*a ? -1
+: d2 > b*b ? 1 : 0`; `advance` needs `band == 1`.]**
+
+### 21.2 Target selection — PARTIAL (no scoring chooser exists)
+
+FINAL, negative: **there is no function that ranks candidate targets.** Specifically:
+- The target handle is `+0x1330/+0x1334`. Its only plain stores in the executable are inside the
+  set-target routine `0x009659f0(human, target_or_null)` (stores at `0x00965a96`/`0x00965aa6`), which also
+  arms timer `+0x13a8`, draws a weapon (`0x00600720` with 13,1,0,0 on `+0x1b78`) and, for a human-typed
+  human, registers with perception. Called from ~50 sites, all in mode code, event handlers or the network
+  reader.
+- The perception target-refresh pass `0x00506660` (every 300-500 ms) only **re-validates** the current
+  target through `0x004fc100` (still a list-0 entry with flag `0x8`, score below the dismissed sentinel
+  `0x0137fa90`). A failed check clears the handle and posts event 78 (§12.5).
+- The default event handler `0x004ebc70` (jump table at `0x004ec3f4`, byte index at `0x004ec454`) writes
+  the target in two places: **kind 77** clears it (`0x009659f0(human, null)` then requests `Idle`);
+  **kind 78** resolves the event's source handle and sets it as the target, unless the human is a civilian
+  (team byte 7) and `0x004eb920` refuses; then runs the `Gunfire wary` pre-hook `0x004e8070`.
+  Kind 3 (`0x004ebf5f`) calls `0x004dedb0(human, entity, 4 flag bits)`, which also sets awareness directly
+  (`0x005023f0`, maximum score). It is skipped while `+0x76f` bit 1 is set.
+- A follower copies its player's target every 2000 ms (the AI update, `0x004e8e98`): the player's
+  `+0x1e30` target is set as the follower's when `0x009ba7e0` accepts it.
+
+**What picks "the threat" in practice** (HIGH, from the goal tests, §9.6/9.8): the goals do not use a
+chosen target alone; they read **perception list 0**, the known hostiles, whose head entry is the most
+recently created sensed hostile. Candidates are therefore: every other live human the sense pass notices
+(attitude 0, or the human's own target); score is not used for ordering; "player bias" is only the
+`always_sees_player` flag (re-notices every player each pass), the `never_turn_on_player` flag, and the
+provocation meter gate in the notice routine (a player at attitude 4+ is noticed only above the meter
+threshold). Visibility: the view cone plus the asynchronous line-of-sight answer. Distance: only the
+25.0 proximity notice and the ranged-weapon limits (second weapon range value b in `cover`/`advance`,
+`retreat` uses a). Retarget interval: the 300-500 ms refresh for validation; a new sighting is created at
+the sense pass (650-800 ms) subject to the LOS re-check interval above. **Open:** the writer that converts
+a list-0 entry into `+0x1330` for an unprovoked gang NPC first seeing the player is not isolated (event
+kinds 14/38/48 producers are also open, §20.4). Port rule: on the first list-0 hostile entry, post kind 78
+to the NPC with that entity and let the default handler set the target.
+**[2026-10-15 closed (static, HIGH; negative result, not FINAL for runtime): no code converts a list-0 entry
+into `+0x1330`.** Evidence, all by exhaustive caller scan of the exe (`combat2_dis.py callers`,
+`combat2_k78.py`): (1) the ~60 call sites of `0x009659f0` contain **none** in the sense, see, notice,
+dismiss or refresh code (`0x00501xxx`-`0x00507xxx`); the perception code never calls the set-target
+routine. (2) Event 78 has exactly six producers (a scan for a push of kind `0x4e` ahead of the three post
+helpers `0x004f6010`, `0x004f6420`, `0x004f5f80`): the target-refresh pass `0x00506660` (post at `0x00506956`)
+and the standalone validator `0x004fd7e0` (post at `0x004fd831`, called from `0x00505107`), both of which
+pass the **null handle constant `0x01117488`** (`{0,0}`, never written; checked) as the lookup key to
+`0x004fc100`, so the result is always null and the posted source is null; `0x004e53a0(victim, attacker)`
+(posts 78 with the attacker as source, to the victim, after a random delay; callers only the streaking
+bystander code `0x00536fbc` and the activity near-miss scan `0x006b9522`); the kind-77 case inside the default
+handler (`0x004ebe87`); the passenger event `0x0051f737`; the vehicle-threat event `0x00524559`. So the
+only 78 with a real, non-null source for an on-foot NPC comes from `0x004e53a0` (provocation by a
+bystander activity). (3) In the default handler kind 78 does nothing for a null source (the resolver
+`0x004d7f30` returns zero and the case jumps to the default return), while the mode event handlers of
+Combat Movement, Cover stay/popout, Fire spray, Investigate, Melee and Taunt answer kind 78 with
+`0x009659f0(human, 0x004e6bb0(human, null-handle global))`, i.e. they **clear** the target. (4) The
+real non-null writers are: the damage/notice path (`0x004dedb0` then kind-3 default case), follower copy
+(every 2000 ms, `0x004e8e98`), human-shield grab (`0x0050e735`), grenade throw tick (`0x0054ff18`),
+mode events that carry a source (Commando `0x0052cdfd`, Riot cop `0x00530206`/`0x00530590`, Rollerblader
+`0x0053227b`, Dog `0x0052ec6c`, Pickup item `0x004f078a`), script/mission code (`0x00730316`, the
+spawner `0x006745ea` which targets the nearer of two players), and the player auto-aim
+(`0x00950db0`). **Consequence for the port: do not model first sight as "post 78"; static evidence says
+the unprovoked gang NPC's `+0x1330` stays empty until something above fires, and the goals that need a
+target (`must have target` = `0x004e4e50` reads `+0x1330`) cannot pass until then.** What turns a
+sighting into a target for an unprovoked NPC (probably the kind-3 default case through awareness
+`0x005023f0` plus a mode event; not shown) is therefore still unproven; a live hook on `0x009659f0`
+(arguments and return address) during a first sighting is the one test that settles it. The null-probe
+reading of `0x00506660`/`0x004fd7e0` also means the "re-validation" of §12.5 never passes statically; its
+runtime effect (clearing every 300-500 ms or not) needs the same live check.]**
+
+### 21.3 Cover — FINAL for search and timers, PARTIAL for the cost weights
+
+**Entry.** Goal 7 `cover` (21.1 table) passes on the ordered rules of §9.6 (target T seen within
+`Flush_Out`; in-cover range check; `+0x76f` bit 3 with list 3 non-empty; stay-down timer test; **no cover
+object and T holds a ranged weapon seen within `Flush_Out`: true at once**; then `take_cover_when` bits
+`damaged` (accumulator > 10% of max health over 30 s), `shot at` (list 3 non-empty), `aimed at`). Its
+actions: `cover take def` (gate `0x00540b90`: refused while stay-down `+0x968` is armed and less than
+`pop_up_time` has elapsed on it; accepted once find-new `+0x964` has passed, or with no cover object, or
+when not yet within radius `0x024fb1c0` of the cover point). For a freshly spawned NPC both timers are -1
+and the cover handle (`+0x2b0`) is empty, so the gate is true. Mode `Cover stay` enter `0x00543480` runs
+`0x00542bc0` then `0x005429b0` (scripted override first, else search) then the search below.
+
+**Search `0x0050a690(human, radius)`** (FINAL, §15.7; 1,282 instructions): AABB around the human with
+half-width 14.0 (15.0 for a brute) and fixed vertical half-height 4.0, clipped to the human's post area, widened
+toward the group leader for followers; gather by linear scan of every live `cover_node` (`0x008cd960`),
+keeping those inside the box and unclaimed; reject nodes in the human's failure list (perception list 20),
+not "open", or refused by the evaluator `0x00509e50` (hard gate: if any perceived threat that resolves to
+the local player is not shielded by the node, the node is disqualified); score = arc/exposure penalty +
+path distance terms + group cohesion penalty, clamped to [0,100] and quantised; the multi-destination
+query `0x00a12a80` picks the cheapest reachable one; claim by compare-and-set of the node's owner handle
+(`+0x70/+0x74`); on contention or total failure all survivors go on the failure list and the caller backs off
+a random 6-8 s. **Arc test** `0x008cd1d0(node, threat, pos)`: bearing from node to threat wrapped against the
+node's yaw must lie inside `cover_angle_left/right` (bytes dequantised as `(b/255)*2*pi - pi`), and the
+same test from a point 0.45 behind the node against `cover_def_angle_left/right`. Aerial-vehicle threats skip
+it. **PARTIAL:** the exact weights in the cost sum were not extracted (only their sign and clamp).
+**[2026-10-15 closed: FINAL for the evaluator and the threat term; HIGH for the geometry refinements.
+Evaluator `0x00509e50(human, node, &any_primary, &count)` walks perception list 0 (head `+0x804`, next
+`0x004fadc0`) and uses only entries with flag `0x8` whose handle resolves to a live object. For each it calls
+`0x008cd1d0(node, threat, entry position)` (the stored position, not the live one): bit 0 (primary arc) is ORed
+into `any_primary`; bit 1 (def arc, "shielded") is s (`0x00509f5d`). If s = 0 and the threat is the player
+(`0x00853b30` type `0x21`) it returns 0 with count 0. Otherwise count += 1 and shielded += s, and when the
+entry is also in list 16 (damage) or list 3 (shot at) it counts a second time (count += 1, shielded += s;
+`0x00509f9c`-`0x00509fc2`). It returns shielded. Caller `0x0050a690`, after the post-area, failure-list 20 and
+open-flag filters: for current action 8 `cover take def` without a forced point, a node with shielded = 0 is
+rejected (`0x0050b011`), so with no hostile in list 0 no node passes take-def. Threat term (`0x0050b019`):
+`cost = (any_primary ? 0 : wA) + (count - shielded) * wB`, with wA = 8.0, wB = 7.0 when personality
+`combat_aggression` (record `+4`) is 2, else wA = 5.0, wB = 10.0 (`0x01117a54`, `0x01117a50`, `0x01187ecc`,
+`0x01118d20`). Refinements added after it (branches read; their roles HIGH, detail in
+`scratchpad/covernode_selection_2026-10-08.md` §2.3): with a forced point, +20 when the node's def arc does
+not cover that point and + 20 * sqrt(d2) / D (0 below d2 = 16; D = 15.0, or a measured node distance when a
+local flag is set); otherwise 0.75 per metre outside the weapon
+band, +40 when the reachability pre-check fails, a held-cover continuity term (2.0 or 5.0), then the divide by
+0.3 or 1.0, clamp to [0, 100] and the byte quantisation. Port rule: implement the evaluator and the threat
+term exactly as above; take the refinements from the scratchpad list.]**
+
+**Timers** (FINAL, §11.6). On taking cover `0x00541600` arms: find-new `+0x964` = `find_new_cover_time` x
+U(0.8,1.25); stay-down `+0x968` = `stay_down_time` x U(0.8,1.25) (or 800 ms on the first entry while
+`+0x315` bit 7 is clear and recent damage < 20%); time-in-cover `+0x96c` restarts at 0. Cover logic re-arms
+`+0x968` to 10 s when the committed reason `+0x444` is 7. The abandon check `0x0050a000` (perception tick
+step 1) drops the cover when `abandon_cover_time` is exceeded, or while the cover is
+under attack (500 ms re-arm of `+0x964`/`+0x968` while `0x004dd640` holds).
+**Fire cycle** (data of `Gang Average`): down for stay-down (2.4-3.75 s); once that deadline has passed the
+`cover` goal turns false for `pop_up_time` (5 s; 1 s when `+0x76f` bit 3), which lets `cover popout` /
+`cover fire` / `fire` win; after `pop_up_time` the goal is true again and the NPC drops back. `cover advance`
+(`0x00540080`) becomes acceptable when `+0x96c` has reached `advance_cover_time` (4 s); the `advance` goal's
+step 5 holds a non-aggressive NPC in cover while the target is within (2b)^2 of the node and the clock is
+below that value. The in-cover range check of `cover` rule 4 uses b (second weapon range), doubled for
+`combat_aggression` 2. `cover popout` (`0x00541230`) is refused while the `cover` test holds unless block bit
+7 forces it, needs the node's `+0x8c` bit 1, and is the fallback when `cover fire` (`0x00540f30`, requires
+`0x008cd1d0` = 0, i.e. the node does not shield the shooter) cannot accept.
+
+### 21.4 Flee, cower, surrender and human shield
+
+**Flee/cower chooser `0x004eaae0(human, threat, prefer-flag)`** (FINAL; reached from `0x004eaf80` for
+attacked/lethal-gunfire events, and from the idle event sink `0x005113e0`; §20.4 has the front half).
+1. Do nothing if a `Panic` request is pending, or if already in `Cower` with `+0x8d0` bits 4/5 set.
+2. Compute `preferFlee`: true if already in `Flee`; else a uniform random in [0,1) compared with **0.5
+   when currently in `Cower`**, **0.8 otherwise** (`preferFlee` = random <= constant). Then: `cant_flee`
+   (`+0x2ba` bit 5) forces false; `cant_cower` (bit 3) forces true; a position test `0x005812d0(+0x40)`
+   while cowering also forces false; `always_cower` skips the flee branch entirely.
+3. If `preferFlee` and the flee gate `0x004d8ff0(human, threat, 2 (10 on the second variant))` holds: request mode 13
+   `Flee` (storing the threat in `+0x2b0` via `0x004e3830`). The gate refuses: not human-typed, flee-from is
+   self, `ignore_ai` (`+0x2bc` bit 1), special state `+0x1da7` bit 4, brute class (`0x0052a230`), already
+   in a vehicle transition, `+0xec` bit `0x40000`, or no reachable flee-from reference.
+4. Else, if the cower eligibility `0x004eaa40` holds (human-typed; no pending ordered action; not `cant_cower`;
+   not the three special-state tests; for a follower additionally not following) and not already `Cower`:
+   request mode 9 `Cower`, then speak a persona line (hash `0x1f2bb415`) if the threat is a character.
+So a civilian flees about 80% of the time and cowers about 20%; a cowering civilian re-rolls at 50%.
+
+**Flee tick `0x004da9f0`** (FINAL for the stop rule): while `+0x8d0` bit 0 is set (flee-from active) the
+squared distance to the flee-from point/object (`+0x8e8` when bit 5, else the resolved handle `+0x8d8`)
+is compared with the double at `0x01115340` = **900**; **beyond 30 m** the bit is cleared and the flee
+destination logic stops. While the character is in state `+0xcd0` = 7 it re-targets with 0.2 (`0x01171540`).
+Flee target selection (escape point) uses non-navmesh candidates in retail because the navmesh query is dead
+(§14); the 6-way sub-state dispatch (`+0x500` minus 0x5b, 4 cases) is not decoded (PARTIAL).
+`Cower` begin forwards to the owner machine, or refreshes the target handle if already in `Cower`
+(§13.1.1). A flee order from a script (`flee`, `spec-lua-api-behaviour.md` §45.1) posts kind 0x30 with the
+flag dword (2, or 3 / | 0x10) and is entered through the begin function with `+0x4a6` bit 2 selecting the
+body (`0x004d91a0` for scripted, `0x004da0b0` for autonomous).
+
+**Personality** (`ai_personalities.xtbl`, loader `0x00507AC0`): `Flee_health_pct` (`+0x05`) and
+`flee_events` (`+0x06`: aimed at 1, melee hit 2, bullet heard 4, bullet hit 8, explosion heard 0x10) are
+stored but their **decision consumer is not located** (PARTIAL; only the bit `0x08` "bullet hit" test
+in the vehicle-occupant logic of §18.7 and §19 is known). `combat_aggression` is read only by the
+cover/advance tests (`0x00507ee0`, value 2 only) and the assignment scorer `0x004f3470`.
+**[2026-10-15 closed: FINAL. Record = `0x013b84d0 + 0x20 * index` (index `+0x314`, accessor `0x00507e30`;
+the loader reads `Flee_tweaks/Flee_health_pct` into `+5` and `Flee_tweaks/flee_events` into `+6`). The on-foot
+consumer is `0x004ead80(human, bullet)`, "flee rather than fight", called by the attacked / lethal-gunfire
+handler `0x004eaf80` (`0x004eb077`, `0x004eb0cf`) and the idle gunfire sink `0x00512be0` (`0x00512c68`, bullet
+= 0). Its order: (1) flee eligibility `0x004ead10` fails and `cant_cower` (`+0x2ba` bit 3) is set -> false;
+(2) `+0x317` bit 6 -> true; (3) the fight-capability test `0x004e9110` fails -> true; (4) `always_cower`
+(`+0x2b9` bit 7) -> true; (5) `Flee_health_pct` (integer 0-100) > health fraction `+0x1cb8 / +0x1cac` (0..1,
+`0x004d31f0`; compare `0x004eaded`) -> true; (6) `flee_events` bit `0x10` and perception list 15 non-empty
+-> true; (7) else `flee_events` bit `0x08` (bullet hit) when `bullet` is set, else bit `0x02` (melee hit).
+Step 5 compares a percent with a fraction, so a record with `Flee_health_pct` >= 1 passes at any health.
+Shipped `Flee_tweaks` values: `civilian cowardly` 80, `civilian normal` 50, `Genki` 50, `civilian tough` 20,
+`activity hitman target` 20, `activity ho` 20: these always flee when attacked; every gang and police record
+has 0 and no flags, so this test never makes them flee. In `0x004eaf80`: attacker farther than 20 m (squared
+400) on a qualifying human -> event 67 after 250-750 ms carrying the result (TV4); otherwise true ->
+`0x004eaae0` flee/cower chooser (skipped during a vehicle enter/exit), false -> the attacker is noticed at
+maximum awareness (`0x005023f0`) and the human fights. In `0x00512be0` true (or `+0x2b8` bit 4) selects
+`0x00512000` instead of `0x004e8070`. Other bits: `0x04` (bullet heard) is read only by the gunfire-hearing
+routine `0x005046e0` (`0x00504783`); `0x08` also by the vehicle code at `0x00b34014`; `0x01` (aimed at) has no
+reader. Port rule: `flee = (!eligible && cant_cower) ? false : flag317_6 || !can_fight || always_cower ||
+pct > health_frac || (ev & 0x10 && list15) || (bullet ? ev & 0x08 : ev & 0x02)`; keep `pct > health_frac`
+(percent against fraction) to match retail.]**
+
+**Surrender / hands up** — PARTIAL. No path in the decision layer or in the 70 actions produces a
+"surrender". Modes 19 `Holdup` (`0x004dc530` enter, tick `0x004dc610`, event `0x004dca40`, shared net
+write `0x00523ca0` with `Cower`) and 10 `Dbno` (down but not out) exist and are in the "ignored by apply"
+group (§6), so they are entered only by direct scripted/begin calls. I did not decode `Holdup`'s tick; port
+it as a scripted-only state.
+**[2026-10-15 closed: FINAL for `Holdup` (19), HIGH for `Dbno` (10) past its entry. Correction: `Holdup` is
+not scripted-only; it is the **mugging** reaction, data `mugging_diversion.xtbl` (loader `0x006b7900`,
+singleton `0x012f04c0`): Mugging_Start_Time 0.2 s, Mugging_Complete_Time 3 s, Max_Distance 10 (stored
+squared), Barter_Line 0.5 s, Cower_Line 2 s, Default_Min_Cash 5, Default_Max_Cash 35.
+Entry 1, the mugging manager (tick `0x006b8600`, idle `0x006b7cf0`, active `0x006b81a0`): it takes the human
+the local player aims at (`0x006b5820`) when `0x006b7ba0` holds: the player is aiming (`0x009da830`), the human
+passes `0x00943ea0`, `0x007044f0` is non-null and `0x007c3420` is 0, neither is entering or leaving a vehicle,
+the human is in `Idle` (or already `Holdup` with manager state above 1), **every notoriety track 0-3 is at
+level 0** (`0x006b7c62`), the squared distance is at most Max_Distance^2, and the player's weapon passes
+`0x00b81440` with type `+0x4c` not 20. State 1 lasts Mugging_Start_Time. Then a human in a vehicle bails
+(`0x008c0240`), a human with `+0x1e01` bit 3 cowers if eligible, else `0x004dc880(human, player, 0)` begins
+`Holdup` and state 2 arms the complete, barter-line (`0x6b47cafd`) and cower-line (`0x1f2bb415`) timers. When
+the complete timer expires (and `0x0070a440` is false) state 3 pays out (`0x006b7e90`): cash = round(U(min, max))
+from the character's cash words (descriptor `+0xf0`, `+0x38`/`+0x3a`; the defaults replace values below 1)
+through `0x00974880`; then the human is requested to `Flee` from the player and gets event 96. If the player
+stops qualifying while the human is in sub-state 0x7b, the same routine runs without payout and raises the
+police track (3) to 1.0 when it is 0 and `0x006063f0(3) > 0`; any other abort (`0x006b7d50`) posts event 65 to
+the human after 500 ms and raises the police track to 1.0 when it is below 1. Entry 2, the hostage diversion
+(`0x006b45e0`, `0x006b59b0`; singleton `0x012f02f8`) calls `0x006b4430(human, threat)`, which begins `Holdup`
+only for team 7 or 9.
+State machine (sub-state `+0x500`, jump table `0x004dc860` = 0x79 `0x004dc693`, 0x7a `0x004dc74f`, 0x7b
+`0x004dc7a4`, 0x7c and 0x7d both `0x004dc81c`; threat handle `+0x8d8/+0x8dc`). Enter `0x004dc530` (human-typed
+only): 0x79; when `+0x8d0` bit 0, event 63 after 5000 ms; reaction call `0x004e98d0`; threat put in perception
+list 2. Tick `0x004dc610`: threat not a live human -> request `Idle`. 0x79: while animation states
+`0x211`-`0x215` are active it calls `0x004bddb0`, else -> 0x7a. 0x7a: -> 0x7b once state `0x21e` is inactive or
+`0x004bddb0` returns true. 0x7b (hands up): stays while `0x004dc350` holds (the threat aims at the human,
+`0x0050cdb0`: player aim target `+0x1e30` = human, or the threat's aim line passes the human within weapon
+range `+0x120`; or `0x009422b0`) or state `0x1d52` is active, and then runs a deferred re-check when `+0x8d0`
+bit 1 is set; otherwise -> 0x7c, cancels queued event 64 (`0x004f6420`) and posts 64 after 300 ms. 0x7c/0x7d:
+aim resumed -> 0x7a and cancel queued 65 and 64. Events (`0x004dca40`): 63 = re-check `0x004dc3d0`: every
+5000 ms, with probability 0.1 start the fidget state `0x1d52` and re-check after its length + 10000 ms; defer
+(set `+0x8d0` bit 1) while another animation state is current or the sub-state is 0x7d. 64 -> 0x7d, play
+`0x21f`, post 65 after its length. 65 -> request `Flee` from the threat (`+0x2b0`) when `0x004ead10` holds, the
+human is not a shield hostage (`0x00a00560`) and the threat is valid (`0x004dcac7`), else `Idle`. Port rule:
+hands up while aimed at; 300 ms after the aim leaves, lower the hands (`0x21f`), then flee; aiming again during
+the grace or the lowering puts the hands back up.
+`Dbno`: begin `0x0050bd40` requires local ownership (`0x008ae480`) and downed (`0x009715d0`, `+0xcc8` = 6). No
+code requests mode 10 (all `0x004e4130` and `0x004dd380` callers scanned); it is entered only through apply's
+`Veh threat` -> `Dbno` fall-through (§3.2) and the network handler around `0x0050c7b9`. Enter `0x0050c2b0`:
+sub-state 9, clears perception. Tick `0x0050c130`: no longer downed -> `0x004e8070(human, 0)`; while downed,
+not `0x00956390`, and `0x009735d0` non-zero -> `0x0050bef0`; a brute whose state `0x1d60` reaches its tag and
+whose melee routine `0x00551e20` accepts -> `0x005246a0`. `0x0050bef0` (also event 54): nearest human within
+20 m (400 squared) passing `0x00950550` and `0x00973770`; a call-for-help line (one of `0x3bf0449e`,
+`0x2bd444da`, `0xb0c5139a`, random start); state `0x338`; the helper noted in list 2 for that animation's
+length; event 117 posted to the helper after 1000-2000 ms. HIGH: event 117 = "come and revive" (its handler
+was not read).]**
+**[2026-10-15 closed (second pass): PARTIAL, HIGH for the tick; the bleed-out kill is not in the Dbno mode.
+Dbno (10) is a pure waiting state: it has no timer, no bleed counter and no death of its own. Per tick
+`0x0050c130`: (1) `0x0095d720(human)` true -> return (nothing). (2) If the human's `+0xd24` object passes
+`0x004b4ce0(tag 0x1d60)` and the brute test `0x004b4320(tag 0x1d60, -1)` and `0x0052a230` and melee `0x00551e20`
+accept -> `0x005246a0` (brute melee), else return. (3) Not downed (`+0xcc8` != 6) -> request `Idle` via
+`0x004e8070(human, 0)`; this is the only exit, so revive (or any cause that moves the stance word off 6, including
+death) ends the mode. (4) Downed and not `0x00956390`: `0x004de1f0` (clears ordered/cover flags unless state 0x21 is
+active), then if the classifier `0x009735d0` is non-zero (it returns 0 only when the human is blocked by
+`0x0097e280`; otherwise 1-4 = reason class, -1 = none of those) it runs the call-for-help `0x0050bef0`, EVERY TICK
+(the animation-state and helper checks inside gate the repeat; event 54 also reaches it, `0x0050c210`). Mode events
+other than 54 return 1. The downed stance itself is owned by `0x00973dbb`: it picks a downed type (`+0x18e0`),
+calls the type's enter hook (table `0x01309f00`, stride 0x18, hook at row+0xc), sets stance `+0xcc8` = 6 through
+`0x00942110(human, 6, 0xff, 1.0)` and clears `0x00502e40`. Per-type hooks (rows 0-5; row 0 also holds the two
+constants 20000 and 2500 ms at row+0 and row+4): enter `0x009720f0`, `0x009723f0`, `0x00972d30`, `0x009730d0`,
+`0x00973140`, `0x009734f0`; bleed/update hooks at row+0x8..+0x14 (`0x00971fb0`, `0x00972790`, `0x009714c0`,
+`0x00971650`, `0x009716e0`, `0x00973a90`, ...) are called from the stance wrappers `0x00971a80`, `0x00971ad0`,
+`0x00971c60`. I did not decode them, so the per-type bleed-out timing and the revive hand-off (event 117 handler)
+are OPEN. Shipped DBNO tunables (tweak_table.xtbl; these are the 16 names with no registry entry, so they are read
+by name from the table, not by the image): `DBNO_bleed_out_delta_per_second` 10 (bleed-out hit points lost per
+second while bleeding, gained per second while recovering), `Enemy_revive_percent_hit_points` 0.25,
+`Human_revive_percent_hit_points` 1.0, `HD_revive_hold_time_sec` 2.5, getup `DBNO_getup_*` (press speed +1.5, drop
+500 ms, anim speed 0.25-2.5, decay 4/s), screen tint values 0.2/0.3/0.7/0.8; `DBNO_Extra_Time` ms = 1
+(spec-tables-progression.md); per-type `Bleed_Out_Hit_Points` is a u16 in the character record (+0x0C).
+Port rule: while downed (stance 6) an NPC in Dbno does nothing but repeat the call-for-help (nearest human within
+20 m, line, state `0x338`, event 117 to the helper after 1-2 s); leave to `Idle` the first tick the stance is not
+6. Bleed-out: lose `DBNO_bleed_out_delta_per_second` (10) bleed-out HP per second from the record's
+`Bleed_Out_Hit_Points`, die at 0, regain at that rate while being revived, then revive to
+`Enemy_revive_percent_hit_points` x max HP (NPC) -- HIGH by name/description, not by decoded code.
+Test vector: NPC downed (+0xcc8 = 6) -> mode 10 sub-state 9, call-for-help fires; set +0xcc8 = 0 -> next tick
+mode becomes Idle; with Bleed_Out_Hit_Points 100 the bleed lasts 10 s.]**
+**[2026-10-15 closed (third pass): PARTIAL, HIGH for the type-0 timer and the revive heal, event 117 NEGATIVE.
+Correction to the pass above: the per-type table is a stride-0x18 array of six dwords starting at `0x01309f08`
+(fields at +0 predicate `0x01309f08`, +4 enter `0x01309f0c`, +8 and +0xc two bool hooks `0x01309f10`/`f14`, +0x10
+update with float step `0x01309f18`, +0x14 tick `0x01309f1c`; selector `0x009735d0` -> `0x00973d00` calls the
+predicate, `0x00973dbb` calls the enter, then `0x00942110(human, 6, 0xff, -1.0)`). Type 0 = `0x00971fb0` /
+`0x009720f0` / `0x00971650` / `0x00973a90` / none / `0x009723f0`. The words 20000 and 2500 at `0x01309f00` and
+`0x01309f04` have NO code reference (dead data; not the bleed-out time) and `DBNO_bleed_out_delta_per_second` has
+no string or reader in the image either (xtbl-only, unused by retail code). The real bleed-out is a deadline
+timer: type-0 enter `0x009720f0` sets `human+0x18e8` = now (`0x026252d8`) + duration, duration = 30000 ms
+(`0x116e240`) x `[difficulty row +0x14]` (`0x005f4a50`, rows of 40 bytes at `0x014a10b8`/`0x014a1130`), or a fixed
+15000 ms when the game mode is 5 (`0x006725c0`); it also arms flags in `+0x1905` (bit 3 = no timer: set when
+`0x0097e280` is non-null and the string at `0x011169a0` matches; bit 4 = marker handle `+0x18fc`; bit 7 = expiry
+pending for a non-owner) and calls the stance helper `0x004e4130(human, 0x22)`. Pause/resume `0x00971ea0` (re-arms
+from the saved remaining time `+0x18f8`). Type-0 tick `0x009723f0` (via `0x00971a80`): when bit 3 is clear and the
+deadline has passed (`0x00d9e1e0`) and the human is locally owned (`0x008addb0`), it releases the marker, runs
+`0x009723c0`, then **`0x009a7610(human, 0, 0)`** -- the revive/stand-up routine -- and a knock-down/ragdoll call
+`0x009a48e0`. So type 0 does NOT kill at expiry: the downed NPC gets back up. `0x009a7610`, when
+`0x009715d0` (downed) holds, clears the downed flag `+0x1c98` bit 5 and the bleed value `+0x1cb8`, then heals via
+`0x0094cfc0(human, int(+0x1cac) x pct)` and requests `Idle` (`0x004e8070`); pct = `Human_revive_percent_hit_points`
+(storage `0x0262d1c4`, 1.0) when byte `+0x1ca8` is 0, else `Enemy_revive_percent_hit_points` (storage `0x0262d1c0`,
+0.25); registrations `0x01006860`, `0x01006880`. (So the two revive percents ARE in the image; the earlier "no
+registry entry" remark covers only the other DBNO names.) Event 117 (`0x75`): posted by `0x0050bef0` through
+`0x004f5f80` with a 1000-2000 ms delay; every kind switch I could find is bounded below it (`Idle`
+`0x005113e0` byte table `0x00511e20` covers kinds 0-0x73, generic `0x004ebc70`, `0x005112d7`, `0x00519750` cover 1-0x72,
+`0x0051f63a` 1-0x71) and no code compares a kind against 0x75, so the event falls to each default (ignored): HIGH
+that NPC helpers never run a revive on event 117; the revive of a downed human is the timer expiry above or a
+player action (not decoded here). Other types' kill paths (rows 1-5) were not read, so a bleed-out death for those
+types stays OPEN. Port rule: on entering downed type 0 set deadline = now + 30000 x difficulty_scale (15000 in
+mode 5; none when the no-timer flag holds); when it passes on the owning machine, stand the human up and heal
+`int(max_hp_field) x pct` (0.25 enemy-side, 1.0 human-side), then Idle; ignore event 117.
+Test vector: enemy (+0x1ca8 != 0) with +0x1cac = 200, difficulty scale 1.0, downed at t = 0 -> at t = 30000 ms it
+stands, heals 50, mode Idle; same human-side (+0x1ca8 = 0) heals 200.]**
+**[2026-10-16 CORRECTION (FINAL, see 21.10.1): `0x009a7610` is the downed KILL, not a revive. When downed it sets
+HP `+0x1cb8` = 0, clears `+0x1c98` bit 5, unlinks the partner, releases the marker and calls the death finalizer
+`0x00952760(human, 1)` (stance 5). The heal described above (`int(+0x1cac)` x pct, then `Idle`) is the body of
+`0x009a78d0`, reached through the networked get-up `0x009a7c90`. So type-0 expiry is a bleed-out DEATH; a type-0
+human is revived only by a player interaction or a script. The pass above and its port rule/test vector are
+superseded by 21.10.1.]**
+
+**Hostage / human shield.** Actions: `human shield grab` (id 46, routine `0x0050dfe0`) is in goals 2, 7,
+9, 10, 11, 12, 14 (`kill near player`, `cover`, `advance`, `reload`, `kill enemy`, `frustrated`...) with a
+`Gang Average` repeat of 10 s. Grab routine gates (FINAL structure): `0x009aa520` (can grab), not
+a hostile-on-hostile case (`0x009a9610`) for non-brutes on a team, the group leader (if any) within
+`seperated_distance` (`+0x1dc`, `+0x1e0` interior) squared, a threat from `0x004e6bb0(human, own target)`
+that is not in a vehicle, and **seen within 10 s** (`0x2710` ms); then a position/aim check against the
+threat's own target. Success writes the pair links and state (`spec-lua-api-behaviour.md` §13.14: holder
+state 2 then 1, hostage `+0x18dc` bit 0). Mode 21 `Human shield` (holder; tick `0x0050ed90`, event
+`0x0050ee50`, begin-group B) and mode 20 `Hostage` (hostage; tick `0x004dd050`, event is the constant-1
+stub) are the two sides. Hostage tick (PARTIAL): when its sub-timer `+0xa04` expires it speaks persona
+line `0x2bd444da` and re-arms `+0xa04` with a random 1500-5000 ms; if the holder is in a vehicle it
+compares a distance against 15.0 (10.0 for the variant selected by `0x00a77a10`) before releasing
+(unclear which release; PARTIAL). The release/end states 3-6 are in §13.14 and §18.9.
+**[2026-10-15 closed: FINAL. Correction: mode 20 `Hostage` is the **vehicle** hostage (HIGH: a passenger who
+stays in a car someone else drives), not the human-shield victim. Its tick reads the human's own vehicle
+handle `+0x16c0/+0x16c4`; there is no holder in it. Enter `0x004dcf70` (sub-state 0x7f): vehicle = the
+`+0x16d8` pair, else `+0x16c0`; plea timer `+0xa04` = 1500-5000 ms; exit timer `+0x460` = U(D, D + 100) ms with
+D = tunable `RC_hostage_initial_exit_delay_ms` (`0x0135766c`) when vehicle byte `+0x1dec` is set, else
+`Hostage_initial_exit_delay_ms` (`0x01357674`). Tick `0x004dd050`: no live vehicle -> request `Idle`; plea
+line `0x2bd444da` each time `+0xa04` expires (re-armed 1500-5000 ms). Release: speed = round(|velocity| *
+2.236936) mph (`0x00ad4160`; 0 when vehicle `+0xbd0` is not 1; scale written at `0x0100a7a0`), limit = 10.0
+(`0x012e1128`) when `+0x1dec` is set, else 15.0 (`0x012e1124`). While speed >= limit or the vehicle is
+airborne-class (`0x00ad4810`), `+0x460` is re-armed to `RC_hostage_general_exit_delay_ms` (`0x01357668`) or
+`Hostage_general_exit_delay_ms` (`0x01357670`). When the car has stayed below the limit until `+0x460` expires,
+the hostage gets out (`0x004dccd0` default exit block, then `0x00af3cd0`, call at `0x004dd1a0`). The four
+delays are named tunables registered by `0x0071b530`; they sit in zero-filled data (0 in the image), and an
+override source was not traced. Entry: `0x004dcd50` from passenger code: `0x0051f15c` (vehicle `+0x1dec` set,
+vehicle `+0xc6c` bit `0x20` clear, human `+0x1c9c` bit 8 clear, speed > 20 mph, `0x01116990`), `0x00b29fc3`
+(same flags, human in `Passenger` 25), `0x0051f71c` (a team-7 passenger). Port rule: `if (!vehicle) Idle; if
+(mph(vehicle) >= (rc ? 10 : 15) || airborne(vehicle)) exit_at = now + general_delay; else if (now >= exit_at)
+leave_vehicle()`. A human in mode 20 without a vehicle drops to `Idle` on its first tick, so the grab path's
+victim side is not this mode's tick (the grab path itself was not re-read here).]**
+**[2026-10-15 closed (second pass): FINAL for the delay values. The four settings are `Tweak_Table_Entry` rows of
+`tweak_table.xtbl` (category `Entries:AI:Hostage`), registered in the tunable registry by `0x0071b530` with a zero
+default and filled from the table at load, which is why the image holds 0. Shipped values:
+`Hostage_general_exit_delay_ms` 2000 (`0x01357670`), `Hostage_initial_exit_delay_ms` 5000 (`0x01357674`),
+`RC_hostage_general_exit_delay_ms` 4000 (`0x01357668`), `RC_hostage_initial_exit_delay_ms` 6000 (`0x0135766c`).
+Description: the hostage waits this long under the exit speed limit before trying to exit (initial = first time).
+Companion rows: `Hostage_exit_speed_limit` 15 and `RC_hostage_exit_speed_limit` 5 mph. CORRECTION to the
+  **[2026-10-15 RC speed-limit conflict, HIGH: `RC_hostage_exit_speed_limit` is registered by the static initialiser at `0x00fec506`, which pushes the 10.0 constant `0x012e1128` as its DEFAULT, into variable `0x01357684`. `tweak_table.xtbl` then overrides it to 5 at load. So the earlier '10.0' was the registration default, not the runtime value. **Port rule:** RC hostage exit speed limit = 5 mph, normal hostage = 15 mph (table values). The direct reader of `0x01357684` was not located (it is probably read through the tweak registry), so this stays HIGH.]**
+note above: the RC limit shipped in the table is 5, not the 10.0 constant at `0x012e1128`; the table row (registered
+tunable) is the more likely live source, so the port should read the two `*_exit_speed_limit` rows (15 / 5) and keep
+10.0 only if a decode of the compare at the release test shows it reads the constant (not re-verified here).
+Port rule: exit_at = now + U(D, D+100) at entry with D = rc ? 6000 : 5000; while speed >= limit or airborne,
+exit_at = now + (rc ? 4000 : 2000); leave the vehicle once now >= exit_at. Test vector: non-RC car held at 20 mph
+for 10 s -> never exits; drops to 10 mph at t0 -> exits at t0 + 2000 ms; a freshly grabbed non-RC hostage already
+below 15 mph exits 5000-5100 ms after entry.]**
+
+### 21.5 How mission natives drive it — FINAL
+
+All `ai_do_scripted_*`, `ai_suggest_action` and friends write one **staged order** into the character's
+`+0x4a8` block (`0x58` bytes, template `0x012e14e0`, first byte `0x47` = none), via two setters
+(`spec-lua-api-behaviour.md` §7.28):
+
+| Setter | Used by | Effect |
+|---|---|---|
+| `0x004f4d00(char, action, no_id)` | `ai_do_scripted_advance` (action 18 `move advance`), `ai_do_scripted_rush` (22 `move rush`), `ai_do_scripted_take_cover` (8 `cover take def`), `ai_do_scripted_fire`, `ai_do_scripted_move` (24 `move scripted`, flags in `+0x4fd`), `character_take_human_shield_do` (46) | Commits at once. With `no_id` 0, allocates a kind-3 ticket id into `+0x4aa` (freeing any earlier kind-3 ticket of the owner) and sets `+0x4fe` bit 6. Not owned: forwards. Owned: copies block to `+0x450`; `+0x44c` = bit 3 (ordered) set, bits 0, 2, 4 cleared; restarts `+0x440` and `+0x438`; reason `+0x444` = `0x12`; current action `+0x445` = action; requests the action's category mode, ignoring refusal |
+| `0x004f4b90(char, action, handle, flag, track, ...)` | `ai_suggest_action`, `force_throw_*`, `ai_set_in_scripted_cover` | Stages only. `ai_suggest_action` allocates a ticket; the AI commits it through the chooser's ordered re-assert |
+
+**Override of the autonomous loop** (FINAL, §4.4, §9.4). While `+0x44c` bit 3 is set: the chooser's
+step 3 re-issues the staged block as soon as timer `+0x440` has expired, before `ignore_ai` and before any
+goal; if the staged action has a routine and `+0x44c` bit 4 is set, the routine is re-run and a refusal
+re-arms `+0x440` for 250 ms and falls through to the goals. The helper `0x004f28a0` clears bit 1 while the
+staged id equals the current id, so goals never pre-empt a running order. The scripted action's own
+`No_interrupt_ms` still applies.
+
+**Completion and return of control** (FINAL, §4.1): the action's mode calls the finish routine `0x004f4f50`.
+It rolls the cool-down, sets `+0x44c` bit 0, restarts `+0x43c`, and **only if** bit 3 is set, the staged id
+equals the finished action, and that action's category mode equals the current mode: clears bits 3 and 4,
+sets bit 2, completes the ticket (`0x006f66d0(id, owner)`, sets node bit 0 and runs the callback, which is the
+script wake-up), and resets `+0x4a8` to the template. The next frame the gate passes (bit 0) and the goal
+layer is back in charge. `ai_scripted_action_is_complete` (`0x004f2880`) = `0x006f63c0(owner, +0x4aa) != 0`:
+status 2 (no ticket) or 1 (done; ticket consumed, a second read gives 2) both read as complete; only
+status 0 (pending) reads as not complete. `ai_clear_scripted_action` = cancel `0x004f4c90`: clears bits
+2-4, sets bit 0 if the staged order is current, frees the ticket, clears `+0x4a6` bit 7 and `+0x4aa`.
+**Failure modes to port:** a refused mode request leaves the order current with an open ticket until
+cancelled; an order whose mode is replaced by a reactive mode (`Flee` from damage) is never completed by
+that mode's finish. `ai_do_scripted_take_cover` returns true for any resolved NPC whose gate
+`0x00540b90` passes (fresh NPC: true); false only for a name that does not resolve or an NPC inside its
+stay-down window. `ai_set_in_scripted_cover` raises force flag `in_scripted_cover` (`+0x2bc` bit 0), which
+sets the `can do in cover` state bit and makes goal 7 true unless `0x00540a70(human, 0, 0x024fb1d0)` says the
+NPC is already at its cover point.
+
+### 21.6 Test vectors — FINAL unless marked
+
+All use `Gang Average`, data of 21.1, a Deckers `smg` NPC, hostile to the player, `Idle`, full health,
+full clip, no cover object, no post, ability list as extracted.
+
+**TV1: sees the player at 20 m, notoriety 2.** Notoriety is not an input; the result is identical at
+notoriety 0 and 5. Player inside the default cone (45 m, 150 x 80 degrees) and not crouched-reduced.
+1. t=0..0.45 s: the sense pass fires (350-450 ms interval, activity level 5 because the player is within the
+   near test), runs the vision test, queues a line-of-sight request.
+2. The LOS answer is "visible" (within one LOS interval: 0.7-4.0 s worst case): `0x005013b0` creates the list-0
+   entry with flags `0x558` (`0x8|0x10|0x40|0x100|0x400`) and a list-1 entry.
+3. Goal 14 `acquire target` is the first goal that passes with no target (goal 11 needs a target, goals 2-10
+   fail on their own conditions). Its first enabled action whose routine accepts is chosen (PARTIAL: `move to
+   navmesh`, id 25, unread; `pickup weapon` only if a weapon is near; `follow acquire` needs an ally in combat).
+   Mode `Combat Movement` (5) is entered; commit sets reason 14, action id, `+0x438` restarted.
+   **[2026-10-15 closed (HIGH): action 25 refuses an NPC that is on the navmesh (see §21.1 note). With no target,
+   `must have target` (reads `+0x1330`, `0x004e4e50`) removes cover popout, cover take off, follow acquire,
+   move surround, move chase and move advance from goal 14, leaving in data order: pickup weapon (only if a
+   weapon candidate is near), move to post combat (`0x0053b080`; refuses a free NPC, it needs a leash radius
+   `+0x2f0` of at least 0 and refuses when the group leader is the player), move sidestep (`0x0053e870`, not
+   read) and taunt (`0x00552c30`, mode 35, which accepts on foot, in a vehicle or in water). So the first action
+   is `move sidestep` if its routine accepts, else `taunt` **[2026-10-15 read: `move sidestep` `0x0053e870` first
+   calls `0x004e4e50(human)`, which returns null when `+0x2ba` bit 2 is set or the target pair
+   `+0x1330/+0x1334` is empty, and then fails (`0x0053f4ec` returns false). So **sidestep REFUSES a target-less
+   NPC** (FINAL). `taunt` `0x00552c30` also loads `+0x1330` and validates it through `0x004e4ce0`, so it needs a target
+   too (HIGH). Net: an unprovoked, target-less armed NPC has no viable goal-14 action except `pickup weapon`. It
+   stays idle until one of the §21.2 target writers fires (damage, script, spawner, auto-aim).]**; this stays HIGH not FINAL because of those two
+   unread routines and because the target is empty (§21.2 note), which is why a port should give the NPC
+   its target at first sighting through its own rule.]**
+4. Event 78 (target set) is delivered; the NPC's target becomes the player (21.2) and a weapon is drawn
+   (`0x00600720(13,1,0,0)`).
+5. Next re-evaluation (`No_interrupt_ms` 250-1000 ms after commit): the target is seen within 4 s, so goal 11
+   `kill enemy` is eligible. Armed player seen within 5 s and no cover object: goal 7 `cover` is true (rule 7)
+   and sits before goal 11, so the first accepted action is `cover take def` (gate true, no cover object)
+   or, if cover search fails and backs off 6-8 s, goal 9/11 actions (`move advance`, `fire`).
+6. Mode sequence: `Idle` -> `Combat Movement` (or directly `Cover stay` 8) -> `Cover stay` -> `Cover popout`
+   / `Fire spray` cycles. Timer values: see TV2.
+
+**TV2: cover timers.** Cover claimed at t0 with `Gang Average`: stay-down expires at t0+2.4..3.75 s
+(800 ms on the first entry if undamaged and `+0x315` bit 7 clear); pop-up window 5.0 s after that (1 s when
+being shot at, i.e. `+0x76f` bit 3 and list 3 non-empty); `cover advance` eligible from t0+4 s; find-new
+cover eligible from t0+12.0..18.75 s; cover dropped by the abandon check at about 20 s of attack.
+
+**TV3: cover search geometry.** NPC at (0,0,0), brute false. Search box x,z in [-14,14], y in [-4,4]. Nodes
+at (10,0,10) (inside; euclid 14.1), (13,0,13) (inside the box, euclid 18.4), (15,0,0) (outside), (5,5,0)
+(outside by height), a node already claimed by another NPC (rejected), a node in failure list 20 (rejected).
+Survivors are scored and the cheapest reachable chosen; the claim is a compare-and-set. If no survivors the
+caller retries after a 6-8 s back-off. (Cost values: PARTIAL.)
+
+**TV4: civilian hears lethal gunfire** (team byte 7, `Idle`). Event 76 -> `0x00512680` -> `0x005113e0`
+-> `0x004eaf80` (lethal) -> `0x004eaae0`: 80% `Flee` (mode 13, threat stored), 20% `Cower` (mode 9). While in
+`Cower` a new lethal event re-rolls at 50%. `Flee` ends when the distance to the flee-from point exceeds 30 m
+(squared 900). Non-lethal distant gunfire only speaks a line and posts a 250-750 ms delayed re-check (kind 67).
+A civilian with `cant_flee` always cowers; with `cant_cower` always flees.
+
+**TV5: script drives an NPC.** `ai_do_scripted_take_cover("npc")` on a fresh NPC: gate `0x00540b90` true ->
+stage action 8 -> `0x004f4d00(npc, 8, 0)` -> ticket id `1..0xfff | (peer << 12)` in `+0x4aa`,
+`+0x44c` = ordered, `+0x444` = `0x12`, `+0x445` = 8 -> request `Cover stay`. `ai_scripted_action_is_complete`
+returns false (pending) until the cover mode finishes (then true, ticket consumed). A second call before
+completion frees the earlier kind-3 ticket. `ai_clear_scripted_action` returns control at once.
+
+### 21.7 Open items for the next pass
+
+1. The writer path from the first list-0 hostile to the target handle for an unprovoked NPC (21.2).
+   **[2026-10-15: narrowed, see the 21.2 note. All six event-78 producers and all ~60 set-target callers
+   enumerated; none is driven by a sighting. Needs one live hook on `0x009659f0`.]**
+2. Action routines 25 `move to navmesh` and 33 `follow acquire` for the exact first action of TV1.
+   **[2026-10-15: 25 closed (on-navmesh gate on `+0xc38` bit 7); 33 not needed (needs a target); TV1's first
+   action is now `move sidestep` or `taunt`, see TV1 step 3. `move sidestep` `0x0053e870` and `taunt`
+   `0x00552c30` routines remain unread.]**
+3. Cover cost weights inside `0x0050a690` (21.3).
+   **[2026-10-15 closed: FINAL for evaluator `0x00509e50` and the threat term, HIGH for the refinements; see the
+   21.3 note.]**
+4. Consumer of personality `Flee_health_pct` / `flee_events` for on-foot NPCs (21.4).
+   **[2026-10-15 closed: FINAL, `0x004ead80` "flee rather than fight"; percent-vs-fraction health compare; see the
+   21.4 Personality note.]**
+5. `Holdup` (19) tick and its entry condition; `Hostage` (20) release rule.
+   **[2026-10-15 closed: FINAL. `Holdup` = the mugging reaction (state machine and entry, 21.4 Surrender note);
+   `Dbno` HIGH in the same note; `Hostage` = vehicle hostage, released when the car stays below 15 mph (10 for
+   the `+0x1dec` variant) for the exit delay (21.4 Hostage note). Advance step 6 / `0x004e68e0` closed in the
+   21.1 note.]**
+6. The flee sub-state dispatch of `0x004da9f0` (`+0x500` minus 0x5b).
+
+### 21.8 Mission stall map (2026-10-15)
+
+Source: Team B `results/mission_sweep_49_20261013_posteefbbd9/*_stdout.txt`, the line
+`script thread '<name>' (id 1) still suspended at [string "<file>"]:<line> (in <function>)`, read together with
+the Lua in `scratchpad/lua_dumps/<mission>.lua`. 49 missions: 14 finished cleanly (dlc1_mm_01..06, m09,
+mm_m16_5, mm_p_01/02/04/05/06/07; none need AI), 3 ended with an error that already
+carries an OPEN citation (m06 navmesh dispatcher, m10 and m16 checkpoint vehicle), and **32 stall at a wait
+with no OPEN citation** (the task text said about 31; m21 has two suspended threads and is counted once).
+Every wait below is a plain `thread_yield()` polling loop; the number is the loop's yield line from the sweep
+log. "Verified" = the setter of the polled flag was read in the Lua; "site only" = only the loop was read.
+
+| Cluster | Mission : Lua line (function) | Polled condition | Engine behaviour that must happen |
+|---|---|---|---|
+| K1 kill / destroy completion (11) | m08:988 (kill_snipers) | `M08_status.targets_left > 0`; decremented in `m08_sniper_died_cb` and the chopper-destroyed callback | each target's death fires its `on_death` / `on_vehicle_destroyed` thread (Lua spec 17453 section A/B) |
+| | m13:3546 (wait_for_waves_to_complete_state) | `wave.state <= state`; state 5 set when the wave's members are dead | a wave's members die; spawned wave members engage (21.9) |
+| | m15:728 (run) | wave threads `M15_waves.lobby_stag/lobby_decker.thread ~= INVALID` | same, wave thread ends when its group is dead |
+| | sh02:968 (run) | `sh02_guys_killed > 0`; decremented in `sh02_enemy_killed_cb` (on_death) | every Morningstar NPC dies |
+| | dlc2_m03:2167 (process_transmitter_sequence) | `num_shields_destroyed < num_shields` | destructible shield objects take damage and fire their destroyed hook |
+| | m23:2508 (kill_cyrus) | `cyrus_vtol_destroyed` (hook) or `escape_timer_expired` | the VTOL vehicle dies (vehicle damage runtime); or the escape timer elapses |
+| | m18:1593 (cargo_plane_open_cockpit) | `cabin_door_destroyed`, set in the damage handler of the door mover | a mover's health reaches 0 (`on_mover_destroyed`) |
+| | m19:1053 (do_containers_checkpoints) | `m19_get_num_destroyed_containers() < size` | container objects destroyed by player damage |
+| | m20:971 (objective_crash_peds) | `rc_car_peds_hit` counter, then a threshold | RC car collision with a ped fires the damage hook |
+| | m11:1385 (distract_stag) | `num_bases_destroyed < goal` (site read) | base objects destroyed |
+| | sh04:773 (wait_for_slots) | `SH04_slot_obj` set in `sh04_slot_died` once `SH04_destroyed_slots >= SH04_TOTAL_DAMAGE` | slot objects die; first death also flips `SH04_GO_HOSTILE` and starts the attack trigger |
+| K2 scripted NPC completion (5) | m01:1392 (kill_lobby2_guards) | `M01_josh_grandstanded`, set at line 5515 right after `action_play(...)` of the homie, which follows `ai_do_scripted_move(gat, "grandstand_nav")` (line 1398) | scripted move reaches its nav, then the action finishes (22.11) |
+| | sh03:1683 (kinzie_hack_tower) | `get_dist(KINZIE, tower) < 2.0` after `ai_do_scripted_move(KINZIE, tower, true, false)` | scripted move ends within 2.0 m of the nav point (22.11) |
+| | m24:980 (hack_terminal) | `homie_death_thread_handle ~= INVALID` (thread ends when the homie's scripted death scene finishes) | scripted-death thread completes; needs action/anim finish (22.11) |
+| | sh01:578 (run) | `SH01_HACK_PROGRESS < 600`; the hack thread increments it once per yield and resets it when `human_is_downed(homie)` | the helper thread must run, and the homie must not read as downed |
+| | dlc2_m02:1402 (handle_machine) | `explosion_timer_complete` (set at line 2552) | a timer thread elapses; the homie "safe" check is `get_dist(nav, player) < 10` |
+| K3 player grab / shield (2) | m05:1209 (get_info) | `character_has_specific_human_shield(player, target)` stays true until released | shield grab (21.4 human shield) and throw/release clears the shield state |
+| | m07:1630 (zimos_part_one_run) | `club_owner_grabbed`, set after `m07_cleanup_player_and_victim_for_interrogation` | the grab action completes on the owner NPC |
+| K4 vehicle entry / drive goal (4) | dlc3_m02:3831 (get_in_truck) | `character_is_in_vehicle(player, truck) == false` | player seated in the truck (22.7, spec-player-runtime 7) |
+| | m17:1224 (hijack_heli) | `M17_has_reached_goal` set by a trigger callback (lines 2374, 2383) | the player (in the heli) enters the goal volume |
+| | m04:572 (go_to_mechanic) | tutorial store-reach state (site only) | player arrives at the mechanic |
+| | mm_p_03:479 (go_to_flashpoint) | flashpoint counter (site only) | player reaches flashpoint volumes |
+| K5 trigger reach (3) | m12:1290 (goto_a_trigger) | `M12_trigger_reached` (line 2124) | player enters the trigger volume |
+| | m21:1847 (run_goto_angel) | `player_reached_angel`; second thread `m21_player_reached_angel` waits at 3093 | player enters the Angel trigger; then the talk conversation completes |
+| | m22:1593 (process_battle_zone_sequence) | `Current_bz.zone == NO_ZONE` | player enters a battle-zone volume |
+| K6 conversation / camera (4) | m14:2390 (convo_play) | `m14_convo_is_playing(convo)` | conversation reaches its end |
+| | dlc2_m01:1916 (armory_take1_wrap) | `dlc2_m01_helper_dialog_check_done(...)` | conversation reaches its end |
+| | dlc3_m01:1118 (camera_look_through, game_lib) | site only | camera move reaches its end |
+| | dlc3_m03:114 (delay, system_lib) | `delay(n)` inside the start function (site only) | game-time clock advances |
+| K7 UI / store / door (3) | m03:1279 (weapon_upgrade_tutorial) | `M03_status.item_purchased` set by the `on_purchase` callback | store purchase event |
+| | mm_m1_5:100 (run) | `customization_screen_is_ready() == false` | customization screen reports ready |
+| | m02:1502 (go_to_cargo_hold) | `door_to_cargo_bay_opened`, set in the `on_door_opened` callback | the mover opens (player interaction or scripted open) |
+
+**Cluster counts:** K1 11, K4 4, K6 4, K2 5, K5 3, K7 3, K3 2 = 32 (sum 11+5+2+4+3+4+3).
+
+**What to implement, by cluster (Team B):**
+
+| Cluster | Spec to implement | Status |
+|---|---|---|
+| K1 | 21.9 (engagement, damage, death, hook order), Lua spec 17453 (death hooks), `spec-weapons-runtime.md`, `spec-vehicle-damage-runtime.md` | engine side FINAL for the hook firing; **engagement of an unprovoked group member is PARTIAL (21.2, 21.9)**. Nothing in a headless sweep shoots, so K1 needs a harness stand-in as well (21.9 recipe, CHOSEN) |
+| K2 | 21.5 (staged order, ticket, finish), 22.11 (move-scripted completion, follower rules) | ticket/finish FINAL; arrival radius of mode 24 OPEN, stand-in CHOSEN |
+| K3 | 21.4 human shield + Lua spec 13.14 | gates FINAL; the grab action driver is player input |
+| K4 | 22.7 (enter/exit), `spec-player-runtime.md` 7-8; Team B's own checkpoint-vehicle work | FINAL for NPC enter; a player entering needs the harness (like the existing `auto-objective`) |
+| K5 | none new; extend the existing `--auto-objective` teleport to battle-zone and Angel triggers (it already handles named triggers, see m07 log) | harness only |
+| K6 | Lua spec 2.10 / 8.x conversation natives and the per-conversation length from data | conversation-length table; no AI |
+| K7 | store/customization specs (`spec-store-runtime.md`, `spec-cellphone-menu-runtime.md`) | not AI |
+
+Honest scope note: about 60 percent of the stalls (K1, K3, K4, K5 and the player half of K2) wait for the
+**player** to act (shoot, grab, drive, walk into a volume). No AI behaviour makes those complete; the harness
+must supply that input. The engine behaviour that is still needed from the AI side is 21.9 (hostiles shoot
+at the player and die when damaged, with correct hook timing) and 22.11 (scripted NPC orders finish).
+
+### 21.9 How a mission-spawned enemy engages and dies — PARTIAL (structure FINAL, first-sight trigger OPEN)
+
+What is settled, with the sections that hold it:
+
+1. **Spawn.** `group_create` instantiates the group members at their authored positions with the authored
+   behaviour and attitude; this is specified on the Lua side (`spec-lua-api-behaviour.md`, group natives).
+   A member is a human with the §21.1 decision loop running from its first update.
+2. **Target.** Per §21.2 no code converts a sighting into the target handle. The target handle is written by:
+   the damage and notice path (`0x004dedb0` through the kind-3 default case), mode events that carry a
+   source, the follower copy (2000 ms), the human-shield grab, the grenade throw, scripted orders, and the
+   spawner routine at `0x006745ea`, which (case 3 of its switch, loop at `0x006745a8..0x006745e2`) takes the
+   **nearer of two player characters** (distance routine `0x0046c9d0` against `+0x40` position, strictly
+   smaller wins, start value constant `0x12a2ea0`) and calls `0x009659f0(human, nearer)`. That routine's
+   other cases build the human first (`0x00a33b80`, request class `0x2a` into pool `0x2442750`, `+0xa8` set,
+   flag `+0xad` bit 3, then `0x4dff80`..`0x4e0870` ability enables, `0x946020`), so the whole routine is the
+   **ambient attacker spawner** (case index 0..3 chosen by the caller) rather than the mission `group_create`
+   path (HIGH; the mission path was not matched to it).
+3. **Damage and death.** A hit on a human goes through the damage path to kind-3 default handling, which
+   sets awareness and the target (so a shot enemy always turns on its shooter); health reaching zero marks
+   the human dead; the death hook thread is queued at the next per-human update and runs after older
+   threads in table order (Lua spec 17453 A.2, A.3, B).
+4. **Kill-all completion.** There is no engine "group dead" event. Every kill-all wait in 21.8 is a Lua
+   counter or flag decremented inside an `on_death` callback (m08, sh02), a per-wave thread that ends
+   when its members are gone (m13, m15), or a polled helper. Port rule: implement the per-member hook
+   thread and nothing group-level.
+
+**Port recipe for a headless run (CHOSEN, not engine behaviour, must be labelled as a stand-in in the port):**
+for a hostile group member whose list-0 perception holds the player and whose target is empty, set the target
+to the nearer player with the §21.2 nearer-of-two rule once per 2000 ms (the same cadence as the follower
+copy); then let the §21.1 loop choose shoot/advance/cover. To end a kill-all wait without input, apply the
+kill through the damage path (not by deleting the object), so the hook ordering of Lua spec 17453 B still
+holds: the member dies on the next per-human update and the callback thread runs after the yield of the
+calling thread.
+
+Test vectors (derived from the Lua, FINAL for the counters, CHOSEN for the damage source):
+- TV-K1a m08: set `targets_left` = N; kill one sniper; after the calling thread yields, one callback thread
+  runs and the value is N-1; the wait at m08.lua:988 returns when it reaches 0.
+- TV-K1b sh02: `sh02_guys_killed` decrements once per `sh02_enemy_killed_cb`; the wait at sh02.lua:968 exits at 0.
+- TV-K1c ordering: `character_kill(x)` then `thread_yield()` in the same thread: x's callback runs only
+  after that yield and before the caller resumes the next frame only if it was created earlier in the table
+  (A.3(c)).
+
+OPEN: the first-sight target writer (live hook on `0x009659f0`, §21.7 item 1); ~~the mission-group spawn path
+versus `0x006745ea`~~.
+
+**[2026-10-15 closed: mission group spawn path versus `0x006745ea` — FINAL for "no target, no order".
+Static, instruction stream only.]**
+- `group_create_do` (`0x00a4c880`) resolves the group name, resolves the group object through the
+  singleton method `0x005eab60` (singleton `0x02442750`), requires it alive (`0x00853b10`), then calls
+  `0x00677b40(group)` and `0x00a2bb50(group, hidden=0)` (`group_create_hidden_do` differs only in that
+  literal). Creation is once only: both routines test and set group `+0x3a` bit 1 first.
+- `0x00677b40` walks the group's two member lists (npc list head `+0x40`, link `+0x9c`; vehicle list
+  head `+0x48`, link `+0xa0`) and posts one prototype-load request per member (`0x00bbb4a0` for
+  `"group_npc"`, `0x00bbb500` for `"group_veh"`, priority 5). Loading only.
+- `0x00a2bb50` walks the member list (head `+0x3c`, link `+0x88`): member `+0x90` bit 2 = hidden (from
+  the argument); if member bit 0 (created) is clear it calls the member's create slot (`+0x54`), and if the
+  has-entity slot (`+0x68`) still says no it queues an asynchronous poll (`0x00894330`) with ready test
+  `0x00a2ba50`, finish `0x00a2bae0` and a **5000 ms** (`0x1388`) limit; member bit 1 = pending, cleared by
+  the finish callback.
+- The creating member class (vtable `0x0117ec5c`, slot `+0x54` = `0x00a2e0b0`) looks the prototype up from
+  member `+0xac`, builds a creation request at the authored position `member+0x40` / orientation
+  `member+0x4c` with flags `0x60021` (`0x00b84ec0`, `0x008fbbc0`), posts event `0x1f` to the singleton
+  (`0x00456e30`; `0x1e` when the prototype is missing), copies the member pair `+0xb0/+0xb4` into the new
+  object's `+0x1ac/+0x1b8` (only when the class descriptor byte `+9` has bit `0x80`; no AI code reads
+  those two fields), sets the hidden bit through `0x008ccb90` (a generic object visibility setter) and
+  marks the member created. The human then exists as a normal object whose §21.1 loop runs from its first
+  update.
+- **None of these routines writes the target handle, any ticket or order block (`+0x450`/`+0x4a8`), or
+  calls `0x009659f0`.** The function `0x006745ea` belongs to the ambient attacker spawner only.
+- **Port rule (FINAL for the engine, the nearer-of-two stand-in stays CHOSEN):** a mission-spawned enemy
+  starts with an empty target and acquires the player only through perception, damage, events or scripted
+  orders (21.2). Do not give group members an initial attack target at `group_create`. The group is
+  usable for script waits after `group_create_check_done` (`0x00a4c810`) reports every member created;
+  allow up to 5000 ms per member before treating a creation as finished-with-failure (the finish callback
+  just clears the pending bit; the member stays without an entity).
+- Residual: the vtable `0x0117ec5c` class was identified by its create slot, not by a typed name; the
+  vtable `0x0117ea54` class has a no-op create slot and a has-entity test on `+0xb0`, so members of that
+  class are filled by another path (not traced).
+
+### 21.10 Open items added by the stall map
+
+1. Which mode owns action 24 `move scripted`, and its arrival radius (22.11). **[2026-10-15 closed: mode 5
+   `Combat Movement`; its tick `0x0053fe30` dispatches action 24 to `0x0053e600`; arrival = squared
+   distance from the human to the target object's local box below 2.0 (about 1.414 m); see 22.11.]**
+2. Whether the sh01 hack counter (`SH01_HACK_PROGRESS`) stalls because its thread is blocked behind an
+   `action_play` that never finishes (K2); the two lines at sh01.lua:1535-1545 show a plain per-yield counter
+   needing 600 passes of the scheduler (1500 for the full hack), so the stall is upstream.
+3. Sites read only (not verified against the polled setter): m04, mm_p_03, dlc3_m01, dlc3_m03, m11.
+4. Downed NPC types and exits: closed, see 21.10.1.
+
+#### 21.10.1 Downed NPCs (Dbno): types, how the state ends, test vectors — FINAL
+
+Static reading, 2026-10-16. Labels: FINAL = read in the disassembly; HIGH = one link inferred; GUESS = meaning not
+proven. Downed = stance word `+0xcc8` == 6 (`0x009715d0`); dead = 5. The AI mode `Dbno` (10, 21.4) only waits and
+leaves to `Idle` the first tick the stance is not 6; everything below is owned by the stance layer. This section
+supersedes the type-0 expiry claim and the misplaced 2026-10-16 type 1-4 note.
+
+**Three routines that end the state (FINAL).**
+- `0x00971d10` (human in ESI): unlink the partner pair `+0x18f0/+0x18f4` (restore the partner's saved weapon slot
+  `+0x1904` through `0x00600720` when its `+0x1905` bit 6 is set), owner side `0x0094ce30(0)`, `0x00946470(0)`,
+  timer `+0x19c0` = 0, release the marker `+0x18fc` (`0x008f7870`, `+0x1905` bit 4), stop the QTE HUD handle
+  `0x01309fa4`, reset the type `+0x18e0` (`0x00942920`). It does not change the stance.
+- Kill `0x009a7610(human, send_if_remote, no_send)`: network message 0x41 (unless suppressed), then if downed:
+  `+0x1c98` bit 5 cleared, HP `+0x1cb8` = 0, partner unlinked, `+0x1900`/`+0x15f8` released, marker released,
+  `0x00973700` (`0x00971d10` + stance 0), then the death finalizer `0x00952760(human, 1)` -> stance 5.
+- Get-up `0x009a7c90(human, helper, relocate, no_send)`: message 0x41 (unless suppressed), release handles and
+  marker, owner: `0x00973700` (end, stance 0 through `0x00942110(human, 0, 0, -1.0)`), optional relocation, then the
+  revive body `0x009a78d0`: clear `+0xe8` bit 0, heal `0x0094cfc0(int(+0x1cac) x pct)` with pct =
+  `Human_revive_percent_hit_points` 1.0 (`0x0262d1c4`) when team byte `+0x1ca8` is 0, else
+  `Enemy_revive_percent_hit_points` 0.25 (`0x0262d1c0`); put out fire if burning (`0x0097cf40`); request `Idle`
+  (`0x004e8070`).
+
+**Entry (FINAL).** The HP setter `0x0094cfc0` (this = human, one float) clamps to [0, `int(+0x1cac)`]; the owner
+writes `+0x1cb8`; a pending hit (`+0x1584` != 0) goes to the damage event `0x0096f5e0`, whose last step is the
+downed damage hook `0x00971ad0`; then, if HP <= 0, `0x00973d40` tries to down the human; if it refuses and the human
+is not already down or dead (`0x0096f540`), the normal death `0x0096f8c0` runs. `0x00973d40` refuses when the stance
+is 5 or 6 or `+0xe3` bit 0 is set, or the selector returns -1, or `0x0052a2e0` holds (it then calls `0x0052aa90`),
+or (owner only) the type predicate fails; else `0x0094fa00`, enter hook (false = refuse), stance 6 through
+`0x00942110(human, 6, 0, -1.0)`, `+0x18e0` = type; owner: `0x004de1f0`, clear `0x00502e40` (`+0x510`),
+player-class -> `0x007f0140(1)`, follower -> `0x00bdadf0`. Script entry `human_enter_downed` (`0x00a4ea10` ->
+`0x00973ee0`) runs the same `0x00973d40`, then overwrites the deadline with its duration when > 0.
+
+**Selector `0x009735d0`, first match wins (FINAL; mode-gate meanings HIGH).** -1 if `+0x1c9c` bit 17. 0 if
+`0x0097e280` (a non-player follower) is non-null. 0 if player-class (kind bit 0x21) AND a co-op partner exists
+(`0x009df3d0`) AND (owned or the handle matches `0x024d85b8`) AND `0x006a3910()` != 14 AND `0x006d2910()` is not 7
+or 18 (`0x00614d50`) AND `0x00682ad0()` is false. 2 if the character record (`+0xf0` -> `+4`) is
+`npc_Killbane_wrestling` (`0x0149f928`). 3 if it is `npc_Killbane_scifi` (`0x0149f92c`). 4 if avatar
+(`0x005e6ce0`: player-class in stance 16, or 12 with `+0x15c5` bit 2, or record `npc_Matt_Miller_Avatar`
+`0x0149faa4`) and not player-class. 1 if brute (`0x0052a230`) AND gang member (`0x00943190`) AND not `0x009422d0`
+AND not `+0x1c9c` bit 22. Else -1 = no downed state (plain death). A single-player main player has no partner, so
+it never goes down.
+
+**Hook columns (FINAL).** +8 can-use(downed, actor); +0xc use(downed, actor); +0x10 damage(downed, attacker,
+damage); +0x14 tick. The tick wrapper `0x00971a10` runs only for the owner, stance 6 and a valid type. Use comes
+from the interact-prompt action `0x009da510` (nearest downed within 3 m, radius squared 9, via `0x00971bb0` + the
++8 test) or the network receiver `0x008b5a50`; a non-owner forwards the request (1000 ms wait, `+0x1aea`). Prompt
+text (`0x005b7e90`): type 0 `HUD_DOWNED_REVIVE` (+ `HUD_HOLD_BUTTON` unless instant), 1 `HUD_FINISH_BRUTE`,
+2 `HUD_JUMP_ON_KILLBANE`, 3 `HUD_ATTACK_KILLBANE` (only while flag `0x0149f924` is set), 4 `HUD_ATTACK_MATT`.
+
+| Type | Who (predicate) | Enter: timer | Expiry (deadline `+0x18e8` passed, owner) |
+|---|---|---|---|
+| 0 | followers (homies); co-op players whose partner is standing and within 1200 m (`0x00971fb0`, squared 1.44e6 at `0x02625310`); not stance 14/18 | 30000 ms x difficulty, 15000 in mode 5; none for m24 followers (21.4) | **death** `0x009a7610` (bleed-out) |
+| 1 | gang brutes, not burning, overkill within `Bleed_Out_Hit_Points` (below) | `HD_brute_down_time_ms` 7000 (`0x026252c0`); if HP > 0 at entry: anim `0x33b` length + 1500 ms | **gets up**: `0x009a7c90(h, 0, 0, 1)`, heal 0.25 or 1.0 by team |
+| 2 | M21 Murderbrawl Killbane | `HD_killbane_down_time_ms` 10000 (`0x026252b8`) | host: `m21_killbane_damaged` (value 6) to object `M21_Killbane` (`0x005e53f0`); then gets up healed |
+| 3 | m24 Mars Killbane | `HD_mars_killbane_down_time_ms` 8000 (`0x026252b4`) | plays `m24 getup`; then HP +30 points of percent; Lua `m24_killbane_on_undowned`; stands |
+| 4 | Mission 16 Matt Miller avatar | `HD_avatar_down_time_ms` 10000 (`0x026252b0`); none when the stun count is 5 | `0x005e59f0(-1, 0, 0, 1)`: next cheat round in 5000 ms if fewer than 4 stuns; stands, no heal |
+
+**Type 0 detail (FINAL).** Can-use `0x00971650`: not already being revived (`+0x1905` bit 0); a player actor always
+may revive a follower; otherwise the actor must be player-class or pass `0x0052ede0` (descriptor `+0x48` bit 4)
+and the team relation `0x009b7100(actor +0x1ca8, downed +0x1ca8)` must be below 4. Use `0x00973a90`: instant
+get-up `0x009a7c90(downed, actor, 0, 1)` when the actor's `0x009aa130` object has `+0x1c98` bit 22, when
+`0x009b5690(downed)`, or when either side is an avatar. Otherwise a paired animation (`DBNO revive`;
+`Brute DBNO revive` for a brute; `M24 Revive Fail` when the no-timer bit 3 is set) whose state `0x1d54` is scaled
+to last `HD_revive_hold_time_sec` 2.5 s (`0x026252c4`, x 1.0 at `0x01309fa0`); the deadline pauses (remaining time
+saved in `+0x18f8`, deadline = -1), bit 0 set, both sides cross-linked. Tick `0x009723f0`, in order: (1) Whored
+mode (`0x006e44f0`) and a player-class downed that fails `0x006e8c40` -> immediate death. (2) Revive running:
+helper let go (bit 1, not bit 2) -> resume the saved timer (`0x00971ea0`); the downed's `0x1d54` ended -> get-up
+`0x009a7c90(downed, helper, 0, 1)` = revived (heal per team); helper no longer in `0x1d54` -> set bit 1 (except
+no-timer), else bit 2. (3) Deadline passed (no-timer bit clear) OR, for a player-class downed, every player in the
+list is down or dead -> owner: death `0x009a7610(h, 0, 0)`; non-owner: bit 7.
+
+**Type 1 detail (FINAL).** Predicate `0x00972790` is false when: the attacker (`+0x1570`) is a live brute and
+`+0x1568` bit 7 is set; owner and `+0x1588` < -threshold (threshold `0x00972740` = instance override word
+`+0x1da8`->`+0xb8` when set, else `Bleed_Out_Hit_Points`, record `+0x0C`); burning (`0x0097cdd0`, `+0xe8` bit 8);
+`0x009b9180`; Whored mode; or `0x0095d720` with a vehicle passing `0x0052a590`. Enter `0x009728c0`: buffer word
+`+0x18e4` = `int(+0x1588)` + threshold; marker `0x008f96f0(h, 7, 0x13, 1, 100.0)`; state `0x2a5`. Damage hook
+`0x00972bf0` (owner, HP <= 0, timer armed): buffer -= `int(damage)`; buffer < 0 OR damage == -1.0 (the lethal
+constant) -> death `0x00952760(h, 0)` + ragdoll; else remaining = min(remaining + 50 x damage, 7000)
+(`HD_brute_damage_to_timer_ms` 50, `0x026252bc`) and a hit reaction `0x2a6` when state `0x1d5c` > 0.7. Can-use
+`0x009716e0`: not ragdolled, neither side in `0x009634f0`, timer armed, partner empty or the actor. Use (finisher)
+`0x00972a70`: actor must be player-class; animation alternates by toggle `0x02625368`: 0 = `Player finish dbno
+brute`, 1 = `BRUTE_Execute_Head` (owner player is handed `Pistol-Gang` for it); success sets the brute's deadline
+to -1. Tick `0x00972d30`: burning -> death; ragdolled -> re-arm 7000 and replay `0x33b`; timer armed -> drive the
+get-up state `0x1d60` (HIGH: starts when remaining seconds <= the `0x33b` length; rate 0.3 or 1.0) and at expiry
+get-up `0x009a7c90(h, 0, 0, 1)`; deadline -1 (finisher) -> death `0x00952760(h, 0)` when the brute's `0x1d54` ends
+or the player's `0x1d54` passes the event at `0x0153be20`.
+
+**Types 2-4 use (FINAL).** Type 2 `0x00973090`: get-up `0x009a7c90(killbane, player, 0, 1)`, end, then
+`0x005e4420` -> `0x009a87d0(player, killbane, 0)` (HIGH: start of the Killbane ride). Type 3 `0x009717d0`
+(player-class actor, attack flag `0x0149f924` set, `0x0095d8c0`): beatdown `m24 beatdown 1/2/3` chosen by
+clamp(floor((1 - HP/maxHP) x 3), 0, 2); local player gets the `QTE` HUD; deadline -1; flag cleared. Its tick while
+the beatdown runs: HP% <= 12.001 -> at progress 0.75 the host calls Lua `m24_killbane_on_death` and the owner kills
+him (`0x00952760`); otherwise at progress 1.0 `m24_killbane_on_undowned` and he stands with no heal. Type 3 expiry
+heal (only while the flag is still set): HP = floor(HP% + 30) / 100 x maxHP. Type 4 `0x009734b0`: end, stance 0,
+then `0x005e6d40`: cheats reset `0x005e5e40` and sync action `Mission16_StunQTE` (`0x0060e740`, callback
+`0x005e5960`); the stun count `0x012ec720` is raised by `0x005e76a0` (limit 4). Type 4 starts its get-up 2.8 s
+before expiry. `0x004bf810` = name -> action id lookup; `0x00a275e0` = play that action on the human (HIGH).
+
+**How a downed state ends, ordered (FINAL unless marked).**
+1. Timer expiry: per the table. Only type 0 dies; 1-4 stand up.
+2. Another character uses the downed human (3 m prompt): type 0 revive (2.5 s hold, or instant); type 1 finisher
+   (death); type 2 get-up + ride; type 3 beatdown (death at HP <= 12%, else stand); type 4 stun QTE (stand). NPC
+   buddies never revive: the only callers of the use wrapper `0x00971b10` are the player prompt and the network
+   receiver, and event 117 is ignored (HIGH).
+3. Damage while downed: the HP setter cannot kill (stance 6 counts as down in `0x0096f540`) and the sink's kill
+   test `0x0096f990` excludes `+0x1c98` bit 5. So types 0, 2, 3, 4 ignore further damage; type 1 dies when its buffer
+   runs out, on the -1.0 lethal hit, or when burning. There is no NPC finisher on downed humans (HIGH).
+4. Co-op: all players down -> each dies at its next tick; partner more than 1200 m away (`0x007049c0`, squared
+   1.44e6) -> the downed local player dies; Whored mode without a revivable partner -> immediate death.
+5. Scripts: `player_revive` (`0x00a599b0`) and `npc_revive` (`0x00a55680`) -> `0x009a7c90(h, 0, 1, 0)` (stand,
+   relocated, healed); `character_kill` (`0x00a41a60`) with arg 4 = false -> `0x009a7610(h, 1, 0)` (death); with the
+   default arg 4 its -1.0 damage kills only a type-1 brute (HIGH); `human_enter_downed` forces entry.
+6. Engine: cutscene start `0x00726570`, teleport `0x009e69d0` and restart/respawn `0x006d3780`/`0x006d4a10` call
+   `0x009a7c90` (stand); `0x006d89a0`, `0x008b7a40`, `0x008b8980`, `0x009e2bc0` call `0x009a7610` on a downed local
+   player (death; HIGH: respawn/mission-state handlers). Replicas replay kill/get-up from message 0x41
+   (`0x009a81c0`).
+
+**Port rule (FINAL).** Down instead of dying only when the selector picks a type and the owner's predicate passes.
+Type 0 counts down and kills at the deadline unless a player holds revive for 2.5 s (pause, resume on release).
+Types 1-4 stand up at their deadline (type 1 healed by team pct, type 2/3 as above, type 4 no heal). Ignore damage on
+downed types 0/2/3/4; apply the brute buffer and timer extension for type 1. Never let NPCs revive.
+
+**Test vectors.**
+1. Follower, team 0, `+0x1cac` 200, scale 1.0, HP -> 0 at t = 0: type 0, stance 6, deadline 30000. No help: at
+   t = 30000 stance 5, HP 0 (FINAL).
+2. Same, player uses it at t = 10000: saved remaining 20000, deadline -1; revive state ends at t = 12500: stance 0,
+   HP 200, mode `Idle` (FINAL).
+3. Same, player releases at t = 11000: bit 1 -> timer resumes with 20000 left -> death at t = 31000 if not
+   restarted (HIGH: resume re-arms from `+0x18f8`).
+4. Gang brute, `Bleed_Out_Hit_Points` 300, killing hit leaves `+0x1588` = -50: type 1, buffer 250, deadline 7000.
+   Hit for 100 at t = 1000: buffer 150, remaining min(6000 + 5000, 7000) = 7000. Hit for 200: buffer -50 -> dies
+   (FINAL).
+5. Same brute, killing hit leaves -400: -400 < -300 -> no downed state, plain death (FINAL).
+6. Brute left alone, `+0x1cac` 400, enemy team: at t = 7000 stands, HP 100 (FINAL).
+7. Two finishers in a row on two brutes: first plays `Player finish dbno brute`, second `BRUTE_Execute_Head` with
+   `Pistol-Gang` handed over; both brutes end in stance 5 (FINAL).
+8. Mars Killbane, maxHP 1000, HP 300 at entry, flag set, no attack: at t = 8000 `m24 getup`; after it HP = 600,
+   `m24_killbane_on_undowned` (FINAL). Beatdown at HP 100: `m24 beatdown 3`, at progress 0.75
+   `m24_killbane_on_death`, stance 5 (FINAL).
+9. Matt avatar, stun count 1: deadline 10000; at expiry `0x012ec724` = 1, cheat deadline now + 5000, stance 0.
+   Stun count 5 at entry: no deadline (FINAL).
+10. Co-op: both players downed -> both die on their next ticks (FINAL).
+
+Residual: names of the selector mode gates (`0x006a3910` == 14, `0x006d2910` in {7, 18}, `0x00682ad0`) and of
+`0x0095d720`/`0x009b9180`; what the m24 follower's `M24 Revive Fail` knock-down (`0x009a48e0` at progress 0.8)
+looks like; whether a `0x0052ede0`-class NPC ever reaches the use wrapper (no static caller found).
+
+## 22. Mission-driving AI (2026-10-15)
+
+Scope: what a mission script can make an AI vehicle or an NPC do with a vehicle, and what the engine
+does about it. Static analysis only (capstone listings of the shipped exe; no Ghidra, no live game).
+Builds on §17-§20 (lane follower, §20.6.3 speed controller, §20.6.7 follow law `0x00b51950`, junction
+yield `0x00b5e6c0`, lane change `0x00b555d0`), §18.7 (directive modes) and the Lua-side facts in
+`spec-lua-api-behaviour.md` (§9.4 `vehicle_chase`, §9.10a pathfind completion, §21.11/§24.9a exit, the
+"Engine callback dispatch: vehicle entry/exit" section) and `spec-player-runtime.md` §7-§8 (the seat
+state machine). Addresses are plain hex. Clean-room check: no decompiler tokens.
+
+Status legend: FINAL = read from the instruction stream and consistent; HIGH = read, one link inferred;
+PARTIAL = structure and constants read, a role is a hypothesis; OPEN = not decoded.
+
+| # | Item | Status |
+|---|---|---|
+| 1a | Chase (`vehicle_chase`): directive, flags, speed law, steering, hand-off, give-up | FINAL for the speed law, the planner cadence and the flags; PARTIAL for the flank manoeuvre and sub-states |
+| 1b | Follow | No native exists (see 22.4); chase with a vehicle target is the follow behaviour. FINAL |
+| 1c | Drive-to: `vehicle_pathfind_to_do` (road-graph route) and `vehicle_pathfind_navmesh_do` (waypoint directive) | FINAL (arrival radii, flags, completion) |
+| 2 | NPC enter/exit: seat-record fields, timeline, predicate reads, group straggler rule | FINAL for the fields and writers; PARTIAL for animation-driven durations (data) |
+| 3 | Speed and aggression parameters, off-road, stuck | FINAL for constants listed; stuck recovery PARTIAL |
+| 4 | Helicopter fly-to basics | PARTIAL |
+| 5 | Test vectors | 22.9 |
+
+### 22.1 What the natives do to the vehicle directive
+
+All of them write the **directive** at vehicle `+0xc68` (mode byte at directive `+0`, sub-state at `+1`;
+§18.7.1). The ambient lane follower is mode 8 (§20.6); a script directive replaces the mode, so the
+ambient combiner `0x00b57ab0` (which runs only for mode 8) stops driving the car and the mode's own tick
+(table `0x01186da0`, 20 bytes per mode, +4 = tick) takes over. Changing the mode runs the old mode's exit
+slot, then the new mode's enter slot (`0x00b24e40`). Traffic lights are obeyed only in modes 0, 7, 8, 15.
+
+| Native | Directive written | Tick |
+|---|---|---|
+| `vehicle_chase` (`0x00a65ac0`) | mode 4, sub-state `0x0e` | `0x00b4d8f0` |
+| `vehicle_pathfind_to_do` (`0x00a680c0`, helper `0x00b2b140`) | mode 8 with a scripted route (`0x00b57680`) plus a move-to request at directive `+0x18` = 1 | lane follower, plus `0x00b2e720` for completion |
+| `vehicle_pathfind_navmesh_do` (helper `0x00b24fa0` then `0x00b4f150`) | mode 7 | `0x00b4f900` |
+| `vehicle_speed_override` (`0x00a63630`) | directive `+0x9c` = speed (m/s, capped at 1000.0), `+0xa` bit `0x10` = 0 | read by the speed model |
+| `vehicle_stop_do`, `vehicle_disable_chase`, `vehicle_set_no_chase` | see `spec-lua-api-behaviour.md` | |
+
+Chase ends by returning to ambient: `0x00b63ac0(directive, 0, 0, 0)` (mode 6, which rejoins the lane
+graph, or clears the directive when `never_go_ambient` or no road graph; §18.7.1).
+
+### 22.2 Chase (mode 4)
+
+**Entry.** `vehicle_chase(vehicle, target = "#PLAYER1#", a = true, b = false, c = true, d = false)`:
+1. If the vehicle is already in mode 4 or 3 (`0x00ad31a0`), only the target position is pushed
+   (`0x00b3c260`, opcode `0x42`). Otherwise a block is built by `0x00b47110(block, targetHandle,
+   not b)` and committed by `0x00b4d260(directive, block)`.
+2. Block layout: `+0` target handle (8 bytes), `+8` byte = 3 when `b` is true else 0, `+0xc` = 1 when `b`
+   is false else 0, `+0x10` flags dword, `+0x14` word 0. Initial flags `0x12`.
+3. Flag bits written by the native: bit 0 = `a`, bit 3 (`0x08`) = `c`, bit 7 (`0x80`) = `d`. Bits `0x100`
+   and `0x200` are never set by the native (internal callers only).
+4. The commit refuses (leaves the directive untouched) when the driver is a player (`0x00853b30` type
+   `0x21`) or the driver's `+0x16c0` bit `0x4000000` is set. Otherwise the new sub-state is `0x0e`, or
+   `0x0f` when flag `0x100` is set and the driver's crew count (`0x0097e260`) is at least 2.
+5. It copies the target to directive `+0x58` (vehicle `+0xcc0`), and sets the directive bits:
+   - directive `+0x1a0` bit 0 ("occupants may attack from the car") = `a`, but forced to 0 for a
+     tank-type vehicle (`0x00ad3140`, class value 14) unless flag `0x200`, forced to 0 when vehicle
+     `+0xc6c` bit `0x20` is set, and forced to 0 when the target is a player-class human whose own
+     vehicle is a tank-type (`0x00ad3290`/`0x009b5690` tests). The only readers found are the
+     passenger-shooting tick near `0x00b6d265`/`0x00b6de9d`, which reset their timers while it is 0.
+     Name it "drive-by allowed". HIGH.
+   - `+0x1a0` bit 5 (`0x20`) = flag bit 3 (`c`), `+0x1a1` bit 6 = flag `0x200`, `+0x1a8` = block `+8`.
+   - `+0x1a0` bit 1 = the driver-object test `0x009431c0` equals 1, or the target's vehicle is a
+     tank-type; its readers were not located.
+6. **Siren/horn effect (arg `d`).** When flag bit 7 is clear and the driver's team (`+0x1ca8`) is above 4
+   (police 5/6, civilians 7), the commit calls `0x00ad57a0(vehicle, 1)`, which turns on the vehicle siren
+   (`0x00559b40`: sets vehicle `+0x163d` bit 0 and starts audio event `0x762b3179`; `+0x163c` bit `0x10`
+   disables it). Leaving chase to mode 3 calls `0x00559b40(vehicle, 0)`. HIGH (the effect is a looped
+   audio event; its asset name was not looked up).
+7. Two timers: flag bit 1 is set in the initial flags `0x12`, so `+0x4e8` is armed from the random range
+   returned by `0x00b47600` (range not decoded); flag `0x40` is clear, so `+0x4ec` is armed to 0 (the
+   10000-12000 ms and 2000 ms alternatives apply to internal callers with flags `0x40`/`0x04`).
+   **[2026-10-15 closed: FINAL. Directive `+0x4e8`/`+0x4ec` are vehicle `+0x1150`/`+0x1154`, the two
+   event-check timers below. `0x00b47600(vehicle; out lo, out hi)` picks a class c and writes lo/hi in ms;
+   the timer is then set to now + uniform integer in [lo, hi] inclusive (`0x00d9e180`). c = 5 when vehicle
+   `+0xc72` bit `0x20` is set; else c = 1 when vehicle `+0x16e0` = 9; else c = the chase class of
+   `0x00b47460`: `+0xe0c` = 1 -> 0; `+0xe0c` = 0 -> byte `+0xe10`; otherwise 0 for a tank-type target test
+   (`0x00ad3290`), else by the driver's team `+0x1ca8` (`0x00b473a0`): teams 1-3 -> low byte of the dword at
+   `0x014a4f70 + (team-1) * 0x4c` (`0x00605220`), teams 5/6 -> 0, team 4, 0 or above 6 -> 3. Ranges:
+   c = 3 -> 9000-10000; c = 4 -> 6000-7000; c = 5 -> 3000-4000; any other c -> 1000 (fixed). The range is
+   only meaningful for c >= 3, because the ram check it delays (`0x00b4a7e0`) refuses c < 3. The same call
+   re-arms the timer in the mode-4 net-read path (`0x00b4b30c`), there with `+0x4ec` = 2000 ms. Port rule:
+   `first_ram_check_ms = c==3 ? rand(9000,10000) : c==4 ? rand(6000,7000) : c==5 ? rand(3000,4000) : 1000`,
+   inclusive bounds.]**
+
+**Per tick `0x00b4d8f0`** (vehicle as `this`; target = handle at `+0xcc0`, resolved to a live object):
+1. No driver (`0x00ab5100`) -> nothing.
+2. Target missing, dead (`0x0096f4f0`) or the target's controller gone -> `0x00b63ac0(.., 0, 0, 0)`
+   (rejoin ambient). The chase therefore **ends when the target dies or despawns**; there is no timer.
+3. `0x00b4aa10` (event checks, below). If it returns false the tick stops.
+4. **Hand-off to the occupants.** If the target is the local player (`0x0091f5e0`) and the driver's
+   current enemy is that player (`0x0097e940`), then: when the session test `0x005f5f80` is true, or the
+   squared distance between the two vehicles (`0x00da1330`, 3-D) is **< 100.0** (10 m; `0x012a2dd8`), the
+   tick calls `0x00a91070(vehicle, 0)` (passenger/turret attack hand-off) and returns without steering.
+   Otherwise it runs the pursuit tick `0x00b4d070(vehicle, target)`. HIGH: what `0x005f5f80` tests (it
+   gates a distance-free hand-off).
+   **[2026-10-15 closed: FINAL. `0x005f5f80` reads the garage/store interaction state `0x014a1ce4` (the
+   store state of `spec-lua-api-behaviour.md`, "store state `0x014a1ce4`") and returns true when it is
+   neither 0 (idle) nor 3 (interaction left to finish). Writers: 4 when the store UI is entered
+   (`0x005fa7bc`, `0x005fa8f6`, `0x005fb40e`), 1 and 2 by the store-location state machine (`0x005fbc32`,
+   `0x005fb702`, `0x005fb8b9`, `0x005fa9ee`), 0 on reset (`0x005faa2c`, `0x005fb8cc`). So while the local
+   player is in a garage/store interaction (states 1, 2, 4) a chaser whose driver is hostile to that player
+   never steers: it hands off to its occupants at any distance. Port rule: `handoff = target_is_local_player
+   && driver_enemy == player && (store_state in {1,2,4} || dist2(vehicles) < 100.0)`.]**
+5. `0x00b4d070`: target model refresh (`0x00b4ceb0`: plan, flank selection, `0x00b4ad30` sub-state step),
+   then by sub-state: `0x0d` = direct steer (`0x00b47490`, no route), `0x0e`/`0x10` = route follow
+   `0x00b2bbc0` when the route object (`+0x11a4`) exists; `0x0f` does not steer here. A blocked route
+   (`0x00b49820`) switches to mode 3 with the lead and block flags (§18.7.2).
+   **[2026-10-15 closed: FINAL for the sub-state step `0x00b4ad30` (jump table `0x00b4af0c`, sub-states
+   0x0d-0x10).
+   - **0x0f "wait for the crew"** (`0x00b4ad9d`; entered at commit when flag `0x100` is set and the crew count
+     is at least 2). No steering. Each tick: if the driver (`0x00ab5070(vehicle, 0)`) is not a human, has no
+     group (`0x005083f0`) or the group is empty, go to 0x0e. Otherwise walk the group members (`0x00508290`
+     first, `0x00508330` next), skipping the driver. For each one, first ask `0x00520950(vehicle)` for a free
+     seat (it returns the first seat index that is usable and empty, else -1). If there is none, stop the walk.
+     Otherwise the member counts as missing unless its vehicle handle (`+0x16c0/+0x16c4`) is this vehicle and
+     it is seated (`0x009b9210`) or entering (`0x009b9160`). Go to 0x0e when no member was missing (the
+     vehicle filling up also ends the wait). Port rule: hold, without steering, until every other group member
+     is in or boarding the car or no seat is left.
+     **[2026-10-15 CORRECTED (verifier): the free-seat polarity above is inverted. At `0x00b4ae1d` the code is
+     `cmp eax,-1; jne 0x00b4ae6f`: when `0x00520950(vehicle)` finds a free seat (result != -1) the walk STOPS
+     and, if no earlier member was marked missing (flag still 1), the sub-state goes to 0x0e (`0x00b4ae76`).
+     Only when the car has NO free seat (-1) is the member checked (vehicle handle `+0x16c0/+0x16c4` = this
+     vehicle and `0x009b9210` or `0x009b9160`, else missing). `0x00520950` returns the first usable empty seat
+     index, else -1 (`0x005209bf`). So 0x0f ends at once while any seat is free; it only holds while the car is
+     full and some other group member is not in/entering it. Port rule: `if (group empty || driver not human)
+     -> 0x0e; for m in group (skip driver): if free_seat(car) != -1 break; if !(m.vehicle == car && (seated(m)
+     || entering(m))) missing = true; if (!missing) -> 0x0e` (the break keeps any earlier `missing`).]**
+   - **0x10 "recovery / re-acquire"** (entered only by the no-route recovery of 22.6: 150 ms with less than
+     5 m of progress; route objects cleared, anchor reset). It steers like 0x0e (route follow once the planner
+     has rebuilt a route). Exit test `0x00b4ae85` each tick: go to 0x0e when there is no driver or the driver
+     is a player (`0x00853b30` type `0x21`). Stay when the driver's leader (`0x0097e280`) is the target. Stay
+     when the driver is not locally simulated (`0x008addb0`) or has no AI object (`0x004d7e00`). Go to 0x0e
+     when the target is not in the driver's knowledge/visibility record (`0x004fc6d0` on AI `+0x510` with the
+     target handle). Otherwise call `0x004e68e0(ai, target, 0, 0)`: go to 0x0e when it returns 1 (the "no
+     engagement" value: invalid or dead human, or no known target position), else stay. Port rule: after a
+     recovery, stay in 0x10 while the driver can engage a known target, otherwise go back to 0x0e. The
+     recovery itself is suppressed while `0x00b4a7e0` holds (a ram-capable chaser alongside the target).
+   - For completeness: 0x0e -> `0x00b47c80` when `0x00b47f10` holds; 0x0d -> 0x0e when `0x00b47730` is false
+     and `+0xe08` bit 0 is clear (with bit 0 set it sets `+0xe09` bit `0x20` instead). Those two predicates were
+     not decoded here.]**
+
+**Route planning to a moving target (`0x00b4c710`) - FINAL.**
+- Planner cadence: re-run when the planner timer (directive `+0x450`) expires; after each run it is
+  re-armed to a random **300-450 ms** (`0x00dab660(0x12c, 0x1c2)`) when the target is moving (any velocity
+  component >= 0.25), or **2000-2500 ms** (`0x7d0`-`0x9c4`) when the target is stationary.
+- The goal is a position on the road graph: it asks the route builder (`0x00b213b0`) for a path to the
+  target (tolerances 2.0), and replans immediately when the target has moved more than **15.0**
+  (`0x1117a60`) from the position the current route was planned for, and the route is longer than the
+  straight distance plus **20.0** (`0x1116998`).
+- Fallback when the target is off the graph: nearest lane candidates within **200.0** (`0x12a30d4`)
+  (up to 20 segments, search length 1500.0), then a lane walk of at most **5000.0** (`0x111d490`) with
+  flags `0x100`, committed with `0x00b516b0`. If no lane is found the vehicle keeps its last route and
+  retries on the next planner pass; sub-state `0x0d` (direct steer) is the no-route mode.
+- Return values: 0 planned/ok, 1 invalid target, 2 the vehicle is not ready (`0x00b2f160`).
+
+**Speed law (`0x00b48e50`, called from the mode-4 speed hook `0x00b4b340`) - FINAL.** The mode's desired
+speed (`0x00b1e840`, case 4 -> `0x00b4b340`) is 1000.0 when the target is invalid or not a physical object
+(`+0x33` bit 3 clear). Otherwise `0x00b48e50` computes a **target-relative** speed with these inputs:
+- v_own = own speed, v_t = |target velocity|, a_b = vehicle `+0xc58`.
+- Stand-off s = **4.0 m** (`0x12a2f6c`); **30.0** when either vehicle is a tank-type (`0x00ad3140`); when the
+  own vehicle is airborne class (`0x00ad4810`) s = 2.0 (40.0 if tank-type). If the target is not in a
+  vehicle at all the stand-off is the target's body radius (`0x00942370`) and the ambient 10.0 scale
+  (`0x1118d20`) applies.
+- Gap g = distance from the own look-ahead point (own position + own velocity * own half-length,
+  `0x00a78d30`) to the target point, less lookahead bias `0x00b47400`. Flank manoeuvre (below) shifts the
+  target point sideways first; with `+0xe08` bit 3 the dot product with the lateral offset is added.
+- **Far (g >= s):** v_cmd = v_t + sqrt(m * 1.2 * a_b * (g - s)), with m = 1 normally and **m = 2 while a
+  flank manoeuvre is active** (`+0xe20` in {1,2}); constants 0.6 (`0x12a2e90`) times 2.0.
+  If v_own > v_cmd: decel = a_b when the excess (g - s) < 0.1, else min(a_b, (v_own^2 - v_t^2) / (2 * (g - s))).
+- **Near (g < s):** v_cmd = v_t - 5 * (1 - g / s) (constants 5.0 at `0x12a2f20`, -5.0 at `0x1187ac8`).
+  If `+0xe08` bit 6 and g < 0 (overlap): v_cmd = 0, and decel = a_b when v_cmd was above 5. Otherwise, if
+  v_own > v_cmd: decel = (v_own / g) * (v_own - v_cmd).
+- Brake dead band: the decel is zeroed when it is below 0.5 * a_b (`0x00b4b4d1`).
+- The mode-4 speed hook outputs decel and v_cmd to the common controller: brake = min(1, decel / a_b),
+  throttle by the law in §20.6.3(b) with the cap **1.0** (modes 2/4/7), vt clamped to [1, 100] so
+  k = (vt/5)^2 at vt >= 10.
+- Drive-by speed match: when the 1000 ms timer `+0x1150` has expired and `0x00b4a7e0` holds (sub-state
+  0x0e, the chaser's occupants may fire, the target is not already hit, own and target velocity directions
+  within cos 45 deg = 0.7071), v_cmd is replaced by the target-velocity-based value from `0x00b4b340`
+  (|vector from the target's own `+0xcc0` target| + `0x00b476b0`). PARTIAL: the vector's source.
+- Tank-type chaser with a target not in a vehicle: v_cmd = max(v_cmd, 10.0).
+
+**Steering.** Route follow (`0x00b2bbc0`) uses the §18.1 lane walker for the look-ahead point. Within
+**15.0** (225.0 squared, `0x00b2bbc0`) of the lead handle `+0xcc0` and with vehicle `+0xc72` bit `0x20`
+set, it steers straight at the lead (sign from the heading dot product; the near/aligned case uses cos 30
+deg and 5.0 m with vt = 3.5 m/s). Otherwise it applies the throttle/brake pair computed above. The
+obstacle probe and following law of §20.6.7 belong to the ambient combiner only; a chaser has no
+car-following gap other than the 4.0 m stand-off law above, so it closes to about 4 m and matches speed.
+
+**Flank manoeuvre (`0x00b4a180`) - PARTIAL.** Directive field `+0xe20` takes 0 (trail), 1 or 2 (offset to
+one side of the target), 3 or 4 (planner failed; become 1 or 2 when the planner next succeeds). The target
+point is shifted to the side given by the sign of the cross product of the relative position and the
+target's heading; the chooser draws 0 or 1 at random (`0x00dab660`) every **2000-3000 ms**, or every
+**15000-20000 ms** when it drew a non-zero value. Disabled (set 0) when the target's vehicle is in the
+refused class (`0x00ad5020`). The drive-by "shoot from alongside" behaviour of the occupants is the reason;
+no PIT or deliberate ram logic was found anywhere in mode 4: collisions are the consequence of the 4 m
+tailgate law, and the ambient collision reactions of §18.7.3 still apply to the chaser's victims.
+**[2026-10-15 closed: FINAL for the chooser `0x00b4a180(vehicle; target human)`. Two corrections above: the
+random draw is `0x00dab660(0, 2)`, inclusive, so 0, 1 or 2 each with probability 1/3. And 3/4 mean "switch
+to side 1/2 pending", not "planner failed". The deliberate ram does exist, but in mode 9 (see Event checks),
+not in mode 4.
+1. `+0xe20` = 0 when the target's vehicle is in the refused class (`0x00ad5020`). With `+0xe08` bit `0x40`
+   clear, it is also 0 when `+0xe0c` = 2 and the team class (`0x00b473a0`) is < 2, or when `+0xe0c` = 1 and
+   `+0xe08` bit `0x20` is clear. When the target is on foot (`0x004dcf00` null): 0, and timer `+0xe24` = 2000 ms.
+2. Geometric side (`+0xe08` bit `0x40` set): every 300 ms (`+0xe24`), `0x00b49f10` returns two points p, q
+   of the target vehicle. The side is 2 when dot(cross(q - p, up = (0,1,0)), (p + q) / 2 - own position) > 0,
+   else 1, so the chaser keeps the side it is already on. No change when `0x00b49f10` fails.
+3. Random side (bit `0x40` clear): when `+0xe24` expires, draw r in {0,1,2} and re-arm `+0xe24` to 2000-3000 ms
+   (r = 0) or 15000-20000 ms (r != 0). If r equals the current value nothing changes. r = 0 sets 0 (trail)
+   at once. From 0, 3 or 4 the new value is r. From side 1 or 2, a draw of the other side writes the pending
+   value 3 (to side 1) or 4 (to side 2) and arms `+0xe28` = 2000 ms.
+4. Pending commit: when `+0xe28` expires and `0x00b49be0(target)` holds, 3 -> 1 or 4 -> 2 and `+0xe28` is
+   cleared. If it does not hold, `+0xe28` is re-armed to 1000 ms. `0x00b49be0` requires `+0xe08` bit `0x20`,
+   the class gates of step 1, the target in a vehicle, dot(own velocity, target velocity) >= 0.5 (raw,
+   m^2/s^2) and squared distance <= 20.0^2 (30.0^2 with bit `0x40`). With bit `0x40` and a pending value it
+   also checks a look-ahead point against the target vehicle (dot >= 1.0).
+Port rule: implement the four steps exactly. m = 2 in the speed law applies only to sides 1/2, not to the
+pending values 3/4.]**
+
+**Event checks (`0x00b4aa10`).** Runs the generic stuck give-up `0x00b20e20(vehicle, 1)` first (13 s with
+no progress, or two samples under 4.0 m apart, re-issues mode 3; §18.7.2), then every 1000 ms
+(`+0x1150`): if the target-side conditions of `0x00b4a7e0` hold, tries `0x00b60cf0` and, on success,
+re-issues the directive through `0x00b5fe80` (block byte 3) - the chaser leaves mode 4. A second timer
+`+0x1154` and a 10000-12000 ms re-arm gate the same action when a target is far (squared distance > 100.0)
+and ahead (velocity dot product >= 0). PARTIAL: `0x00b5fe80` / mode 5 role (mode 5's speed is 15.0).
+**[2026-10-15 closed: FINAL. Correction: `0x00b5fe80` commits mode **9**, not mode 5. The chase hand-off is a
+deliberate **ram**.
+- **Timer `+0x1150` (directive `+0x4e8`).** First armed from `0x00b47600` (see Entry step 7). When it
+  expires and (`+0xc72` bit `0x20` is set or the target is in a vehicle) and `0x00b4a7e0(target)` holds, the
+  chaser calls `0x00b60cf0`. On failure the timer is re-armed to 1000 ms. `0x00b4a7e0` = sub-state 0x0e,
+  chase class (`0x00b47460`) >= 3, target vehicle not in the refused class, and then: a tank-type chaser
+  refuses a player target; a target on foot needs `+0xc72` bit `0x20` and at most 2 live entries among the
+  chaser's `+0xd61` handle slots (`+0xd68`, 8 bytes each); a target in a tank-type refuses; class 5 passes;
+  otherwise the own and target velocity directions must be within cos 45 deg (0.7071).
+- **`0x00b60cf0(vehicle, target handle)` = "strike opportunity".** The target must be a live human (class
+  bit `+0xa` 1, not `0x00853b10`).
+  - Target in a vehicle (`0x009b9160`): `0x00b5f940` gives four corner points of the target vehicle. Count
+    the corners with dot(corner - own position, own velocity) >= 0, and require at least 2 (the target is
+    ahead). Then the box-to-box squared gap of `0x00b5ef00` must be <= r^2, with r from `0x00b5f170`.
+  - Target on foot (allowed only with `+0xc72` bit `0x20`): the target must be ahead, and the squared gap
+    of `0x00b5ee50` must be <= 10.0^2 (30.0^2 when `0x014f71e8` bit `0x80` is set).
+- **`0x00b5fe80(directive, block)` = ram commit.** A remote vehicle forwards network opcode `0x42`. Locally
+  it calls `0x00b26250(directive, 9, 0x0b)` and stores block `+8` -> `+0x3b0`, block `+0xc` -> `+0x3ac`,
+  block `+9` bits 0/1 -> `+0x3a8`, and the target -> `+0x58`. The block built at `0x00b4ac88` carries
+  byte `+8` = directive `+0x1a8` when `+0x1a4` = 0, else max(3, chase class), plus `+0xc` = `+0x1a4` and a
+  byte `+9` holding the drive-by bit with bit 1 set. A player target
+  (`0x00853b30` type `0x21`) also arms global timer `0x0130edd0` from the activity record `+0x24`
+  (`0x005f4a50`). The chase tick then stops (returns false).
+- **Mode 9 (slots `0x01186da0` + 9*20: tick `0x00b61750`, enter `0x00b5f300` clears `+0x3a8..+0x3b8`).**
+  - Sub 0x0b, the strike (`0x00b61160`): it aims at the target. A target in a vehicle is aimed at its
+    position plus its velocity times a lead time; the lead uses the constants 0.75 and 0.5x + 1.0 (the exact
+    clamp was not transcribed). The aim point goes through `0x00a91fa0`. The tick writes steering
+    (`0x00a929e0`) and `0x00a92940(vehicle, 0)`, plus input -1.0 to `0x00a92640` (reverse) when the target is
+    behind (dot < 0); otherwise it takes the speed path `0x00b207d0`. `0x00b5f370` is a contact test (HIGH);
+    when it holds the tick calls `0x00ab6c90`/`0x00ab7830`.
+  - Sub 0x0c, back-off (`0x00b5fc60`): it reverses away (throttle +-1 by side) until directive `+0x4e8`
+    expires or the squared distance exceeds 625.0 (25 m), then goes back to 0x0b. The writer of sub 0x0c was
+    not located.
+  - Exit to chase is `0x00b5f090(directive, rearm)`: the chase block is rebuilt with `0x00b47110` and
+    committed with `0x00b4d260`, flag `0x20` set, and flag bit 1 = rearm. The strike calls it with rearm 0
+    when `0x00b60cf0` fails or the stuck test `0x00b20e20` fires. It uses rearm 1 when the target is gone or
+    dead, or when timer `+0x101c` has run over 2000 ms. A failed sub-0x0c target check uses rearm 1.
+- **Timer `+0x1154`** does not call `0x00b60cf0`. When it expires: if the target is in a vehicle, ahead
+  (dot >= 0), more than 10 m away (squared > 100.0) and `0x00b64340` holds, then with 15% probability
+  (`0x00dab5e0` < 0.15) it calls `0x00b65e80(directive, target)`, a road-graph look-ahead manoeuvre
+  (`0x00b1b090`/`0x00b1b420`). On success the tick stops; otherwise `+0x1154` is re-armed to 10000-12000 ms.
+  The internals of `0x00b65e80` stay OPEN.
+- **Mode 5** is not reached from chase. It is set only by `0x00b5d730` (mode 5, sub 0). The callers are the
+  mode-8 blocked-wait escalation `0x00b55330` (from the lane-follow tick at `0x00b5861a`, after a random
+  750-1250 ms or 4750-5750 ms blocked window, or at once when directive `+8` bit 0 and `+6` bit 0 are set)
+  and the debug command string "rail_obs" (`0x00b2c5fb`). `0x00b5d730` collects the blocking objects
+  (`0x00b5d410`, `0x00b5c7c0`) and builds a detour (`0x00b5c600`). Mode 5 = obstacle bypass ("rail
+  obstacle") at speed 15.0. HIGH: the name is inferred from the debug string and the callers.
+Port rule: chase class >= 3 chasers re-test every 1000 ms (first test after the Entry step 7 delay). When
+`0x00b60cf0` passes, switch to mode 9 sub 0x0b, steer and throttle straight at the (led) target, and return
+to chase on a miss, a timeout or a lost target. Mode 5 belongs to the lane follower, not to chase.]**
+
+**Give-up.** There is no distance give-up. The chase ends when: the target dies or is gone (mode 6/3
+re-entry), the stuck rule fires (13 s, or the 150 ms/5 m rule in 22.6), the player target is within 10 m and
+the hand-off fires (the car stops steering; occupants fight), a later script directive replaces it, or
+`vehicle_disable_chase` / `vehicle_set_no_chase` is called.
+
+### 22.3 Drive-to
+
+**`vehicle_pathfind_to_do(vehicle, destName, stopAtGoal, flagC)` (road-graph route) - FINAL.**
+- Needs a driver; `destName` resolves to a path object (up to 25 points, taken after the vehicle's own
+  position) or a point (2 points). Fewer than 2 points -> false.
+- `0x00b2b140(vehicle, points, count, stopAtGoal, 0, flagC, speed = -1.0, requestId)`; count must be
+  2..25. The local branch builds a lane route from the point nearest the car to the last point
+  (`0x00b20920`, mode flags `0x800100`, speed cap 3.0 unless a positive speed is given) and installs it as
+  the ambient lane follower's route (`0x00b57680`). A road-graph search of 200.0 around the car and
+  around the destination (candidates up to 15.0 away) is used (`0x00b1b040`, `0x00b1b320`, `0x00b1b730`).
+- The completion request is a move-to record (`0x00b2e510`, kind 1): block from constructor `0x004f1370`
+  has **arrival radius 3.0 m** (`0x1116444`) at block `+0x10`, maximum distance FLT_MAX at `+0x18`;
+  flag byte: bit 0 = `stopAtGoal`, bit 2 = path variant (always set), bit 3/bit 4 are set by the checker.
+- **Completion (`0x00b2e720`, per frame, X/Z distance d to the goal, a_b = vehicle `+0xc58`, radius r):**
+  - `stopAtGoal` false: complete when d < r.
+  - `stopAtGoal` true: braking phase starts when closing speed > 0 and d < v^2 / a_b + r, then the request
+    completes when speed < **1.0 m/s**. Stored brake demand v^2 / (2 d) and speed cap sqrt(d * a_b) (min 1.0).
+  - path variant (flag 4): completes on the last path node when the remaining distance is below the
+    sub-path's `+0x34` and `0x00ab8fd0` speed < 1.0.
+  The request id is released through `0x006f66d0`, so `vehicle_pathfind_check_done` returns done on any
+  completion path (§9.10a). The car travels on lanes at lane speed (§20.6.3), the script only chooses the
+  endpoints.
+
+**`vehicle_pathfind_navmesh_do` (waypoint directive, mode 7) - FINAL.** Despite the name no navmesh is used.
+- Setup `0x00b4f150(directive, points, count <= 25, block)`: copies the points into the node ring at
+  `+0x25c`; block `+0` = mode (`+0x254`; 1 = loop/ring, otherwise one pass; wrap is `index mod count`,
+  `0x00b4db50`), `+4` = speed (> 0 sets bit 2 of `+0x258` and `+0x268`), `+8` = nodes to pre-skip, `+9`
+  bit 0 = stop-at-end (`+0x258` bit 0), bit 1 -> `+0x258` bit 3. The helper `0x00b24fa0` passes mode =
+  (its loop parameter != 0), stop-at-end = its last parameter, speed 0, `+9` bit 1 always set. Which Lua
+  argument position feeds each parameter was not separately pinned. The first node is skipped if the car is
+  within 2.0 m (squared 4.0) of node 0.
+- Tick `0x00b4f900`: advance rule and last-node arrival from §9.10a (squared distance 16.0 = 4 m,
+  4.0 = 2 m when stop-at-end, mode 2 = 2500.0); each tick the route to the next node is built on the lane
+  graph (`0x00b4ec00`: when the planner timer `+0x450` has expired and the car is more than 2.0 m
+  (squared 4.0) from the previous plan point it plans; otherwise the timer is re-armed 500-1000 ms),
+  and the car follows it with `0x00b2bbc0` plus the generic stuck give-up. If the car is not on the graph
+  it still plans from the nearest lane.
+- Desired speed (`0x00b4dcc0`): `+0x9c` when the script speed override (`+4` bit 0x10) is set, else `+0x268`
+  when `+0x258` bit 2, else **1000.0** (no cap; the planner's curve and braking limits apply). Throttle cap
+  1.0. Lights are obeyed in mode 7.
+
+### 22.4 Follow
+
+No follow native exists (checked against the vehicle, helicopter and character enter/exit/pathfind native lists). The engine behaviours that are
+"follow" are:
+1. Chase with a vehicle's driver or the vehicle as target: the stand-off law of 22.2 (gap 4.0 m, speed
+   matched, +5 m/s per stand-off of excess gap).
+2. Lane car-following of ambient traffic (§20.6.7), for any car in mode 8.
+3. Helicopter follow (22.8).
+4. On-foot followers (`#FOLLOWER#`) are a human AI matter (§21).
+No formation logic (offsets, wing positions) exists for vehicles; the flank manoeuvre is the only lateral
+offset, and the group enter native only assigns seats.
+
+### 22.5 Parameters per directive
+
+| Mode | Desired speed | Throttle cap | Steering/route | Lights |
+|---|---|---|---|---|
+| 4 chase | 22.2 law, 1000.0 with no valid target | 1.0 | route follow / direct steer | off |
+| 7 waypoint | `+0x9c`, `+0x268`, else 1000.0 | 1.0 | route per node | on |
+| 8 lane follow | route/lane value (§20.6.3) | 0.7-1.0 by speed | lane follower | on |
+| 2 flee | route value | 1.0 | lane walk away | off |
+| 3 ambient | 0 (re-plan) | | | off |
+| 5 | 15.0 | | | off |
+| 13 | 40.0 | | | |
+
+Personality and aggression: the choice between chase and flee is the §18.7.3 weighted draw
+(`VehicleCollisionResponse`) or the threat processing; `vehicle_chase` bypasses it. There is no per-chase
+aggression number; the effect of a driver's personality is the pre-chase draw only. Vehicle braking and
+radial capacity (`+0xc58`, `+0xc5c`) are scaled by condition (§20.6.3); directive scale fields
+`+0x528`/`+0x52c`/`+0x530` are network-serialized state only (read at `0x00b22200`, `0x00b26680`,
+`0x00b270a0`) and their defaults were not decoded (OPEN).
+
+### 22.6 Off-road and stuck
+
+- **Off-road.** No mode drives off the lane graph except mode 4 sub-state `0x0d` (direct steering toward
+  the target, `0x00b47490`) and the 15 m close-in steering of 22.2. All route-based modes snap to the
+  nearest lane (200.0 search) and follow lanes. A destination far from the graph ends the route at the
+  nearest lane point; pathfind arrival is then judged against the real goal position (radius 3.0 or
+  4 m), so the car may stop at the nearest lane end without completing until the stuck rule fires.
+- **Stuck give-up (generic, `0x00b20e20`, all modes).** 13000 ms without progress, or two samples under
+  4.0 m apart (reverse-out window 1000 ms, 2000 ms in modes 4 and 8): re-issue mode 3 and, in the hard-stop
+  window, brake 0, throttle 0.1 or 1.0, steering 0 (§18.7.2).
+- **Chase no-route recovery (`0x00b4d070` tail).** Only when the planner flag `+0xe08` bit 0 is clear
+  and the sub-state is not `0x10`: the vehicle is compared with the anchor `+0xe44`; if it is within 5.0 m
+  (`0x130edd4`, squared 25.0) a 150 ms timer (`+0xe34`) is armed and, when it expires, the route objects
+  (`+0x11a0`, `+0x11a4`, `+0x11e4`) are cleared, the car is stopped (`0x00a90c70`, `0x00a91f30`, zero
+  steering `0x00a929e0`), the anchor is reset to the current position and sub-state becomes `0x10`
+  (recovery). Moving 5 m or more clears the timer. PARTIAL: the exit from `0x10` (back to `0x0e` when
+  `0x00b4ae85` finds no armed enemy). **[2026-10-15 closed: FINAL. The exit test is decoded in 22.2 under
+  "Per tick" step 5 (sub-state 0x10). Port rule: leave 0x10 for 0x0e when the driver cannot engage a target
+  it knows about.]**
+- Scripted waypoint and pathfind requests never time out (§9.10a): the stuck rule changes the mode to 3,
+  which drops the waypoint directive; the pending request is completed by the teardown
+  (`0x00b46ca0`), so Lua sees "done" without arriving.
+
+### 22.7 NPC enter and exit
+
+**Orders.** `vehicle_enter_do(char, vehicle, instant, seat, ...)` (`0x00a67000`) has three paths:
+1. instant: a request block with the instant bit set goes to the submitter `0x00af22a0`;
+2. named seat: seat index resolved through `0x004bf810` and the submitter;
+3. otherwise an **AI order** `0x00521200(char, vehicle handle, &template, 1)`: refused when the character is
+   already seated (`+0x16d4` = 3, `0x009b9160`) or entering/exiting (`0x009b91e0`); refuses when `0x00ad5180(vehicle)` is true, validates the seat
+   (`0x00b0fdf0`), copies the 22-dword action template at `0x012e14e0`
+   into the character's action block (`+0x4a8`) and starts action `0x31`. The walk to the door is the seat
+   state machine (states 2, 3, 5; `spec-player-runtime.md` §7.5); the state-1 hub requests the AI mode
+   `Veh enter` (38) (§6). On success a player-class character gets its
+   script-mode field set to 2 (`0x009e3200(2, 0)`).
+`vehicle_enter_group_do` repeats this per table entry; instant mode gives seats by table position (first
+entry = seat 0 = driver).
+
+**Seat choice** (state-0 upkeep `0x00af5cb0`, every 250 ms per vehicle record): request search mode 0 =
+the requested seat, 1 = any seat from 0 (driver first), 2 = any seat from request `+0x04`; the submitter
+turns 1 into 2 for a remote-controlled vehicle or a player-class character. Seats are scored by
+`0x00b0eb90` (animation availability for the door side, bearing thresholds 45 and 105 degrees to pick the
+entry point; `spec-player-runtime.md` §9). No seat -> cancel (state 8).
+
+**Seat record sequence** (vehicle `+0x1340` + `0x30` * seat; FINAL). The three handles that
+`character_is_in_a_driver_seat` reads are written by distinct steps:
+
+| Step | Writer | `+0x00` claim | `+0x08` pending | `+0x18` seated | human fields |
+|---|---|---|---|---|---|
+| submit (state 0 on-entry `0x00af9a90`) | slot alloc | unchanged | unchanged | unchanged | `+0x16d4` = 1, `+0x16c0/c4` = vehicle |
+| seat resolved, state 1 hub `0x00afd4c0` -> `0x00b0cb20` | claim | empty -> character; else character -> `+0x10` (next claim) | - | - | `+0x16c8` = seat, `+0x16cc` = entry point; queued in the entry-point queue |
+| (switch/exit side) `0x00b0b540` from the exit states | pending | - | exiting character (the previous holder) | cleared | `+0x16d0` = seat |
+| seating commit, state 9 `0x00afbd90` -> `0x00b0b930` | commit | `+0x10` -> `+0x00` (or empty) | - | character | `+0x16d4` = 3 (ride state `0x22`) |
+| exit release `0x00b086d0` | release | - | - | cleared (if still this occupant) | `+0x16d4` = 0, `+0x16c0/c4` null |
+
+Timing: submit and state 0 happen immediately; the state-1 claim happens at the first seat-resolution
+upkeep, i.e. on the same frame for requests with the skip bit (request `+0x21` bit 0), else within 250 ms.
+The animated entry (walk to the door, state 2/3, door animation state 4 `Enter_Animations`) takes the
+clip length in `vi_enter.xtbl`; the commit fires when the seat-occupancy entry names the character
+(`0x00b0b3f0`), and instant/teleport routes (states `0x0b`, `0x0f`, `0x07`, `0x11`, `0x13`) commit at
+once. At the commit `on_vehicle_enter` is posted (vehicle slot 7, then player slot `0x16` or NPC slot
+`0x17`) and **in the same engine call** `+0x16d4` becomes 3. So by the first script resume after the
+commit the thread exists and every poll answers "seated".
+
+**What each query reads at each stage (FINAL):**
+
+| Stage | `character_is_in_vehicle` (`+0x16d4`=3) | `character_is_in_a_driver_seat` (seat 0) |
+|---|---|---|
+| ordered, not yet submitted | false | false |
+| state 0 (submitted) | false (`+0x16d4` = 1) | false (vehicle handle matches, no seat field yet) |
+| state 1 and after, seat 0, before commit | false | **true** (claim = character) |
+| committed | true | true (seated at `+0x18`) |
+| passenger seat | true after commit | false always |
+
+`vehicle_enter_check_done` reports done once `+0x16d4` = 3 for the target vehicle (its numeric return is
+in `spec-lua-api-behaviour.md` §22.3); `vehicle_exit_check_done` is true for `+0x16d4` in {0, 1}.
+
+`character_is_in_a_driver_seat` = `inVehicle(c) && (seat0.claim == c || seat0.pending == c ||
+seat0.seated == c)`; "inVehicle" here means the character's `+0x16c0/c4` equals this vehicle's handle,
+which is set at state 0, so the driver check can already be true while `+0x16d4` is 1 or 2. A character
+leaving seat 0 stays true while it is the pending handle (exit states) until release.
+
+**Exit.** `vehicle_exit_do` requires `+0x16d4` = 3 at the call and builds an exit request; exit states
+`0x14`..`0x21` run (`+0x16d4` = 2 from `0x14`'s entry). `on_vehicle_exit` fires at the finaliser `0x00b03d80`
+before `+0x16d4` is cleared; `vehicle_exit_check_done` is true for `+0x16d4` in {0, 1}.
+
+**`vehicle_enter_group_check_done` stragglers (FINAL, `spec-lua-api-behaviour.md` §38.1).** Done only when
+every member is: absent/dead, or in state `+0x501` = `0x26`, or seated in this vehicle (`+0x16d4` = 3 and the
+vehicle handle matches). Polling with do-not-reorder false re-issues the AI order (`0x00521700`) to every
+member that has no pending order. With do-not-reorder true the group never completes if a member cannot
+seat.
+
+**Driver reaction.** Entering the driver seat does not by itself give the car a directive. The first
+directive comes from the next AI native or from the default ambient mode when the vehicle is spawned as
+traffic. For a mission vehicle without a directive the car sits (engine on) until a native runs.
+
+### 22.8 Helicopter fly-to and follow (PARTIAL)
+
+Heli AI record (found through `0x00a79470`): `+0x298` flags (bit 0 hold/hover, bit 1 stop request, bit 2
+script speed in `+0x43c`, bit 3 follow object, bit 4 hover at last point, bit 5 pending request), `+0x299`
+state bits (bit 0 ring, bit 1 done, bit 2 brake), `+0x29a` count, `+0x29b` index, `+0x29c` points
+(12 bytes each, up to 25), `+0x4b4` phase (1 = fly, 2 = hover/landing-style). Tick `0x00b405b0`.
+- Phase 1: speed = `+0x43c` if bit 2, else **45.0** (`0x11169a8`). Waypoint steering is the shared steer
+  helper `0x00b38f10(vehicle, 15.0 look distance, speed, height request, ...)`; a node is passed when the
+  helper's distance-like result is below **0.2** (`0x12a2e30`).
+- Follow (`+0x298` bit 3): the follow target `+0x440/+0x444`, trail distance `+0x448`. If the target is within
+  **20.0** (`0x1116990`), speed = clamp of the closing-rate term (negative closing: closing * -0.25;
+  positive: closing * 2.0; minimum 1.0); beyond it speed is limited to the target's speed (minimum 1.0).
+- Arrival: `index >= count` (or `count - 1` with hover-at-last-point) sets `+0x299` bit 1 and completes the
+  request (`0x006f66d0`, `+0x458`). With hover, the helicopter holds with the stop helper (`0x00b35130`,
+  `0x00b35aa0`) or a drift target 45.0 along the heading scaled by `0x00b35a80`.
+No ramming or chase of vehicles by helicopters was found in this unit; helicopter combat is a separate
+module (`0x00b3xxxx`) not opened here.
+
+### 22.9 Test vectors
+
+Notation: a_b = vehicle `+0xc58` (AI_Max_Braking_Decel scaled by condition; use 8.0 m/s^2 in the
+examples), speeds in m/s, gaps in metres from the own look-ahead point to the target point.
+
+**TV1: chase, target 25 m/s straight, gap 30 m, own speed 25.**
+- g = 30, s = 4.0 (neither a tank): far case.
+- v_cmd = 25 + sqrt(1.2 * 8 * (30 - 4)) = 25 + sqrt(249.6) = 40.80 m/s (m = 1; no flank).
+- v_own (25) < v_cmd: decel = 0, brake = 0. Throttle: vt = 40.80, k = (40.8/5)^2 = 66.6; throttle =
+  66.6 * (1 - 625 / 1664.6) = 41.6, clamped to 1.0. Steering: route follow to the target's lane point.
+- Steady state: the gap closes until g = 4 where v_cmd = 25.0 (matched). At g = 2: v_cmd = 25 - 5 * (1 - 0.5)
+  = 22.5. At g = 0: 20.0. At g < 0 with `+0xe08` bit 6: v_cmd = 0 and brake = min(1, a_b / a_b) = 1.
+- With a flank manoeuvre active (`+0xe20` = 1 or 2): v_cmd = 25 + sqrt(2 * 1.2 * 8 * 26) = 25 + 22.34 = 47.34.
+**TV2: chase braking.** v_own = 40, v_t = 25, g = 10: excess 6; v_cmd = 25 + sqrt(57.6) = 32.59 < 40, so
+decel = min(8, (1600 - 625) / 12 = 81.25) = 8.0, brake = min(1, 8/8) = 1.0, throttle = 0.001.
+**TV3: chase end.** Player target within 10 m (squared distance 99.9) with the driver's enemy = the player and
+not co-op: hand-off, no steering this tick. At 100.0 exactly the chase continues (comparison is `<`).
+**TV4: drive-to arrival (`vehicle_pathfind_to_do`, stopAtGoal false).** Goal 3.0 m radius: completes when the
+X/Z distance is below 3.0 (3.0 does not complete). With stopAtGoal true, v = 10 m/s, a_b = 8: braking starts
+when d < 100 / 8 + 3 = 15.5 m; completion when speed < 1.0.
+**TV5: waypoint directive.** Nodes A, B (last), mode 0, stop-at-end false: A passes when
+`(A - p) . (B - A) <= 0`; the last node B completes when the squared X/Z distance is <= 16.0 (4 m); with
+stop-at-end true the radius is 2 m (4.0 squared).
+**TV6: seat record over a scripted driver entry (seat 0, instant false).**
+t=0 submit: `+0x16d4`=1, claim empty; polls: `character_is_in_vehicle` false, enter check not done,
+`is_in_a_driver_seat` false. t <= 250 ms (first upkeep): hub: claim = driver, `+0x16c8` = 0; polls: driver
+seat TRUE, in-vehicle false. During the animation (clip length of `Enter Left Driver`): unchanged. At the
+commit frame: `+0x18` = driver, claim = next claim or empty, `on_vehicle_enter(name, vehicle, 0)` posted,
+`+0x16d4` = 3: all three polls true. Passenger entering seat 1 meanwhile: seat 1 record only; seat 0 queries
+stay as they were.
+**TV7: instant group.** `vehicle_enter_group_do(v, true, {A, B, C})`: A -> seat 0, B -> seat 1, C -> seat 2
+(search mode by table position); all three commit on the next upkeep/engine pass; `group_check_done` true as
+soon as all three have `+0x16d4` = 3 for this vehicle.
+**TV8: helicopter fly-to.** Three waypoints, no script speed: speed 45.0; node passes at helper result < 0.2;
+after the third node `done` bit set and request completed; with hover-at-last-point it completes at
+index >= 2.
+
+### 22.10 Port recipe and OPEN
+
+1. Keep the 17-mode directive table; implement modes 4 and 7 beside mode 8. Mode 4: planner every 300-450
+   ms (2000-2500 ms when the target stands), speed law of 22.2, stand-off 4.0, throttle cap 1.0, route
+   follow with the 15 m direct-steer, hand-off at 10 m for player targets, end on target death.
+2. Drive-to: route the lane graph from the nearest lane to the nearest lane of the last point, complete
+   with the move-to radii of 22.3; never fail, only finish.
+3. Seat records: three handles per seat, written by the claim, exit-pending and commit steps of 22.7.
+4. OPEN: sub-states `0x0f`/`0x10` of chase beyond the entry conditions; the role of `0x00b60cf0`,
+   `0x00b5fe80` and mode 5; the source vector in the drive-by speed match; the default values of directive
+   `+0x528`/`+0x52c`/`+0x530`; the helicopter phase-2 branch; heli combat; the exact lookahead bias
+   `0x00b47400`; `0x00a91070` internals (passenger/turret attack hand-off).
+   **[2026-10-15 closed: PARTIAL for this list; details at the matching notes in 22.2.
+   (a) `0x005f5f80` = store/garage state `0x014a1ce4` is in {1,2,4}: FINAL.
+   (b) The flank chooser `0x00b4a180` (draw 0..2; 3/4 = pending side switch) and sub-states 0x0f (wait for
+   the crew) and 0x10 (post-recovery hold) are FINAL. The 0x0d/0x0e predicates `0x00b47f10`/`0x00b47730` are
+   still OPEN.
+   (c) `0x00b60cf0` = strike-opportunity test, `0x00b5fe80` = commit to mode 9 sub 0x0b (ram), FINAL. Mode 5
+   = lane-follower obstacle bypass, not chase, HIGH.
+   (d) `0x00b47600` = class-based first-ram delay, 9000-10000 / 6000-7000 / 3000-4000 / 1000 ms, FINAL.
+   Still OPEN: `0x00b65e80` (the 15% far-target manoeuvre), the writer of mode-9 sub 0x0c, the lead-time
+   clamp in `0x00b61160`, and the meaning of the per-team class byte at `0x014a4f70 + (team-1) * 0x4c`
+   (table data; its loader was not traced).]**
+
+### 22.11 Scripted NPC move completion and follower rules (stall clusters K2 and K4)
+
+Status: FINAL for the order/ticket/finish contract (restated from 21.5 and the Lua spec), PARTIAL for the
+arrival test, because the mode behind action 24 `move scripted` has a null goal routine (21.1 table) and its
+tick was not decoded here.
+
+1. **`ai_do_scripted_move(char, nav, run, fire)`** (Lua spec 3.11) resolves the destination as a handle pair
+   (class literal `0x031d152c`, registry `0x024433a8`), gates it (`0x00853b10` liveness and three `0x00853b30`
+   queries), and stages action 24 through `0x004f4d00` with the handle pair copied to `+0x4b0/+0x4b4`. It
+   returns true whenever the character resolved, even when nothing was issued; scripts must not read the
+   return as success.
+2. **Completion** is the ticket rule of 21.5: the mode calls the finish routine `0x004f4f50`, which (bit 3 set,
+   staged id equal, category mode equal) completes the ticket and returns control to the goal layer.
+   `ai_scripted_action_is_complete` reads the ticket: pending only while status is 0.
+3. **Scripts that do not use the ticket** poll geometry: sh03 waits for `get_dist(KINZIE, tower) < 2.0`, and
+   re-issues the move when the distance exceeds 2.0. So the port must bring the NPC to within **2.0 m** of the
+   nav point, not merely finish the order.
+4. **[2026-10-15 closed: the radius is the engine's 1.414 m box-distance test, not the CHOSEN 2.0 m; see the
+   closing note at the end of this section.]** ~~**Port recipe (CHOSEN for the arrival radius):**~~ old text: move along the navmesh toward the nav point at walk or run
+   speed per the `run` flag; complete the ticket when within 2.0 m (the tightest radius any script tests); if
+   the mode is replaced by a reactive mode (Flee), keep the ticket open as in the 21.5 failure modes.
+5. **Followers and homies.** A follower copies its player's target every 2000 ms (21.2). It follows the player on
+   foot through the group-leader goal (`group`, goal 5 in 9.6). When the player's vehicle seat state reaches
+   seated, followers enter through `vehicle_enter_do` / `vehicle_enter_group_do` (22.7) or the `Veh passenger`
+   mode; seat order is by table position, driver first. Test vector: dlc3_m02 truck: after
+   `vehicle_enter_group_do` with N entries and instant 0, `character_is_in_vehicle(player, truck)` becomes true
+   only when the player's own seat state is 3; NPC entries do not satisfy the player test.
+6. **Scripted death scene (m24)**: `m24_homie_death_thread` ends when the staged action and the animation finish;
+   treat as an action with its own ticket and the animation length from the data.
+
+OPEN: ~~the arrival radius and tick of mode 24~~ (closed below); the animation length of scripted action
+scenes (data driven, `spec-anim-runtime.md`).
+
+**[2026-10-15 closed: action 24 `move scripted` tick, arrival, completion, failure. FINAL for the test and
+the branches; HIGH for the steering call. Static, instruction stream only. This replaces the CHOSEN 2.0 m
+of items 3 and 4.]**
+- **Owner.** The null goal routine is irrelevant: action 24's category mode is 5 `Combat Movement`. Its tick
+  `0x0053fe30` skips when `+0x44c` bit 0 (finished) is set, otherwise indexes a byte table
+  (`0x0053ff68`, index = action - 14, 54 entries) into 18 targets (`0x0053ff20`); action 24 maps to entry
+  10, which calls **`0x0053e600(human)`** every update. (Entries 8..9 and 11..17 are the other actions of
+  the mode.)
+- **Tick `0x0053e600`, in order (per update):**
+  1. Resolve the destination handle pair at `+0x458/+0x45c` (committed copy of staged `+0x4b0/+0x4b4`)
+     with `0x00458230` (registry `0x024433a8`, class literal `0x031d152c`). Valid when found, `+0x33`
+     bit 4 clear, class descriptor (`0x02cc9900[+0x34]`) byte `+6` bit 3 (value 8) set, and not dead
+     (`0x00853b10`). **Arrival test A (any pose):** take the human position, subtract the target's position
+     and rotate it into the target's local frame (target position `+0x40`, orientation `+0x4c`), fetch the
+     target's local box through its vtable slot `+0x60` (min, max), clamp the local point into that box,
+     and compare the **squared** 3D distance from the point to its clamp with the constant at
+     `0x01118ce0` = **2.0**. Below 2.0 (all four lanes) = arrived: call `0x004f4f50` and return.
+     For a point-like nav object (zero-size box) that is a sphere of radius sqrt(2) = **1.414 m**; for a
+     sized box it is the distance to the box surface.
+  2. Otherwise, if the human's pose byte `+0xccd` is 2 or 3 (`0x0098da50`): keep moving. Call
+     `0x00539170(human, flagA, flagB)` with flagA = `+0x4a5` bit 2 (Lua arg 3) and flagB = bit 3 (Lua arg
+     4), then, if either is set, `0x00943960(human, 1, 500)` (raises a 500 ms-based upkeep timer at
+     `+0x1390` if it is lower). `0x00539170` sets the locomotion request byte `+0xb35` (1, or 2 plus
+     `+0x2bc` bit 7 for the fire variant) and, unless the human is in the `+0x2b8` bit 4 state or `+0xccc`
+     is above 1, calls `0x004ea460`, which hands the point stored at `+0x1500` to the locomotion layer
+     (`0x004e86e0`). The tick itself does no path planning and no end test in this branch. HIGH: the
+     producer of `+0x1500` was not traced.
+  3. Otherwise (pose not 2 or 3, i.e. standing still): **test B**: the stored point at `+0x468/+0x46c/+0x470`
+     (staged `+0x4c0..+0x4c8`); horizontal (x, z) squared distance (`0x00d9fc80`, no root) below 4.0
+     (2.0 m) **and** |stored y - human y| below 2.0 (a double compare against `0x01187ebc` = 2.0) = arrived:
+     finish as in step 1. The stored point is filled by `ai_do_scripted_move` from the three floats at
+     `0x029cdb98/9c/a0`, which are the shared zero vector (referenced by dozens of sites), so test B
+     compares against the world origin and is **effectively never true**; treat it as dead.
+  4. Otherwise: call `0x004f50b0(human, 0)` (the give-up end, see below).
+- **Completion** (arrived): `0x004f4f50` as in 4.1 and 21.5: bit 3 set, staged id 24 equal, mode equal
+  gives bit 2 set, bits 3 and 4 clear, ticket `+0x4aa` completed through `0x006f66d0`, staged block reset,
+  current action = none (0x47), and the keyed `0x14` wake record signalled (wakes a thread waiting on the
+  order). `ai_scripted_action_is_complete` then reads done.
+- **Failure and timeout.** There is **no timer in this tick**: a human that keeps pose 2 or 3 moves for
+  ever. The give-up case is "standing still, not within A, B false": `0x004f50b0(human, 0)` raises the
+  action's repeat timer to at least 0, sets `+0x44c` bit 0 (finished), and does **not** complete the ticket
+  (the ordered bit 3 and staged block remain, ticket status stays 0 = pending). The tick is then
+  suppressed and the decision step runs (4.3); `ai_scripted_action_is_complete` stays false until another
+  order replaces the ticket (a new kind-3 request frees the old one). A port must therefore not invent a
+  timeout; scripts that need one (sh03 re-issue when farther than 2.0 m) poll geometry themselves.
+- **Port rule (replaces item 4's CHOSEN radius):** while the destination object resolves and is alive,
+  complete the ticket on the first update where the squared distance from the human to the object's local
+  box (point objects: its position) is below 2.0 (1.414 m), regardless of pose. If it is not reached and
+  the human has stopped (not walking or running), end without completing. A destination that fails the
+  gate or is dead skips test A and ends the same way. This also satisfies sh03's `get_dist < 2.0`.
+  Note the first check happens on the first update after staging, so a human already inside 1.414 m
+  completes in one update.
+- **Test vectors.** (a) point nav object at (10, 0, 0), human at (8.7, 0, 0): squared 1.69 < 2.0 completes;
+  human at (8.5, 0, 0): squared 2.25 does not. (b) box target, local box x 0..4, y 0..2, z 0..4, local
+  human point (6, 1, 2): clamp (4, 1, 2), squared 4.0, not arrived; point (5, 1, 2): squared 1.0, arrived.
+  (c) human stopped 5 m away, pose not 2 or 3: finished bit set, `ai_scripted_action_is_complete` false.
+
 ---
 
 ## Changelog
+
+- **2026-10-15 - 21.8-21.10, 22.11: mission stall map** (SPEC TEAM). 32 of 49 missions stall at a Lua wait;
+  clustered by behaviour, with the spec section per cluster; engagement/kill-all recipe and scripted-move
+  completion added.
+
+- **2026-10-15 - §22: mission-driving AI** (SPEC TEAM). Chase (mode 4) planner cadence, target-relative speed law (stand-off 4.0 m, +5 m/s per stand-off), 10 m player hand-off; drive-to arrival radii (3.0 m move-to, 4 m / 2 m waypoint); seat-record claim/pending/seated sequence and per-stage predicate reads; heli fly-to basics. Static analysis only.
+
+- **2026-10-15 - §21: combat and NPC behaviour end to end** (SPEC TEAM). Decision loop, target selection
+  (no scoring chooser; event 77/78 handlers), cover search and timers, flee/cower chooser (0.8/0.5 flee
+  probability, 30 m stop radius), human shield grab gates, native-order override and completion, five
+  test vectors. Notoriety shown not to be an AI input.
 
 - **2026-10-14 — §20.6.7–20.6.12: population tails** (SPEC TEAM). Car-following law (`0x00b51950`,
   5 m stop gap, ≈ 11 m steady gap, 0.75/0.5 hysteresis) and obstacle probe; `0x00b5e6c0` re-identified
@@ -7844,3 +9572,40 @@ decompiler tokens.
   `[0,1]`, these real values mean the curve is a structural no-op: steering input passes through
   unshaped, no deadzone or ramp. Cleanroom self-check: strict regex 0 hits, C-cast-dereference
   check 0 hits.
+
+### 22.12 NPC weapon accuracy data (PARTIAL, 2026-10-15)
+
+This section answers the gap Team B's combat audit raised: there were no accuracy numbers. Only the data layout is FINAL so far. The per-shot miss model is still OPEN.
+
+- **Accuracy table.** Each weapon names an accuracy record. The weapon's info block holds a pointer to that record; when the weapon names none, a default record is used. Records are loaded from a weapon-tweak container and found by name (string compare).
+- **Record fields** (float unless noted):
+  - turn_speed
+  - Close_range, Close_accuracy, Far_range, Far_accuracy
+  - Bounces_per_sec, Speed_multipler (the misspelling is the game's own field name)
+  - recover_penalty, recover_time, bullets_to_unsteady (all in the Recovery group)
+  - start_burst_box_pct (Firing group)
+  - explosive_z_offset, explosive_y_offset, lead_pct, explosive_error_radius_min, explosive_error_radius_max (Explosive_Miss group)
+  - explosive_error_flat (a sub-record)
+- **Burst firing.** The weapon field Burst_Delay_ms holds the delay between bursts. NPC_Desired_Burst_Size defaults to 3 for one weapon class, and to 1 for every other class, before the table value is read.
+- **CHOSEN until the reader is found:**
+  - Interpolate accuracy linearly from Close_accuracy at Close_range to Far_accuracy at Far_range, clamping outside that span.
+  - Read accuracy as the probability that a shot hits.
+  - Spread each miss randomly around the target.
+  - Give explosive weapons a miss radius chosen uniformly between explosive_error_radius_min and explosive_error_radius_max.
+  - Fire bursts of NPC_Desired_Burst_Size shots, with Burst_Delay_ms between bursts.
+- **OPEN:** the in-game shot code that reads Close_accuracy and Far_accuracy (one candidate site reads the explosive radius max but is not confirmed); grenade throw decisions; the Firearm_Accuracy and accuracy_multiplier upgrade stats, which scale accuracy for the player.
+
+#### 22.12.1 Explosive aim and burst timing (2026-10-16, static)
+
+- **Explosive aim** (grenades and rockets, 0x0054dce0; returns success or failure). It uses the accuracy record of the shooter's current weapon.
+  - **Lead:** the aim point is the target position plus a vector built from the target's velocity, scaled by lead_pct and by a random factor drawn uniformly from 0.75 to 1.2. CONFIRMED.
+  - **Error radius:** t = clamp(distance(shooter, target) / 15.0 m, 0, 1). The low end is min(explosive_error_radius_min, 0.25 x a distance-scaled value). The radius is low + t x (explosive_error_radius_max - low), and it multiplies a random offset vector. The explosive_error_flat flag picks between two random-offset generators; the flat variant is guessed to keep the offset horizontal. CONFIRMED, except the meaning of the flat variant, which is a GUESS.
+  - **Final adjustments:** explosive_z_offset scales the normalised aim direction, and explosive_y_offset adds a vertical offset. The result must then pass a line-of-sight and validity check; if it fails, the throw is not taken. CONFIRMED.
+  - **Early gates:** a timing value above 5000 ms, or above 2000 ms together with a target flag, sends the code down an alternate path. Those gates are not decoded.
+- **Burst timing** (around 0x00556a00). Weapon info is reached as the character's current weapon info.
+  - Burst_Delay_ms and NPC_Desired_Burst_Size are both multiplied by 1/30, which turns them into frame-time units.
+  - The next-fire timer becomes max(candidate, old - Burst_Delay x 1/30).
+  - When the weapon is idle, the burst window becomes max(old, Burst_Size x 1/30 + x).
+  - A piecewise-linear table in weapon info appears to feed this timer. GUESS.
+- start_burst_box_pct is a player reticle value only (HUD), not NPC accuracy.
+- **Still OPEN:** no reader of Close_accuracy, Far_accuracy, recover_* or bullets_to_unsteady was found by whole-text scanning. Keep the CHOSEN bullet model in §22.12. A reference search outward from the accuracy array in Ghidra is the next step.

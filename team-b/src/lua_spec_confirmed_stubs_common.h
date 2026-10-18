@@ -31,6 +31,7 @@
 #include "sr3luahost/spec_confirmed_stubs.h"
 
 #include "sr3luahost/bare_globals.h"
+#include "sr3airuntime/npc_ai_runtime.h"
 
 #include <algorithm>
 #include <cmath>
@@ -489,5 +490,28 @@ inline void registerOne(lua_State* L, EngineState& state, HitLog& log, const std
 // lua_spec_confirmed_stubs_registry.cpp and passed by reference into each
 // section in turn.
 using WantsPredicate = std::function<bool(const char*)>;
+
+// 0x00a3bae0(character, 0) - the predicate character_is_ready (Sec7.27) returns and move_to_do (Sec21.22) gates on
+// with its arg 5 false. Single-player port rule (spec 7.27 FINAL): false when dead, hidden/unusable (+0x3b bit 0),
+// ragdolled/physics-posed (0x009a1dc0 = pose byte +0xcd2 not 0/6), or while a tracked scripted action is pending;
+// otherwise true. The NPC-only AI-mode tests (Stunned, Idle + "trans to stand") read the NPC AI loop when it tracks the NPC.
+inline bool characterReadyPredicate(EngineState* st, const std::string& resolvedName) {
+    CharacterState& c = st->getOrCreateCharacter(resolvedName);
+    if (!c.aliveByPredicate()) return false; // 0x0096f4f0
+    if (c.hiddenFlag.known() ? c.hiddenFlag.get() : c.hidden) return false;
+    if (st->characterReadyBlocked().known(resolvedName) && st->characterReadyBlocked().get(resolvedName)) return false;
+    // AI-16, spec 7.27 FINAL (NPC-only tests): an NPC whose AI mode is Stunned (34), or Idle (0) with sub-state 0x26 "trans
+    // to stand", is not ready. Read from the NPC AI loop when it tracks this character (the player is never tracked).
+    if (sr3airuntime::NpcAiRuntime* ai = st->npcAi()) {
+        const uint64_t handle = st->npcAiHandleOf(resolvedName);
+        if (handle != 0) {
+            const int32_t m = ai->modeOf(handle);
+            if (m == sr3airuntime::mode::Stunned) return false;
+            const sr3airuntime::NpcState* ns = ai->state(handle);
+            if (m == sr3airuntime::mode::Idle && ns && ns->ai->mode.state.subState == 0x26) return false;
+        }
+    }
+    return c.scriptedLookupNonNull(); // 0x004f2880: no pending scripted action
+}
 
 } // namespace sr3luahost

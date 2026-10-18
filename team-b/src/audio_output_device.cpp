@@ -56,6 +56,7 @@ struct AudioOutputDevice::VoiceSlot {
     std::unique_ptr<OneShotVoiceCallback> callback;
     std::shared_ptr<std::atomic<bool>> finished;
     std::vector<int16_t> ownedPcm;  // the real copy - see this file's header's own top comment
+    uint64_t id = 0;
 };
 
 AudioOutputDevice::AudioOutputDevice() = default;
@@ -148,6 +149,31 @@ void AudioOutputDevice::pump() {
 
 bool AudioOutputDevice::playOneShot(const int16_t* interleavedPcm, size_t sampleCount, long sampleRate,
                                      int channels, float volume, std::string& error) {
+    return playTracked(interleavedPcm, sampleCount, sampleRate, channels, volume, error, nullptr);
+}
+
+void AudioOutputDevice::stopVoice(uint64_t id) {
+    if (id == 0) return;
+    for (auto it = activeVoices_.begin(); it != activeVoices_.end(); ++it) {
+        if ((*it)->id != id) continue;
+        if ((*it)->voice != nullptr) {
+            (*it)->voice->Stop(0);
+            (*it)->voice->DestroyVoice();
+            (*it)->voice = nullptr;
+        }
+        activeVoices_.erase(it);
+        return;
+    }
+}
+
+bool AudioOutputDevice::isVoiceActive(uint64_t id) {
+    pump();
+    for (auto& v : activeVoices_) if (v->id == id) return true;
+    return false;
+}
+
+bool AudioOutputDevice::playTracked(const int16_t* interleavedPcm, size_t sampleCount, long sampleRate,
+                                     int channels, float volume, std::string& error, uint64_t* outVoiceId) {
     if (xaudio2_ == nullptr) {
         error = "AudioOutputDevice not initialised";
         return false;
@@ -195,6 +221,8 @@ bool AudioOutputDevice::playOneShot(const int16_t* interleavedPcm, size_t sample
         return false;
     }
     slot->voice = voice;
+    slot->id = nextVoiceId_++;
+    if (outVoiceId != nullptr) *outVoiceId = slot->id;
 
     XAUDIO2_BUFFER buffer{};
     buffer.AudioBytes = static_cast<UINT32>(slot->ownedPcm.size() * sizeof(int16_t));

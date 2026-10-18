@@ -151,7 +151,11 @@ int stub_effect_play(lua_State* L) {
     (void)optionalBoolDefault(L, 2, false);
     (void)optionalNumberDefault(L, 3, 0.0);
     EngineState* st = upState(L);
-    if (!st->objectResolves().get(name)) { // OPEN until set
+    // Spec 9.1 blocker dlc3_m01 (FINAL): the by-name table (0x004588f0) hashes the lower-cased name and compares
+    // case-insensitively, and every navpoint of a loaded zone is registered in it, so a name found among the loaded
+    // zone objects (case-insensitively) resolves. Anything else keeps the shared objectResolves() lookup.
+    const bool resolves = st->resolveZoneObject(name) != nullptr || st->objectResolves().get(name); // OPEN until set
+    if (!resolves) {
         lua_pushnumber(L, EngineState::kActionPlaySentinelResolveFail);
         return 1;
     }
@@ -386,7 +390,9 @@ int stub_audio_persona_line_playing(lua_State* L) {
 // reduces to argument parsing only.
 int stub_audio_remove_mission_cellphone(lua_State* L) {
     logCall(L, upLog(L), "audio_remove_mission_cellphone", upStateTag(L));
-    (void)argString(L, 1); // 1 mandatory string, read unconditionally (CONFIRMED)
+    std::string callId = argString(L, 1); // 1 mandatory string, read unconditionally (CONFIRMED)
+    // Spec V.3 (CONFIRMED, spec sync bfe0542): clears both hook slots, never fires cb2.
+    upState(L)->removeMissionCellphoneCall(callId);
     return 0;
 }
 
@@ -517,6 +523,7 @@ int stub_trigger_enable(lua_State* L) {
     int64_t flags = truncateEa2596(optionalNumberDefault(L, 3, 3.0));
     EngineState* st = upState(L);
     if (st->objectResolves().get(name)) { // OPEN until set
+        st->applyTriggerEnableTransition(name, enable); // spec V.4: disable emits EXIT for a human inside; enable of a disabled trigger = fresh phantom (reads the PREVIOUS enable state, so before the record below)
         st->recordTriggerEnable(name, enable, flags);
     }
     return 0;
@@ -668,7 +675,25 @@ int stub_mission_set_checkpoint(lua_State* L) {
     // CONFIRMED short-circuit: only consult usePlayerVehicleTransform when
     // arg 2 is false - when arg 2 is true the function "always snapshots
     // from the generic default-character accessor" without checking it.
-    bool useVehicle = !arg2 && cp.usePlayerVehicleTransform.get(); // OPEN until set, only read on this branch
+    // Spec a166141 Sec1.6: derived from real state - the local player counts only when seated
+    // (+0x16d4 == 3) in a resolved vehicle matching its own vehicle link; otherwise the
+    // player-position branch. An explicit test override (usePlayerVehicleTransform.set) wins.
+    bool useVehicle = false;
+    if (!arg2) {
+        if (cp.usePlayerVehicleTransform.known()) {
+            useVehicle = cp.usePlayerVehicleTransform.get();
+        } else {
+            const std::string player = st->localPlayerNameForTesting().known()
+                                           ? st->localPlayerNameForTesting().get() : std::string("#PLAYER1#");
+            if (st->hasCharacter(player)) {
+                CharacterState& pc = st->getOrCreateCharacter(player);
+                useVehicle = pc.stateEnum.known() && pc.stateEnum.get() == 3 &&
+                             pc.currentVehicleName.known() && !pc.currentVehicleName.get().empty() &&
+                             st->objectResolves().known(pc.currentVehicleName.get()) &&
+                             st->objectResolves().get(pc.currentVehicleName.get());
+            }
+        }
+    }
     cp.lastUsedVehicleTransform = useVehicle;
     cp.lastLoadoutSlotsZeroed = arg3;
     try { // never let a C++ exception cross this extern "C" Lua frame (common.h's own top rule)
@@ -863,6 +888,7 @@ int stub_character_is_dead(lua_State* L) {
     if (primaryResolves && !dead && st->missionContext().missionEndTimer1Armed) {
         dead = true; // CONFIRMED mission-end-transition-timer override, primary branch only
     }
+    if (!dead && objectExists && name.rfind("#PLAYER", 0) != 0) st->noteDeathPollQuery(primaryResolves ? name : resolvedName); // --auto-objective harness bookkeeping only (a live, non-player target a script is waiting on)
     lua_pushboolean(L, dead ? 1 : 0);
     return 1;
 }

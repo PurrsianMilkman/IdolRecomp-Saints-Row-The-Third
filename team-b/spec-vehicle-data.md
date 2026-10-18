@@ -377,8 +377,97 @@ All of the following are (evidence dump, not in repo). Ghidra post-scripts: `AfD
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: 123 vehicles (106 + 17), class census, `Mass` absent 3/123, `Maximum_Speed` 300 in 2/210, 15 shared IDs, `Drift_Ramp_Time` 123/123, 19 group rows all match Team B `HANDOFF.md` §9.84 (element-tree level only; runtime offsets stay NEEDS-EXE) — desk review (not re-derived from the executable).**
 
+## Per-vehicle data load path (2026-10-14)
+
+**Scope and method.** What data a vehicle needs, in what order it is read, who overrides whom, and the resolved
+values for three test vehicles. Read with capstone from `SaintsRowTheThird.exe` (`tools/scratchpad/fr2_*.py`,
+`vehphys_dis.py`) plus the shipped files (`vehicles.xtbl`, `vehicle_groups.xtbl`, `vehicle_defaults.xtbl`,
+`<name>_veh.xtbl`, `<name>.xtbl`, `.ccar_pc`). No game run. Labels: **FINAL** / **PARTIAL**.
+
+**Load order — FINAL (driver `0x00ace640`).**
+1. `vehicles.xtbl` and, for every kept row, the variant file `<name>.xtbl`, through the vehicle-table parser
+   `0x00ad0450` (source file `vehicle_table_parser_*.cpp`), into the global container `vehicle_containers`
+   (`0x01495DD8`). Rows are kept when `Framework` is absent or `"main"` (retail: all **104** rows, none carry a
+   `Framework`). This closes the §7.1 residual: base slots `0…103` = 104 listed rows.
+2. `vehicle_defaults.xtbl`, only its `<Defaults>` child (`0x00acb5b0`), into the global block (§7.2).
+3. `vehicle_groups.xtbl`, each `<Vehicle_Group>` into group row *n* (§7.2).
+4. `vehicle_group_cameras.xtbl` and the rest of the camera/tuning tables (not vehicle physics).
+5. For every kept name, `<prefix><name>_veh.xtbl` (format `%s%s_veh.xtbl`; the prefix is empty for the base game;
+   fallback substitution when the file is missing, §7.1) read by the entry reader `0x00acbfc0` into table slot
+   `start + i` (§7.1).
+6. DLC archives repeat steps 1 and 5 with their framework list (`dlcN_vehicles.xtbl`); slots begin at the first
+   row's `Info_Slot_Index`.
+
+**Override order for a numeric field — FINAL (§7.2, restated).** Global `<Defaults>` → the vehicle's group row
+(chosen by hashing its `Group` text, entry `+0x480` keeps the row pointer) → the `_veh.xtbl` `<Vehicle>` element.
+Axle fields follow the same chain per axle (`Axles > Axle`, element 0 = front, 1 = rear; the global block spells
+them `Spring_Length`, `Spring_Strength`, `Spring_Damp_Comp`, `Spring_Damp_Exp`). Case-insensitive names
+(`Center_of_Mass_Z_Offset` matches `Center_Of_Mass_Z_Offset`). Units are converted once, after the three layers
+(mph → m/s ×0.44704, degrees → radians).
+
+**Variant file `<name>.xtbl` — FINAL for the fields the parser reads (`0x00ad0480`).** The file's `Vehicle` →
+`Variants` → `Variant` rows are read one by one (at most 16 per vehicle; record stride `0x49c`, name slots of
+`0x41` bytes). Per variant the parser reads `File_Id` (default `0xFFFE` when absent), `Fully_Customizable` and
+`Has_Peg`. The variant's resource name is `"%s_%u"` (vehicle name, `File_Id`), or just the vehicle name when
+`File_Id` is `0xFFFE` (`0x00ad09f1`). That resource name is the `.str2_pc` / `.ccar_pc` stem: for example variant
+`File_Id 2` of `car_2dr_exoticsports01` is `car_2dr_exoticsports01_2.str2_pc/car_2dr_exoticsports01_2.ccar_pc` in
+`vehicles.vpp_pc`. If the variant file is missing, a fallback is read instead (`heli_standard_04` for names
+containing `heli`, else `car_2dr_muscle02`, same rule as the `_veh` file). `Components`, `Colors`, `Wheels` inside
+each variant are customization data (`spec-customization-data.md`).
+
+**Geometry per instance — FINAL (formats in `spec-vehicle-geometry.md`; physics use in `spec-physics-runtime.md`
+§10.11).**
+- The `.ccar_pc` constructor matches the instance to a variant element of the entry (§7.1), then:
+  - the part list at `+0x390` count / `+0x3A0` records (stride `0xE0`): wheel parts are those with part type
+    (`+0x44` of the record) 2 (front axle) or 3 (rear axle); wheel position = translation row of the part
+    transform (floats 12..14 of the record), in vehicle coordinates (x right, y up, z forward). Child dummies
+    `PD_wheel_xx01/02` (types 18/23, 6/24) are not wheels and sit at the parent origin;
+  - header `+0x44/+0x48/+0x4C` = base centre of mass.
+- Wheel positions do not change between the variants of one vehicle (checked for exoticsports01 variants 1, 2, 3:
+  identical to 4 decimals; pickup03 variants 0 and 1 and genki variant 0 share identical headers).
+- Wheel radius and width do not come from the `.ccar_pc`: they come from the equipped rim in the shared
+  `externalized_components.cvcomp_pc` (`vehicles_preload.vpp_pc`) scaled by the variant's `Wheel_Group` sizes
+  (`spec-physics-runtime.md` §10.11.4): `radius = 0.2048 × Ts[size]`.
+
+**Centre-of-mass resolution — FINAL formula, PARTIAL source.** `com = (0, base.y + Center_Of_Mass_Y_Offset,
+base.z + Center_Of_Mass_Z_Offset)` with `base` = header `+0x48/+0x4C` of the matched `.ccar_pc` (x forced to 0;
+the entry's `+0x618` x offset is added then overwritten, §10.11.2). The header source for `base` is HIGH, not proven (§10.11.2).
+
+**Test vectors** (static, from shipped data):
+
+| Quantity | `car_4dr_genki` | `car_2dr_exoticsports01` | `truck_2dr_pickup03` |
+|---|---|---|---|
+| archive of `_veh.xtbl` / variant file | `dlc1.vpp_pc` (`dlc1__car_4dr_genki_veh.xtbl`, `dlc1__car_4dr_genki.xtbl`) | `misc_tables.vpp_pc` | `misc_tables.vpp_pc` |
+| `vehicles.xtbl` row / entry slot | DLC1 list row 2, slot **105** (list starts at `Info_Slot_Index` 104 with `sp_mdsphere_genki`) | row **6**, slot 6 | row **59**, slot 59 |
+| `Group` → group row | `Car - standard` | `Car - sports` | `Truck - small (pickups)` |
+| `ID` | 58 | 23 | 74 |
+| `Mass` kg | 1500 | 1000 | 2000 |
+| `Center_Of_Mass_Y_Offset` / `Z_Offset` | −0.7 / 0 | −0.3 / −0.2 | −0.4875 / 0.45 |
+| variants (`File_Id`: name) | 0: Average | 0 Rough, 1 Average, 2 Ultimate, 3 Fully_Customizable | 0 Rough, 1 Average, 2 Fully_Customizable |
+| `.ccar_pc` stem | `car_4dr_genki_0` | `car_2dr_exoticsports01_<File_Id>` | `truck_2dr_pickup03_<File_Id>` |
+| `Wheel_Group` front width/size, rear width/size | 2 / 11, 2 / 11 (`wheels`) | 2 / 9, 4 / 10 (`Standard`) | 2 / 14, 2 / 14 (`Default`) |
+| header `+0x44` x, y, z (base COM) | 0.0052, 0.3873, 0.2355 | 0.0, −0.0012, −0.0531 | 0, 0, 0 |
+| **resolved CoM (x, y, z)** | **(0, −0.3127, 0.2355)** | **(0, −0.3012, −0.2531)** | **(0, −0.4875, 0.45)** |
+| wheel FL | (−0.7701, −0.2185, 1.8841) | (−0.8584, −0.2920, 1.3417) | (−0.7270, −0.6319, 1.6598) |
+| wheel FR | (0.7675, −0.2185, 1.8841) | (0.8586, −0.2920, 1.3331) | (0.7270, −0.6314, 1.6587) |
+| wheel BL | (−0.7204, −0.2197, −1.4923) | (−0.8957, −0.2697, −1.5947) | (−0.7280, −0.6420, −1.3966) |
+| wheel BR | (0.7201, −0.2197, −1.4963) | (0.8960, −0.2697, −1.5925) | (0.7280, −0.6420, −1.3966) |
+| radius F / R | 0.2458 / 0.2458 (`Ts[11]` = 1.2) | 0.2253 / 0.2355 (`Ts[9]` = 1.1, `Ts[10]` = 1.15) | 0.2765 / 0.2765 (`Ts[14]` = 1.35) |
+| front axle part type / rear | 2 / 3 | 2 / 3 | 2 / 3 |
+
+The wheel and radius rows repeat `spec-physics-runtime.md` §10.11.9 so Team B has one table per vehicle. A
+resolver that loads the three layers in the order above, then the variant file for `File_Id`, then the `.ccar_pc`,
+and applies the formulas of this section, reproduces every row.
+
+**OPEN:** which `File_Id` a spawned instance picks (weights in the variant rows, `Weight`/`ParkingWeight`, and the
+spawn-time selection are in `spec-customization-data.md`/the traffic spawner, not re-derived here); the writer of
+the customisation-record bytes that mirror `Wheel_Group` (§10.11.4); the `.rig_pc` bound via entry `+0xAC8`
+(§7.1 (d)).
+
 ## Changelog
 
+- 2026-10-14: new section "Per-vehicle data load path" (load order, override chain, variant naming, CoM and wheel
+  resolution, test vectors for genki, exoticsports01, pickup03). Settles the base row count (104).
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): added a resolved banner to §2 and marked §3/§6 item 1's "blocked" statements resolved (§7.9, §7.11); marked the "no shipped Airplane/Watercraft sample" statements (§5, §6 item 4, §7 headline, §7.5) superseded by §7.11; struck §6 item 5 (`.cvtf_pc`, resolved by `spec-geometry-format.md` §5); fixed the DLC vehicle count (6–7 → 7/8/2) and the integer-value count (46 → 80); struck §7.7's "largest value 100" row result (§7.11); flagged the `spec-output.md` citation as unpublished.
 - 2026-09-30 (cloud, self-containment pass): restated 0 load-bearing HANDOFF/WALLS-only facts inline (every HANDOFF/WALLS citation here is provenance/methodology, or the fact is already stated in this or another spec); repointed 0 `HANDOFF.md` §27.x references to the archived headings; 0 left (see review).
 - 2026-09-30 (adversarial desk review, `review/adv_vehicle-data.md`): added review-status summary and per-unit status lines; marked OPEN: 106 files vs 104 base slots (§7.1), element `+0x5C`/`+0x6C` vs `spec-geometry-format.md` (§7.1), default-then-overwrite vs always-write and the `Mass` accessor (§7.2), `Group` coverage, effects 22 vs 16 dwords, hardtop/roof range, unlisted `+0x484`/`+0x90C` regions, seat literals vs `spec-tables-vehicle-world.md`, upgrade cost branch, Vtol camera block, bool literals; clarified §7.5 offset bases from the spec's own block sizes (Airplane block-relative, Helicopter entry-relative); struck §7.9 item 1's stale "not yet validated"; added §7.9 items 8–14; marked dead fields and units in §4; repointed absent `tools/` evidence paths as "(evidence dump, not in repo)".

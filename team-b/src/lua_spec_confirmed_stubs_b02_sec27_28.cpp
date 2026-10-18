@@ -703,7 +703,20 @@ int stub_get_char_vehicle_is_in_air(lua_State* L) {
     EngineState* st = upState(L);
     std::string resolvedName;
     if (resolveFollowerAwareObject(st, name, resolvedName)) { // OPEN until set; may throw OpenStateError for an unresolved-index #FOLLOWER...# literal
-        inAir = st->vehicleInAirByCharacter().get(resolvedName); // OPEN until set
+        if (st->vehicleInAirByCharacter().known(resolvedName)) {
+            inAir = st->vehicleInAirByCharacter().get(resolvedName); // test/override wins
+        } else {
+            // Sec28.8 (78fb40a, FINAL): 0x00ad4040 = no static-world contact, no wheel contact, not in water; a
+            // flying helicopter is airborne. No contact physics here: a flying-class vehicle (xtbl class 2
+            // airplane/3 heli/4 VTOL) counts as airborne until helicopter_land marks it landed or it is in water;
+            // a character with no current vehicle, or a ground-class vehicle, reads false.
+            const CharacterState& ch = st->getOrCreateCharacter(resolvedName);
+            if (ch.currentVehicleName.known() && !ch.currentVehicleName.get().empty()) {
+                const VehicleState& v = st->getOrCreateVehicle(ch.currentVehicleName.get());
+                int32_t cls = v.flyingType.get(); // OPEN (throws) when the vehicle's class is not known
+                inAir = (cls == 2 || cls == 3 || cls == 4) && !v.landed && !v.inWater;
+            }
+        }
     }
     lua_pushboolean(L, inAir ? 1 : 0);
     return 1;
@@ -736,16 +749,34 @@ int stub_effect_play_finisher(lua_State* L) {
     int64_t selector = truncateEa2596(optionalNumberDefault(L, 3, 3.0));
     (void)selector; // stored on the request (+0x6c), own meaning OPEN per spec
     EngineState* st = upState(L);
-    const char* iconName = st->effectFinisher().gamepadMode.get() ? "vfx_xbox_Icon" : "vfx_pc_Icon"; // OPEN until set
-    if (!st->effectFinisher().effectIndexValid.get(iconName)) { // OPEN until set
+    // 0x0141250d answered (spec sync bfe0542, Sec28.9 blocker sh02, FINAL): the "last active input device is a
+    // gamepad" byte, 0 at load (the same byte game_is_active_input_gamepad returns), set only by the input latch
+    // on gamepad activity. On PC with keyboard and mouse it is 0, so the icon is vfx_pc_Icon. A test-set
+    // gamepadMode still wins.
+    const bool gamepadActive = st->effectFinisher().gamepadMode.known() ? st->effectFinisher().gamepadMode.get()
+                                                                         : st->activeInputIsGamepad();
+    const char* iconName = gamepadActive ? "vfx_xbox_Icon" : "vfx_pc_Icon";
+    // A test-set value wins; else the real effects tables' Name set (spec-tables-environment.md 10.1, 0x005c50b0) says the
+    // icon effect exists -> index != -1. A name absent from the tables stays OPEN.
+    const bool iconIndexValid = (!st->effectFinisher().effectIndexValid.known(iconName) && st->effectNameInTable(iconName))
+                                    ? true
+                                    : st->effectFinisher().effectIndexValid.get(iconName); // OPEN until set
+    if (!iconIndexValid) {
         lua_pushnumber(L, -1.0); // CONFIRMED failure sentinel
         return 1;
     }
-    if (target.empty() || !st->objectResolves().get(target)) { // OPEN until set when target non-empty
+    if (target.empty() || !(st->resolveZoneObject(target) != nullptr || st->objectResolves().get(target))) { // OPEN until set when target non-empty
         lua_pushnumber(L, -1.0);
         return 1;
     }
-    lua_pushnumber(L, st->effectFinisher().successReturn.get()); // OPEN until set
+    // Success: 0x00a48af0 pushes the created instance's packed identifier (spec 28.9 Return line and the sh02
+    // note: "return the effect handle"). The packed value is not specified, so a test-set successReturn wins and
+    // otherwise the same port-allocated handle effect_play (9.1) returns stands in.
+    if (st->effectFinisher().successReturn.known()) {
+        lua_pushnumber(L, st->effectFinisher().successReturn.get());
+    } else {
+        lua_pushnumber(L, static_cast<lua_Number>(st->nextVisualEffectHandle()));
+    }
     return 1;
 }
 

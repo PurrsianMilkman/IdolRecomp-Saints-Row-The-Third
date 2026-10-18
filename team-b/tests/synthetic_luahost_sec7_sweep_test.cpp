@@ -95,7 +95,7 @@ int main() {
         Host host(fixtureNames());
         lua_State* gp = host.gameplayState();
         EngineState& es = host.engineState();
-        refuses(host, gp, "character_exists('Nobody')", "named-object resolution");
+        ok(host, gp, "assert(character_exists('Nobody') == false)"); // Sec7.9 (78fb40a): unresolved -> false
         es.objectResolves().set("KnownMissing", false);
         ok(host, gp, "assert(character_exists('KnownMissing') == false)");
         es.objectResolves().set("Alice", true);

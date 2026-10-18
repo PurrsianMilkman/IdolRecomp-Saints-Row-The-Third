@@ -62,6 +62,58 @@ double SteeringRateLimiter::Update(double targetRad, double dt) {
     return current_;
 }
 
+double SteeringProfileLimiter::Update(double targetRad, double dt) {
+    const bool centring = (targetRad == 0.0);
+    const double V = centring ? p_.returnSpeed : p_.turnInSpeed;
+    const double A = centring ? p_.returnAccel : p_.turnInAccel;
+    if (!(V > 0.0) || !(A > 0.0)) {  // no profile data: snap (callers only construct this with data)
+        angle_ = targetRad;
+        vel_ = 0.0;
+        return angle_;
+    }
+    double rem = dt;
+    for (int seg = 0; seg < 8 && rem > 1e-6; ++seg) {
+        const double e = targetRad - angle_;
+        const double s = (e > 0.0) ? 1.0 : -1.0;
+        const double ae = std::abs(e);
+        const double w = vel_ * s;  // speed toward the target (negative = moving away)
+        if (ae < 1e-9 && std::abs(w) < 1e-9) {
+            angle_ = targetRad;
+            vel_ = 0.0;
+            break;
+        }
+        double accel;     // along s
+        double tEvent;    // time until the phase changes
+        if (w < 0.0) {
+            accel = A;
+            tEvent = -w / A;
+        } else if (w * w / (2.0 * A) >= ae * (1.0 - 1e-12)) {
+            accel = -A;  // must brake now
+            tEvent = w / A;
+        } else if (w >= V - 1e-9) {
+            accel = 0.0;  // cruise until the braking point
+            tEvent = (ae - V * V / (2.0 * A)) / V;
+        } else {
+            accel = A;
+            const double tV = (V - w) / A;
+            const double tB = (-w + std::sqrt(w * w * 0.5 + A * ae)) / A;
+            tEvent = std::min(tV, tB);
+        }
+        const double h = std::min(rem, std::max(tEvent, 0.0));
+        const double step = (h > 0.0) ? h : rem;
+        const double wNew = std::clamp(w + accel * step, -V, V);
+        angle_ += s * (w * step + 0.5 * accel * step * step);
+        vel_ = s * wNew;
+        rem -= step;
+        if (h <= 0.0) break;
+    }
+    if (std::abs(targetRad - angle_) < 1e-9 && std::abs(vel_) < 1e-6) {
+        angle_ = targetRad;
+        vel_ = 0.0;
+    }
+    return angle_;
+}
+
 // ===========================================================================
 // 10.2 Engine
 // ===========================================================================
@@ -331,25 +383,33 @@ FrictionCouplingInverse2x2 InvertFrictionCouplingMatrix(double couplingX, double
     return result;
 }
 
-FrictionEllipseCurveFn FrictionSlipTableCurve(const FrictionSlipTable& table) {
-    // Captured by value - the table is small (16 doubles + 2 scalars) and a
-    // caller may build this curve once per vehicle/axle, not per call.
-    return [table](double overshootFraction) -> double {
-        const double clampedFraction = std::clamp(overshootFraction, 0.0, 1.0);
-        if (clampedFraction <= table.boundary) {
-            // CHOSEN reading of "a pre-loop boundary value" (see header doc
-            // comment): below it, the per-entry walk never starts at all.
-            return table.entries.front() * table.entryMultiplier;
+FrictionSlipLookup LookupFrictionSlipTable(const FrictionSlipTable& table, double A, double B) {
+    // spec-physics-runtime.md 10.11.6 PORT RULE (FINAL): search, do not index.
+    FrictionSlipLookup out;
+    if (A * A + B * B <= 1.0) return out;  // inside the friction circle: no correction
+    out.belowCircle = false;
+    double prevU = 0.0, prevV = 0.0, prevS = 0.0;
+    double ladder = A * table.start;  // u_0
+    for (int i = 0; i < 16; ++i) {
+        const double u = ladder;
+        const double v = B * table.entries[static_cast<size_t>(i)];
+        const double S = u * u + v * v;
+        if (S > 1.0 || i == 15) {
+            const double r = std::sqrt(S);
+            const double pr = std::sqrt(prevS);
+            const double t = (1.0 - pr) / std::max(r - pr, 1.19e-7);
+            out.stopIndex = i;
+            out.t = t;
+            out.u = std::clamp((1.0 - t) * prevU + t * u, -1.1, 1.1);
+            out.v = (1.0 - t) * prevV + t * v;
+            return out;
         }
-        const double span = std::max(1e-9, 1.0 - table.boundary);
-        const double t = std::clamp((clampedFraction - table.boundary) / span, 0.0, 1.0);
-        const double scaledIndex = t * static_cast<double>(table.entries.size() - 1);
-        const size_t lo = static_cast<size_t>(scaledIndex);
-        const size_t hi = std::min(lo + 1, table.entries.size() - 1);
-        const double frac = scaledIndex - static_cast<double>(lo);
-        const double interp = table.entries[lo] + frac * (table.entries[hi] - table.entries[lo]);
-        return interp * table.entryMultiplier;
-    };
+        prevU = u;
+        prevV = v;
+        prevS = S;
+        ladder *= table.q;
+    }
+    return out;  // unreachable: entry 15 always stops the search
 }
 
 FrictionEllipseResult SolveFrictionEllipse(double axis1ForceIn, double axis2ForceIn, double axis1Limit,

@@ -421,7 +421,7 @@ enum class PrimaryBlockType : uint8_t {
     MotionCopyVariant3 = 2,     // OPEN: motion-vector bit-width/encoding not given
     Giant1FullResTwin = 3,      // OPEN: giant1's own bit-level token format not given
     MotionHuffmanResidual4 = 4, // OPEN: motion-vector gap + tree-table values not given
-    IntraIdct5 = 5,             // OPEN: quant-table bytes + AC index mapping not given
+    IntraIdct5 = 5,             // CONFIRMED (Sec5.3al, 2026-10-14): DC word + AC tree + nibble + intra IDCT, pixel-exact vs DLL
     SolidFill6 = 6,             // CONFIRMED (Sec5.3aj, 2026-10-13): solid 8x8 fill, 1 colour byte
     InterIdctResidual7 = 7,     // OPEN: same gaps as 5, plus the motion-vector gap
     PatternBlend4Bit8 = 8,      // OPEN: control-nibble-to-pixel spatial mapping not given

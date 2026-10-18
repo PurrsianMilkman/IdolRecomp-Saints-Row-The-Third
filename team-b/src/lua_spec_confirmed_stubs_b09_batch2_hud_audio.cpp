@@ -771,6 +771,7 @@ int stub_vehicle_detonate(lua_State* L) {
     VehicleState& v = st->getOrCreateVehicle(name);
     // f752324: bit 0x1 is a re-entrancy latch, 0 on a fresh/intact vehicle -> unseeded = false.
     if (v.destroyedFlag16c8.known() && v.destroyedFlag16c8.get()) return 0; // CONFIRMED early bail-out when latch set
+    st->notifyVehicleDestroyed(name);        // spec D: on_vehicle_destroyed queued BEFORE the occupants die (engine callback dispatch)
     ++v.detonateAppliedCount;                // gate passed - the real force/damage dispatch's own deep internals are OPEN, not modelled
     return 0;
 }

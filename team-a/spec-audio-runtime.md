@@ -5161,7 +5161,7 @@ rule that applies:
   5. Append [intro] song [outro].
 - `Callin_percent` and the call-in list are **never used** by the builder. Retail lists are empty anyway.
   `GENX_CALLIN_*` cues sit in `Intro_list` and play as intros.
-- Pattern quirk: the slot type is read from pattern entry 0 onward on every rebuild. The wrap point is
+- Pattern quirk: the slot type is read from pattern entry 0 onward on every rebuild. **[2026-10-14 clarification: the 512-step bound and the wrap test are counted from the saved position `+0x19E`, while the slot type at step n is pattern[n mod count] from entry 0 of this rebuild. A port that restarts at entry 0 and counts 512 steps from 0 (Team B's `buildQueue`) is a simplification that will not reproduce the vector's 946 draws and final position 2; to match, seed the step counter from the saved position (0 on the first build). See CONFORMANCE-REVIEW.md.]** The wrap point is
   counted from the saved position `+0x19E`. So after the first build, the first pass through the pattern is
   cut short.
 - When the build ends: `+0x19E` = position, `+0x5A4` = length, `+0x5A6` = 0, and `+0x68A` bit 4 is cleared.
@@ -5250,7 +5250,7 @@ data has enabled ads.
   4. Read the remaining time r of `+0x674`. If the current entry's `Length` > r, post that entry and
      **seek** to `Length − r` ms (`0x0045EF20`, which sets the play record's start offset). Otherwise
      advance and start from 0.
-  5. Re-arm the timer to r. Bits: set 0 (playing), clear 1 and 2.
+  5. Re-arm the timer to r. Bits: set 0 (playing), clear 1 and 2. **[2026-10-14 clarification: step 5 applies to both branches. When the entry is not longer than r (only when the timer was just armed, r = Length) the advance happens and the timer is still re-armed to the OLD remaining r, not to the new entry's overlap-adjusted duration; the next expiry uses the overlap-adjusted duration. Team B re-arms to the new entry's duration there. See CONFORMANCE-REVIEW.md.]**
 - So tuning in joins the song mid-way, at the point the station's timeline has reached.
 - **Audible station, timer expires:**
   1. Stop the play record from two items back (`+0x678`). Shift current → `+0x678`.
@@ -5474,6 +5474,73 @@ dialogue is therefore expected to be Wwise bus ducking authored in `init.bnk_pc`
    - `radio_newsbreak` → the deferred newsbreak post.
    - `cell_music_menu_toggle_station` → the hidden bit.
 8. **Save:** only the Mix Tape list, hidden ids and commercial flags (§12.8 of the save spec).
+
+#### 14.6.6 Station cue tables and queue test vector (2026-10-14)
+
+Status: schema **FINAL** (all 12 files, `fr2_genx.py` tag census); row-to-queue path **FINAL** (§14.6.2 plus below);
+queue vector **FINAL as a model** (not live-captured).
+
+**File schema** (each station file is `<root><Table><NewEntity>` with exactly one row; the trailing
+`TableDescription` is editor metadata, ignored at runtime):
+
+| tag | content | consumer |
+|---|---|---|
+| `Name` | display name (`GenX`) | station `+0x?` name, informational |
+| `Radio_Station_Settings` | `Intro_percent`, `Callin_percent`, `Outro_percent` (s8 0..100), `Station_switch` (Wwise switch name, 9 of 12 files), `Game_display_resource` (→ station `+0x40`), `Interface_image` (→ `+0x80`, 8 files) | `0x0055C9F0` |
+| `Sweeper_list` / `Commercial_list` | `Info{Length, Cue}` rows | type 2 / type 1 content entries, `Length` ms |
+| `Intro_list` | `Info{Length, Delay, Cue}` | type 3, `+0x0E` = `Delay` |
+| `Outro_list` | `Info{Length, Prestart, Cue}` | type 5, `+0x0E` = `Prestart` |
+| `CallIn_list` | `Info{Length, Delay, Cue}` | type 4 (empty in retail) |
+| `Singalong_list` | `Info{Length, Cue}` | type 8 (only the_mix_radio fills it) |
+| `Station_Playlist` | `Playlist_entry` text `Song` / `Commercial` / `Sweeper` (anything else reads as Song) | pattern (`+0x19C/+0x1A0`) |
+| `Song_List` | `Info{Buyable, Length, Cue, Intros{Cue*}, CallIns{}, Outros{Cue*}, Sing_along{Info{percent, Persona, Cue}*}}` | type 0 (6 on Police/FBI, 7 on News) plus a 0x48-byte pool record |
+
+- `Buyable` (True/False) is only the "can be added to My Radio" flag (§14.1); it is not read by the queue.
+- Song `Intros`/`Outros` hold **cue names**, resolved by hash against the content table already built from
+  `Intro_list`/`Outro_list` (an unknown name gives index −1 = stored as `0xFFFF`). A name may be listed twice
+  (DIAMOND_EYES lists `BACK_SELL` twice).
+- Each song record holds at most 3 intros / 3 outros; retail maximum 3 intros (two FRONT_SELL plus a
+  `GENX_CALLIN_*` cue) and 2 outros.
+- Sing-along `Persona` (e.g. `Player_BF`, `Player_WM`) and `percent` go to the record `+0x24`/`+0x40`.
+- Content `Length` of a commercial is overridden by `commercials.xtbl` after load (§14.6.2).
+
+**Row to queue item.** A queue item is just a content index (u16). A song slot expands to up to three items
+`[intro?] song [outro?]`. The wire values for timing are `Length` (item length, ms) and `+0x0E`: next item
+is armed at `Length − Delay` after an intro starts and at `Length(song) − Prestart(outro)` when the song is
+followed by an outro (§14.6.5 item 6). A `Delay` equal to `Length` (e.g. ANIMAL_FRONT_SELL_2 5021/5021) means the
+song starts only when the intro ends. `Delay`/`Prestart` are u16 (≤ 65535 ms).
+
+**Parsed GenX table** (station 3, `wwise_id` GENX = `0x48E832A3`; pattern S S C S S W S S S C with W = Sweeper;
+Intro/Callin/Outro % = 40/0/40; 18 songs, 2 sweepers, 81 commercials, 54 intros, 36 outros). Content indices
+are the retail global ones (GENX is the first station loaded, so its sweepers take 0 and 1). First 10 songs
+in file order:
+
+| n | content idx | cue | FNV-1 | Length ms | intros (names) | outros |
+|---|---|---|---|---|---|---|
+| 0 | 173 | GENX_BROOKLYN___VOLCANOLOGY | `0x34908852` | 210895 | VOLCANOLOGY_FRONT_SELL, _2, CALLIN_VOLCANOLOGY | BACK_SELL, BACK_SELL_2 |
+| 1 | 174 | GENX_DEFTONES___DIAMOND_EYES | `0xB5BD17CE` | 175107 | DIAMOND_EYES_FRONT_SELL, _2, CALLIN | BACK_SELL, BACK_SELL |
+| 2 | 175 | GENX_DELPHIC___CLARION_CALL | `0x5423413B` | 175003 | CLARION_CALL_FRONT_SELL, _2, CALLIN | BACK_SELL, _2 |
+| 3 | 176 | GENX_DRAGONETTE___STUPID_GRIN | `0xD16AA53C` | 223376 | STUPID_GRIN_FRONT_SELL, _2, CALLIN | BACK_SELL, _2 |
+| 4 | 177 | GENX_FEEDER___RENEGADES | `0x86314760` | 213925 | RENEGADES_FRONT_SELL, _2, CALLIN | BACK_SELL, _2 |
+| 5 | 178 | GENX_HEAVY_YOUNG_HEATHENS___SHA_LA_LA_LA_LA | `0x0F29C3E2` | 213184 | SHA_LA_LA_LA_LA_FRONT_SELL, _2, CALLIN | BACK_SELL, _2 |
+| 6 | 179 | GENX_HOCKEY___TOO_FAKE | `0x653DABB8` | 232757 | TOO_FAKE_FRONT_SELL, _2, CALLIN | BACK_SELL, _2 |
+| 7 | 180 | GENX_JR___LOST_DESIRE | `0xAB7AF456` | 176896 | LOSTDESIRE_FRONT_SELL, _2, CALLIN_LOST_DESIRE | LOSTDESIRE_BACK_SELL, _2 |
+| 8 | 181 | GENX_KING_KHAN_AND_THE_SHRINES___TORTURE | `0x6A5BF2C7` | 184668 | TORTURE_FRONT_SELL, _2, CALLIN | BACK_SELL, _2 |
+| 9 | 182 | GENX_MIIKE_SNOW___ANIMAL | `0x411A6B56` | 260853 | ANIMAL_FRONT_SELL (8899 ms, Delay 7544), _2 (5021/5021), CALLIN_ANIMAL | ANIMAL_BACK_SELL (6262, Prestart 591), _2 (3328/591) |
+
+**First 24 GenX queue entries, seed 5489** (content indices, assertable; names and lengths in the §14.6.4 table):
+
+`0, 175, 125, 178, 7, 190, 154, 179, 168, 0, 85, 188, 127, 189, 174, 143, 45, 189, 164, 0, 186, 26, 187, 173`
+
+Total queue 512 entries, 946 ring draws, saved pattern position 2. The `radio_sim.py` result was re-run
+unchanged this pass and agrees with the §14.6.4 table. Notes for Team B asserting it:
+- Entry 0 is **not** a pattern sweeper: it is the first song slot's intro pick starting at a negative start
+  index (−2), which reads the used flags and index array outside the record and yields content 0
+  (GENX_SWEEPER_01). It is then followed by the song (175). Entry 19 is the same defect (i = −2 again). A port that
+  avoids this reads out of bounds differently and will not match.
+- Entry 9 is the genuine pattern Sweeper slot (sweeper bag, index 0).
+- Entry 17 repeats entry 13 because the song bag reset when no unused song remained at/after the drawn index
+  (the scan never wraps).
 
 **OPEN after this pass:**
 - the names of `0x01DF15F0` / `0xC4F14EEA` and their bus targets;

@@ -350,7 +350,8 @@ int main() {
     ok(host, gp, "assert(vehicle_pathfind_to_do('pf01', 'pftgt01', false, false) == false)");
 
     es.objectResolves().set("pf02", true);
-    fails(host, gp, "vehicle_pathfind_to_do('pf02', 'pftgt01', false, false)", "seat-0");
+    // Spec 46.4 m06 note (2026-10-15, FINAL): a vehicle nothing was seated in has no seat-0 occupant (default false).
+    ok(host, gp, "assert(vehicle_pathfind_to_do('pf02', 'pftgt01', false, false) == false)");
     es.getOrCreateVehicle("pf02").seat0Occupied.set(false);
     ok(host, gp, "assert(vehicle_pathfind_to_do('pf02', 'pftgt01', false, false) == false)");
 

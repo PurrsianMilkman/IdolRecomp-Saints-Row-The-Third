@@ -89,24 +89,14 @@
 // Step08_ForceTorqueAccumulate() (physics_vehicle_substeps.cpp) for the
 // consuming side.
 //
-// The 7-slot-offset -> named-component mapping this file assumes (CHOSEN,
-// Sec6.8 item 1 is explicit that no spec determines this):
-//   +0x20 driver input (sub-step 1: lightest, single status byte - matches a
-//         device-presence query better than a physics computation)
-//   +0x24 raycast wheel collide (sub-step 2: the "per-wheel array... 32-64
-//         elements" cap matches a per-wheel raycast-result array)
-//   +0x28 steering (sub-step 3: two-float current/target relay)
-//   +0x30 suspension (sub-step 4: the richest - two per-wheel arrays plus a
-//         scalar, matching per-wheel suspension state)
-//   +0x34 brakes (sub-step 5: thin forwarder)
-//   +0x38 transmission (sub-step 6: thinnest forwarder)
-// Engine has no slot in this reading (Sec6.3 lists six offsets for six
-// sub-steps, +0x2c is explicitly "present in the slot progression but not
-// read by any of these six sub-steps") - this file computes engine-torque
-// delivery inside the phase-2 per-axle wheel-force steps (10/11) instead,
-// since that is where Sec6.4 itself locates the real per-wheel force math
-// (items 10/11 are the two largest/richest of the 13); see those methods'
-// own comments.
+// Component-slot map (spec-physics-runtime.md 10.11.0, FINAL, confirmed from the
+// exe constructors; replaces this file's earlier guessed map, which was wrong for every
+// slot but +0x20): +0x20 driver input, +0x24 steering, +0x28 engine, +0x2c
+// transmission, +0x30 brakes, +0x34 suspension, +0x38 aerodynamics (Havok
+// default), +0x3c wheel collide, +0x40 tyre marks (never built), +0x44
+// velocity damper (Havok default). See VehicleComponentSlot below. This
+// file's sub-step order is unrelated to slot order; engine torque is still
+// computed inside the per-axle wheel-force steps (10/11).
 //
 // ---------------------------------------------------------------------------
 // PLANAR SCOPE (CHOSEN, stated up front rather than per-field)
@@ -133,6 +123,20 @@
 
 namespace sr3physics {
 
+// spec-physics-runtime.md 10.11.0 component-slot offsets on the vehicle instance.
+enum class VehicleComponentSlot : int {
+    DriverInput = 0x20,
+    Steering = 0x24,
+    Engine = 0x28,
+    Transmission = 0x2c,
+    Brakes = 0x30,
+    Suspension = 0x34,
+    Aerodynamics = 0x38,
+    WheelCollide = 0x3c,
+    TyreMarks = 0x40,  // never built
+    VelocityDamper = 0x44,
+};
+
 // --- vehicle tuning -----------------------------------------------------
 
 // Per-axle tuning (spec-vehicle-data.md Sec7.3 "Axles" - CONFIRMED field
@@ -145,19 +149,7 @@ struct AxleAccelTuning {
     double wheelBrakingTorqueNm = 900.0;      // Wheel_Braking_Torque
     bool steers = false;                       // Wheel_Does_Steer
 
-    // §10.8's real 16-entry per-wheel friction/slip table (vehicle_driving_
-    // slice.h's `FrictionSlipTable`) - CHOSEN per-AXLE granularity (applies
-    // identically to both wheels on this axle), matching this struct's own
-    // existing per-axle fields above (wheelFriction/wheelMaxFriction/
-    // wheelBrakingTorqueNm are also axle-level, not per-wheel, despite the
-    // real schema/runtime record being per-wheel - the same simplification
-    // this harness already made for those). `std::nullopt` by default: this
-    // harness has no real sampled curve to supply (Sec10.8's own OPEN item),
-    // so ApplyFrictionCircle() (physics_vehicle_substeps.cpp) keeps calling
-    // SolveFrictionEllipse() with plain `nullptr` - IDENTICAL existing
-    // behaviour - unless a caller actively constructs a VehicleTuning with
-    // this set.
-    std::optional<FrictionSlipTable> frictionSlipTable;
+
 };
 
 // Vehicle-wide tuning. Fields marked (confirmed field) have their SEMANTICS
@@ -211,7 +203,7 @@ struct VehicleTuning {
     std::vector<double> gearRatios = {3.4};                // Gear_Ratios (confirmed field LIST, spec-vehicle-data.md Sec7.3) - every element FromVehicleEntry() was given; drives GearShiftTuning::maxGear = gearRatios.size() below
     std::vector<double> downshiftRpms;                      // Downshift_RPMs (confirmed field LIST, spec-vehicle-data.md Sec7.3, entry+0x594) - runtime destination WIRED 2026-10-09 (spec-physics-runtime.md Sec10.10, wave 6 item 5): "Not independently re-verified: whether Downshift_RPMs is copied into component +0x34 ... structurally very likely, HIGH not CONFIRMED" - HIGH, not instruction-level CONFIRMED like the other 5 fields in this block, but consumed anyway (see BuildGearShiftTuning(), physics_vehicle_substeps.cpp): every element FromVehicleEntry() was given becomes the REAL per-gear downshift-RPM table GearShiftTuning::downshiftRpmByGear uses; any gear this specific vehicle's own data does not cover (including every gear, when this vector is left empty, CHOSEN default) falls back element-by-element to the pre-existing CHOSEN uniform-margin table (gearUpshiftRpmThreshold - gearDownshiftMarginRpm, unchanged below) - an unsourced vehicle's behaviour is therefore identical to before this wiring.
     double diffGearRatio = 3.7;                            // Diff_Gear_Ratio (confirmed field; re-confirmed 2026-10-09, spec-physics-runtime.md Sec10.10 - transmission constructor 0x00abd400 copies entry+0x5AC -> component +0x10, same field/destination this file already wired, no change needed)
-    double reverseGearRatio = 0.0;                          // Reverse_Gear_Ratio (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5B0 -> transmission component +0x18) - parsed by FromVehicleEntry() below for completeness, same OPEN treatment as clutchSlipRpm above: Sec10.3 itself states "Manual-shift input handling is gated out entirely at the mode byte and was not located (OPEN)", and no spec traces HOW/WHEN the real game selects reverse gear at all - inventing a reverse-gear-engagement trigger (e.g. "brake held at a stop") would be fabricating an unconfirmed mechanism, against this project's own "no invented fixes" rule, not wiring a confirmed one. CHOSEN default 0.0 (OPEN - this harness has no reverse-drive mode to feed it into); a caller inspecting this field directly still gets the REAL per-vehicle ratio when sourced.
+    double reverseGearRatio = 0.0;                          // Reverse_Gear_Ratio (xtbl entry+0x5B0 -> transmission +0x18). 10.3 (2026-10-14) resolves trigger and ratio: wheel ratio = -(Reverse_Gear_Ratio x Diff_Gear_Ratio) while the reverse flag is set (flag per DecideReverse(), vehicle_spec_data.h); the shift machine is suspended in reverse. Files that omit it take an untraced base value, so the default stays 0 (no reverse drive) until sourced. Engagement needs VehicleTuning::reverseFullLogic (the "full logic" byte source is untraced).
     double clutchDelaySec = 0.3;                            // Clutch_Delay (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5B4 -> transmission component +0x14, "all consumed by the already-documented gear-shift state machine 0x00aece20") - this file's own HIGH-confidence (not instruction-level CONFIRMED) reading of WHICH of that state machine's own fields +0x14 is: Sec10.3's own independent read of 0x00aece20 names exactly one timer-shaped field it owns ("a shift-duration timer") and no other, so this is mapped to GearShiftTuning::shiftDurationSec (see BuildGearShiftTuning(), physics_vehicle_substeps.cpp). CHOSEN default 0.3s matches GearShiftTuning's own prior CHOSEN default, so an unsourced vehicle's behaviour is unchanged.
     double maxRpmChangePerSec = 1.0e6;                      // Maximum_RPM_Rate (confirmed field, WIRED 2026-10-09, spec-physics-runtime.md Sec10.10 wave 6 item 5: xtbl entry+0x5B8 -> transmission component +0x40) - this file's own HIGH-confidence reading of its destination: vehicle_driving_slice.h's ComputeTargetEngineRpm() (Sec10.3's own 0x00aecef0, "the transmission's half of the engine/transmission RPM-matching loop") is the one function in this model with an otherwise-CHOSEN "maxRpmChangePerSec" parameter ("the spec confirms 'rate-limits' happen, not their coefficients") - the xtbl field's own name matches that role closely enough not to leave it unused. CHOSEN default 1.0e6 (effectively unbounded) matches Step08_ForceTorqueAccumulate()'s own prior hardcoded literal, so an unsourced vehicle's behaviour is unchanged.
 
@@ -277,7 +269,22 @@ struct VehicleTuning {
     double corneringStiffness = 9000.0;                        // CHOSEN (N/rad) - linear-tire-model constant; Havok's own tire-friction law is not given by any spec (Sec6.4 items 10/11/13 are HIGH/HYPOTHESIS *shape* only)
 
     double dragCoefficient = 0.33;                              // Drag_Coefficient (confirmed field)
-    double frontalArea = 2.2;                                    // Frontal_Area (confirmed field, m^2)
+    // spec-physics-runtime.md 10.11.8/10.11.10 (FINAL, 2026-10-14) - pure
+    // formulas in vehicle_spec_data.h. 0 = feature off.
+    double maximumSpeedMs = 0.0;              // Maximum_Speed (m/s): per-frame hard clamp of chassis speed (10.11.10)
+    double maximumSpeedWithNitrousMs = 0.0;    // Maximum_Speed_With_Nitrous (10.11.10 step 2 blend target)
+    double maxSpeedOverrideMs = -1.0;           // vehicle +0x1d84 script override (`vehicle_max_speed`); negative = none
+    int vehicleClass = 0;                        // Vehicle_Type class: 0 Automobile, 1 Motorcycle, 2 Airplane, 3 Helicopter, 4 Vtol, 5 Watercraft
+    double engineTorqueModifier = 1.25;           // Vehicle_engine_torque_modifier (tweak_table.xtbl), 10.11.10: final multiply on engine torque
+    double extraGravity = 0.0;                     // Extra_Gravity (10.11.8); 0 = action off. The planar sim only uses its coasting damping term
+    double steeringTurnInDampAngleRad = 0.0;        // Steering_Wheel_Damp_Angle (10.11.7); both damp angles > 0 selects the min-time profile limiter
+    double steeringReturnDampAngleRad = 0.0;         // Steering_Wheel_Return_Damp_Angle
+    bool reverseFullLogic = false;                    // 10.3 "full logic" byte (source untraced, OPEN): false = plain mode, reverse never engages
+    double normalSpinDamping = 0.0;            // Normal_Spin_Damping (10.11.8 velocity damper)
+    double collisionSpinDamping = 0.0;          // Collision_Spin_Damping
+    double collisionSpinThresholdRad = 0.0;      // Collision_Spin_Threshold (rad/s)
+    double liftCoefficient = 0.0;                 // Lift_Coefficient (negative = downforce); stored; planar model has no vertical use yet
+    double frontalArea = 2.2;                                   // Frontal_Area (confirmed field, m^2)
     double airDensity = 1.2;                                      // Air_Density (confirmed field, kg/m^3)
 
     double gravity = 9.8;                                          // CONFIRMED, spec-physics-runtime.md Sec4.1 step 5 / Sec4.6 ("gravity (0,-9.8,0)")
@@ -311,6 +318,8 @@ struct DriverInput {
     double throttle = 0.0;  // [0,1]
     double brake = 0.0;     // [0,1]
     double steer = 0.0;     // [-1,1], fraction of maxSteeringAngleRad
+    bool handbrake = false; // 10.3 reverse rule input (+0x14f)
+    bool nitrous = false;   // 10.11.10 nitrous byte (+0x10c)
 };
 
 // --- per-wheel runtime record (sub-steps 2/4/7/8/10/11/13's own scratch) --
@@ -450,6 +459,11 @@ struct VehicleInstanceState {
     // estimate (CHOSEN - a standard explicit approximation avoiding an
     // implicit force/load solve; see Step08's own doc comment).
     double prevAccelForwardBody = 0.0, prevAccelRightBody = 0.0;
+
+    // 10.11.10 / 10.3 persistent limiter state.
+    double nitroBlend = 0.0;       // vehicle +0x1a34
+    bool wrecked = false;          // skips the Maximum_Speed clamp
+    bool reverseFlag = false;      // physics-object +0xb0
 };
 
 // RETIRED (2026-10-08, engine-curve/slip-table follow-up task): this
@@ -511,6 +525,7 @@ public:
     // steering limiter's own reversal-direction memory (Sec10.1), and the
     // gear-shift machine's own timers/current gear (Sec10.3).
     SteeringRateLimiter steeringLimiter_;
+    SteeringProfileLimiter steeringProfile_;  // used instead when both damp angles are data-sourced (10.11.7)
     GearShiftStateMachine gearShift_;
 
     // Call-order log (sub-step index 1..13, in execution order this call),

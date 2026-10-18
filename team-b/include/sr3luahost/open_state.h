@@ -42,6 +42,8 @@ template <typename T>
 class OpenValue {
 public:
     OpenValue(const char* global, const char* spec) : global_(global), spec_(spec) {}
+    OpenValue(const char* global, const char* spec, const T& defaultValue)
+        : global_(global), spec_(spec), value_(defaultValue) {}
     bool known() const { return value_.has_value(); }
     const T& get() const {
         if (!value_) throw OpenStateError(global_, spec_);
@@ -91,10 +93,16 @@ private:
 template <typename T>
 class OpenValueMap {
 public:
-    OpenValueMap(const char* what, const char* spec) : what_(what), spec_(spec) {}
-    bool known(const std::string& key) const { return values_.count(key) != 0; }
+    // foldCase: keys are ASCII-lower-cased on every access (set/get/known/forget). Used by the named-object
+    // resolution map: the engine's by-name registry lookup (0x004588f0) hashes the name lower-cased and compares
+    // case-insensitively (spec-lua-api-behaviour.md gat_captive_nav note and the dlc3_m01 'Vfx Transformer DTH'
+    // note), so 'Saint_NPC 007' and 'saint_npc 007', or '#player1#' and '#PLAYER1#', are the same object. The
+    // error text still reports the key as the script wrote it.
+    OpenValueMap(const char* what, const char* spec, bool foldCase = false)
+        : what_(what), spec_(spec), foldCase_(foldCase) {}
+    bool known(const std::string& key) const { return values_.count(fold(key)) != 0; }
     const T& get(const std::string& key) const {
-        auto it = values_.find(key);
+        auto it = values_.find(fold(key));
         if (it != values_.end()) return it->second;
         // DIAGNOSTIC, not behaviour (see enableProbeFallback's own doc
         // comment): off by default - every real baseline measurement runs
@@ -105,8 +113,8 @@ public:
         }
         throw OpenStateError(std::string(what_) + "['" + key + "']", spec_);
     }
-    void set(const std::string& key, const T& v) { values_[key] = v; }
-    void forget(const std::string& key) { values_.erase(key); }
+    void set(const std::string& key, const T& v) { values_[fold(key)] = v; }
+    void forget(const std::string& key) { values_.erase(fold(key)); }
     size_t knownCount() const { return values_.size(); }
     const char* what() const { return what_; }
     const char* spec() const { return spec_; }
@@ -127,8 +135,16 @@ public:
     }
 
 private:
+    std::string fold(const std::string& key) const {
+        if (!foldCase_) return key;
+        std::string out = key;
+        for (char& c : out)
+            if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+        return out;
+    }
     const char* what_;
     const char* spec_;
+    bool foldCase_ = false;
     std::unordered_map<std::string, T> values_;
     std::optional<T> probeFallback_;
     std::unordered_set<std::string>* probedKeys_ = nullptr;

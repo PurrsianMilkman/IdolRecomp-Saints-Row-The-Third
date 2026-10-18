@@ -497,7 +497,12 @@ int stub_on_hud_screen_exit(lua_State* L) {
     std::string callbackName = argString(L, 1);
     std::string screenName = argString(L, 2);
     EngineState* st = upState(L);
-    if (!st->hudScreenNameResolves().get(screenName)) return 0; // OPEN until set
+    // The registry matches on the CRC-32 of the LOWER-CASED name, so the lookup folds case. msn_text_adventure is a
+    // static screen registered at boot, so it always resolves (seeded in the EngineState constructor; spec sync
+    // bfe0542, Sec24.24 blocker m16, FINAL). Any other screen name stays OPEN until a test/data registers it.
+    if (!st->hudScreenNameResolves().get(AsciiLowerFold(screenName))) return 0; // OPEN until set
+    // Register (or, with an empty callback name, clear) the screen's exit hook slot 0; nothing returned. The
+    // callback is called when the screen is popped (EngineState::popHudScreen).
     st->setNamedHookCallback("on_hud_screen_exit:" + screenName, callbackName);
     return 0;
 }
@@ -884,8 +889,8 @@ int stub_get_char_in_vehicle(lua_State* L) {
     bool resolved = st->objectResolves().get(vehicleName); // OPEN until set
     if (resolved && seat == 0) {
         VehicleState& v = st->getOrCreateVehicle(vehicleName);
-        if (v.driverName.known() && !v.driverName.get().empty()) {
-            lua_pushstring(L, v.driverName.get().c_str());
+        if (!v.seat0OccupantName().empty()) {
+            lua_pushstring(L, v.seat0OccupantName().c_str());
             return 1;
         }
     }

@@ -31,6 +31,14 @@ double EngineState::doubleFromBits(uint64_t bits) {
     return d;
 }
 
+// Design notes moved verbatim from EngineState::vintDisplayModeLadder's declaration in engine_state.h
+// (refactor step 3a):
+// 0x00e23000(a, b) (CONFIRMED ladder): a / b in single precision, mode
+// -1, raised by strict tests > 2.48 -> 0, > 3.18 -> 1, > 3.72 -> 2,
+// > 4.77 -> 3, > 5.58 -> 4. 2.48 is the single at 0x01256908 (CONFIRMED);
+// the four doubles are HIGH CONFIDENCE "as rendered", so a ratio above
+// 2.48 (where they decide the mode) is refused as OPEN. Every ratio at or
+// below 2.48 - any single display - gives -1 from CONFIRMED values only.
 int32_t EngineState::vintDisplayModeLadder(int32_t a, int32_t b) {
     // a / b in single precision (REAL). Division by zero spelled out (IEEE:
     // +-inf, NaN for 0/0) so no sanitizer sees it.
@@ -90,6 +98,17 @@ void EngineState::vintUiSubsystemInit(int32_t width, int32_t height) {
     }
 }
 
+// Design notes moved verbatim from EngineState::vintResolutionChange's declaration in engine_state.h
+// (refactor step 3a):
+// 0x00e23a20(width, height) (CONFIRMED; caller 0x005df6e0, HYPOTHESIS the
+// resize handler; what triggers it is OPEN, so nothing in lua_host_run
+// calls it). Unchanged pair: nothing, returns false. Otherwise: globals,
+// record copy, mode, layout index; then the UI-state Lua global
+// vint_lib_init_constants() if it is a function; and when the
+// standard/wide class flipped, <document name>_reset() for every loaded
+// UI document - this host has no UI document list, so those calls are
+// only counted (vintDocumentResetsNotModelled). Throws before writing on
+// an OPEN read.
 bool EngineState::vintResolutionChange(int32_t width, int32_t height) {
     // 0x00e23a20(width, height). Every read happens before any write.
     const int32_t oldWidth = vintGlobalWidth_.get();

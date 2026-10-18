@@ -166,7 +166,29 @@ int main(int argc, char** argv) {
     std::vector<uint8_t> bytes = readFile(archivePath);
     vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
     walkCzn(es, c);
+    // Extra archives (only when names were passed on the command line, so the default run is unchanged).
+    if (argc > 2) {
+        for (const char* extra : {"/sr3_city_1.vpp_pc", "/sr3_city_missions.vpp_pc", "/patch_compressed.vpp_pc", "/patch_uncompressed.vpp_pc"}) {
+            try {
+                std::vector<uint8_t> eb = readFile(cacheDir + extra);
+                vpp::Container ec(vpp::ByteView(eb.data(), eb.size()));
+                walkCzn(es, ec);
+            } catch (const std::exception&) {
+            }
+        }
+    }
 
+    // Optional extra names (argv[2..]): report whether each one is a zone-registered object and its class/team.
+    for (int i = 2; i < argc; ++i) {
+        const sr3zone::ObjectRecord* r = es.resolveZoneObject(argv[i]);
+        std::cout << "name \"" << argv[i] << "\": objectResolves.known=" << es.objectResolves().known(argv[i])
+                  << " zoneRecord=" << (r ? "FOUND" : "nullptr");
+        if (r) {
+            std::cout << " class=" << sr3zone::ClassNameForHash(r->classHash).value_or("<unresolved>")
+                      << " script_npc_team=" << sr3zone::ScriptNpcTeam(*r).value_or("<none>");
+        }
+        std::cout << "\n";
+    }
     std::cout << "=== AFTER loadZoneObjectsSection (sr3_city_0.vpp_pc walked) ===\n";
     std::cout << "czn_files_found=" << g_cznFilesFound << " objects_sections=" << g_cznWithSection
               << " named_objects_resolved=" << es.zoneObjectsLoadedCount() << "\n";

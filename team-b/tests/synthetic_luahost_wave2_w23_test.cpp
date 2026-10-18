@@ -439,7 +439,7 @@ int main() {
         CHECK(es.getOrCreateCharacter("Hooked").onWeaponEquipCallback == "cbEquip");
         ok(host, gp, "on_door_opened('cbDoor', 'Hooked')");
         CHECK(es.getOrCreatePlacedObject("Hooked").onDoorOpenedCallback == "cbDoor");
-        ok(host, gp, "on_pickup('Hooked', 'cbPickup')");
+        ok(host, gp, "on_pickup('cbPickup', 'Hooked')");
         CHECK(es.getOrCreatePlacedObject("Hooked").onPickupCallback == "cbPickup");
     }
 

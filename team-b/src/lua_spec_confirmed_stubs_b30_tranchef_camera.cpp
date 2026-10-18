@@ -70,9 +70,16 @@ int stub_character_kill(lua_State* L) {
     }
     if (!objectExists) return 0; // CONFIRMED: a resolve is required to reach the damage call at all
     CharacterState& c = st->getOrCreateCharacter(resolvedName);
+    // Spec B/F table: the lethal sink call has no attacker, so the killer of a character_kill is nil.
+    st->recordDamageAttacker(resolvedName, std::string());
     ++c.characterKillCallCount;
     c.lastCharacterKillArg2 = arg2; // bit 0x100 alone - real-world PURPOSE stays OPEN (Sec3.15), recorded only
+    const bool wasDead = EngineState::characterReadsDead(c); // the sink bails out on a victim that is already dying
     c.lifeState.set(5); // CONFIRMED-guaranteed lethal hit, modeled as deterministic (see field's own doc comment)
+    // Spec F table: character_kill is a lethal sink call with no attacker and flag 0x100 only, so on_take_damage
+    // fires with attacker nil and hitpoints <= 0 (before the death callbacks, which the per-human update queues).
+    if (!wasDead) st->fireCharacterHitCallbacks(resolvedName, std::string(), 1.0, 0.0, 0x100u);
+    if (!wasDead) st->armPlayerDeathTimer(resolvedName); // review N-7: armed by the death finalizer, not the first tick
     if (!deathReactionName.empty() || lua_gettop(L) >= 3) {
         // CONFIRMED gate: only looked up once the character is confirmed
         // dead - always true here under this project's own deterministic

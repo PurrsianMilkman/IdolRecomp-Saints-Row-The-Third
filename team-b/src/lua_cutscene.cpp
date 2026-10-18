@@ -278,6 +278,17 @@ void EngineState::zscenePrep(const std::string& name) {
 // copied into the manager, and the failed-scene-manager-allocation
 // null-write path. Fabricating either would be inventing an engine value
 // this task's own standing rule refuses to do.
+// Design notes moved verbatim from EngineState::cutscenePlayDo's declaration in engine_state.h
+// (refactor step 3a):
+// cutscene_play_do / cutscene_play_check_done (Sec57.2, tranche 23) -
+// see src/lua_cutscene.cpp's own doc comment above cutscenePlayDo() for
+// the full design (reuses the EXISTING zscene prep gate and screen-
+// fade-request mechanism, both already Sec26.25-confirmed; the
+// destination-table and "written even when refused" quirks are modeled
+// directly). NOT modeled (unobservable through any in-scope native, so
+// nothing to fabricate): the uninitialized script-group-handle copy
+// and the failed-scene-manager-allocation null-write path (reachability
+// HYPOTHESIS per Sec57.2 itself).
 void EngineState::cutscenePlayDo(const std::string& name, std::vector<std::string> destinations) {
     // CONFIRMED (Sec57.2): written unconditionally, before anything below
     // decides whether the start itself succeeds or is refused.
@@ -338,6 +349,48 @@ void EngineState::cutscenePlayDo(const std::string& name, std::vector<std::strin
 // get_dist/get_object_pos also read), then commits via the SAME live
 // worldPosition bridge (bridgeLiveCharacterPosition()) - never fabricating
 // a position for a destination name this host cannot actually resolve.
+// Design notes moved verbatim from EngineState::cutscenePlayApplyEndPlacement's declaration in engine_state.h
+// (refactor step 3a):
+// cutscenePlayApplyEndPlacement() - CHOSEN stand-in, spec-lua-api-
+// behaviour.md Sec57.2a's 2026-10-11 "new finding" note (three-pass
+// investigation, orchestrator-routed for `m07`): the real engine's
+// non-skip ("a manager exists") branch writes `cutscene_play`'s two
+// resolved destinations into the cutscene manager's own fields
+// (`+0x35f0`-`+0x362c` local, `+0x3630`-`+0x367c` partner), but an
+// exhaustive 3-pass search (the full 20-state cutscene state machine,
+// the `.cte_xtbl` RestorePlayerPos reader, and a 91-function xref sweep
+// of the manager-pointer global) found NO consumer anywhere that reads
+// those bytes back and commits them to the player. Per this project's
+// own negative-result rule, that is read as "there is a consumer we
+// have not found yet," not "shipped missions never actually get
+// placed" - `m07.lua`'s own `cutscene_play` call sites never follow up
+// with a redundant `teleport_coop`, showing the shipped SCRIPT trusts
+// the engine to place the player by itself.
+//
+// This host has no manager allocation at all (cutscenePlayCheckDone()'s
+// own doc comment above), so it can never observe which of the two real
+// branches "really" applies - but the ONE branch that IS fully, End-to-
+// end disassembly-confirmed is the `skip_all_cutscenes` one: it resolves
+// both destination names through the SAME by-name resolver (`0x005982e0`)
+// `teleport` itself uses, then commits via the SAME real player-class
+// async-teleport entry point (`0x009e2220`, the generic vtable `+0x40`
+// transform-setter) `teleport`'s own stub now drives (see stub_teleport,
+// lua_spec_confirmed_stubs_b08_batch1_core.cpp, commit b209dd3). CHOSEN
+// here: apply that SAME proven mechanism universally - on cutscene
+// completion (cutscenePlayCheckDone() reporting true) exactly as on an
+// explicit skip - rather than block indefinitely on an unresolved real
+// consumer, or invent a different, unproven one. This is NOT a claim
+// that the real non-skip path works this way; it is the most
+// architecturally defensible stand-in available (same destination
+// names, same resolver, same commit primitive already proven correct
+// for the skip case), used here for BOTH players: the local player
+// (`cutscenePlayDestination1()`, "#PLAYER1#") and the co-op partner
+// (`cutscenePlayDestination2()`, "#PLAYER2#") - matching arg 3's own
+// documented "exactly two destination names" shape (local + partner).
+// Position-only (no orientation commit): this host has never modeled
+// an orientation field for any character - the SAME scope limit
+// stub_teleport's own real position write (b209dd3) already accepted
+// for its identical `+0x4c` orientation half.
 void EngineState::cutscenePlayApplyEndPlacement() {
     if (cutscenePlayPlacementApplied_) return;
     cutscenePlayPlacementApplied_ = true;
@@ -360,6 +413,15 @@ void EngineState::cutscenePlayApplyEndPlacement() {
 // cutsceneCameraScriptStep / sampleCutsceneCamera: see the doc comments on
 // EngineState::cutsceneCameraScriptOutcome()/installCameraScriptOpener()/
 // sampleCutsceneCamera() in engine_state.h for the full design citation.
+// Design notes moved verbatim from EngineState::cutsceneCameraScriptStep's declaration in engine_state.h
+// (refactor step 3a):
+// cutscene_play_do's real camera-script step (public API doc comment
+// above cutsceneCameraScriptOutcome()/sampleCutsceneCamera()). Resolves
+// `name`'s kind, applies the 0x00721bc0 Designer-skip gate, and for
+// kind 1/2 calls the installed opener and parses the result with the
+// EXISTING sr3cutscene::camera_script reader. May throw OpenStateError
+// (propagated straight from zsceneResolve(), same pre-existing
+// behaviour cutscenePlayDo's own zscene-gate call already has).
 void EngineState::cutsceneCameraScriptStep(const std::string& name) {
     cutsceneCameraScript_.reset();
     const ZsceneResolved r = zsceneResolve(name); // may throw OpenStateError (pre-existing: same resolve the zscene gate call above already runs)
@@ -401,6 +463,14 @@ void EngineState::cutsceneCameraScriptStep(const std::string& name) {
     }
 }
 
+// Design notes moved verbatim from EngineState::sampleCutsceneCamera's declaration in engine_state.h
+// (refactor step 3a):
+// sr3cutscene::CameraScript::sample(t) (the EXISTING real sampler,
+// spec-cutscene-camera-format.md Sec10.3/Sec10.6) on the active script.
+// Throws std::logic_error if none is loaded - a direct, immediate C++
+// error rather than OpenStateError: WHICH of the REAL/CHOSEN reasons
+// above applies is already known via cutsceneCameraScriptOutcome() by
+// the time this is callable, so there is no OPEN fact left to report.
 sr3cutscene::CameraSample EngineState::sampleCutsceneCamera(double t) const {
     if (!cutsceneCameraScript_) {
         throw std::logic_error("sampleCutsceneCamera: no camera script loaded (outcome is not Loaded)");
@@ -408,6 +478,15 @@ sr3cutscene::CameraSample EngineState::sampleCutsceneCamera(double t) const {
     return cutsceneCameraScript_->sample(t);
 }
 
+// Design notes moved verbatim from EngineState::zsceneIsLoaded's declaration in engine_state.h
+// (refactor step 3a):
+// zscene_is_loaded (Sec14.23 corrected truth table, CONFIRMED). hasName
+// is true for a string or number argument. Throws OpenStateError on an
+// OPEN read. For the PENDING entry the engine answers false until the
+// per-frame driver promotes it (cutsceneHostFrame); when the host's most
+// recent cutscene frame stopped on an OPEN read, that promotion cannot
+// happen in this host, so the call refuses naming that read instead of
+// returning a false with no modelled end. Counted.
 bool EngineState::zsceneIsLoaded(bool hasName, const std::string& name) {
     // Sec14.23 corrected truth table (REAL).
     if (hasName) {
@@ -774,6 +853,22 @@ void EngineState::cutsceneSecondStep() {
     }
 }
 
+// Design notes moved verbatim from EngineState::cutsceneHostFrame's declaration in engine_state.h
+// (refactor step 3a):
+// One host frame of the cutscene machine and the zscene lifecycle, in
+// this order (Sec26.25): 0x0072d660's case for the current state; then
+// 0x007258a0 (bytes 0x0153b525/0x0153b526, its case: in states 0 and 2
+// the reset-check 0x00720320 - run whether or not an entry is pending -
+// and, when it is true, promotion of the pending zscene, mounts in 4,
+// loads in 5, chain/teardown in 15); then the zscene completion
+// 0x007285c0. The Host summary of Sec26.25 states "every frame: promotion
+// ..., then completion"; the engine calls 0x007285c0 from two cases of
+// 0x0072d660 (which two is not stated), so running it every frame after
+// the promotion is the host summary's instruction, not a reading of
+// 0x0072d660. Uses the host clock screenFadeClockMs() (advanced by
+// screenFadeHostFrame, which lua_host_run calls first each tick). The
+// first OPEN read stops the frame (each step reads before it writes);
+// counted, with the blocking global.
 void EngineState::cutsceneHostFrame() {
     // 2026-10-02 correction (file header above, Sec26.25's corrected Host
     // summary): completion and promotion are each unconditional, independent

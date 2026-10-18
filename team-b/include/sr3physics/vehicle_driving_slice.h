@@ -166,6 +166,33 @@ private:
     double lastDiffSign_ = 0.0;
 };
 
+// spec-physics-runtime.md 10.11.7 steering limiter profile (`0x00dae970`):
+// minimum-time profile toward the target angle with maximum angular speed V
+// and acceleration/deceleration A = V^2 / (2 * dampAngle), so stopping from V
+// uses exactly the damp angle. When the target is 0 (centring) the return
+// pair is used, otherwise the turn-in pair. Evaluated as at most 8 analytic
+// segments per call (accelerate, cruise at V, decelerate), time tolerance
+// 1e-6, as the spec describes. The reversal-seed role inside `0x00dae970`
+// is OPEN (10.11.11 item 9) and is not modelled. Replaces SteeringRateLimiter
+// in the simulator whenever the vehicle data supplies both damp angles.
+struct SteeringProfileParams {
+    double turnInSpeed = 0.0, turnInAccel = 0.0;  // V, A = V^2/(2*damp)
+    double returnSpeed = 0.0, returnAccel = 0.0;
+};
+
+class SteeringProfileLimiter {
+public:
+    explicit SteeringProfileLimiter(SteeringProfileParams p) : p_(p) {}
+    double Update(double targetRad, double dt);
+    double current() const { return angle_; }
+    double velocity() const { return vel_; }
+
+private:
+    SteeringProfileParams p_;
+    double angle_ = 0.0;
+    double vel_ = 0.0;
+};
+
 // ===========================================================================
 // 10.2 Engine (`hk_custom_vehicle_engine`, row 30)
 // ===========================================================================
@@ -589,56 +616,40 @@ struct FrictionEllipseResult {
 // supplied" - see SolveFrictionEllipse()'s own doc comment for its fallback.
 using FrictionEllipseCurveFn = std::function<double(double overshootFraction)>;
 
-// The real 16-entry per-wheel friction/slip table step 5's own "bounded...
-// table-driven piecewise evaluation" reads (CONFIRMED EXACT location,
-// Sec10.8, synced 2026-10-08): 16 consecutive floats at `a1[wheel]+0x8`
-// through `+0x44`, plus two companion scalars at `+0x48`/`+0x4C` ("a
-// pre-loop boundary value and a per-entry multiplier") - living INSIDE the
-// per-wheel Havok-side tuning record itself (the same array already holding
-// `wheelExtra` at `+0x54`, this struct's own `ComputeTangentEffectiveMass()`
-// input above), NOT a separate tuning asset.
-//
-// OPEN (Sec10.8's own words, explicit): the table's real sampled curve
-// VALUES ("would need a live vehicle tuning asset nobody has dumped") AND
-// its own indexing/interpolation rule ("only confirms piecewise and
-// 16-entry, not how a caller walks it"). This struct is therefore a real,
-// INJECTABLE (caller-settable) data member with NO baked-in default curve:
-// the all-`1.0`/`boundary=0`/`entryMultiplier=1.0` default below is a
-// CHOSEN, honestly-flagged PASS-THROUGH placeholder - every overshoot
-// fraction maps to a scale of exactly 1.0, i.e. by itself this table applies
-// NO rescale at all - it is NOT a claim about the real table's shape, only
-// the simplest value a reader cannot mistake for a real sampled curve. It
-// is also never the ACTIVE curveFn unless a caller explicitly opts in (see
-// `VehicleTuning::AxleAccelTuning::frictionSlipTable` in vehicle_substeps.h -
-// `std::nullopt` by default, so `ApplyFrictionCircle()` keeps passing plain
-// `nullptr` into `SolveFrictionEllipse()`, which has its OWN separate,
-// previously-reviewed proportional-rescale fallback for that case - the
-// pass-through default here and that fallback are two different CHOSEN
-// defaults for two different "no real data" situations, not the same one).
+// The per-axle 16-entry friction/slip table read by the saturation routine
+// `0x00c63930` (spec-physics-runtime.md 10.11.6, FINAL for the lookup rule,
+// 2026-10-14; supersedes the earlier 10.8 "OPEN" wording). Axle description
+// layout: 16 floats at +0x00..+0x3C, step `q` at desc +0x40 (a1-relative
+// +0x48), start `x/16` at desc +0x44 (a1-relative +0x4C). The earlier labels
+// here ("boundary" at +0x48, "multiplier" at +0x4C) were swapped; the spec's
+// correction is: +0x48 = q, +0x4C = start. Values are built from data by
+// BuildFrictionSlipTableFromSpec() (vehicle_spec_data.h).
 struct FrictionSlipTable {
     std::array<double, 16> entries{1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-                                   1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};  // CHOSEN pass-through placeholder, NOT a real sampled curve (OPEN, see above)
-    double boundary = 0.0;         // +0x48 ("a pre-loop boundary value", OPEN role beyond that) - CHOSEN placeholder
-    double entryMultiplier = 1.0;  // +0x4C ("a per-entry multiplier", OPEN role beyond that) - CHOSEN placeholder
+                                   1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};  // placeholder until built from data
+    double q = 1.0;      // desc +0x40 (a1+0x48): ladder step, (16/x)^(1/15)
+    double start = 0.0;  // desc +0x44 (a1+0x4C): ladder start, x/16
 };
 
-// Builds a FrictionEllipseCurveFn (SolveFrictionEllipse()'s own existing
-// injectable seam) from a FrictionSlipTable. CHOSEN indexing/interpolation
-// rule (Sec10.8 confirms "piecewise"/"16-entry"/"a real search/
-// interpolation step", not how a caller walks it): an `overshootFraction`
-// (already [0,1], SolveFrictionEllipse's own deadzone/clamp-guarded domain)
-// below `boundary` returns `entries[0]` unchanged (CHOSEN reading of "a
-// pre-loop boundary value" as an early-exit threshold before the per-entry
-// walk begins); above it, linearly re-maps the remaining `[boundary,1]` span
-// across the 16 entries and linearly interpolates between the two nearest,
-// then applies `entryMultiplier`. This is NOT a reproduction of the real
-// "quadratic form kept via running-best comparison" search (that scan's own
-// exact per-entry comparand is OPEN) - only this file's own simplest
-// reading that respects the CONFIRMED "piecewise table of 16" shape and
-// gives both CONFIRMED companion scalars an actual role, flagged
-// individually so a future pass that traces the real scan can replace only
-// this function's body.
-FrictionEllipseCurveFn FrictionSlipTableCurve(const FrictionSlipTable& table);
+// Result of the 10.11.6 search. `belowCircle` = A^2 + B^2 <= 1 (wheel is
+// inside the friction circle: nothing happens, wheel +0x98 is set to 0).
+struct FrictionSlipLookup {
+    bool belowCircle = true;
+    int stopIndex = -1;  // first i with S_i > 1.0 (0..15)
+    double t = 0.0;      // secant parameter (1 - pr) / max(r - pr, 1.19e-7)
+    double u = 0.0;      // u*, clamped to [-1.1, 1.1]
+    double v = 0.0;      // v*
+};
+
+// 10.11.6 PORT RULE, implemented exactly: sequential first-exceed search,
+// u_i = A*start*q^i, v_i = B*table[i], S_i = u_i^2 + v_i^2 > 1; secant
+// interpolation between sample i and i-1 (for i = 0 the previous sample is
+// u = v = 0, S = 0), denominator floored at 1.19e-7, u* clamped to +-1.1.
+// NOT precomputed from slip. Not decoded by the spec: which physical axis A
+// and B are, and how (u*, v*) becomes a force change - so no caller applies
+// the result to a force yet (SolveFrictionEllipse keeps its own fallback).
+FrictionSlipLookup LookupFrictionSlipTable(const FrictionSlipTable& table, double A, double B);
+
 
 constexpr double kFrictionEllipseDeadzone = 1e-4;        // CONFIRMED literal, Sec10.8 step 5
 constexpr double kFrictionEllipseOvershootClamp = 1.1;   // CONFIRMED literal, Sec10.8 step 5

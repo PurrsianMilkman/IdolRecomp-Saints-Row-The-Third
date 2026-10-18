@@ -16,6 +16,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <unordered_set>
@@ -271,6 +272,24 @@ struct VehicleState {
     // gap as kneecappersEnabled's own "no per-wheel physics pool" precedent)
     // - test-settable only, OPEN until set.
     OpenValue<bool> seat0Occupied{"vehicle seat-0 occupant present", "spec-lua-api-behaviour.md Sec46.4"};
+    // Seat-0 record (spec 21.26 blocker dlc2_m01 and 46.4 blocker m06, 2026-10-15, FINAL): vehicle +0x1340, three
+    // handle fields per seat: +0x00 the current claim (entering or reserving), +0x08 the pending handle, +0x18 the
+    // seated occupant. The seated field is seatOccupants[0] (written by commitVehicleSeat / cleared by
+    // commitVehicleExit); claim and pending are written only by a host event that models entering or reserving
+    // (none in this host yet, so tests set them). "" = the null handle.
+    std::string seat0Claim;
+    std::string seat0Pending;
+    // The seat-0 occupant fact (seat record +0x18 present). Default false: a vehicle nothing was seated into has no
+    // occupant (spec 46.4 m06 note, FINAL: "seat-0 occupant present = false at m06_start"). A test-set
+    // seat0Occupied still wins.
+    bool seat0OccupantPresent() const {
+        if (seat0Occupied.known()) return seat0Occupied.get();
+        auto it = seatOccupants.find(0);
+        return it != seatOccupants.end() && !it->second.empty();
+    }
+    // 21.26: true when seat 0's claim, pending or seated handle names `character` (compared case-insensitively
+    // like every other by-name lookup in the engine).
+    bool seat0HoldsCharacter(const std::string& character) const;
 
     // --- vehicle_pathfind_navmesh_do (Sec22.1, wave 2 batch W2-1) - REUSES
     // seat0Occupied above for its own occupant/part-index-0 accessor gate
@@ -691,6 +710,15 @@ struct VehicleState {
     // Default empty ("no callback registered").
     std::string onVehicleEnterCallback;
 
+    // ---- engine callback firing (spec-lua-api-behaviour.md "Engine callback dispatch", 2026-10-14) ----
+    // One on_vehicle_destroyed fire per vehicle (spec D "one fire per vehicle", HIGH CONFIDENCE).
+    bool destroyedCallbackFired = false;
+    // Seat record: seat index (0 = driver) -> occupant name. Written at the seating commit, erased at exit.
+    std::map<int, std::string> seatOccupants;
+    // The character remote-controlling this vehicle (+0x1df0/+0x1df4; "" = the null pair). Written only by the RC
+    // start / stop routines (spec Sec18.10, blocker m20); ordinary driving never writes it.
+    std::string rcControllerName;
+
     // --- Batch 3 (2026-10-08), spec-lua-api-behaviour.md Sec11+Sec12 (PCR
     // quick-queries + vehicle/HUD/effect cluster) - see each stub's own doc
     // comment (lua_spec_confirmed_stubs_b10_batch3_pcr_vehicle.cpp) for the
@@ -716,6 +744,13 @@ struct VehicleState {
     // vehicle, by contrast, cleanly pushes nil with no OPEN refusal).
     OpenValue<std::string> driverName{"vehicle driver/occupant name (0x00ab5100/0x00ab50c0 + 0x00a353d0)",
                                        "spec-lua-api-behaviour.md Sec12.14"};
+    // Sec12.14 (78fb40a, FINAL): the seat-0 occupant's script name, "" (nil) when seat 0 is empty. A test-set
+    // driverName still wins; otherwise seatOccupants[0] (written at the seating commit).
+    std::string seat0OccupantName() const {
+        if (driverName.known()) return driverName.get();
+        auto it = seatOccupants.find(0);
+        return it == seatOccupants.end() ? std::string() : it->second;
+    }
 
     // vehicle_show (Sec12.18, 0x00a645c0): CONFIRMED resolve + unconditional
     // "materialize" call (0x00a87780, position pair + 2 zeros, OPEN) plus an

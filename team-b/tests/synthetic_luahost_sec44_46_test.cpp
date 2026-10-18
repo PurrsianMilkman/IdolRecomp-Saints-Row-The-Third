@@ -138,7 +138,7 @@ int main() {
     // override.
     es.vehicles().at("veh1").forceFlagGatePasses.set(false);
     ok(host, gp, "turn_invulnerable('veh1', true)"); // gate false: replicate only
-    CHECK(es.vehicles().at("veh1").forceFlags1d7a.knownMask() == 0);
+    CHECK(es.vehicles().at("veh1").forceFlags1d7a.get(VehicleState::kInvulnerableBit1d7a | VehicleState::kAlwaysApplyPlayerDamageBit1d7a) == 0); // replicate-only: bits stay at the spawn default 0 (Sec46.1, 78fb40a)
     es.vehicles().at("veh1").forceFlagGatePasses.set(true);
     ok(host, gp, "turn_invulnerable('veh1', true)");
     CHECK(es.vehicles().at("veh1").forceFlags1d7a.get(VehicleState::kInvulnerableBit1d7a) ==

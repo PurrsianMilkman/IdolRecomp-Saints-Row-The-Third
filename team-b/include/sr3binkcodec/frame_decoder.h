@@ -353,7 +353,18 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
     trace.blockRows = blockRows;
     trace.totalBlocksInGrid = blockCols * blockRows;
 
+    SiblingTableBank rowSiblingBank;
+    DcArrayPreStageGapResult rowPreStageGap;
+    DcDeltaArray rowDcArray{std::vector<uint16_t>{}};
+    FlatFillPrestageCursor rowFlatFillCursor(nullptr, 0);
+    Sibling19d10Cursor rowSibling19d10Cursor(nullptr, 0);
+    BlockGrid gridModel{blockCols, blockRows, 0};
     for (int row = 0; row < blockRows; ++row) {
+        // MEASURED (spec 5.3al sec.4: stripe 1 starts at the exact bit stripe 0 ends, DC cursor continues at word 75;
+        // rows 2-3 then match FFmpeg pixel-exact with no pre-stage either): the pre-stages (23 table builds, DC array,
+        // colour/0x10019d10 arrays) are NOT re-run per stripe; their cursors persist. OPEN GAP: the refill trigger for
+        // a later exhausted array (frame 0 stops at Y row 3 col 6, primary=6 colour cursor exhausted) is not in the spec.
+        const bool skipPrestage = decodeDcArray && row > 0;
         // SiblingTableBank (2026-10-12, fix/flat-fill-perplane-width-
         // promotion task): descriptor A's own 16-table per-class capture for
         // this row, declared at per-row scope (not inside the
@@ -365,8 +376,7 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // with `caseSelector == nullptr` - such a caller never reaches the
         // `decodeDcArray` branch below either (same existing gating), so an
         // invalid bank is never actually consumed.
-        SiblingTableBank rowSiblingBank;
-        if (caseSelector != nullptr) {
+        if (caseSelector != nullptr && !skipPrestage) {
             // spec-bink-codec.md Sec5.3h: descriptor B's own refill fires
             // unconditionally right after descriptor A's own refill
             // returns, sharing the SAME 23-call per-row table-build pass -
@@ -433,10 +443,9 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // `decodeDcArray=true` call site also passes a real `caseSelector`
         // (confirmed: decodeLumaPlane() below is the only one), so this is
         // safe without an extra null-table fallback branch.
-        DcArrayPreStageGapResult rowPreStageGap =
+        if (!skipPrestage) rowPreStageGap =
             decodeDcArray ? consumeDcArrayPreStageGap(br, caseSelector->builtTable(), rowSiblingBank, blockCols)
                           : DcArrayPreStageGapResult{};
-        FlatFillPrestageArray& rowFlatFillArray = rowPreStageGap.flatFillArray;
         // DC DELTA ARRAY ROW DECODE (2026-10-11, fix/bink-dc-array-indexing
         // task, spec-bink-codec.md Sec5.3p/Sec5.3m): run the FULL per-row
         // DC-delta-accumulation decode (dc_delta_array.h, `0x1001a160`)
@@ -458,7 +467,7 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // hand-built-nibble test, unaffected by this task) skips this
         // entirely and keeps the legacy br.readAlignedByte() fallback in
         // block_dispatch.h unperturbed.
-        DcDeltaArray rowDcArray =
+        if (!skipPrestage) rowDcArray =
             decodeDcArray ? decodeRowDcArray(br, blockCols) : DcDeltaArray(std::vector<uint16_t>{});
         const DcDeltaArray* dcArrayPtr = decodeDcArray ? &rowDcArray : nullptr;
 
@@ -478,7 +487,7 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // consumer). Gated by `decodeDcArray`, same as the array decode
         // itself - every synthetic/hand-built-nibble test (decodeDcArray=
         // false) is unaffected.
-        if (decodeDcArray) {
+        if (decodeDcArray && !skipPrestage) {
             skipSecondDcArrayZeroCountBail(br);
             skip0x10019af0ZeroMagnitudeBail(br);
         }
@@ -496,7 +505,7 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // byte-alignment anchor into `br`'s own raw buffer is needed or
         // used any more - the prior anchor-into-raw-bytes model was Sec
         // 5.3z's own named root cause, now replaced.
-        FlatFillPrestageCursor rowFlatFillCursor(&rowFlatFillArray, 0);
+        if (!skipPrestage) rowFlatFillCursor = FlatFillPrestageCursor(&rowPreStageGap.flatFillArray, 0);
         FlatFillPrestageCursor* flatFillCursorPtr = decodeDcArray ? &rowFlatFillCursor : nullptr;
 
         // SIBLING 0x10019d10 CURSOR, PER ROW (2026-10-11, spec-bink-codec.md
@@ -517,9 +526,9 @@ inline DecodeTrace decodePlaneRasterOrder(BitstreamReader& br, PlaneView dest, c
         // in main_menu_bg.bik's own Y-plane per block_dispatch.h's own top
         // comment), which this task's own "no regressions" requirement
         // forbids.
-        Sibling19d10Cursor rowSibling19d10Cursor(&rowPreStageGap.sibling19d10Array, 0);
+        if (!skipPrestage) rowSibling19d10Cursor = Sibling19d10Cursor(&rowPreStageGap.sibling19d10Array, 0);
         Sibling19d10Cursor* sibling19d10CursorPtr = (decodeDcArray && rowPreStageGap.sibling19d10Array.size() != 0) ? &rowSibling19d10Cursor : nullptr;
-        const BlockGrid gridModel{blockCols, blockRows, 0};
+        if (!skipPrestage) gridModel = BlockGrid{blockCols, blockRows, 0};
         for (int col = 0; col < blockCols;) {
             BlockRecord rec = decodeOneBlock(br, dest, prev, row, col, caseSelector, caseSelectorB, dcArrayPtr,
                                               flatFillCursorPtr, sibling19d10CursorPtr, caseSelector != nullptr ? &gridModel : nullptr);

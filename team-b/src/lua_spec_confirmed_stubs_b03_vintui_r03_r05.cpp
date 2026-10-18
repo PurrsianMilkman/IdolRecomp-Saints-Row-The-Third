@@ -649,7 +649,11 @@ int stub_vehicle_set_sirenlights(lua_State* L) {
             v.forceFlags1d7c.setBits(0x8, value ? 0x8u : 0x0u); // CONFIRMED: siren only
             break;
         default:
-            throw OpenStateError("vehicle class " + std::to_string(cls) + " per-class siren/headlight allow flag",
+            // Types outside 3..12 (and 4/9/10 inside it) take the default path, which reads the per-INSTANCE
+            // customisation record (+0xa88 -> +0x50 bit 0x2, the light-bar option). That record is not modelled,
+            // so this stays OPEN (spec sync bfe0542, Sec33.1 blocker m10: the class enum itself is now answered).
+            throw OpenStateError("vehicle instance customisation light-bar option ((+0xa88)+0x50 bit 0x2; Special_Vehicle_Type " +
+                                     std::to_string(cls) + ")",
                                  "spec-lua-api-behaviour.md Sec33.1");
     }
     return 0;
@@ -1028,6 +1032,9 @@ int stub_action_play_synced_do(lua_State* L) {
     }
     int32_t index = st->lookupSyncedActionIndex(actionName); // 0x0095da50 CORRECTED (Sec14.1/Sec33.3): plain name lookup
     (void)index; // no further synced-action table to cross-reference once found (not modelled)
+    // Spec Sec18.5 port rule (blocker m07): a successful play gives both characters an active synced instance.
+    // CHOSEN stand-in length (animation lengths are not modelled; the spec suggests ~3 s): 3 s.
+    if (resolved) st->beginSyncedActionInstance(actor1, actor2);
     if (st->coopIsActive()) {
         EngineState::replicateStateChange("action_play_synced_do", actor1); // CONFIRMED: always sends an opcode-0x43 sub-code-19 record in multiplayer
     }

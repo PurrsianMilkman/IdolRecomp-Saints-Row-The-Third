@@ -144,3 +144,9 @@ Everything exits when the game closes.
 5. Kill one gang member and **don't move** until its gun is on the ground.
 6. Press **Num4**, then walk straight over the dropped gun.
 7. Press **Num4** again, then **Num9**, then quit the game normally.
+
+### Proposed item 10 (2026-10-15, read-only hook; ask before running)
+- **What:** hook set-target `0x009659f0` (log the caller `bt[0]`, the NPC and the target) together with event-78 posts.
+- **When:** while an armed gang member first notices the player, without being shot first.
+- **Why:** static analysis found no code path that sets an unprovoked NPC's first target from perception (spec-ai-runtime §21.2 / §21.7). One sighting would settle it, and would also show whether the 300–500 ms refresh clears targets.
+- **User action:** after Num1 (which sends the gang at you), stand still and let them come and open fire.

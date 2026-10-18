@@ -161,6 +161,8 @@ int main() {
 
         CHECK(player.stateEnum.get() == 3); // seated - stub_vehicle_exit_do's own gate
         CHECK(player.currentVehicleName.get() == "m05_heli_pierce");
+        // The seat-0 commit is the seat-0 occupant fact (m06 vehicle_pathfind_to blocker): no longer OPEN.
+        CHECK(st.getOrCreateVehicle("m05_heli_pierce").seat0OccupantPresent() == true);
     }
 
     if (g_failures == 0) {

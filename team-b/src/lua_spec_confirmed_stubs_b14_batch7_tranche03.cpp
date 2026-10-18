@@ -528,7 +528,7 @@ int stub_vehicle_pathfind_to_do(lua_State* L) {
         return 1;
     }
     VehicleState& v = st->getOrCreateVehicle(vehicleName);
-    if (!v.seat0Occupied.get()) { // OPEN until set; CONFIRMED gate "needs a vehicle with a driver"
+    if (!v.seat0OccupantPresent()) { // default false (spec 46.4 m06 note); CONFIRMED gate "needs a vehicle with a driver"
         lua_pushboolean(L, 0);
         return 1;
     }
@@ -689,7 +689,12 @@ int stub_turn_to_do(lua_State* L) {
     }
 
     (void)st->allocateScriptRequestId(character, /*channel=*/0); // 0x006f62b0, Sec30.5's own preamble
-    if (c.turnRefusalPredicateFires.get()) { // OPEN until set
+    // Sec30.6 (78fb40a): refusal = 0x009433d0 ("may turn now") false. Modelled: the human occupies a vehicle.
+    // The other conditions (action tags, player-kind + cutscene, 0x009aa360) are not modelled and read as not firing.
+    bool refused = c.turnRefusalPredicateFires.known()
+                       ? c.turnRefusalPredicateFires.get()
+                       : (c.currentVehicleName.known() && !c.currentVehicleName.get().empty());
+    if (refused) {
         st->releaseScriptRequestId(character, 0);
         lua_pushboolean(L, 1); // CONFIRMED: refusal predicate fires -> true, releases the id
         return 1;

@@ -687,7 +687,9 @@ int main() {
     CHECK(!mt.moveToRequestTagC34.has_value());
 
     es.objectResolves().set("mt_dest", true);
-    fails(host, gp, "move_to_do('mt_c', 'mt_dest', 1, false, false, false, 0)", "0x00a3bae0(character, false)");
+    // 0x00a3bae0(c, 0) is character_is_ready's predicate (spec 7.27), computed live: a standing NPC passes it and the
+    // call reaches the next open gate (the dispatch result), no longer stopping on the predicate itself.
+    fails(host, gp, "move_to_do('mt_c', 'mt_dest', 1, false, false, false, 0)", "action-id counter");
     fails(host, gp, "move_to_do('mt_c', 'mt_dest', 1, false, true, false, 0)", "0x00a3bae0(character, true)");
     mt.moveToPredicateA3baeArgFalse.set(false);
     mt.moveToPredicateA3baeArgTrue.set(true);
@@ -696,7 +698,7 @@ int main() {
     CHECK(*mt.moveToTimerC30 == -1);
 
     fails(host, gp, "move_to_do('mt_c', 'mt_dest', 4, false, true, false, 0)", "outside 1/2/3");
-    fails(host, gp, "move_to_do('mt_c', 'mt_dest', 1, false, true, false, 0)", "0x00993630");
+    fails(host, gp, "move_to_do('mt_c', 'mt_dest', 1, false, true, false, 0)", "action-id counter");
     CHECK(es.hasActiveScriptRequest("mt_c", EngineState::kScriptedRequestKindMoveOrPathfind)); // allocated before 0x00993630
     mt.moveToDispatchSucceeds.set(false);
     ok(host, gp, "assert(move_to_do('mt_c', 'mt_dest', 2, false, true, false, 0) == 0)");
@@ -730,7 +732,9 @@ int main() {
     es.objectResolves().set("pn_unres", false);
     fails(host, gp, "vehicle_pathfind_navmesh_do('pn_unres', 'pn_dest', false, false, false, 0)", "does not resolve");
     es.objectResolves().set("pn_v", true);
-    fails(host, gp, "vehicle_pathfind_navmesh_do('pn_v', 'pn_dest', false, false, false, 0)", "seat-0");
+    // Spec 46.4 m06 note (2026-10-15): the unseated default reads "no occupant", so this reaches the
+    // 'clear the pending request' tail, whose return value Sec22.1 still leaves OPEN.
+    fails(host, gp, "vehicle_pathfind_navmesh_do('pn_v', 'pn_dest', false, false, false, 0)", "clear the pending request");
     VehicleState& pv = es.getOrCreateVehicle("pn_v");
     pv.seat0Occupied.set(false);
     fails(host, gp, "vehicle_pathfind_navmesh_do('pn_v', 'pn_dest', false, false, false, 0)", "clear the pending request");
@@ -738,11 +742,11 @@ int main() {
     fails(host, gp, "vehicle_pathfind_navmesh_do('pn_v', '', false, false, false, 0)", "clear the pending request");
     fails(host, gp, "vehicle_pathfind_navmesh_do('pn_v', {}, false, false, false, 0)", "clear the pending request");
     es.objectResolves().set("pn_dest", true);
-    fails(host, gp, "vehicle_pathfind_navmesh_do('pn_v', 'pn_dest', false, false, false, 0)", "0x00b24fa0");
-    CHECK(!es.hasActiveScriptRequest("pn_v", EngineState::kScriptedRequestKindMoveOrPathfind)); // nothing before the refusal
+    // Spec a166141 Sec22.1: result no longer OPEN - authority default is 1.0.
+    ok(host, gp, "assert(vehicle_pathfind_navmesh_do('pn_v', 'pn_dest', false, false, false, 0) == 1)");
     es.vehicleNavmeshDispatchResult().set(7.0);
     ok(host, gp, "assert(vehicle_pathfind_navmesh_do('pn_v', 'pn_dest', true, false, true, 4.7) == 7)");
-    CHECK(pv.navmeshPathfindCount == 1);
+    CHECK(pv.navmeshPathfindCount == 2);
     CHECK(pv.lastNavmeshPathfindRequest->destinationName == "pn_dest");
     CHECK(pv.lastNavmeshPathfindRequest->flagArg3 && !pv.lastNavmeshPathfindRequest->flagArg4 &&
           pv.lastNavmeshPathfindRequest->flagArg5);

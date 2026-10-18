@@ -132,6 +132,16 @@ public:
     // `decoded.ok`.
     bool playOneShot(const DecodeAttemptResult& decoded, float volume, std::string& error);
 
+    // Like playOneShot() but reports a stable voice id (never 0) so a caller
+    // can stop it early (vehicle radio: leaving the car cuts the song).
+    // `outVoiceId` is set only on success.
+    bool playTracked(const int16_t* interleavedPcm, size_t sampleCount, long sampleRate, int channels,
+                      float volume, std::string& error, uint64_t* outVoiceId);
+    // Stops and destroys one tracked voice (no-op if unknown/finished).
+    void stopVoice(uint64_t id);
+    // True while the tracked voice has not finished playing.
+    bool isVoiceActive(uint64_t id);
+
     // THE 3D CALL. Computes the real, spec-CONFIRMED straight-line distance
     // (spec-audio-runtime.md Sec11a.3's own `0x004685c0` mechanism,
     // single-position-sample case - no SetMultiplePositions equivalent here)
@@ -171,6 +181,7 @@ private:
     void* masteringVoice_ = nullptr;  // IXAudio2MasteringVoice*
     std::vector<std::unique_ptr<VoiceSlot>> activeVoices_;
 
+    uint64_t nextVoiceId_ = 1;
     uint64_t buffersSubmitted_ = 0;
     uint64_t bytesSubmitted_ = 0;
 };

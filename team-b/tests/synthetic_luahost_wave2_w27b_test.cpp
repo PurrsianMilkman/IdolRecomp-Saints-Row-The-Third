@@ -172,8 +172,13 @@ int main() {
     es.objectResolves().set("NoSuchPlayer", false);
     es.objectResolves().set("NoSuchTarget", false);
 
-    // --- flee: no spec text anywhere - honest OPEN refusal ------------------
-    fails(host, gp, "flee()", "flee");
+    // --- flee (Sec45.1, 0x00a49b30): actor must resolve (not #PLAYER#); a request is counted, no return ---
+    ok(host, gp, "flee('NoSuchChar', 'NoSuchTarget')"); // unresolved actor: silent no-op
+    es.objectResolves().set("FleeNpc", true);
+    ok(host, gp, "flee('FleeNpc')");
+    ok(host, gp, "flee('FleeNpc', '#PLAYER1#', true, true)");
+    CHECK(es.getOrCreateCharacter("FleeNpc").fleeRequestCount == 2);
+    CHECK(es.getOrCreateCharacter("NoSuchChar").fleeRequestCount == 0);
 
     // --- assert_screen_is_faded_out: confirmed no-op (Sec35.1) --------------
     ok(host, gp, "assert_screen_is_faded_out()");

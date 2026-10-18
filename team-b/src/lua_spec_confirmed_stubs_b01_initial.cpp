@@ -341,6 +341,7 @@ int stub_ai_add_enemy_target(lua_State* L) {
             std::string resolvedTarget = resolveClosestPlayerSentinel(target); // CONFIRMED __stricmp redirect, Sec3.9
             if (st->objectResolves().get(resolvedTarget)) { // OPEN until set
                 resolved = true;
+                if (resolvedTarget.rfind("#PLAYER", 0) == 0) actorState.hostileTargetOrderSeen = true; // --auto-objective harness bookkeeping only
                 if (arg4) {
                     actorState.lastAiAddEnemyTargetArg4TargetName = resolvedTarget;
                     ++actorState.aiAddEnemyTargetArg4CallCount;
@@ -556,7 +557,11 @@ int stub_ai_clear_scripted_action(lua_State* L) {
     if (isFollowerSentinelLiteral(name)) {
         if (!resolveFollowerAwareObject(st, name, resolvedName)) return 0; // may throw OpenStateError for an unresolved-index literal; a known-but-empty list is a genuine no-op, nothing to touch
     }
-    (void)st->getOrCreateCharacter(resolvedName);
+    CharacterState& cc = st->getOrCreateCharacter(resolvedName);
+    // spec-ai-runtime.md Sec21.5: cancel 0x004f4c90 frees the ticket and returns control at once (the staged order
+    // is dropped, so a scripted move stops).
+    cc.scriptedOrderTicket.clear();
+    cc.scriptedMoveActive = false;
     return 0;
 }
 

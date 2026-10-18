@@ -205,6 +205,9 @@ void applySpecInitialState(EngineState& es) {
     //    name) - so it correctly stays OPEN; do not widen this set without
     //    new CONFIRMED spec text (see objectResolves()'s own doc comment,
     //    engine_state.h).
+    // Sec17.29 (spec sync 78fb40a, FINAL): 0x013010d8 is the "gis_grain" UI-document id, -1 (not loaded) at boot.
+    es.dlcFilmGrainAvailable().set(false);
+
     es.objectResolves().set("homies", true);
     es.objectResolves().set("shopkeepers", true);
     es.objectResolves().set("-- Cutscene Script Group --", true);

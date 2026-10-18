@@ -4880,6 +4880,8 @@ the main reader.
    running class is **reset to 0 at the start of every stripe**, before the colour call. It is carried
    only within a stripe. Evidence: disassembly + live trace. **FINAL.**
 
+**[2026-10-14 clarification: stripe in answer 3 and in 5.3al item 4 means one 8-pixel-row dispatch row. The DC array is refilled at the start of every stripe, so the DC slot restarts at 0 on each one, and the colour and pattern arrays are refilled by the same per-stripe pre-stage pass. A decoder that builds those arrays once per frame and keeps one cursor running only matches the DLL while the arrays last. The cursors' past-end rule (jump to base + 4) is a separate safeguard and does not replace the per-stripe refill.]**
+
 **Where 32 and 226 come from (OPEN on Team B's side).** The DLL's inputs for both blocks are settled
 above. The bit length, DC slot and nibble agree with Team B's model (83 bits; DCs 199/212 at slots 1/2;
 nibble 0 for both). So the error is after the read, in the coefficient values, their placement, the

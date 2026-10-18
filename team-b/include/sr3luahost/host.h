@@ -70,6 +70,31 @@ public:
     };
     RunResult runChunk(lua_State* L, const std::string& source, const std::string& chunkName);
 
+    // Makes thread_new find a mission's own global functions. The engine bootstraps three literals before any script
+    // (spec-lua-bindings.md Sec14, the 6 luaL_loadstring sites): `_UGGlobals = getfenv()` (so _UGGlobals IS the state's
+    // global table), then a strict-globals metatable on it. system_lib.lua's `_GetAnyGlobalSilent` (the lookup
+    // thread_new uses, Sec26.27 step 3) reads rawget(_UGGlobals, k), and system_lib's `_PrepareForDynamicGlobals` /
+    // `_DynamicGlobalsLoadComplete` install that metatable on `_UGGlobals`. This host never ran the bootstrap, so
+    // `_UGGlobals` stayed an empty detached table and every thread_new of a mission function returned 65535 (no mission
+    // worker thread ever started). Applying the engine literal literally would make `_UGGlobals` the global table and
+    // the lifecycle hooks (which this host fires) would then install the strict metatable on it, turning every read of
+    // an unmodelled global into an unprotected error. CHOSEN equivalent: wrap `_GetAnyGlobalSilent` so it also finds a
+    // raw global of the state, which is exactly what `_UGGlobals == _G` gives thread_new, without strict globals.
+    // Call after system_lib.lua is preloaded into `L`; idempotent.
+    RunResult applyDynamicGlobalsBootstrap(lua_State* L) {
+        return runChunk(L,
+                        "if _GetAnyGlobalSilent ~= nil and not _SR3_ANYGLOBAL_PATCHED then\n"
+                        "  local orig = _GetAnyGlobalSilent\n"
+                        "  _GetAnyGlobalSilent = function(k)\n"
+                        "    local v = orig(k)\n"
+                        "    if v ~= nil then return v end\n"
+                        "    return rawget(_G, k)\n"
+                        "  end\n"
+                        "  _SR3_ANYGLOBAL_PATCHED = true\n"
+                        "end\n",
+                        "dynamic_globals_bootstrap");
+    }
+
     // Real, per-hook outcome of one Host::fireConfirmedHooks() attempt
     // against one hook name, on one state. A genuinely different signal
     // from RunResult above - RunResult reports a script's own TOP-LEVEL

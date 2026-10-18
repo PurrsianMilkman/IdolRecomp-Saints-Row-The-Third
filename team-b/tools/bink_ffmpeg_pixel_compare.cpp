@@ -20,6 +20,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -131,6 +132,10 @@ int main(int argc, char** argv) {
                     std::printf("block (row=%d,col=%d) primary=%d sub=%d pixel(0,0): ours=%u ffmpeg=%u %s\n",
                                 b.blockRow, b.blockCol, static_cast<int>(b.primary),
                                 b.sub ? static_cast<int>(*b.sub) : -1, o, t, (o == t) ? "MATCH" : "MISMATCH");
+                    if ((o != t || std::getenv("BINK_DIAG_ALL")) && b.dcLiteral)
+                        std::printf("    diag: dc=%u acEntryBit=%zu acExitBit=%zu\n", static_cast<unsigned>(*b.dcLiteral),
+                                    b.acEntryBitPos ? *b.acEntryBitPos : size_t(0),
+                                    b.acExitBitPos ? *b.acExitBitPos : size_t(0));
                 }
             }
         }
@@ -149,6 +154,10 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 10; ++i)
         if (perPrimaryChecked[i]) std::printf(" p%d=%zu/%zu", i, perPrimaryExact[i], perPrimaryChecked[i]);
     std::printf("\nfirst mismatching block: row=%d col=%d\n", firstBadRow, firstBadCol);
+    if (!trace.blocks.empty()) {
+        const auto& lb = trace.blocks.back();
+        std::printf("last block: row=%d col=%d primary=%d sub=%d outcome=%d rawPrimaryNibble=%d\n", lb.blockRow, lb.blockCol, static_cast<int>(lb.primary), lb.sub ? static_cast<int>(*lb.sub) : -1, static_cast<int>(lb.outcome), static_cast<int>(lb.rawPrimaryNibble));
+    }
     std::printf("stop reason: %s\n", trace.stopReasonText().c_str());
 
     std::printf("\n=== RESULT ===\n");

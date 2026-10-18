@@ -294,6 +294,19 @@ void EngineState::screenFadeFrameRoutine() {
     }
 }
 
+// Design notes moved verbatim from EngineState::screenFadeHostFrame's declaration in engine_state.h
+// (refactor step 3a):
+// Host frame. Advances the host's millisecond clock (the engine's clock
+// 0x01320d9c; this host's clock starts at 0 and moves only here), then:
+//  1. HOST-SIDE SUBSTITUTE (not engine behaviour; Sec26.24 allows it and
+//     requires the label): a transition still running durationMs after
+//     its request started it is completed by running the completion
+//     body. Only used when screen_fade_do was not a function in the UI
+//     state (or the document is not loaded) - fallback_undefined - or
+//     was called but never called Screen_fade_transition_complete -
+//     fallback_no_callback. The preferred path is the script's own call.
+//  2. the per-frame routine 0x0059fe70 (CONFIRMED body). An OPEN read
+//     stops that frame's routine; counted (screenFadeFramesBlockedOnOpen).
 void EngineState::screenFadeHostFrame(int64_t elapsedMs) {
     screenFadeClockMs_ += elapsedMs;
     ++screenFadeCounters_.framesRun;
