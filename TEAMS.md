@@ -1,4 +1,37 @@
-# Teams and sessions (cloud phase, from 2026-09-30)
+# Teams and sessions
+
+## Current setup (from 2026-10-19): four teams, run locally
+
+The project runs on the owner's PC as four always-on Claude Code teams, each in its own folder and git checkout,
+plus one orchestrator session that keeps them running, syncs specs and reports to the owner.
+
+| Team | Side | Owns | Talks to |
+|---|---|---|---|
+| **A** | Dirty | Specifications from the original executable (Ghidra), reviews of clean-side code against the specs | D |
+| **D** | Dirty | Differential testing: runs routines from the original executable in a CPU emulator, feeds the same inputs to our code, reports every mismatch (`spec-differential-*.md`) | A |
+| **B** | Clean | `sr3.exe`, world, AI, stability; merges every clean-side branch into `main` | C |
+| **C** | Clean | Menus, HUD, save, activities, Team D fixes, the "looks like the game" visual track (its own git worktree of Team B's repo) | B |
+
+**The wall.**
+- Only `spec-*.md` files cross from the dirty side to the clean side. Each one goes through a commit script with a
+  leak guard that refuses decompiler names, addresses written as code, and pseudocode.
+- The clean teams never open the dirty teams' folders.
+- The message tool refuses any message from a dirty-side team to a clean-side team.
+- Clean-side requests reach Team A through the orchestrator as plain written asks.
+
+**Safety rules.**
+- Nothing attaches to the running game unless the owner says so.
+- Every playtest build is archived and kept.
+- Only build output that can be rebuilt may be deleted.
+
+**Milestone.** First Playable (boot → main menu → New Game / Load Save → free roam → pause → save / quit) was
+reached on 2026-10-19. The current priorities are its stability, then making it look like the original game.
+
+---
+
+## Earlier phases (historical)
+
+### Cloud phase (from 2026-09-30)
 
 > **Local phase (from 2026-10-01): the cloud phase below is historical.** The project is worked on locally
 > on the owner's PC again. Team A runs Ghidra directly and Team B builds and runs against the game files directly, so

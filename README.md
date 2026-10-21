@@ -9,18 +9,26 @@ To run anything here you need your own legitimate copy of the game.
 
 ## How the project works
 
-The work is split between two teams, following the clean-room method:
+The work is split between four teams on two sides of a clean-room wall:
 
-| | Team A (`team-a/`) | Team B (`team-b/`) |
-|---|---|---|
-| Role | Studies the original game and writes specifications | Builds the reimplementation |
-| Reads | The game executable (disassembly) and the game's data files | Only Team A's specifications and the game's data files |
-| Produces | `spec-*.md` documents | C++17 readers, a D3D11 renderer, a Lua 5.1 host |
+| | Team A | Team D | Team B | Team C |
+|---|---|---|---|---|
+| Side | Dirty | Dirty | Clean | Clean |
+| Role | Studies the original game and writes specifications | Runs the original game's own code in an emulator and compares it with ours | Builds the reimplementation (`sr3.exe`, world, AI) and merges all clean-side work | Builds menus, HUD, saving, activities, visuals and Team D's fixes |
+| Reads | The game executable (disassembly) and the game's data files | The game executable, Team A's specs and the clean side's code | Only specifications and the game's data files | Only specifications and the game's data files |
+| Produces | `spec-*.md` documents | `spec-differential-*.md`: test vectors and match/mismatch findings | C++17 code, a D3D11 renderer, a Lua 5.1 host | C++17 code on its own branches, merged by Team B |
 
-Specifications flow one way, from Team A to Team B. Team B never sees the original code. Specs describe
-file layouts and behaviour in plain language, with confidence labels: **CONFIRMED** (empirical or
-disassembly), **HIGH CONFIDENCE**, **HYPOTHESIS** and **OPEN**. Anything unresolved is recorded as
-open rather than guessed.
+- **Only specification documents cross the wall,** from the dirty side to the clean side, and every one passes
+  a leak check that blocks decompiler-style names and code. The clean side never sees the original code.
+- **Teams on the same side talk to each other** (A with D, B with C). The dirty side can never message the
+  clean side; the clean side asks for specs through written requests.
+- **Team D is the referee.** It feeds thousands of inputs through a routine from the original executable and
+  through our version, then reports exactly where they differ (findings D-1 to D-28 so far). Fixes go
+  through Team A as corrected specs, then to Team C or Team B.
+
+Specs describe file layouts and behaviour in plain language, with confidence labels: **CONFIRMED** (empirical,
+emulated or disassembly), **HIGH CONFIDENCE**, **HYPOTHESIS** and **OPEN**. Anything unresolved is recorded as
+open rather than guessed. See [`TEAMS.md`](TEAMS.md) for the full setup.
 
 **Running Claude Code in the cloud against this repo? Read [`CLOUD-START.md`](CLOUD-START.md) first.**
 
@@ -28,7 +36,9 @@ open rather than guessed.
 
 - `team-a/`: Team A's specifications (`spec-*.md`), its running log (`HANDOFF.md`), and `WALLS.md`,
   the list of approaches that were tried and ruled out.
-- `team-b/`: the reimplementation.
+- `team-a/` also holds Team D's published results: `spec-differential-results.md` and the
+  `spec-differential-vectors-*.md` test vectors.
+- `team-b/`: the reimplementation, including Team C's merged work.
   - `include/`, `src/`: C++17 libraries. There are readers for about 19 binary formats (containers,
     textures, meshes, rigs, animation headers, trees, zones, vehicles, collision meshes, shaders and
     saves) and for about 236 data tables.
@@ -40,17 +50,25 @@ open rather than guessed.
     licence).
   - `STATE.md`: current status, with real denominators. `HANDOFF.md`: the full engineering log.
 
-## Status (September 2026)
+## Status (October 2026)
 
-- Every covered format is validated against the full shipped population, not a sample.
-- A D3D9 SM2/SM3 shader bytecode disassembler, plus a translator to HLSL SM4/5. All 7,276 shipped
-  shaders translate and compile.
-- A deferred D3D11 renderer. It draws characters with animation, vehicles with their original shaders
-  and paint, trees, the always-loaded city tier, and textured level meshes (buildings and props).
-- An embedded Lua 5.1 host. It registers all 1,490 engine functions and runs all 804 shipped scripts.
-  About 20 engine functions are reimplemented from reviewed specs so far; about 570 have written specs.
+**First Playable reached.** `sr3.exe` boots, skips the intro videos, and shows the main menu. New Game and Load
+Save work; you can free roam on foot, in cars, boats and aircraft with the HUD and minimap; the pause menu
+resumes, saves, quits to the main menu or quits to the desktop; and a saved game reloads where you left it.
 
-This is not yet a playable game.
+- Every covered file format is validated against the full shipped population, not a sample.
+- A D3D9 shader bytecode translator to HLSL SM4/5: all 7,276 shipped shaders translate and compile.
+- A deferred D3D11 renderer: characters, vehicles, trees, buildings, the street ground, sky, sun direction and
+  time-of-day colour.
+- An embedded Lua 5.1 host that registers all 1,490 engine functions and runs all 804 shipped scripts.
+- Systems built and tested: mission scripting, HUD/minimap, save/load, respect and progression, radio,
+  physics, weather, roads and traffic, pedestrians, NPC and combat AI, aircraft and boats, death and arrest,
+  GPS, homies, menus, and eight activities.
+- Missions: 14 of 49 complete end to end in the last full automated run; the rest are being worked through.
+- Original-code checks: 28 routines compared against the original executable with tens of thousands of
+  inputs; most mismatches found are already fixed.
+
+It is a playable build, not a finished game: it does not look like the original yet, and missions are incomplete.
 
 ## Building
 
