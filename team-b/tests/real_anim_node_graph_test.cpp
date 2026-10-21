@@ -399,14 +399,14 @@ int main() {
         for (const auto& kv : unresolvedTags) total += kv.second;
         std::cout << "  unresolved tag_names: " << total << " in " << unresolvedTags.size() << " graphs\n";
         for (const auto& kv : unresolvedTags) std::cout << "    " << kv.first << ": " << kv.second << "\n";
-        CHECK_EQ(total, 9);
+        CHECK_EQ(total, 7);  // D-16: the document parser trims text, so the two trailing-space names of cower_test resolve (spec-anim-runtime 7.12 said nine)
         std::map<std::string, int> byFile;
         for (size_t gi = 0; gi < lib.graphs.size(); ++gi) {
             auto it = unresolvedTags.find(lib.graphs[gi].name);
             if (it != unresolvedTags.end()) byFile[lib.rowNames[static_cast<size_t>(lib.graphRow[gi])]] = it->second;
         }
-        CHECK((byFile == std::map<std::string, int>{{"cower_test", 2}, {"spinslower_sm", 1}, {"tiger_ride_sm", 6}}));
-        CHECK((unresolvedTagNames == std::set<std::string>{"cower run ", "cower stumble ", "SpinSlower", "tiger calm",
+        CHECK((byFile == std::map<std::string, int>{{"spinslower_sm", 1}, {"tiger_ride_sm", 6}}));
+        CHECK((unresolvedTagNames == std::set<std::string>{"SpinSlower", "tiger calm",
                                                            "tiger stumble left", "tiger stumble right"}));
     }
 

@@ -132,26 +132,31 @@ void NormalizeForDisplay(float rgb[3]) {
 
 TodLightingResult ComputeTodLighting(const std::vector<WeatherTimeSegment>& segments, float t,
                                      const std::string& chosenWeatherStageName) {
+    // Single-stage form: stage A == stage B, so the weather axis is a mathematical no-op.
+    return ComputeTodLightingBlended(segments, t, chosenWeatherStageName, chosenWeatherStageName, 0.0f);
+}
+
+TodLightingResult ComputeTodLightingBlended(const std::vector<WeatherTimeSegment>& segments, float t,
+                                            const std::string& stageAName, const std::string& stageBName,
+                                            float stageBlend) {
     TodLightingResult result;  // old-behaviour defaults; overwritten field-group by field-group below
     ComputeChosenSunDirection(t, result.sunDirection);
 
     const TodSegmentBracket bracket = FindTodSegmentBracket(segments, t);
     if (bracket.low == nullptr || bracket.high == nullptr) return result;  // no segment data - old defaults
 
-    const WeatherTimeOfDayCell* cellLow = FindCellByStageName(*bracket.low, chosenWeatherStageName);
-    const WeatherTimeOfDayCell* cellHigh = FindCellByStageName(*bracket.high, chosenWeatherStageName);
-    if (cellLow == nullptr || cellHigh == nullptr) return result;  // chosen stage missing here - old defaults
+    const WeatherTimeOfDayCell* lowA = FindCellByStageName(*bracket.low, stageAName);
+    const WeatherTimeOfDayCell* highA = FindCellByStageName(*bracket.high, stageAName);
+    const WeatherTimeOfDayCell* lowB = FindCellByStageName(*bracket.low, stageBName);
+    const WeatherTimeOfDayCell* highB = FindCellByStageName(*bracket.high, stageBName);
+    if (!lowA || !highA || !lowB || !highB) return result;  // a stage is missing here - old defaults
 
-    // stageBlend is always 0 (CHOSEN: no simulated weather-STAGE schedule in
-    // this project, see this file's header banner) - passing the SAME cell
-    // as both stage-A and stage-B corners makes BlendTodCorners' weather
-    // axis a mathematical no-op, rather than fabricating a second stage.
     const TodColor4 ambient =
-        BlendTodCorners(*cellLow, *cellHigh, *cellLow, *cellHigh, bracket.segmentBlend, 0.0f, ExtractAmbientColor);
+        BlendTodCorners(*lowA, *highA, *lowB, *highB, bracket.segmentBlend, stageBlend, ExtractAmbientColor);
     const TodColor4 fog =
-        BlendTodCorners(*cellLow, *cellHigh, *cellLow, *cellHigh, bracket.segmentBlend, 0.0f, ExtractFogColor);
-    const TodColor4 sun = BlendTodCorners(*cellLow, *cellHigh, *cellLow, *cellHigh, bracket.segmentBlend, 0.0f,
-                                          ExtractTodLightColor);
+        BlendTodCorners(*lowA, *highA, *lowB, *highB, bracket.segmentBlend, stageBlend, ExtractFogColor);
+    const TodColor4 sun =
+        BlendTodCorners(*lowA, *highA, *lowB, *highB, bracket.segmentBlend, stageBlend, ExtractTodLightColor);
 
     result.ambientColor[0] = ambient.r * ambient.intensity;
     result.ambientColor[1] = ambient.g * ambient.intensity;

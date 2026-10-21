@@ -22,15 +22,35 @@ const DiversionRespectData kShippedStuntDiversions[11] = {
     {"stoppie", 50, 6000, 200, -1},
 };
 
+int32_t RoundProductF32(double product) {
+    const double r = std::round(static_cast<double>(static_cast<float>(product)));  // halves away from zero
+    if (!(r >= -2147483648.0 && r <= 2147483647.0)) return INT32_MIN;
+    return static_cast<int32_t>(r);
+}
+
 int32_t ScaleByMultiplier(float multiplier, int32_t amount) {
-    return static_cast<int32_t>(std::lround(static_cast<double>(multiplier) * amount));
+    return RoundProductF32(static_cast<double>(multiplier) * amount);
+}
+
+int64_t AddCashToWallet(int64_t cash, int64_t amount, float multiplier, bool localPlayer) {
+    if (localPlayer && amount > 0) {
+        const float dollars = static_cast<float>(static_cast<float>(amount) / 100.0f);
+        const float scaled = static_cast<float>(static_cast<double>(dollars) * multiplier * 100.0);
+        const double r = std::round(static_cast<double>(scaled));
+        amount = static_cast<int64_t>(std::clamp(r, -2000000000.0, 2000000000.0));
+    }
+    // The wallet as read is already within +-2e9 (an edited 2,147,483,000 adds like 2,000,000,000 in the
+    // vectors); the sum is then signed 32-bit.
+    const int64_t sum = Wrap32(std::clamp<int64_t>(cash, -2000000000LL, 2000000000LL) + amount);
+    return std::max<int64_t>(std::clamp<int64_t>(sum, -2000000000LL, 2000000000LL), 0);
 }
 
 ActivityAwards ActivityCompletionAwards(int32_t propsAward, float multiplier) {
     ActivityAwards a;
     a.first = propsAward;
-    a.second = static_cast<int32_t>(
-        std::lround(static_cast<double>(propsAward) * (static_cast<double>(multiplier) - 1.0)));
+    // Props_Award is read as unsigned 32-bit; D-1 rounding (spec-differential-results D-1/D-8).
+    a.second = RoundProductF32(static_cast<double>(static_cast<uint32_t>(propsAward)) *
+                               (static_cast<double>(multiplier) - 1.0));
     return a;
 }
 
@@ -38,11 +58,10 @@ DiversionReward DiversionRewardFor(float fraction, int32_t maxRespect, int32_t m
                                    int32_t maxCash, int64_t lifetimeStatistic) {
     DiversionReward r;
     const double f = std::clamp(static_cast<double>(fraction), 0.0, 1.0);
-    // "If it is ~0, nothing": a tolerance of 1e-6 (CHOSEN; the spec gives
-    // no epsilon).
-    if (f < 1e-6) return r;
-    if (lifetimeStatistic >= maxLifetimeRespect)
-        r.cashDollars = static_cast<int32_t>(std::lround(f * maxCash));
+    // Nothing unless f > 0.001 as a single (spec-differential-results D-2).
+    if (!(f > static_cast<double>(0.001f))) return r;
+    if (lifetimeStatistic >= maxLifetimeRespect)  // cash floored, the product first rounded to single
+        r.cashDollars = static_cast<int32_t>(std::floor(static_cast<float>(f * static_cast<float>(maxCash))));
     else
         r.respect = static_cast<int32_t>(std::trunc(f * maxRespect));
     return r;
@@ -52,10 +71,18 @@ ToastFinalisation FinaliseRewardToast(const RewardToast& toast, float multiplier
                                       const RespectTable& table, AppliedUnlocks& applied,
                                       const AwardContext& ctx) {
     ToastFinalisation t;
-    t.award = AwardRespect(p, ScaleByMultiplier(multiplier, toast.respect), table, applied, ctx);
-    t.zeroGrantHint = t.award.returned == 0;
-    const double raw = std::round(static_cast<double>(toast.cashDollars) * 100.0);
-    t.cashRaw = static_cast<int64_t>(std::clamp(raw, -2000000000.0, 2000000000.0));
+    if (toast.respect > 0) {  // respect only; the toast's cash field is ignored (D-3)
+        const int32_t amount = ScaleByMultiplier(multiplier, toast.respect);
+        if (amount == 0) return t;  // nothing at all
+        t.award = AwardRespect(p, amount, table, applied, ctx);
+        t.zeroGrantHint = amount > 0 && t.award.returned == 0;
+        return t;
+    }
+    if (toast.cashDollars > 0.0f) {
+        // Out of the 32-bit range the conversion gives -2147483648, which the clamp turns into -2e9.
+        const int32_t raw = RoundProductF32(static_cast<double>(toast.cashDollars) * 100.0);
+        t.cashRaw = std::clamp<int64_t>(raw, -2000000000LL, 2000000000LL);
+    }
     return t;
 }
 
@@ -71,9 +98,8 @@ int32_t KillRespect(const KillRespectTable& props, int victimRank, bool victimIs
         base = props.killa;
     else
         base = props.thug;
-    // Scaled by the per-kill factor and rounded (CHOSEN rounding; the spec
-    // gives only "multiplied by a per-kill float").
-    return static_cast<int32_t>(std::lround(static_cast<double>(base) * perKillFactor));
+    // Scaled by the per-kill factor, D-1 rounding (spec-differential-results D-1).
+    return RoundProductF32(static_cast<double>(base) * perKillFactor);
 }
 
 int32_t StorePurchaseRespect(double price, double storeRespectMultiplier, float multiplier) {

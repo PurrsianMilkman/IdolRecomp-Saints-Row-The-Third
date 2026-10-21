@@ -7,6 +7,12 @@
 // position lag none; follow swing a = 1-(1-q*r)^n on the 120 Hz tick, heading += (1-hr)*delta;
 // pitch ease 0.01^step; pad hold 10 ms moving / 500 ms stopped; r = 1-exp(K/Swing_Rate).
 // CHOSEN stand-ins are labelled in vehicle_camera.cpp.
+//
+// NOT-YET (VC-5, Sec4.15.2 FOV row; no effect on the genki test vector): the FOV secondary rules are absent -
+//   (1) the 0.9 * Max_FOV cap that applies when the predicate 0x00ad3290(V) holds,
+//   (2) the +/-30 deg rule,
+//   (3) the "RC-base-only" case (RC vehicles use the base FOV only).
+// VehicleCamFov implements only the primary formula above.
 #pragma once
 #include <optional>
 

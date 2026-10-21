@@ -949,7 +949,8 @@ int stub_camera_restrict_target_object(lua_State* L) {
 int stub_waypoint_add(lua_State* L) {
     logCall(L, upLog(L), "waypoint_add", upStateTag(L));
     std::string name = argString(L, 1);
-    (void)optionalNumberDefault(L, 2, 3.0);
+    const double modeRaw = optionalNumberDefault(L, 2, 3.0);
+    upState(L)->recordWaypointAdd(name, static_cast<int32_t>(modeRaw));  // GPS hook, spec-ai-runtime Sec23.2
     double result = EngineState::kActionPlaySentinelResolveFail;
     if (upState(L)->objectResolves().get(name)) result = 0.0; // OPEN until set; CONFIRMED overwrite on a success path
     lua_pushnumber(L, result);

@@ -69,9 +69,38 @@ static void flight(double dt, double groundY, double height, double* peak, doubl
     CHECK(jc.stats().jumps == 1 && jc.stats().landings == 1);
 }
 
+// Regression (2026-10-18 spawn "drift"): the ground target steps down 2.27 m (32.15 -> 29.88, a road-node step while
+// walking). Without carrying the fall velocity across frames the player sank ~|g|*dt^2 = 0.011 m/frame (200+ frames);
+// with it, gravity accumulates and the drop takes ~0.7 s, ending exactly on the new ground.
+static void testStepDownFallsUnderGravity() {
+    const double dt = 1.0 / 30.0;
+    EmptyCollisionWorld world;
+    CharacterProxyDriver drv(world, 0.4, 1.8, 32.15);
+    JumpController jc;
+    Vec3 pos{0, 32.15, 0};
+    drv.setGroundY(29.88);
+    int n = 0;
+    double firstStep = 0.0;
+    while (pos.y > 29.88 + 1e-9 && n < 400) {
+        const double vy = jc.beginFrame(JumpGateInputs{}, pos.y);
+        const CapsuleStepResult r = drv.step(pos, Vec3{0, vy, 0}, dt);
+        jc.endFrame(r.position.y, r.velocity.y, r.grounded, dt);
+        if (n == 0) firstStep = pos.y - r.position.y;
+        pos = r.position;
+        ++n;
+    }
+    CHECK(std::fabs(firstStep - 9.8 * dt * dt) < 1e-9);  // first frame is still the small step
+    CHECK(n <= 30);                                       // ~0.7 s analytic, not a 0.011 m/frame crawl
+    CHECK(std::fabs(pos.y - 29.88) < 1e-12);
+    // Grounded afterwards: no residual velocity.
+    CHECK(jc.beginFrame(JumpGateInputs{}, pos.y) == 0.0);
+    std::printf("  step-down 2.27 m settled in %d frames\n", n);
+}
+
 int main() {
     testLaunchFormula();
     testGate();
+    testStepDownFallsUnderGravity();
     for (double dt : {1.0 / 30.0, 1.0 / 60.0}) {
         for (double groundY : {0.0, 32.15}) {
             double peak, air, finalY, below;

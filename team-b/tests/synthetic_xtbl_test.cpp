@@ -31,11 +31,15 @@ int g_failures = 0;
         }                                                                    \
     } while (0)
 
+// This file exercises the forgiving reader (ParseOptions::legacyTolerant); the original-exact parser (the default) is covered by
+// differential_tables_test against spec-differential-vectors-xml.md.
+static const sr3xtbl::ParseOptions kLegacy = [] { sr3xtbl::ParseOptions o; o.legacyTolerant = true; return o; }();
+
 // The input must be rejected with FormatError.
 #define CHECK_REJECTS(text)                                                  \
     do {                                                                     \
         bool threw_ = false;                                                 \
-        try { (void)sr3xtbl::ParseDocument(std::string_view(text)); }        \
+        try { (void)sr3xtbl::ParseDocument(std::string_view(text), kLegacy); } \
         catch (const sr3xtbl::FormatError&) { threw_ = true; }               \
         if (!threw_) {                                                       \
             std::cerr << "CHECK FAILED: expected FormatError for " #text " at " __FILE__ ":" << __LINE__ << "\n"; \
@@ -45,7 +49,7 @@ int g_failures = 0;
 
 using namespace sr3xtbl;
 
-Document P(std::string_view s) { return ParseDocument(s); }
+Document P(std::string_view s) { return ParseDocument(s, kLegacy); }
 
 size_t countKind(const Document& d, WarningKind k) {
     size_t n = 0;
@@ -197,7 +201,7 @@ void testText() {
     Document en = P("<r><A>Display Case&lt;001&gt; &amp; &quot;q&quot; &apos;a&apos; &#65;&#x42;&#xE9;</A></r>");
     CHECK(*FindChild(en.root(), "A")->text() == "Display Case<001> & \"q\" 'a' AB\xC3\xA9");
     CHECK(en.warnings().empty());
-    ParseOptions raw; raw.decodeEntities = false;
+    ParseOptions raw = kLegacy; raw.decodeEntities = false;
     Document rw = ParseDocument(std::string_view("<r><A>a&lt;b</A></r>"), raw);
     CHECK(*FindChild(rw.root(), "A")->text() == "a&lt;b");
     Document bad = P("<r><A>x &foo; y & z &#0; &#xD800; &#12a;</A></r>");
@@ -382,16 +386,17 @@ void testFloat() {
     CHECK(sameBits(ParseFloat("5."), 5.0f));
     CHECK(sameBits(ParseFloat("-5"), -5.0f) && sameBits(ParseFloat("12"), 12.0f) && sameBits(ParseFloat("0"), 0.0f));
     CHECK(sameBits(ParseFloat("1.5"), 1.5f) && sameBits(ParseFloat("-1.5"), -1.5f) && sameBits(ParseFloat("30.000000"), 30.0f));
-    // "e/E starts a decimal exponent applied as x10^n"
-    CHECK(sameBits(ParseFloat("1e3"), 1000.0f) && sameBits(ParseFloat("1E3"), 1000.0f) && sameBits(ParseFloat("2.5e2"), 250.0f));
-    CHECK(sameBits(ParseFloat("-1e3"), -1000.0f));
+    // D-14: an exponent counts only when the text has a "." (no dot: exponent ignored, "1e3" reads 1); "+" in the exponent is accepted.
+    CHECK(sameBits(ParseFloat("1e3"), 1.0f) && sameBits(ParseFloat("1E3"), 1.0f) && sameBits(ParseFloat("2.5e2"), 250.0f) && sameBits(ParseFloat("1.5e+2"), 150.0f));
+    CHECK(sameBits(ParseFloat("-1e3"), -1.0f));
     CHECK(near(ParseFloat("1.5e-2"), 0.015f, 1e-9f));
-    CHECK(near(ParseFloat("1e-3"), 0.001f, 1e-9f));
+    CHECK(near(ParseFloat("1.0e-3"), 0.001f, 1e-9f));
     CHECK(sameBits(ParseFloat("1e"), 1.0f));               // exponent without digits: x10^0
     // the integer part is read by the integer parser and stops at the first non-digit; junk after the number is ignored
     CHECK(sameBits(ParseFloat("12.5.7"), 12.5f) && sameBits(ParseFloat("1.5abc"), 1.5f) && sameBits(ParseFloat("7x"), 7.0f));
     // text that does not start like a number reads as 0
-    CHECK(ParseFloat("") == 0.0f && ParseFloat("abc") == 0.0f && ParseFloat("-") == 0.0f && ParseFloat(".") == 0.0f && ParseFloat(" 1.5") == 0.0f);
+    CHECK(ParseFloat("") == 0.0f && ParseFloat("abc") == 0.0f && ParseFloat("-") == 0.0f && ParseFloat(".") == 0.0f && ParseFloat(" 5") == 0.0f);
+    CHECK(sameBits(ParseFloat(" 1.5"), 0.5f));  // D-14: the fraction is found at the first "." anywhere, the integer part is 0
     // "each digit weighted by successive x0.1 in SINGLE precision": w = 0.1f, value += digit * w, w *= 0.1f.
     {
         float w = 0.1f, v = 0.0f;
@@ -401,9 +406,10 @@ void testFloat() {
         CHECK(!sameBits(ParseFloat("0.02"), 0.02f));       // the weighting is NOT correctly-rounded parsing
     }
     {
-        float w = 0.1f, v = 3.0f;
+        float w = 0.1f, v = 0.0f;
         const int digits[] = {1, 4, 1, 5, 9};
-        for (int dgt : digits) { v = v + static_cast<float>(dgt) * w; w = w * 0.1f; }
+        for (int dgt : digits) { v = static_cast<float>(static_cast<double>(dgt) * w + v); w = w * 0.1f; }  /* D-14: multiply-add in double, one rounding */
+        v = static_cast<float>(3.0 + static_cast<double>(v));
         CHECK(sameBits(ParseFloat("3.14159"), v));
         CHECK(near(ParseFloat("3.14159"), 3.14159f, 1e-5f));
     }

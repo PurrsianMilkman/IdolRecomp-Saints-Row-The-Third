@@ -259,6 +259,12 @@ public:
     int32_t roundsInClip() const { return roundsInClip_; }
     void setInfiniteAmmo(bool infinite) { infiniteAmmo_ = infinite; }
     bool infiniteAmmo() const { return infiniteAmmo_; }
+    // Per-weapon refire gate length. Default kRefireDelayMs (original working value, unchanged for
+    // every existing caller). weapon_inventory.h feeds the row's own Time_Management.Refire_Delay
+    // here (spec-weapons-runtime.md Sec3.1: HIGH-confidence holder+0x134 gate fed from a weapon-
+    // definition-derived u16; that it equals Refire_Delay is OPEN).
+    void setRefireDelayMs(double ms) { refireDelayMs_ = ms; }
+    double refireDelayMs() const { return refireDelayMs_; }
 
     // Lets a test trip the refuse-gate seam (dispatch step 2 - OPEN real
     // trigger condition, CHOSEN pass-through default).
@@ -304,6 +310,7 @@ private:
     bool infiniteAmmo_ = false;
     bool refuseGateTripped_ = false;
     double nextAllowedFireMs_ = 0.0;
+    double refireDelayMs_ = kRefireDelayMs;
     // timerF4_/timer104_: armed (set()) for fidelity to spec's "3 generic
     // timer-primitive writes", but their real written value is OPEN - 0.0
     // is a deterministic placeholder (the same "0 stand-in, not the

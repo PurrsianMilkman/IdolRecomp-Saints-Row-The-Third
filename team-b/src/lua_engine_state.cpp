@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <functional>
@@ -12,6 +13,7 @@
 #include <string>
 
 #include "sr3luahost/save_game_bridge.h"
+#include "sr3player/vitals.h"
 #include "sr3luahost/vint_property_types.h"
 #include "sr3save/save_crc.h"
 #include "sr3vintdoc/vint_doc.h"
@@ -308,6 +310,112 @@ void EngineState::applyCharacterSpawnDefaults(const std::string& name, uint32_t 
     c.ignoreAI.set(false);          // Sec34.1 step 3 / Sec34.3: re-cleared, redundant with getOrCreateCharacter's own default but explicit here too
 }
 
+// spec-player-runtime.md Sec18.3 item 4 / Sec18.8 (PV-6, FINAL): the damage-received multiplier is applied INSIDE the
+// damage sink, for a player victim or a follower of the local player, when dmg > 0. The record is the single-player
+// difficulty record (picker 0x005f4a50, level = difficultyLevel_): Damage_Received_Mult 0.3/0.75/1.5 for easy/
+// normal/hard (Sec18.2). Co-op (second record) is not modelled: this host has no session members. Sec18.3 item 1
+// (wait re-arm after every damaging hit) and item 2 (the 1/30 s tick) are armHealthRegenWait/tickHealthRegen below.
+float EngineState::damageReceivedDifficultyMultiplier() const {
+    static const bool diagOff = std::getenv("SR3_DIAG_NO_RECEIVED_MULT") != nullptr;  // DIAGNOSTIC ONLY (before/after runs)
+    if (diagOff) return 1.0f;
+    return sr3player::SpDifficultyVitals(difficultyLevel_).damageReceivedMult;
+}
+
+// CHOSEN: the local player is the character named "player" (free-roam playtest) or "#PLAYER..." (mission scripts).
+bool EngineState::isLocalPlayerName(const std::string& name) {
+    return name == "player" || name.rfind("#PLAYER", 0) == 0;
+}
+
+bool EngineState::isFollowerOfLocalPlayer(const std::string& name) const {
+    for (const auto& kv : party_.membersByLeader) {
+        if (!isLocalPlayerName(kv.first)) continue;
+        for (const auto& m : kv.second)
+            if (m == name) return true;
+    }
+    return false;
+}
+
+void EngineState::armHealthRegenWait(CharacterState& c) {
+    const bool dont = c.forceFlags1c98.known(CharacterState::kDontRegenHealthBit1c98) &&
+                      c.forceFlags1c98.get(CharacterState::kDontRegenHealthBit1c98) != 0;
+    // reduction: cheat word 0x014F71E8 bit 0x10000 (3000) is not modelled (no cheat state here), else +0x276C == 0.
+    const int64_t waitMs = sr3player::RegenWaitMs(0.0, sr3player::SpDifficultyVitals(difficultyLevel_).healthRegenWaitMult,
+                                                  !c.humanShieldHostageName.empty(), dont);
+    if (waitMs < 0) return;
+    c.healthRegenReadyAtSeconds = vitalsClockSeconds_ + static_cast<double>(waitMs) / 1000.0;
+}
+
+// Sec18.3 item 2: per host frame, fixed 1/30 s steps. Only player characters regenerate; health runs to full.
+void EngineState::tickHealthRegen(double dtSeconds) {
+    static const bool diagOff = std::getenv("SR3_DIAG_NO_REGEN") != nullptr;  // DIAGNOSTIC ONLY (before/after runs)
+    if (diagOff) return;
+    if (!(dtSeconds > 0.0)) return;
+    vitalsClockSeconds_ += dtSeconds;
+    if (playerFullRestoreUntilSeconds_ >= 0.0 && vitalsClockSeconds_ >= playerFullRestoreUntilSeconds_) {
+        playerFullRestoreUntilSeconds_ = -1.0;  // Sec18.13: on expiry HP := maxHP (0x009a0860)
+        for (const auto& nm : characterOrder_) {
+            if (!isLocalPlayerName(nm)) continue;
+            auto ci = characters_.find(nm);
+            if (ci != characters_.end() && ci->second.currentHitPoints.known() && ci->second.maxHitPoints.known() &&
+                !characterReadsDead(ci->second))
+                ci->second.currentHitPoints.set(ci->second.maxHitPoints.get());
+        }
+    }
+    const size_t n = characterOrder_.size();
+    for (size_t i = 0; i < n; ++i) {
+        const std::string name = characterOrder_[i];
+        if (!isLocalPlayerName(name)) continue;
+        auto it = characters_.find(name);
+        if (it == characters_.end()) continue;
+        CharacterState& c = it->second;
+        if (characterReadsDead(c) || !c.currentHitPoints.known() || !c.maxHitPoints.known()) continue;
+        if (c.lifeState.known() && c.lifeState.get() == 6) continue;  // downed
+        if (c.forceFlags1c98.known(CharacterState::kDontRegenHealthBit1c98) &&
+            c.forceFlags1c98.get(CharacterState::kDontRegenHealthBit1c98) != 0)
+            continue;
+        const int32_t hp = c.currentHitPoints.get();
+        const int32_t maxHp = c.maxHitPoints.get();
+        if (c.healthRegenExactHp < 0.0 || std::lround(c.healthRegenExactHp) != hp) c.healthRegenExactHp = hp;
+        const bool ready = vitalsClockSeconds_ >= c.healthRegenReadyAtSeconds;
+        const double rate = sr3player::RegenRatePerSec(sr3player::SpDifficultyVitals(difficultyLevel_).healthRegenSpeedMult,
+                                                       healthRegenUnlockFactor, !c.humanShieldHostageName.empty());
+        sr3player::HealthRegen acc;
+        acc.carrySeconds = c.healthRegenCarrySeconds;
+        const double before = c.healthRegenExactHp;
+        c.healthRegenExactHp = acc.step(c.healthRegenExactHp, static_cast<double>(maxHp), ready, rate, dtSeconds);
+        c.healthRegenCarrySeconds = acc.carrySeconds;
+        if (c.healthRegenExactHp > before) {
+            ++healthRegenTickCount;
+            const int32_t newHp = std::min<int32_t>(maxHp, static_cast<int32_t>(std::lround(c.healthRegenExactHp)));
+            if (newHp != hp) c.currentHitPoints.set(newHp);
+        }
+    }
+}
+
+// Sec18.13: the ambulance marker arms the timer; tickHealthRegen applies the expiry.
+void EngineState::armPlayerFullRestore() { playerFullRestoreUntilSeconds_ = vitalsClockSeconds_ + kAmbulanceFullRestoreSeconds; }
+bool EngineState::playerFullRestoreArmed(const std::string& name) const {
+    return isLocalPlayerName(name) && playerFullRestoreUntilSeconds_ >= 0.0 && vitalsClockSeconds_ < playerFullRestoreUntilSeconds_;
+}
+
+// Sec18.14: base = max - bonus; bonus' = trunc(base * (M - 1.0)) in double math; max += bonus' - bonus; HP clamped.
+int32_t EngineState::applyPlayerHealthBonus(double modifier, const std::string& playerName) {
+    CharacterState& c = getOrCreateCharacter(playerName);
+    const int32_t maxHp = drawOrGetMaxHitPoints(playerName);
+    const int32_t base = maxHp - playerMaxHpBonus_;
+    const int32_t bonus = static_cast<int32_t>(static_cast<double>(base) * (modifier - 1.0));  // trunc toward 0
+    const int32_t newMax = maxHp + (bonus - playerMaxHpBonus_);
+    playerMaxHpBonus_ = bonus;
+    c.maxHitPoints.set(newMax);
+    if (c.currentHitPoints.known() && c.currentHitPoints.get() > newMax) c.currentHitPoints.set(newMax);
+    return newMax;
+}
+
+bool EngineState::fireOnRespawn(const std::string& playerScriptName) {
+    if (playerOnRespawnCallback_.empty()) return false;
+    return fireEngineCallback(playerOnRespawnCallback_, {CallbackArg::str(playerScriptName)}, "on_respawn");
+}
+
 // The damage-apply sink's authoritative-branch core (spec-player-runtime.md
 // Sec15.3a) - see this method's own declaration (engine_state.h) for why it
 // is factored out of stub_character_damage. `targetName` must already be a
@@ -338,6 +446,7 @@ void EngineState::applyCharacterSpawnDefaults(const std::string& name, uint32_t 
 // 0x100, plus 0x200 for its default third argument true).
 void EngineState::applyCharacterDamage(const std::string& targetName, const std::string& sourceName, float amount,
                                        uint32_t flags) {
+    if (playerFullRestoreArmed(targetName)) return;  // Sec18.13 / Sec4.5.4 step 10d: no damage while +0x19c4 is armed
     CharacterState& c = getOrCreateCharacter(targetName);
     recordDamageAttacker(targetName, sourceName); // spec B: rewritten on every application, nil when attacker-less
     int32_t resistancePercent = 100; // CHOSEN neutral default - no instigator, or instigator's own scale unset
@@ -345,6 +454,13 @@ void EngineState::applyCharacterDamage(const std::string& targetName, const std:
     double scaled = static_cast<double>(amount) * (static_cast<double>(resistancePercent) / 100.0);
     bool instigatorIsPlayerClass = !sourceName.empty() && playerClassChainResolves(sourceName);
     if (instigatorIsPlayerClass) scaled *= static_cast<double>(damageDealtDifficultyMultiplier());
+    // Sec18.3 item 4 (PV-6): Damage_Received_Mult for the local player and its followers (after the dealt scalar,
+    // before the downed absorb, in the Sec4.5.4 order).
+    const bool receivesPlayerScale = isLocalPlayerName(targetName) || isFollowerOfLocalPlayer(targetName);
+    if (receivesPlayerScale && scaled > 0.0) {
+        scaled *= static_cast<double>(damageReceivedDifficultyMultiplier());
+        ++damageReceivedScaledCount;
+    }
     if (absorbDamageWhileDowned(c, targetName, scaled)) return;  // Sec21.10.1: a downed human does not take the normal HP path
 
     // CORRECTED (this pass): maxHitPoints is resolved through
@@ -373,6 +489,7 @@ void EngineState::applyCharacterDamage(const std::string& targetName, const std:
     int32_t newHp = static_cast<int32_t>(std::lround(newHpD));
     c.currentHitPoints.set(newHp);
     c.lastDamageMagnitude = std::max(static_cast<double>(oldHp - newHp), 0.0); // +0x1584: max(-delta, 0)
+    if (isLocalPlayerName(targetName) && scaled > 0.0) armHealthRegenWait(c);  // Sec18.3 item 1
 
     // on_take_damage / on_damage fire inside the sink, before the death chain (spec F): the lethal hit still
     // produces them. The death callbacks follow from the per-human update.
@@ -398,6 +515,14 @@ bool EngineState::tryEnterDownedOnLethalHit(CharacterState& c, const std::string
         for (const auto& kv : party_.membersByLeader)
             for (const auto& m : kv.second)
                 if (m == targetName) facts.isNonPlayerFollower = true;
+    }
+    {
+        // Team A 2026-10-20 (Sec21.10.1 note, FINAL): gang member (0x00943190) = team byte <= 4 AND matrix(team, 0) <= 1.
+        const int team = teamIdOfCharacter(c);
+        if (team >= 0 && team <= 4) {
+            const int rel = teamRelationForTesting(team, 0);
+            if (rel >= 0 && rel <= 1) facts.isGangMember = true;
+        }
     }
     const int type = sr3airuntime::combat::SelectDownedType(facts);
     if (type < 0) return false;

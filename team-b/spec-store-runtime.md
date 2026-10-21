@@ -1821,3 +1821,42 @@ material.
 `0x0082b0c0` (type 0) validates the store through `0x00821ec0`, writes a store context (`0x022ffd3c` = store, `0x022ffd40` = the validator's result, `0x022ffd50` = the filter string `"all"` at `0x0111b478`), then calls the shared opener `0x0080CC90`. Type 0 lives in the same code region as the clothing functions, so it is the **likely clothing-store entry** (HIGH CONFIDENCE, not live-confirmed).
 
 **Port rule:** the walk-in interact dispatches by store type through this table; each callback validates, sets the store context, and calls the shared opener. **Next live run:** the `freeroam2` hook set now hooks all four recovered callbacks plus `0x00A03940` and `0x0080CC90`. One clothing-store visit will name the type and close this item.
+
+## 9a. Rim Jobs end to end: flow summary, price source and the performance-upgrade charge (2026-10-19) — FINAL except where marked
+
+Orchestrator queue item 6. This section collects the vehicle store and adds the native side of the
+performance-upgrade purchase. The Lua flow is already FINAL in §7 (`store_vehicle.lua`).
+
+**Flow (summary of §7, not re-derived).** Enter: the walk-in store trigger (§9 registry) opens `store_vehicle`
+in `MODE_VCUST` (or `MODE_GARAGE` from a crib). Categories come from `vcust_populate_menu` (the category list
+is `vehicle_cust_interface.xtbl`, `spec-tables-vehicle-world.md` §8.2). Preview: `vcust_preview_component`,
+`vcust_preview_color`/`vcust_preview_palette`, `vcust_preview_wheel_sizing`/`vcust_preview_rim_sizing`; revert:
+`vcust_revert_color`, `vcust_revert_wheels`. Purchase natives: `vcust_purchase_component` (body parts, and
+the NOS/hydraulics rows behind the `vcust_show_nos_hydraulic_warning` popup), `vcust_purchase_wheels`,
+`vcust_purchase_paint`, `vcust_set_underglow`, `vcust_purchase_performance_upgrade`. Performance rows have no
+preview. Exit pops back to the walk-in state (§7).
+
+**Performance-upgrade purchase, native side (`0x008201xx`, reached from `vcust_purchase_performance_upgrade`).**
+FINAL:
+
+1. Resolve the player's current vehicle (handle lookup `0x00458230`, live and not wrecked, `+0xbd0` = 1).
+2. category = the row id (0 Torque, 1 Tire, 2 Collision, 3 Hitpoints). Current level L = byte[category] of the
+   applied-customisation object (`vehicle+0xA88`); a category ≥ 4 reads as 0.
+3. **Price source:** cost = descriptor `u32` at `+0xB38 + 0x10·category + 4·L` — the `Cost/Levels/Level_(L+1)`
+   value of the vehicle's group row (`spec-vehicle-data.md`, customisation data). Price for the current level
+   is read **before** the level is raised.
+4. `0x00ab7800(category, +1, vehicle)` raises the level and reapplies the handling (`spec-physics-runtime.md`
+   §10.14.5). If it refuses (already level 4), nothing is charged.
+5. Discount: `0x0080e740(cost)` = cost × (1 − clamp(a + b, 0, 1)) with two global fractions `0x022cd0ec`
+   (a) and `0x022cd0f0` (b); when a > 1 it is cost × (1 − b). HIGH that a/b are the shop's ownership discounts
+   (`store_discounts.xtbl` / `Discount` unlockables, `spec-tables-progression.md`); writers not traced.
+6. Charge = −(discounted × 100.0) converted to an integer (`0x00dad900`) and passed to the cash adjust
+   (`0x0094d920`, reason 0xb). HIGH that the ×100 is the dollars → cents conversion of the cash store.
+7. Stats/feedback: `0x00710cb0(0x47, …)`, `0x006b2050(0x13)`, a refresh of the vcust UI (`0x0081f070`).
+
+**Test vectors.** (a) group row with costs 100/200/400/800, Torque L0, no discount: price 100, charge
+10000, level → 1. (b) same at L3: price 800, level → 4. (c) at L4: refused, no charge. (d) discount a = 0.1,
+b = 0: price 90. (e) a = 0.7, b = 0.6: clamp → price 0.
+
+**Residual:** the native bodies of `vcust_purchase_component` for the NOS and hydraulics rows (which "has
+nitrous"/hydraulics flag they set); the writers of the two discount globals; the rounding mode of `0x00dad900`.

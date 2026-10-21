@@ -54,7 +54,7 @@ void testKinds() {
     CHECK(parseCutscene("<CutsceneType>Story</CutsceneType>").kind == std::optional<int>(2));
     CHECK(parseCutscene("<CutsceneType>Designer</CutsceneType>").kind == std::optional<int>(0));
     CHECK(parseCutscene("<CutsceneType>Video</CutsceneType>").kind == std::optional<int>(2));
-    CHECK(parseCutscene("<CutsceneType>Zscene </CutsceneType>").kind == std::optional<int>(2)); // text is never trimmed
+    CHECK(parseCutscene("<CutsceneType>Zscene </CutsceneType>").kind == std::optional<int>(1)); // D-16: the document parser trims the text first
     // OPEN: no text, or a case-only variant (the comparison's case rule is not stated).
     CHECK(!parseCutscene("").kind);
     CHECK(!parseCutscene("<CutsceneType></CutsceneType>").kind);
@@ -107,8 +107,8 @@ void testSoundtrack() {
     CHECK(parseCutscene("<Soundtrack>X:</Soundtrack>").soundtrackSplitOpen);
     CHECK(parseCutscene("<Soundtrack/>").soundtrackSplitOpen);
     CHECK(!parseCutscene("<Soundtrack>X:</Soundtrack>").soundtrackRight);
-    // "X :" has one character after the colon: right half empty, left "X".
-    const SceneFields edge = parseCutscene("<Soundtrack>X : </Soundtrack>");
+    // "X :." has one character after the colon: right half empty, left "X". (Trailing white space cannot occur any more: D-16 trims it.)
+    const SceneFields edge = parseCutscene("<Soundtrack>X :.</Soundtrack>");
     CHECK(!edge.soundtrackSplitOpen && edge.soundtrackLeft == std::optional<std::string>("X") &&
           edge.soundtrackRight == std::optional<std::string>(""));
 }

@@ -27,6 +27,14 @@
 
 namespace sr3luahost {
 
+// Design notes moved verbatim from EngineState::registerDataResponderForTesting's declaration in engine_state.h
+// (refactor step 3a):
+// --- vint_dataresponder_finished / vint_internal_dataresponder_request
+// (Sec21) -----------------------------------------------------------
+
+// Test/setup-only entry point (see VintDataResponderRecord's own doc
+// comment on why no Lua-visible function in this pass's 2-name scope
+// populates this registry).
 void EngineState::registerDataResponderForTesting(const std::string& name, bool finished) {
     vintDataResponders_[sr3save::nameHash(name)] = VintDataResponderRecord{finished, 0};
 }
@@ -37,6 +45,19 @@ bool EngineState::dataResponderFinished(const std::string& name) const {
     return it->second.finished;
 }
 
+// Design notes moved verbatim from EngineState::dataResponderRequest's declaration in engine_state.h
+// (refactor step 3a):
+// CONFIRMED (Sec21.2): a complete, silent no-op when no record exists
+// for `name`, or when `validCallback`/`validMax` (the caller's own
+// lua_type checks on args 2/3) are false - never creates the record
+// itself (Sec21.2's own text: "this native never creates the named
+// record"). When a record exists and both types validate, increments
+// this project's own dispatchAttempts counter (test-observable proof the
+// gate runs) - the real further dispatch (0x00e1e660, the trailing-
+// argument array, and the +0x25c context stamp) has no Lua-visible
+// consequence among this pass's two in-scope functions and is not
+// modeled (0x00e1e660's own body was not independently decompiled this
+// pass either, per Sec21.2's own explicit "not traced" note).
 void EngineState::dataResponderRequest(const std::string& name, bool validCallback, bool validMax) {
     auto it = vintDataResponders_.find(sr3save::nameHash(name));
     if (it == vintDataResponders_.end()) return; // CONFIRMED (Sec21.2): no record -> complete, silent no-op
@@ -61,6 +82,22 @@ int EngineState::scriptedRequestStatusCode(const std::string& name, int kind) {
     return 1;
 }
 
+// Design notes moved verbatim from EngineState::setVehiclePathfindResolvableForTesting's declaration in engine_state.h
+// (refactor step 3a):
+// vehicle_pathfind_check_done (Sec9.10, the REFERENCE reading Sec35.2's
+// own cross-check cites as "already correct"): the real wrapper resolves
+// the vehicle AND checks for an occupant/part in slot 0 (most plausibly a
+// driver check, Sec9.10's own text) BEFORE ever consulting the shared
+// pool; failing either converges on the SAME literal fallback constant
+// the pool's own "no request" code already uses, 2.0 (Sec9.10: "the SAME
+// numeric code the success path itself uses... both routes converge on
+// one consistent answer"). This project has no vehicle-resolution/
+// occupant registry (same "no invented entity system" boundary as
+// CharacterState's own top note) - every name defaults UNRESOLVABLE,
+// which is itself the real, CONFIRMED fallback path for an unmodeled
+// vehicle, not a guess. setVehiclePathfindResolvableForTesting() is the
+// only way to open the gate, so a test can still exercise the shared
+// pool's own 0/1/2 polarity through this wrapper.
 void EngineState::setVehiclePathfindResolvableForTesting(const std::string& vehicleName, bool resolvable) {
     if (resolvable) vehiclePathfindResolvable_.insert(vehicleName);
     else vehiclePathfindResolvable_.erase(vehicleName);
@@ -119,6 +156,32 @@ void EngineState::recordTutorialAdvance(int index) {
 // tutorial_lock (Sec52.3, tranche 15, real-hit batch 2026-10-03) - see
 // engine_state.h's own doc comment on tutorialLockCount()/
 // recordTutorialLock() for the full citation.
+// Design notes moved verbatim from EngineState::tutorialLockCount's declaration in engine_state.h
+// (refactor step 3a):
+// sfx_use_load_images (Sec49.4, `ui`) needs no state - CONFIRMED
+// hardcoded true (0x0149365c set unconditionally at start-up,
+// independently re-confirmed this tranche; already in Sec26.24's own
+// screen-fade table) - the stub pushes a literal true directly, no
+// accessor needed here.
+
+// --- Ranking tranches 15/17/20/22/23 (spec-lua-api-behaviour.md
+// Sec52/Sec51/Sec53/Sec55/Sec57), real-hit names only (2026-10-03,
+// orchestrator-directed pass over the whole Sec50-Sec59 backlog: only
+// names with a real, measured non-zero mission-drive call count get a
+// real implementation; every other name in that backlog stays a
+// generic logging stub - see the implementing commit's own message for
+// the per-section tally). -----------------------------------------------
+
+// tutorial_lock (Sec52.3, tranche 15). CONFIRMED: "it only accepts
+// tutorial indices up to 188... the 21 entries from 189-209 can never
+// be locked through this native at all." The resulting lock
+// state/mechanism itself is not given beyond that bound (OPEN) - this
+// project counts a "would lock" hit per in-range index rather than
+// fabricate a state code into tutorialState()'s own stride-9 enum
+// (whose "locked" value is nowhere confirmed in this spec). Reuses
+// EngineState::tutorialLookup() (Sec10.4, above) for name resolution -
+// the SAME 210-entry table every sibling in this family shares.
+// Test-observable only.
 int EngineState::tutorialLockCount(int index) const {
     auto it = tutorialLockCounts_.find(index);
     return it == tutorialLockCounts_.end() ? 0 : it->second;
@@ -208,6 +271,23 @@ bool EngineState::coopLocalIsClient() const {
     return coopSession_.present.get() && !coopSession_.localIsHost.get();
 }
 
+// Design notes moved verbatim from EngineState::multiply33XorHashBucket's declaration in engine_state.h
+// (refactor step 3a):
+// 0x00dab330 (spec-texture-format.md Sec8.2's "multiply-33/XOR"
+// hash: fold each character to lowercase, `hash = (hash*0x21) XOR c`,
+// then `hash % bucketCount`) - CONFIRMED, empirically vector-validated
+// (spec-lua-api-behaviour.md Sec5.3, 5/5 real I/O vectors matched
+// exactly). Used by game_peg_load_with_cb (Sec8.24) via its own
+// confirmed shared chain with game_peg_unload (Sec2.7),
+// bucket_count=9000. A free function (no state needed) - exposed here
+// rather than in a texture-domain header since this is the only
+// consumer among this task's 12 in-scope names.
+//
+// Spec update 2026-09-30 (Sec8.2): initial value 0 and 32-bit wrap are
+// now stated there, as implemented. Still OPEN there: signed vs
+// unsigned modulo and the character load's signedness. This function
+// takes the unsigned reading of both; it is the answer only when
+// multiply33XorHashBucketUnambiguous() is true.
 uint32_t EngineState::multiply33XorHashBucket(const std::string& name, uint32_t bucketCount) {
     // spec-texture-format.md Sec8.2, transcribed exactly: "fold each
     // character to lowercase, then hash = (hash * 0x21) XOR character, and
@@ -272,6 +352,16 @@ bool EngineState::vintIsStdRes() const {
 // - batch 2026-10-02.
 // =========================================================================
 
+// Design notes moved verbatim from EngineState::pauseMapZoneControlFraction's declaration in engine_state.h
+// (refactor step 3a):
+// pause_map_stag_current_district_control's own CONFIRMED computation
+// (Sec31.2): owned-weight / total-weight for the given zone, or 1.0 when
+// total <= 0 (including NaN) - CONFIRMED, including the "a zone with no
+// registered members" case (an unregistered zoneHandle, e.g. 0 on the
+// no-selection path, naturally has total==0 here, matching Sec31.2's own
+// "in practice over members with no zone, giving 1.0" reading exactly -
+// no special-casing of zone 0 is needed, the general formula already
+// produces it).
 double EngineState::pauseMapZoneControlFraction(uint32_t zoneHandle) const {
     double total = 0.0;
     double owned = 0.0;
@@ -331,6 +421,14 @@ void EngineState::pauseMapSetGpsStagBranch() {
 // this host safely refuses instead of reproducing that crash, matching the
 // project's own "flag a real hazard, don't reproduce it" precedent for the
 // three crash-shaped paths ranking tranche 04 itself flags (Sec32.8).
+// Design notes moved verbatim from EngineState::pauseMapStagTakeover's declaration in engine_state.h
+// (refactor step 3a):
+// pause_map_stag_takeover_do_reward's own CONFIRMED claim/clear-stag-
+// mode/request-autosave mechanism (Sec31.6) - see this method's own .cpp
+// doc comment for the full reasoning, including why this host refuses
+// the real engine's own unchecked null-dereference safely instead of
+// reproducing it (same §32.8 "flag, don't reproduce" precedent as the
+// three crash paths below).
 void EngineState::pauseMapStagTakeover() {
     if (pauseMapSelectedZone_ == 0) return; // real engine: undefined-behavior null-deref on +0x44; this host refuses safely instead
     auto it = zoneMembersByZone_.find(pauseMapSelectedZone_);
@@ -721,6 +819,19 @@ int32_t EngineState::lookupCaeActionIndex(const std::string& name) const {
     return kCaeActionNotFound;
 }
 
+// Design notes moved verbatim from EngineState::allocateScriptRequestId's declaration in engine_state.h
+// (refactor step 3a):
+// --- Shared script-request-id allocator 0x006f62b0 (Sec30.5's own
+// preamble: "cancels any tracked request for the same object+channel,
+// allocates a 12-bit sequence id OR-ed with a machine-index nibble
+// (HYPOTHESIS); channel 0 = turn_to_do, 2 = vehicle_pathfind_to_do, 3 =
+// the AI action writers"). This project is single-player/host-only
+// everywhere (stated, project-wide simplification - see
+// replicateStateChange's own doc comment) so the machine-index nibble
+// is always 0 here; only the 12-bit sequence counter is modelled,
+// wrapping at 0xFFF (CONFIRMED structure). A fresh allocate for the
+// SAME (object, channel) pair simply overwrites whatever was tracked
+// before (CONFIRMED "cancels any tracked request"). -----------------
 int32_t EngineState::allocateScriptRequestId(const std::string& objectName, int channel) {
     auto key = std::make_pair(objectName, channel);
     int32_t id = nextScriptRequestSeq_++;
@@ -735,6 +846,22 @@ void EngineState::releaseScriptRequestId(const std::string& objectName, int chan
     activeScriptRequestId_.erase(std::make_pair(objectName, channel));
 }
 
+// Design notes moved verbatim from EngineState::stopVehicle's declaration in engine_state.h
+// (refactor step 3a):
+// --- vehicle_stop_do / teleport_vehicle_to_object's own SHARED
+// 0x00abe510 stop routine (Sec30.5: "vehicle_stop_do... 0x00abe510(1)
+// ...; 0x00abe510 (shared with teleport_vehicle_to_object)..."). Only
+// the CONFIRMED gate/branch structure is modelled (direct-apply vs.
+// replicate-only, same double-/single-gate family every other setter
+// in this header already resolves true-in-single-player) - the real
+// physics stop (0x00b46ca0/0x00a90c70) and the AI-driving-controller
+// stop on the +0x808 sub-object are NOT simulated (no physics/AI-
+// subobject model in this project). `authorityPasses` is computed by
+// the caller from whichever real gate applies to ITS own path
+// (character's controlLockGatePasses for the via-character path,
+// vehicle's own forceFlagGatePasses for the direct/vehicle-name path -
+// Sec30.5: "authority checked on the character (if via character) or
+// the vehicle (if direct)").
 void EngineState::stopVehicle(const std::string& vehicleName, bool authorityPasses) {
     VehicleState& v = getOrCreateVehicle(vehicleName);
     if (authorityPasses) {
@@ -805,6 +932,34 @@ void EngineState::guardianAngelStartZonePinning(const std::string& zoneSetName) 
 // host instead silently refuses, matching the common in-range case's own
 // observable result of "the array holds what you asked" while never
 // touching memory outside the 10-byte array).
+// Design notes moved verbatim from EngineState::dlc2ClapboardsSet's declaration in engine_state.h
+// (refactor step 3a):
+// --- guardian_angel_start_zone_pinning / _clear_zone_pinning /
+// _release_attack_groups (Sec53.3): see GuardianAngel::
+// currentZonePinSetName's own doc comment above (extended in place,
+// this batch's own additions to that already-existing struct).
+
+// --- helicopter_* cluster (Sec53.2): see VehicleState's own new
+// fields above (largeDspiral/dontMoveInCombat/dontExplodeInAir/
+// maxBankAngleOverrideEnabled/landDistanceGatePasses/landed/
+// dropoffOccupancyGatePasses/dropoffRequested) - "accepts any resolved
+// vehicle, not just a helicopter," so these live on VehicleState, not
+// a separate per-helicopter map.
+
+// --- dlc2_m02_clapboards_set (Sec55.5) - MEMSAFE, hardened AS ONE UNIT
+// WITH its already-registered siblings dlc2ClapboardsGet/_Reset
+// (wave-1 Batch 5, lua_spec_confirmed_stubs_b05_invuln_r15_23.cpp /
+// engine_state.h's own existing dlc2ClapboardCount_/dlc2ClapboardFlags_
+// /dlc2ClapboardsGetNegativeIndexGuardCount_ fields above) - SAME
+// signed-index bounding scheme: argument <= 0 is HOST-SAFETY-refused
+// (own named counter, NOT dlc2ClapboardsGetNegativeIndexGuardCount_ -
+// "count every hardened-path firing via a NAMED PER-SITE counter" per
+// this batch's own hardening policy); the upper bound (index >= count
+// or >= the 10-byte array) is the CONFIRMED real behaviour already
+// established by _get (there: "no value at all"; here: the write is
+// simply skipped, there is no return value to shape). See
+// EngineState::dlc2ClapboardsGet's own doc comment (above) for the
+// full CONFIRMED shape this reuses.
 void EngineState::dlc2ClapboardsSet(int32_t clapboardNumber, bool value) {
     if (clapboardNumber <= 0) {
         ++dlc2ClapboardsSetNegativeIndexGuardCount_; // HOST-SAFETY, see doc comment above
@@ -816,6 +971,19 @@ void EngineState::dlc2ClapboardsSet(int32_t clapboardNumber, bool value) {
 }
 
 // world_despawn_all_vehicles / world_despawn_all_pedestrians (Sec46.3).
+// Design notes moved verbatim from EngineState::despawnAllVehicles's declaration in engine_state.h
+// (refactor step 3a):
+// --- world_despawn_all_vehicles / world_despawn_all_pedestrians
+// (Sec46.3) ---------------------------------------------------------
+// Walks vehicles()/characters() (this project's own stand-in for "the
+// dedicated ambient/traffic lists," same convention VehicleState's own
+// doc comment on vehicles() already establishes) and marks every
+// non-protected, non-player-occupied entry despawnedPendingDelete -
+// "deferring actual deletion through the engine's normal pending-
+// delete queue rather than freeing synchronously" is modelled as
+// "marked, not erased from the map" (consistent with this project's
+// general no-real-deletion convention elsewhere, e.g. garage/pool
+// records). Returns the count actually despawned.
 uint64_t EngineState::despawnAllVehicles() {
     uint64_t count = 0;
     for (auto& entry : vehicles_) {

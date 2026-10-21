@@ -399,7 +399,7 @@ int stub_store_weapon_purchase_ammo(lua_State* L) {
     // comment above); only arg 4 (price) feeds an observable effect.
     double price = lua_gettop(L) >= 4 ? lua_tonumber(L, 4) : 0.0;
     EngineState* st = upState(L);
-    st->playerCash() -= price; // CONFIRMED: no affordability check anywhere in this function
+    st->debitPlayerCash(price); // CONFIRMED: no affordability check anywhere in this function
     st->purchaseLedger().push_back({"weapon-ammo", price, false});
     return 0;
 }

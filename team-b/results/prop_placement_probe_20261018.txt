@@ -1,0 +1,36 @@
+=== tile 0915 ===
+czh: records=992 origin=(-1279.55,40.28,-557.11)
+records world (origin+pos): x[-1439.9..-1119.2] y[10.08..70.49] (p10 18.08 med 31.97 p90 38.70) z[-699.9..-414.3]
+collision AABB: x[-1461.6..-1094.5] y[3.77..42.56] z[-722.7..-380.0]
+records inside collision XZ AABB: 992/992; with a topmost-surface hit: 373
+recordY - topmostCollisionY: min -8.97 p10 -0.16 med 0.02 p90 2.79 max 9.99  (|dy|<1m: 309)
+=== tile 0814 ===
+czh: records=933 origin=(-1438.71,25.70,-281.64)
+records world (origin+pos): x[-1597.6..-1279.8] y[4.50..46.91] (p10 22.83 med 30.67 p90 39.28) z[-420.5..-142.7]
+collision AABB: x[-1614.6..-1263.9] y[-9.94..41.36] z[-449.0..-124.8]
+records inside collision XZ AABB: 933/933; with a topmost-surface hit: 378
+recordY - topmostCollisionY: min -20.06 p10 -0.62 med 0.00 p90 3.65 max 16.00  (|dy|<1m: 292)
+=== tile 0815 ===
+czh: records=1411 origin=(-1596.71,20.74,-559.17)
+records world (origin+pos): x[-1752.7..-1440.7] y[1.95..39.54] (p10 7.38 med 10.76 p90 19.57) z[-700.6..-417.7]
+collision AABB: x[-1773.5..-1408.3] y[1.59..31.23] z[-734.4..-388.1]
+records inside collision XZ AABB: 1411/1411; with a topmost-surface hit: 521
+recordY - topmostCollisionY: min -1.89 p10 -0.12 med 0.02 p90 0.64 max 30.89  (|dy|<1m: 474)
+=== tile 0916 ===
+czh: records=923 origin=(-1120.22,68.60,-874.99)
+records world (origin+pos): x[-1279.4..-961.1] y[5.39..131.82] (p10 10.23 med 18.09 p90 30.06) z[-1049.4..-700.6]
+collision AABB: x[-1299.6..-938.9] y[9.02..31.97] z[-1038.1..-686.5]
+records inside collision XZ AABB: 922/923; with a topmost-surface hit: 451
+recordY - topmostCollisionY: min -12.13 p10 -0.19 med 0.04 p90 12.95 max 121.47  (|dy|<1m: 309)
+=== tile 0914 ===
+czh: records=1325 origin=(-1120.03,37.23,-279.61)
+records world (origin+pos): x[-1280.0..-960.1] y[19.92..54.55] (p10 24.88 med 25.17 p90 32.23) z[-419.2..-140.1]
+collision AABB: x[-1343.0..-938.8] y[3.49..37.87] z[-456.7..-114.2]
+records inside collision XZ AABB: 1325/1325; with a topmost-surface hit: 557
+recordY - topmostCollisionY: min -3.60 p10 -0.17 med 0.02 p90 3.89 max 35.51  (|dy|<1m: 469)
+=== tile 1015 ===
+czh: records=1246 origin=(-985.76,23.15,-560.84)
+records world (origin+pos): x[-1171.1..-800.4] y[0.86..45.45] (p10 2.25 med 21.75 p90 35.92) z[-701.8..-419.9]
+collision AABB: x[-1145.3..-711.0] y[-4.10..46.38] z[-735.8..-349.5]
+records inside collision XZ AABB: 1245/1246; with a topmost-surface hit: 491
+recordY - topmostCollisionY: min -17.80 p10 -0.16 med 0.02 p90 1.01 max 20.66  (|dy|<1m: 413)

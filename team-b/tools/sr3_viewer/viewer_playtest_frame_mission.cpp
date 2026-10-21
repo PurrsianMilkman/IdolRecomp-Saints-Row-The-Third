@@ -853,6 +853,7 @@ void stepMissionDrive(PlaytestSession& sess, PlaytestFrame& frm) {
                 // destruction" B): the per-human update finalizes deaths BEFORE the script pump, so a thread's
                 // character_kill is finalized (on_human_killed, then on_death queued) at the next frame's world
                 // tick and the callback runs in that frame's pump, after every older thread.
+                hudEs->tickHealthRegen(dt);  // spec-player-runtime.md Sec18.3 regen tick (player victims only)
                 hudEs->tickCharacterDeaths();
                 hudHost->bareGlobals().setFrameTime(static_cast<float>(dt));
                 lua_State* currentResumeCo = nullptr;

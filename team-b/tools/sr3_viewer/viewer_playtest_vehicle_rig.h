@@ -98,6 +98,7 @@ struct PlaytestVehicleRig {
         std::vector<sr3mesh::Vertex> verts;
         std::vector<bool> rangeMask;
         std::vector<std::array<float, 3>> basePositions; // raw decode position - the wheel-placement fix
+        size_t drawGroup = 0; // AW-15: draw group this channel renderer draws (0 for everything but RebuildLodHeadChannels())
     };
     struct WheelSlot {
         size_t partIndex = 0;
@@ -250,7 +251,7 @@ struct PlaytestVehicleRig {
                 const std::vector<bool>* maskPtr = ch.rangeMask.empty() ? nullptr : &ch.rangeMask;
                 std::string uploadErr;
                 if (!ch.renderer->initialise(device, uploadErr) ||
-                    !ch.renderer->upload(device, *meshPtr, ch.channelIndex, 0, uploadErr, 0, nullptr, nullptr, maskPtr)) {
+                    !ch.renderer->upload(device, *meshPtr, ch.channelIndex, 0, uploadErr, ch.drawGroup, nullptr, nullptr, maskPtr)) {
                     outDiag = "channel " + std::to_string(ch.channelIndex) + ": " + uploadErr;
                     return false;
                 }
@@ -580,7 +581,7 @@ struct PlaytestVehicleRig {
             }
             std::string uploadErr;
             const std::vector<bool>* maskPtr = ch.rangeMask.empty() ? nullptr : &ch.rangeMask;
-            if (!ch.renderer->upload(device, *meshPtr, ch.channelIndex, 0, uploadErr, 0, &overridePositions, nullptr,
+            if (!ch.renderer->upload(device, *meshPtr, ch.channelIndex, 0, uploadErr, ch.drawGroup, &overridePositions, nullptr,
                                      maskPtr)) {
                 std::fprintf(stderr, "[playtest-vehicle] re-upload (channel %zu) failed: %s\n", ch.channelIndex,
                              uploadErr.c_str());
@@ -615,6 +616,57 @@ struct PlaytestVehicleRig {
                                        static_cast<float>(wheelRollAngleRad[slot.partIndex]), fullSteerAngle,
                                        catalogWheelScale, wheelAttachWorld[s].data());
         }
+    }
+
+    // AW-15: helicopter / airplane meshes keep their parts in many draw groups (heli_standard_02: 78, plane_standard01: 81)
+    // where group 0 is a few triangles only, so the group-0-only load above draws nothing visible for them (cars have the
+    // whole body in group 0). Groups are a part x LOD grid (spec-vehicle-geometry.md Sec11: LOD levels, group index mod 3
+    // for high16); the exact grid is not specified for aircraft. CHOSEN: draw the head of every LOD chain, where a chain
+    // starts at the first group and at every group whose index count exceeds the previous group's (LODs shrink). Replaces
+    // `channels` (group 0 stays for cars; call this only for craft models). Returns the number of groups drawn.
+    size_t RebuildLodHeadChannels(ID3D11Device* device) {
+        if (!ready || !meshPtr || !meshPtr->drawGroupsLocated()) return 0;
+        const auto& groups = meshPtr->drawGroups();
+        std::vector<size_t> heads;
+        uint64_t prevTotal = 0;
+        for (size_t g = 0; g < groups.size(); ++g) {
+            uint64_t total = 0;
+            for (const auto& rg : groups[g]) total += rg.indexCount;
+            if (g == 0 || total > prevTotal) heads.push_back(g);
+            prevTotal = total;
+        }
+        std::map<size_t, std::vector<sr3mesh::Vertex>> decoded;
+        std::vector<Channel> rebuilt;
+        for (size_t g : heads) {
+            std::vector<uint32_t> distinct;
+            for (const auto& rg : groups[g])
+                if (std::find(distinct.begin(), distinct.end(), rg.submeshIndex) == distinct.end()) distinct.push_back(rg.submeshIndex);
+            for (uint32_t c32 : distinct) {
+                const size_t c = static_cast<size_t>(c32);
+                if (c >= meshPtr->channels().size()) continue;
+                Channel ch;
+                ch.channelIndex = c;
+                ch.drawGroup = g;
+                ch.rangeMask.assign(groups[g].size(), false);
+                for (size_t r = 0; r < groups[g].size(); ++r) ch.rangeMask[r] = groups[g][r].submeshIndex == c32;
+                auto it = decoded.find(c);
+                if (it == decoded.end()) it = decoded.emplace(c, meshPtr->decodeChannel(c)).first;
+                ch.verts = it->second;
+                ch.basePositions.resize(ch.verts.size());
+                for (size_t vi = 0; vi < ch.verts.size(); ++vi) ch.basePositions[vi] = ch.verts[vi].position;
+                ch.renderer = std::make_unique<sr3render::MeshRenderer>();
+                std::string err;
+                if (!ch.renderer->initialise(device, err) ||
+                    !ch.renderer->upload(device, *meshPtr, c, 0, err, g, nullptr, nullptr, &ch.rangeMask)) {
+                    std::fprintf(stderr, "[playtest-vehicle] LOD-head group %zu channel %zu upload failed: %s\n", g, c, err.c_str());
+                    continue;
+                }
+                rebuilt.push_back(std::move(ch));
+            }
+        }
+        if (rebuilt.empty()) return 0;
+        channels = std::move(rebuilt);
+        return heads.size();
     }
 
     // Draws the vehicle body (real per-material paint when resolved, else

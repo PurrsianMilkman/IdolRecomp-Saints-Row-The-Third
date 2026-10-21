@@ -1293,6 +1293,17 @@ range at `0x1001aab0`, not a real instruction boundary, fires twice per real cal
 recount discards any firing whose `dword[esp]` doesn't exactly equal one of the 2 real return addresses,
 `0x1001aab7`/`0x1001aad4`) — §5.3f's own numbers were not wrong, just counted at 4× this granularity.
 
+**[2026-10-20 per Team D emulation: FINAL — the pre-stage refill rule (closes the "Bink refill" open item).** Unicorn harness `bink_unicorn_harness_2026-10-08` (read-only), `main_menu_bg.bik` frame 0, Y plane; hooks at `0x1001aab2`/`0x1001aab7` (descriptor-A call of `0x10019360`) and `0x1001abd7` (selector read).
+- `0x10019360` is called at the START of every block row, before the column loop. It refills only when cursor == bound exactly (guard `0x1001936a`–`0x1001936f`).
+- There is no mid-row refill. A selector read with cursor ≥ bound jumps to the bail path `0x1001acc9`.
+- Rows 0–2: row 0 refills 528 bytes. Rows 0, 1 and 2 read 178, 178 and 172 selectors and empty the range exactly.
+- Row 3: cursor == bound, so it REFILLS. The new range is 518 bytes at the same scratch base. Refill cadence here: every 3 rows (rows 0, 3, 6 give 528, 518, 512 bytes).
+- Row 3's first 12 selector bytes in read order: 1,1,1,6,6,1,6,6,1,5,5,5. Read number 6 (column 6 in read order) = 6.
+- Selector reads per row (172–178) are fewer than the 240 block columns, so the read index ≠ the block column.
+- The row-3 call made 2018 writes: 504 byte writes and 1514 dword writes (table build, stack and the range). 500 of them land in the new selector range.
+- Range bytes from the start: `0101010606010606010505050505060101050508080608010105050508050601010106060106050505050801010606050505050606010505010101010508080506060101010101050505050508010106...`
+- Team D's full write log: `TEAM D\out\bink_prestage_row3_writes.tsv`.]
+
 **Real starting bit position, measured directly (refutes the "skip earlier rows" hypothesis with a
 decisive row-0 argument):** for each plane's row 0, the first genuine `0x10019360` call's LEN read
 begins (counting from each plane's own sub-chunk data-start, i.e. past its own 4-byte length prefix) at

@@ -526,6 +526,7 @@ add_test(NAME synthetic_player_character_collision_test COMMAND sr3player_charac
 # (see that header's own LAYERING NOTE).
 add_library(sr3weapons STATIC
     src/weapon_fire.cpp
+    src/weapon_inventory.cpp
 )
 target_include_directories(sr3weapons PUBLIC include)
 target_link_libraries(sr3weapons PUBLIC sr3tables_weapons sr3player)
@@ -533,6 +534,11 @@ target_link_libraries(sr3weapons PUBLIC sr3tables_weapons sr3player)
 add_executable(sr3weapons_tests tests/synthetic_weapon_fire_test.cpp)
 target_link_libraries(sr3weapons_tests PRIVATE sr3weapons)
 add_test(NAME synthetic_weapon_fire_test COMMAND sr3weapons_tests)
+
+# Weapon inventory: clip/reserve ammo, reload, switching (gap #17; include/sr3weapons/weapon_inventory.h).
+add_executable(sr3weapons_inventory_tests tests/synthetic_weapon_inventory_test.cpp)
+target_link_libraries(sr3weapons_inventory_tests PRIVATE sr3weapons)
+add_test(NAME synthetic_weapon_inventory_test COMMAND sr3weapons_inventory_tests)
 
 # Damage model (spec-weapons-runtime.md Sec4.5/4.5.5a, spec sync 974bd21).
 add_executable(sr3weapons_damage_model_tests tests/synthetic_damage_model_test.cpp)
@@ -601,6 +607,11 @@ add_executable(sr3physics_vehicle_world_collision_tests tests/synthetic_physics_
 target_link_libraries(sr3physics_vehicle_world_collision_tests PRIVATE sr3physics)
 add_test(NAME synthetic_physics_vehicle_world_collision_test COMMAND sr3physics_vehicle_world_collision_tests)
 
+# vehicle_contact.h (free-roam gap #8): plan-view OBB/circle contact, impulse response, collision damage skeleton.
+add_executable(sr3physics_vehicle_contact_tests tests/synthetic_physics_vehicle_contact_test.cpp)
+target_link_libraries(sr3physics_vehicle_contact_tests PRIVATE sr3physics)
+add_test(NAME synthetic_physics_vehicle_contact_test COMMAND sr3physics_vehicle_contact_tests)
+
 # vehicle_driving_slice.h (2026-10-08 follow-up task) models spec-physics-
 # runtime.md Sec10's 7 named hkpVehicle component override classes - see that
 # header's own doc comment for its relationship to vehicle_substeps.h above
@@ -633,6 +644,63 @@ target_link_libraries(sr3tables_diversions PUBLIC sr3xtbl)
 add_executable(sr3tables_diversions_tests tests/synthetic_tables_diversions_test.cpp)
 target_link_libraries(sr3tables_diversions_tests PRIVATE sr3tables_diversions)
 add_test(NAME synthetic_tables_diversions_test COMMAND sr3tables_diversions_tests)
+# Instanced activities and Insurance Fraud (Team C), spec-activity-runtime.md 6.1/6.2:
+# the Activity record, the reward grant, Fraud scoring and win/fail. No engine-state dependency.
+add_library(sr3activity STATIC
+    src/activity_instance.cpp
+    src/activity_fraud.cpp
+    src/activity_snatch.cpp
+    src/activity_mayhem.cpp
+    src/activity_escort.cpp
+    src/activity_trafficking.cpp
+    src/activity_genki.cpp
+    src/activity_heli.cpp
+    src/activity_harness.cpp
+)
+target_include_directories(sr3activity PUBLIC include)
+target_link_libraries(sr3activity PUBLIC sr3progression sr3tables_diversions)
+
+# Collectibles and challenges (Team C), spec-tables-progression.md C.2-C.6: the collectible
+# registry and collect routine, the 41 challenges with their triggers and progress.
+add_library(sr3collect STATIC
+    src/collect_collectibles.cpp
+    src/collect_challenges.cpp
+)
+target_include_directories(sr3collect PUBLIC include)
+target_link_libraries(sr3collect PUBLIC sr3tables_progression sr3save sr3xtbl)
+# Team D differential vectors (spec-differential-vectors-progression.md V1-V5, -cash.md) against sr3progression.
+add_executable(differential_progression_tests tests/differential_progression_test.cpp)
+target_link_libraries(differential_progression_tests PRIVATE sr3progression)
+add_test(NAME differential_progression_test COMMAND differential_progression_tests ${CMAKE_CURRENT_SOURCE_DIR})
+# Sun / TOD light direction (Team C, spec-tables-environment 19.2, differential D-23).
+add_library(sr3sky STATIC src/sky_sun.cpp src/sky_tod_curves.cpp)
+target_include_directories(sr3sky PUBLIC include)
+add_executable(sr3sky_tests tests/synthetic_sky_test.cpp)
+target_link_libraries(sr3sky_tests PRIVATE sr3sky)
+add_test(NAME synthetic_sky_test COMMAND sr3sky_tests)
+target_link_libraries(sr3sky PUBLIC sr3xtbl)
+add_executable(real_tod_curves_tests tests/real_tod_curves_test.cpp)
+target_link_libraries(real_tod_curves_tests PRIVATE sr3sky vppcache)
+target_compile_definitions(real_tod_curves_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_tod_curves_test COMMAND real_tod_curves_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_tod_curves_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+add_executable(sr3collect_tests tests/synthetic_collect_test.cpp)
+target_link_libraries(sr3collect_tests PRIVATE sr3collect)
+add_test(NAME synthetic_collect_test COMMAND sr3collect_tests)
+add_executable(real_collect_tables_tests tests/real_collect_tables_test.cpp)
+target_link_libraries(real_collect_tables_tests PRIVATE sr3collect vppcache)
+target_compile_definitions(real_collect_tables_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_collect_tables_test COMMAND real_collect_tables_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_collect_tables_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+
+add_executable(sr3activity_tests tests/synthetic_activity_test.cpp)
+target_link_libraries(sr3activity_tests PRIVATE sr3activity)
+add_test(NAME synthetic_activity_test COMMAND sr3activity_tests)
 
 add_library(sr3tables_customization STATIC
     src/tables_customization_color_pools.cpp
@@ -1070,12 +1138,14 @@ add_test(NAME synthetic_bone_palette_test COMMAND sr3bonepalette_tests)
 # work, not resolved here; see zone_objects.h's own file-level comment).
 add_library(sr3zone STATIC
     src/zone_header.cpp
+    src/zone_placement.cpp
     src/zone_geometry.cpp
     src/zone_objects.cpp
     src/traffic_graph.cpp
     src/road_graph.cpp
     src/hood_volumes.cpp
     src/zone_heightmap.cpp
+    src/zone_collision_mesh.cpp
 )
 target_include_directories(sr3zone PUBLIC include)
 target_link_libraries(sr3zone PUBLIC sr3geometry sr3mesh vpp_container)
@@ -1087,6 +1157,11 @@ add_test(NAME synthetic_zone_test COMMAND sr3zone_tests)
 add_executable(sr3zone_objects_tests tests/synthetic_zone_objects_test.cpp)
 target_link_libraries(sr3zone_objects_tests PRIVATE sr3zone)
 add_test(NAME synthetic_zone_objects_test COMMAND sr3zone_objects_tests)
+
+# spec-world-streaming.md Sec10.7.1 placement-record decode (name binding, rotation, position).
+add_executable(sr3zone_placement_tests tests/zone_placement_test.cpp)
+target_link_libraries(sr3zone_placement_tests PRIVATE sr3zone)
+add_test(NAME zone_placement_test COMMAND sr3zone_placement_tests)
 
 # Traffic (0x2236) record reader (spec-zone-data-format.md Sec13.2,
 # include/sr3zone/traffic_graph.h/src/traffic_graph.cpp, added 2026-10-08
@@ -1119,6 +1194,20 @@ endif()
 add_executable(sr3zone_heightmap_tests tests/synthetic_zone_heightmap_test.cpp)
 target_link_libraries(sr3zone_heightmap_tests PRIVATE sr3zone)
 add_test(NAME synthetic_zone_heightmap_test COMMAND sr3zone_heightmap_tests)
+
+# Walkable-ground collision mesh (spec-zone-data-format.md Sec13.5.1, include/sr3zone/zone_collision_mesh.h): pure
+# decode tests plus a real-data test on the tile-0915 `~s` vectors (SKIPPED, 77, when the archive is absent).
+add_executable(sr3zone_collision_mesh_tests tests/synthetic_zone_collision_mesh_test.cpp)
+target_link_libraries(sr3zone_collision_mesh_tests PRIVATE sr3zone)
+add_test(NAME synthetic_zone_collision_mesh_test COMMAND sr3zone_collision_mesh_tests)
+
+add_executable(real_zone_collision_mesh_tests tests/real_zone_collision_mesh_test.cpp)
+target_link_libraries(real_zone_collision_mesh_tests PRIVATE sr3zone vpp_container vppcache)
+target_compile_definitions(real_zone_collision_mesh_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+add_test(NAME real_zone_collision_mesh_test COMMAND real_zone_collision_mesh_tests)
+if(NOT CRREISH_VERIFY_BUILD)
+    set_tests_properties(real_zone_collision_mesh_test PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 
 # `_media.bnk_pc` audio-wrapper reader (spec-audio-format.md Sec4/Sec5) -
 # the `VWSBPC` block directory and the 16-byte read of a plain `.bnk_pc`'s
@@ -1450,8 +1539,7 @@ if(WIN32)
     # (viewer_main.cpp dispatches; viewer_common.* / viewer_*_support.* hold the
     # helpers shared by more than one mode; one viewer_<mode>.cpp per mode or
     # small group of related modes).
-    add_executable(sr3_viewer
-        tools/sr3_viewer/viewer_main.cpp
+    add_library(sr3viewer_core STATIC
         tools/sr3_viewer/viewer_common.cpp
         tools/sr3_viewer/viewer_skinning.cpp
         tools/sr3_viewer/viewer_multichannel.cpp
@@ -1495,13 +1583,27 @@ if(WIN32)
         tools/sr3_viewer/viewer_playtest_setup_audio_hud.cpp
         tools/sr3_viewer/viewer_playtest_setup_sim.cpp
         tools/sr3_viewer/viewer_playtest_frame_input.cpp
+        tools/sr3_viewer/viewer_playtest_craft.cpp
         tools/sr3_viewer/viewer_playtest_frame_vitals.cpp
         tools/sr3_viewer/viewer_playtest_frame_traffic.cpp
+        tools/sr3_viewer/viewer_playtest_frame_gps.cpp
+        tools/sr3_viewer/viewer_playtest_frame_police.cpp
+        tools/sr3_viewer/viewer_playtest_frame_homies.cpp
+        tools/sr3_viewer/viewer_playtest_frame_collision.cpp
         tools/sr3_viewer/viewer_playtest_frame_player.cpp
         tools/sr3_viewer/viewer_playtest_frame_mission.cpp
         tools/sr3_viewer/viewer_playtest_frame_render.cpp
         tools/sr3_viewer/viewer_playtest_saveflow.cpp
+        tools/sr3_viewer/viewer_playtest_soak.cpp
+        tools/sr3_viewer/viewer_playtest_activity.cpp
+        tools/sr3_viewer/viewer_playtest_collect.cpp
+        tools/sr3_viewer/viewer_playtest_sky.cpp
+        tools/sr3_viewer/viewer_playtest_hudart.cpp
         tools/sr3_viewer/viewer_playtest.cpp)
+    # sr3_viewer is now just the command dispatcher over the sr3viewer_core static library (FIRST PLAYABLE refactor:
+    # the playtest/free-roam code is shared with tools/sr3_game/main.cpp -> sr3.exe). All TUs are unchanged.
+    add_executable(sr3_viewer tools/sr3_viewer/viewer_main.cpp)
+    target_link_libraries(sr3_viewer PRIVATE sr3viewer_core)
     # sr3anim added because `animpose` (stage 2, HANDOFF Sec9.56) calls
     # sr3anim::Animation/Payload/sampleClipAtTime - previously missing
     # here, so this target would not have linked via a real `cmake
@@ -1594,15 +1696,15 @@ if(WIN32)
     # Brad's REAL weapon" block parses - both targets already exist above
     # (sr3weapons line ~477, sr3tables_weapons line ~375), well before this
     # target, so no deferred if(TARGET sr3_viewer) block is needed.
-    target_link_libraries(sr3_viewer PRIVATE sr3render sr3geometry sr3mesh sr3rig sr3anim sr3vehicle sr3physics sr3fxo sr3d3d9bc sr3zone sr3airuntime sr3clmesh sr3luahost sr3vintdoc sr3xtbl sr3tables_environment sr3tables_vehicle_world sr3font sr3locstr sr3playeranim sr3animpose sr3tables_animation sr3weapons sr3tables_weapons sr3tables_progression vppcache d3d11 dxgi d3dcompiler user32 gdi32)
+    target_link_libraries(sr3viewer_core PUBLIC sr3render sr3geometry sr3mesh sr3rig sr3anim sr3vehicle sr3physics sr3fxo sr3d3d9bc sr3zone sr3airuntime sr3clmesh sr3luahost sr3vintdoc sr3xtbl sr3tables_environment sr3tables_vehicle_world sr3font sr3locstr sr3playeranim sr3animpose sr3tables_animation sr3weapons sr3tables_weapons sr3tables_progression vppcache d3d11 dxgi d3dcompiler user32 gdi32)
     # audio-playback task (2026-10-10): sr3audio (HIRC/media-bank SFX lookup,
     # include/sr3audio/{hirc.h,media_bank.h}) + sr3audioruntime (Vorbis
     # decode + the new AudioOutputDevice, include/sr3audioruntime/
     # audio_output_device.h) - both already-existing/newly-added libraries
     # reused here, not reinvented, for runPlaytest()'s own first real SFX
     # playback wiring.
-    target_link_libraries(sr3_viewer PRIVATE sr3audio sr3audioruntime)
-    target_link_libraries(sr3_viewer PRIVATE sr3hud sr3saveflow)  # Team C HUD/save wiring (HANDOFF-C.md section 6)
+    target_link_libraries(sr3viewer_core PUBLIC sr3audio sr3audioruntime)
+    target_link_libraries(sr3viewer_core PUBLIC sr3hud sr3saveflow sr3activity sr3collect sr3sky)  # Team C HUD/save wiring (HANDOFF-C.md section 6)
 
     # --- Fold tests/golden/build.bat's remaining standalone tools into real
     # CMake targets (B1 task, 2026-10-07). tests/golden/ (including
@@ -1740,6 +1842,11 @@ if(WIN32)
     add_executable(sr3render_tod_clock_tests tests/synthetic_tod_clock_test.cpp)
     target_link_libraries(sr3render_tod_clock_tests PRIVATE sr3render d3d11 dxgi d3dcompiler user32 gdi32)
     add_test(NAME synthetic_tod_clock_test COMMAND sr3render_tod_clock_tests)
+
+    # Weather-stage scheduler (include/sr3render/weather_schedule.h, spec-tables-environment.md Sec2/Sec18; gap #9).
+    add_executable(sr3render_weather_schedule_tests tests/synthetic_weather_schedule_test.cpp)
+    target_link_libraries(sr3render_weather_schedule_tests PRIVATE sr3render d3d11 dxgi d3dcompiler user32 gdi32)
+    add_test(NAME synthetic_weather_schedule_test COMMAND sr3render_weather_schedule_tests)
 
     # Output-path guard (include/sr3io/output_path_guard.h, called from
     # src/png_writer.cpp's writePng and src/wav_writer.cpp's writeWavPcm16):
@@ -2585,7 +2692,7 @@ add_test(NAME synthetic_seated_ride_pose_test COMMAND sr3player_seated_ride_pose
 # rather than in that earlier target_link_libraries(sr3_viewer ...) call
 # (CMake requires a target to already exist when it is linked against).
 if(TARGET sr3_viewer)
-    target_link_libraries(sr3_viewer PRIVATE sr3player_vehicle sr3tables_vehicle_world)
+    target_link_libraries(sr3viewer_core PUBLIC sr3player_vehicle sr3tables_vehicle_world)
 endif()
 
 # real_seated_ride_pose_tests itself moved below (seated-driving-pose merge,
@@ -2633,7 +2740,7 @@ add_test(NAME synthetic_cutsceneplay_test COMMAND sr3cutsceneplay_tests)
 # sr3player_vehicle block above) rather than in sr3_viewer's own original
 # target_link_libraries call.
 if(TARGET sr3_viewer)
-    target_link_libraries(sr3_viewer PRIVATE sr3tables_cutscene)
+    target_link_libraries(sr3viewer_core PUBLIC sr3tables_cutscene)
 endif()
 
 # The verdict tool: loads game_lib.lua for real and attempts to load/run a
@@ -2845,6 +2952,26 @@ if(WIN32)
     add_dependencies(real_playtest_smoke_tests sr3_viewer)
     if(NOT CRREISH_VERIFY_BUILD)
         set_tests_properties(real_playtest_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
+# Real-data end-to-end activity runs (Team C, HANDOFF-C.md section 8): sr3_viewer playtest
+# --activity <instance> --auto-activity for Snatch (_a_sn_ne_01) and Insurance Fraud
+# (_a_if_dt_01): start point -> run -> SUCCEEDED -> reward grant, checked from stdout. Same
+# shell-out, skip (77) and GPU-lock conventions as real_playtest_smoke_test above; ~2 x 100 s.
+if(WIN32)
+    add_executable(real_activity_e2e_tests tests/real_activity_e2e_test.cpp)
+    target_compile_definitions(real_activity_e2e_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+    add_test(NAME real_activity_e2e_test
+             COMMAND real_activity_e2e_tests --bin-dir $<TARGET_FILE_DIR:sr3_viewer>
+                     --source-dir ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(real_activity_e2e_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device"
+        TIMEOUT 1500)
+    add_dependencies(real_activity_e2e_tests sr3_viewer)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_activity_e2e_test PROPERTIES SKIP_RETURN_CODE 77)
     endif()
 endif()
 
@@ -3988,6 +4115,7 @@ set_tests_properties(
     synthetic_bink_codec_test
     synthetic_tod_lighting_test
     synthetic_tod_clock_test
+    synthetic_weather_schedule_test
     PROPERTIES LABELS "fast")
 
 set_tests_properties(
@@ -4170,6 +4298,18 @@ add_executable(sr3airuntime_notoriety_escalation_tests tests/synthetic_notoriety
 target_link_libraries(sr3airuntime_notoriety_escalation_tests PRIVATE sr3airuntime)
 add_test(NAME synthetic_notoriety_escalation_test COMMAND sr3airuntime_notoriety_escalation_tests)
 
+# Police response to notoriety (police_response.h): Sec19.4 binary hostility, Sec22.2 chase speed law / hand-off, plus the
+# CHOSEN dispatch pacing and stand-down rules. Pure header-only logic.
+add_executable(sr3airuntime_police_response_tests tests/synthetic_police_response_test.cpp)
+target_link_libraries(sr3airuntime_police_response_tests PRIVATE sr3airuntime)
+add_test(NAME synthetic_police_response_test COMMAND sr3airuntime_police_response_tests)
+
+# Homies and followers (homies.h): spec-ai-runtime.md Sec24 - cap, drop score, spawn search, approach speed, cooldown,
+# gait/radii, friendly-fire meter, abandon rule, hospital bill. Pure header-only logic; Sec24.12 vectors 1-12.
+add_executable(sr3airuntime_homies_tests tests/synthetic_homies_test.cpp)
+target_link_libraries(sr3airuntime_homies_tests PRIVATE sr3airuntime)
+add_test(NAME synthetic_homies_test COMMAND sr3airuntime_homies_tests)
+
 # Steamworks call boundary (spec-steamworks-boundary.md): the GAME side's
 # own call contract into the 17 imported Steamworks entry points - the
 # SteamAPI_Init silent-skip-on-failure path (Sec2.2), the LIFO shutdown-hook
@@ -4254,7 +4394,7 @@ if(NOT CRREISH_VERIFY_BUILD)
     set_tests_properties(real_radio_content_test real_radio_wav_probe_test PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 if(TARGET sr3_viewer)
-    target_link_libraries(sr3_viewer PRIVATE sr3radio)
+    target_link_libraries(sr3viewer_core PUBLIC sr3radio)
 endif()
 
 # spec-physics-runtime.md 10.11 FINAL vehicle formulas (vehicle_spec_data.h).
@@ -4273,6 +4413,11 @@ add_test(NAME synthetic_radio_content_test COMMAND sr3radio_content_tests)
 add_executable(sr3airuntime_freeroam_population_tests tests/freeroam_population_test.cpp)
 target_link_libraries(sr3airuntime_freeroam_population_tests PRIVATE sr3airuntime)
 add_test(NAME freeroam_population_test COMMAND sr3airuntime_freeroam_population_tests)
+
+# Abandoned-car schedule (spec-ai-runtime.md Sec20.6.14, include/sr3airuntime/abandoned_vehicle_schedule.h; EC-6).
+add_executable(sr3airuntime_abandoned_vehicle_schedule_tests tests/abandoned_vehicle_schedule_test.cpp)
+target_link_libraries(sr3airuntime_abandoned_vehicle_schedule_tests PRIVATE sr3airuntime)
+add_test(NAME abandoned_vehicle_schedule_test COMMAND sr3airuntime_abandoned_vehicle_schedule_tests)
 
 # Ambient-vehicle entry selection rules (spec-player-runtime.md Sec13.3/13.4, include/sr3player/ambient_vehicle_entry.h).
 add_executable(sr3player_ambient_vehicle_entry_tests tests/ambient_vehicle_entry_test.cpp)
@@ -4304,6 +4449,11 @@ add_executable(sr3airuntime_ped_navigator_tests tests/ped_navigator_test.cpp)
 target_link_libraries(sr3airuntime_ped_navigator_tests PRIVATE sr3airuntime vppcache)
 target_compile_definitions(sr3airuntime_ped_navigator_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
 add_test(NAME ped_navigator_test COMMAND sr3airuntime_ped_navigator_tests)
+
+# GPS route planner (spec-ai-runtime.md Sec23): A* in GPS mode, monitor/replan, Sec23.8 vectors TV1-TV11 (synthetic).
+add_executable(sr3airuntime_gps_route_tests tests/gps_route_test.cpp)
+target_link_libraries(sr3airuntime_gps_route_tests PRIVATE sr3airuntime vppcache)
+add_test(NAME gps_route_test COMMAND sr3airuntime_gps_route_tests)
 
 # Hood -> spawn category (spec-ai-runtime.md Sec20.6.8): hood BSP volumes from
 # sr3_city~fawld.czn_pc + spawn_info_categories.xtbl, Sec20.6.8 test vectors.
@@ -4351,6 +4501,81 @@ add_executable(sr3luahost_opens_78fb40a_tests tests/synthetic_opens_78fb40a_test
 target_link_libraries(sr3luahost_opens_78fb40a_tests PRIVATE sr3luahost)
 add_test(NAME synthetic_opens_78fb40a_test COMMAND sr3luahost_opens_78fb40a_tests)
 
+# --- FIRST PLAYABLE: sr3.exe (boot -> main menu -> free roam -> pause/save/quit) ----------------------------------
+# Thin host over sr3viewer_core (the playtest/free-roam code shared with sr3_viewer). The menus sit behind
+# include/sr3game/frontend.h: src/game_frontend_default.cpp is the stand-in text menu; Team C swaps
+# `sr3game_frontend_default` in the sr3 link line for their own library implementing the same functions.
+if(WIN32 AND TARGET sr3viewer_core)
+    add_library(sr3game_saves STATIC src/game_saves.cpp)
+    target_include_directories(sr3game_saves PUBLIC include)
+    target_link_libraries(sr3game_saves PUBLIC sr3saveflow sr3save)
+    add_library(sr3game_frontend_default STATIC src/game_frontend_default.cpp)
+    target_include_directories(sr3game_frontend_default PUBLIC include)
+
+    # Team C front end (HANDOFF-C.md section 10): the menu models + gamepad (sr3frontend, tested by
+    # synthetic_frontend_test) and the frontend.h implementation drawn through FrontendCanvas.
+    add_library(sr3frontend STATIC src/frontend_menu_model.cpp src/frontend_gamepad.cpp src/frontend_options.cpp src/frontend_bindings.cpp)
+    target_include_directories(sr3frontend PUBLIC include)
+    target_link_libraries(sr3frontend PUBLIC sr3save sr3tables_ui_controls xinput)
+    add_library(sr3game_frontend_teamc STATIC src/frontend_menus.cpp)
+    target_link_libraries(sr3game_frontend_teamc PUBLIC sr3frontend vppcache)
+    target_compile_definitions(sr3game_frontend_teamc PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")  # interim binding-table path
+    add_executable(sr3frontend_tests tests/synthetic_frontend_test.cpp)
+    target_link_libraries(sr3frontend_tests PRIVATE sr3frontend)
+    add_test(NAME synthetic_frontend_test COMMAND sr3frontend_tests)
+    add_executable(real_bindings_tests tests/real_bindings_test.cpp)
+    target_link_libraries(real_bindings_tests PRIVATE sr3frontend vppcache)
+    target_compile_definitions(real_bindings_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+    add_test(NAME real_bindings_test COMMAND real_bindings_tests)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_bindings_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+
+    add_executable(sr3 tools/sr3_game/main.cpp)
+    target_include_directories(sr3 PRIVATE tools/sr3_viewer include)
+    target_compile_definitions(sr3 PRIVATE
+        SR3_DEFAULT_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}"
+        SR3_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(sr3 PRIVATE sr3viewer_core sr3game_saves sr3game_frontend_teamc psapi dbghelp)  # Team C menus replace sr3game_frontend_default
+    # Public-symbol .pdb (no /Zi needed): lets the in-process crash filter symbolise stacks (tools/sr3_game/main.cpp).
+    if(MSVC)
+        target_link_options(sr3 PRIVATE /DEBUG /OPT:REF /OPT:ICF /MAP)
+    endif()
+    # The HUD registration list sr3.exe loads by default, next to the exe (it also falls back to SR3_SOURCE_DIR/tools).
+    add_custom_command(TARGET sr3 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/lua_all_registered_1490_tagged.txt" "$<TARGET_FILE_DIR:sr3>")
+
+    # Scripted boot-flow smoke test: boot -> main menu -> New Game -> 300 frames -> pause -> save -> quit; checks exit 0
+    # and that the save file (+ position sidecar) was written. Then boots again with Load Save on that file.
+    add_executable(real_first_playable_smoke_tests tests/real_first_playable_smoke_test.cpp)
+    target_compile_definitions(real_first_playable_smoke_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+    add_test(NAME real_first_playable_smoke_test
+             COMMAND real_first_playable_smoke_tests --bin-dir $<TARGET_FILE_DIR:sr3>)
+    set_tests_properties(real_first_playable_smoke_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device"
+        TIMEOUT 900)
+    add_dependencies(real_first_playable_smoke_tests sr3)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_first_playable_smoke_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+
+    # Short chaos soak (fixed seed, 3000 frames, 3 rounds = 2 Save/Quit-to-menu/Load transitions): crash/hang/leak tripwire.
+    add_executable(real_first_playable_soak_tests tests/real_first_playable_soak_test.cpp)
+    target_compile_definitions(real_first_playable_soak_tests PRIVATE CRREISH_GAME_CACHE_DIR="${CRREISH_GAME_CACHE_DIR}")
+    add_test(NAME real_first_playable_soak_test
+             COMMAND real_first_playable_soak_tests --bin-dir $<TARGET_FILE_DIR:sr3>)
+    set_tests_properties(real_first_playable_soak_test PROPERTIES
+        LABELS "golden"
+        RESOURCE_LOCK "sr3_gpu_device"
+        TIMEOUT 1500)
+    add_dependencies(real_first_playable_soak_tests sr3)
+    if(NOT CRREISH_VERIFY_BUILD)
+        set_tests_properties(real_first_playable_soak_test PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+endif()
+
 # --- Build-speed: precompiled headers (CRREISH_PCH) -------------------------
 # Build-config only, no source change. Three PCHs:
 #  1. sr3luahost (lib): std heavy headers + sr3luahost/engine_state.h. None of
@@ -4394,8 +4619,8 @@ if(CRREISH_PCH AND MSVC)
     endforeach()
     list(LENGTH CRREISH_PCH_REUSERS _crreish_n)
     message(STATUS "CRREISH_PCH: ${_crreish_n} executables reuse the sr3luahost PCH")
-    if(TARGET sr3_viewer)
-        target_precompile_headers(sr3_viewer PRIVATE
+    if(TARGET sr3viewer_core)
+        target_precompile_headers(sr3viewer_core PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/tools/sr3_viewer/viewer_platform.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/vpp/container.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/sr3render/device.h"
@@ -4407,7 +4632,11 @@ if(CRREISH_PCH AND MSVC)
             "${CMAKE_CURRENT_SOURCE_DIR}/include/sr3render/texture_upload.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/sr3render/tod_clock.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/sr3render/tod_lighting.h"
+            "${CMAKE_CURRENT_SOURCE_DIR}/include/sr3render/weather_schedule.h"
             "${CMAKE_CURRENT_SOURCE_DIR}/include/sr3render/png_writer.h")
+        if(TARGET sr3_viewer)
+            target_precompile_headers(sr3_viewer REUSE_FROM sr3viewer_core)
+        endif()
     endif()
 endif()
 
@@ -4429,3 +4658,64 @@ add_test(NAME synthetic_jump_crouch_test COMMAND sr3player_jump_crouch_tests)
 add_executable(sr3player_vitals_tests tests/player_vitals_test.cpp)
 target_link_libraries(sr3player_vitals_tests PRIVATE sr3player)
 add_test(NAME player_vitals_test COMMAND sr3player_vitals_tests)
+# Sec18 (2026-10-18): regen / respawn-point / penalty rules and the EngineState hooks (PV-6).
+add_executable(sr3player_vitals_engine_tests tests/player_vitals_engine_test.cpp)
+target_link_libraries(sr3player_vitals_engine_tests PRIVATE sr3player sr3luahost)
+add_test(NAME player_vitals_engine_test COMMAND sr3player_vitals_engine_tests)
+
+# Diagnostic probe (2026-10-18 prop-placement-Y investigation): SR3Z record world Y vs ~s tail collision mesh.
+add_executable(prop_placement_probe tools/probes/prop_placement_probe.cpp)
+target_link_libraries(prop_placement_probe PRIVATE sr3zone vpp_container vppcache)
+
+# Player-flown aircraft/watercraft per-step laws (spec-physics-runtime.md Sec10.13) and freefall/parachute
+# (spec-player-runtime.md Sec19). Pure header-only libraries + unit tests (2026-10-19).
+add_executable(sr3physics_aircraft_watercraft_tests tests/synthetic_aircraft_watercraft_test.cpp)
+target_include_directories(sr3physics_aircraft_watercraft_tests PRIVATE include)
+add_test(NAME synthetic_aircraft_watercraft_test COMMAND sr3physics_aircraft_watercraft_tests)
+
+add_executable(sr3player_freefall_tests tests/synthetic_freefall_test.cpp)
+target_include_directories(sr3player_freefall_tests PRIVATE include)
+add_test(NAME synthetic_freefall_test COMMAND sr3player_freefall_tests)
+
+# AW-15: the viewer's 3-D craft rig wiring the Sec10.13 laws (pure header under tools/sr3_viewer).
+add_executable(sr3viewer_craft_rig_tests tests/synthetic_craft_rig_test.cpp)
+target_include_directories(sr3viewer_craft_rig_tests PRIVATE include tools/sr3_viewer)
+add_test(NAME synthetic_craft_rig_test COMMAND sr3viewer_craft_rig_tests)
+# Team D differential vectors (spec-differential-*.md), Team B areas.
+add_executable(differential_cash_tests tests/differential_cash_test.cpp)
+target_link_libraries(differential_cash_tests PRIVATE sr3player)
+target_compile_definitions(differential_cash_tests PRIVATE SR3_SPEC_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME differential_cash_test COMMAND differential_cash_tests)
+add_executable(differential_combat_tests tests/differential_combat_test.cpp)
+target_link_libraries(differential_combat_tests PRIVATE sr3player sr3weapons)
+target_compile_definitions(differential_combat_tests PRIVATE SR3_SPEC_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME differential_combat_test COMMAND differential_combat_tests)
+add_executable(differential_engine_tests tests/differential_engine_test.cpp)
+target_link_libraries(differential_engine_tests PRIVATE sr3physics)
+target_compile_definitions(differential_engine_tests PRIVATE SR3_SPEC_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME differential_engine_test COMMAND differential_engine_tests)
+add_executable(differential_ai_tests tests/differential_ai_test.cpp)
+target_link_libraries(differential_ai_tests PRIVATE sr3airuntime)
+target_compile_definitions(differential_ai_tests PRIVATE SR3_SPEC_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME differential_ai_test COMMAND differential_ai_tests)
+
+# Impact-audit dump of every shipped xtbl through sr3xtbl (diff two builds output).
+add_executable(xtbl_audit_dump tools/xtbl_audit_dump.cpp)
+target_link_libraries(xtbl_audit_dump PRIVATE sr3xtbl vpp_container)
+
+add_executable(differential_tables_tests tests/differential_tables_test.cpp)
+target_link_libraries(differential_tables_tests PRIVATE sr3xtbl vpp_container)
+target_compile_definitions(differential_tables_tests PRIVATE SR3_SPEC_DIR="${CMAKE_SOURCE_DIR}")
+add_test(NAME differential_tables_test COMMAND differential_tables_tests)
+# D-25/D-26/D-27 differential vectors (spec-differential-results.md).
+add_executable(differential_d25_d27_tests tests/differential_d25_d27_test.cpp)
+target_link_libraries(differential_d25_d27_tests PRIVATE sr3weapons sr3physics)
+target_include_directories(differential_d25_d27_tests PRIVATE include)
+add_test(NAME differential_d25_d27_test COMMAND differential_d25_d27_tests)
+
+add_executable(xtbl_audit_diff tools/xtbl_audit_diff.cpp)
+
+# Per-car ambient braking decel pick (PerCarBrakingDecel, traffic_following.h): synthetic.
+add_executable(sr3airuntime_per_car_braking_tests tests/synthetic_per_car_braking_test.cpp)
+target_link_libraries(sr3airuntime_per_car_braking_tests PRIVATE sr3airuntime)
+add_test(NAME synthetic_per_car_braking_test COMMAND sr3airuntime_per_car_braking_tests)

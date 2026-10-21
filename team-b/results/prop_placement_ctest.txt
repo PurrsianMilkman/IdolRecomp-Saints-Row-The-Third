@@ -1,0 +1,493 @@
+Test project D:/IdolRecomp Saints Row The Third/TEAM B/.claude/worktrees/agent-a99562d5ed4dac987/build
+        Start   1: synthetic_archive_test
+        Start   2: synthetic_vppcache_test
+        Start   3: synthetic_content_validation_test
+        Start   4: synthetic_save_test
+        Start   5: synthetic_saveflow_test
+        Start   6: synthetic_asm_test
+        Start   7: synthetic_fxo_test
+        Start   8: synthetic_effects_test
+  1/238 Test   #1: synthetic_archive_test ...............................................   Passed    0.39 sec
+  2/238 Test   #3: synthetic_content_validation_test ....................................   Passed    0.38 sec
+  3/238 Test   #2: synthetic_vppcache_test ..............................................   Passed    0.38 sec
+  4/238 Test   #4: synthetic_save_test ..................................................   Passed    0.37 sec
+  5/238 Test   #5: synthetic_saveflow_test ..............................................   Passed    0.28 sec
+  6/238 Test   #6: synthetic_asm_test ...................................................   Passed    0.10 sec
+        Start   9: synthetic_xtbl_test
+        Start  10: synthetic_tables_trafficai_test
+        Start  11: synthetic_tables_weapons_test
+        Start  12: synthetic_tables_progression_test
+        Start  13: synthetic_progression_test
+        Start  14: synthetic_tables_environment_test
+  7/238 Test   #7: synthetic_fxo_test ...................................................   Passed    0.13 sec
+        Start  15: synthetic_tables_animation_test
+  8/238 Test   #8: synthetic_effects_test ...............................................   Passed    0.13 sec
+  9/238 Test  #10: synthetic_tables_trafficai_test ......................................   Passed    0.03 sec
+ 10/238 Test  #11: synthetic_tables_weapons_test ........................................   Passed    0.02 sec
+ 11/238 Test   #9: synthetic_xtbl_test ..................................................   Passed    0.12 sec
+ 12/238 Test  #13: synthetic_progression_test ...........................................   Passed    0.01 sec
+        Start  16: synthetic_tables_audio_radio_test
+        Start  17: synthetic_tables_ui_controls_test
+        Start  18: synthetic_hud_test
+        Start  19: synthetic_player_runtime_test
+        Start  20: synthetic_player_character_collision_test
+ 13/238 Test  #12: synthetic_tables_progression_test ....................................   Passed    0.13 sec
+        Start  21: synthetic_weapon_fire_test
+ 14/238 Test  #14: synthetic_tables_environment_test ....................................   Passed    0.12 sec
+ 15/238 Test  #15: synthetic_tables_animation_test ......................................   Passed    0.12 sec
+ 16/238 Test  #16: synthetic_tables_audio_radio_test ....................................   Passed    0.11 sec
+ 17/238 Test  #17: synthetic_tables_ui_controls_test ....................................   Passed    0.11 sec
+ 18/238 Test  #18: synthetic_hud_test ...................................................   Passed    0.02 sec
+ 19/238 Test  #19: synthetic_player_runtime_test ........................................   Passed    0.01 sec
+        Start  22: synthetic_weapon_inventory_test
+        Start  23: synthetic_damage_model_test
+        Start  24: synthetic_ground_follow_test
+        Start  25: synthetic_physics_runtime_test
+        Start  26: synthetic_physics_vehicle_substeps_test
+        Start  27: synthetic_physics_vehicle_world_collision_test
+ 20/238 Test  #20: synthetic_player_character_collision_test ............................   Passed    0.13 sec
+ 21/238 Test  #21: synthetic_weapon_fire_test ...........................................   Passed    0.12 sec
+ 22/238 Test  #22: synthetic_weapon_inventory_test ......................................   Passed    0.12 sec
+ 23/238 Test  #23: synthetic_damage_model_test ..........................................   Passed    0.12 sec
+ 24/238 Test  #24: synthetic_ground_follow_test .........................................   Passed    0.02 sec
+        Start  28: synthetic_physics_vehicle_contact_test
+        Start  29: synthetic_physics_vehicle_driving_slice_test
+        Start  30: synthetic_tables_vehicle_world_test
+        Start  31: synthetic_tables_diversions_test
+        Start  32: synthetic_activity_test
+ 25/238 Test  #25: synthetic_physics_runtime_test .......................................   Passed    0.13 sec
+        Start  33: synthetic_tables_customization_test
+ 26/238 Test  #26: synthetic_physics_vehicle_substeps_test ..............................   Passed    0.13 sec
+ 27/238 Test  #27: synthetic_physics_vehicle_world_collision_test .......................   Passed    0.12 sec
+ 28/238 Test  #28: synthetic_physics_vehicle_contact_test ...............................   Passed    0.12 sec
+ 29/238 Test  #29: synthetic_physics_vehicle_driving_slice_test .........................   Passed    0.12 sec
+        Start  34: synthetic_d3d9bc_test
+        Start  35: synthetic_d3d9bc_ctab_test
+        Start  36: synthetic_d3d9bc_hlsl_test
+        Start  37: synthetic_vehicleinfo_test
+ 30/238 Test  #30: synthetic_tables_vehicle_world_test ..................................   Passed    0.22 sec
+ 31/238 Test  #31: synthetic_tables_diversions_test .....................................   Passed    0.12 sec
+ 32/238 Test  #32: synthetic_activity_test ..............................................   Passed    0.11 sec
+        Start  38: synthetic_customization_test
+        Start  39: synthetic_texture_test
+        Start  40: synthetic_ccmesh_test
+ 33/238 Test  #33: synthetic_tables_customization_test ..................................   Passed    0.12 sec
+ 34/238 Test  #34: synthetic_d3d9bc_test ................................................   Passed    0.12 sec
+ 35/238 Test  #35: synthetic_d3d9bc_ctab_test ...........................................   Passed    0.11 sec
+        Start  41: synthetic_material_binding_test
+        Start  42: synthetic_character_matlib_test
+        Start  43: synthetic_anim_test
+ 36/238 Test  #36: synthetic_d3d9bc_hlsl_test ...........................................   Passed    0.21 sec
+ 37/238 Test  #37: synthetic_vehicleinfo_test ...........................................   Passed    0.12 sec
+ 38/238 Test  #38: synthetic_customization_test .........................................   Passed    0.11 sec
+ 39/238 Test  #39: synthetic_texture_test ...............................................   Passed    0.11 sec
+        Start  44: synthetic_anim_payload_test
+        Start  45: synthetic_anim_runtime_test
+        Start  46: synthetic_anim_node_graph_test
+        Start  47: synthetic_anim_node_graph_runtime_test
+ 40/238 Test  #40: synthetic_ccmesh_test ................................................   Passed    0.21 sec
+ 41/238 Test  #41: synthetic_material_binding_test ......................................   Passed    0.21 sec
+ 42/238 Test  #42: synthetic_character_matlib_test ......................................   Passed    0.12 sec
+        Start  48: synthetic_player_anim_bridge_test
+        Start  49: synthetic_anim_pose_compose_test
+        Start  50: synthetic_morph_test
+ 43/238 Test  #43: synthetic_anim_test ..................................................   Passed    0.13 sec
+ 44/238 Test  #44: synthetic_anim_payload_test ..........................................   Passed    0.12 sec
+ 45/238 Test  #45: synthetic_anim_runtime_test ..........................................   Passed    0.12 sec
+ 46/238 Test  #46: synthetic_anim_node_graph_test .......................................   Passed    0.11 sec
+        Start  51: synthetic_foliage_test
+        Start  52: synthetic_ctdg_test
+        Start  53: synthetic_csc_test
+        Start  54: synthetic_cvtf_test
+ 47/238 Test  #47: synthetic_anim_node_graph_runtime_test ...............................   Passed    0.22 sec
+ 48/238 Test  #48: synthetic_player_anim_bridge_test ....................................   Passed    0.12 sec
+ 49/238 Test  #49: synthetic_anim_pose_compose_test .....................................   Passed    0.11 sec
+        Start  55: synthetic_mesh_vertex_test
+        Start  56: synthetic_rig_test
+        Start  57: synthetic_pose_test
+ 50/238 Test  #50: synthetic_morph_test .................................................   Passed    0.12 sec
+ 51/238 Test  #51: synthetic_foliage_test ...............................................   Passed    0.12 sec
+ 52/238 Test  #52: synthetic_ctdg_test ..................................................   Passed    0.02 sec
+ 53/238 Test  #53: synthetic_csc_test ...................................................   Passed    0.02 sec
+        Start  58: synthetic_multibone_pose_test
+        Start  59: synthetic_bone_palette_test
+        Start  60: synthetic_zone_test
+        Start  61: synthetic_zone_objects_test
+ 54/238 Test  #54: synthetic_cvtf_test ..................................................   Passed    0.13 sec
+ 55/238 Test  #55: synthetic_mesh_vertex_test ...........................................   Passed    0.12 sec
+ 56/238 Test  #56: synthetic_rig_test ...................................................   Passed    0.12 sec
+        Start  62: zone_placement_test
+        Start  63: synthetic_traffic_graph_test
+        Start  64: real_road_graph_test
+ 57/238 Test  #57: synthetic_pose_test ..................................................   Passed    0.13 sec
+ 58/238 Test  #58: synthetic_multibone_pose_test ........................................   Passed    0.12 sec
+ 59/238 Test  #59: synthetic_bone_palette_test ..........................................   Passed    0.03 sec
+ 60/238 Test  #60: synthetic_zone_test ..................................................   Passed    0.02 sec
+        Start  65: synthetic_zone_heightmap_test
+        Start  66: synthetic_zone_collision_mesh_test
+        Start  67: real_zone_collision_mesh_test
+        Start  68: synthetic_media_bank_test
+ 61/238 Test  #61: synthetic_zone_objects_test ..........................................   Passed    0.12 sec
+ 62/238 Test  #62: zone_placement_test ..................................................   Passed    0.12 sec
+        Start  69: synthetic_hirc_media_lookup_test
+        Start  70: synthetic_audio_runtime_test
+ 63/238 Test  #63: synthetic_traffic_graph_test .........................................   Passed    0.12 sec
+ 64/238 Test  #64: real_road_graph_test .................................................***Skipped   0.12 sec
+ 65/238 Test  #65: synthetic_zone_heightmap_test ........................................   Passed    0.11 sec
+ 66/238 Test  #66: synthetic_zone_collision_mesh_test ...................................   Passed    0.02 sec
+        Start  71: synthetic_wwise_internal_test
+        Start  72: synthetic_wwise_vorbis_setup_test
+        Start  73: synthetic_wwise_codebook_library_crosscheck_test
+        Start  74: synthetic_clmesh_test
+ 67/238 Test  #67: real_zone_collision_mesh_test ........................................***Skipped   0.12 sec
+ 68/238 Test  #68: synthetic_media_bank_test ............................................   Passed    0.12 sec
+ 69/238 Test  #69: synthetic_hirc_media_lookup_test .....................................   Passed    0.11 sec
+        Start  75: synthetic_tree_test
+        Start  76: composite_renderer_test
+        Start  77: synthetic_tod_lighting_test
+ 70/238 Test  #70: synthetic_audio_runtime_test .........................................   Passed    0.12 sec
+ 71/238 Test  #71: synthetic_wwise_internal_test ........................................   Passed    0.12 sec
+        Start  78: synthetic_tod_clock_test
+        Start  79: synthetic_weather_schedule_test
+ 72/238 Test  #72: synthetic_wwise_vorbis_setup_test ....................................   Passed    0.21 sec
+ 73/238 Test  #74: synthetic_clmesh_test ................................................   Passed    0.12 sec
+ 74/238 Test  #73: synthetic_wwise_codebook_library_crosscheck_test .....................   Passed    0.12 sec
+ 75/238 Test  #75: synthetic_tree_test ..................................................   Passed    0.11 sec
+        Start  80: synthetic_output_path_guard_test
+        Start  81: synthetic_lua_test
+        Start  82: synthetic_luahost_test
+        Start  83: synthetic_zone_object_resolver_test
+ 76/238 Test  #77: synthetic_tod_lighting_test ..........................................   Passed    0.12 sec
+ 77/238 Test  #78: synthetic_tod_clock_test .............................................   Passed    0.12 sec
+        Start  84: synthetic_minimap_live_transform_test
+        Start  85: synthetic_mission_host_live_bridge_test
+ 78/238 Test  #79: synthetic_weather_schedule_test ......................................   Passed    0.13 sec
+ 79/238 Test  #81: synthetic_lua_test ...................................................   Passed    0.12 sec
+        Start  86: synthetic_luahost_bare_globals_test
+        Start  87: synthetic_trigger_volume_overlap_test
+ 80/238 Test  #83: synthetic_zone_object_resolver_test ..................................   Passed    0.12 sec
+ 81/238 Test  #80: synthetic_output_path_guard_test .....................................   Passed    0.13 sec
+ 82/238 Test  #82: synthetic_luahost_test ...............................................   Passed    0.12 sec
+ 83/238 Test  #76: composite_renderer_test ..............................................   Passed    0.24 sec
+        Start  88: synthetic_hud_prompt_autoanswer_test
+        Start  89: synthetic_shop_crib_press_e_entry_test
+        Start  90: synthetic_weapon_pickup_dropped_and_heavy_test
+        Start  91: synthetic_luahost_roster_test
+ 84/238 Test  #84: synthetic_minimap_live_transform_test ................................   Passed    0.22 sec
+ 85/238 Test  #85: synthetic_mission_host_live_bridge_test ..............................   Passed    0.12 sec
+        Start  92: synthetic_luahost_unified_registry_test
+        Start  93: synthetic_luahost_refusal_stress_test
+ 86/238 Test  #87: synthetic_trigger_volume_overlap_test ................................   Passed    0.12 sec
+ 87/238 Test  #86: synthetic_luahost_bare_globals_test ..................................   Passed    0.12 sec
+ 88/238 Test  #88: synthetic_hud_prompt_autoanswer_test .................................   Passed    0.11 sec
+ 89/238 Test  #89: synthetic_shop_crib_press_e_entry_test ...............................   Passed    0.11 sec
+        Start  94: synthetic_luahost_cutscene_test
+        Start  95: synthetic_luahost_cutscene_camera_script_test
+        Start  96: synthetic_luahost_batch2728_test
+        Start  97: synthetic_luahost_tranche03_test
+ 90/238 Test  #90: synthetic_weapon_pickup_dropped_and_heavy_test .......................   Passed    0.21 sec
+        Start  98: synthetic_luahost_tranche03_batch7_test
+ 91/238 Test  #91: synthetic_luahost_roster_test ........................................   Passed    0.13 sec
+ 92/238 Test  #92: synthetic_luahost_unified_registry_test ..............................   Passed    0.12 sec
+ 93/238 Test  #95: synthetic_luahost_cutscene_camera_script_test ........................   Passed    0.11 sec
+ 94/238 Test  #94: synthetic_luahost_cutscene_test ......................................   Passed    0.11 sec
+        Start  99: synthetic_luahost_wave2_w21_test
+        Start 100: synthetic_luahost_follower_sentinel_test
+        Start 101: synthetic_luahost_batch31_32_test
+        Start 102: synthetic_luahost_tranche060708_test
+ 95/238 Test  #97: synthetic_luahost_tranche03_test .....................................   Passed    0.12 sec
+ 96/238 Test  #96: synthetic_luahost_batch2728_test .....................................   Passed    0.21 sec
+ 97/238 Test  #98: synthetic_luahost_tranche03_batch7_test ..............................   Passed    0.11 sec
+ 98/238 Test  #99: synthetic_luahost_wave2_w21_test .....................................   Passed    0.11 sec
+ 99/238 Test #100: synthetic_luahost_follower_sentinel_test .............................   Passed    0.11 sec
+        Start 103: synthetic_luahost_sec44_46_test
+        Start 104: synthetic_luahost_tranche16_test
+        Start 105: synthetic_luahost_tranche_realhits_test
+        Start 106: synthetic_luahost_player_controls_test
+        Start 107: synthetic_luahost_native_batch1007_test
+100/238 Test #101: synthetic_luahost_batch31_32_test ....................................   Passed    0.21 sec
+        Start 108: synthetic_luahost_character_is_in_vehicle_test
+101/238 Test #102: synthetic_luahost_tranche060708_test .................................   Passed    0.21 sec
+102/238 Test #103: synthetic_luahost_sec44_46_test ......................................   Passed    0.11 sec
+103/238 Test #104: synthetic_luahost_tranche16_test .....................................   Passed    0.11 sec
+104/238 Test #105: synthetic_luahost_tranche_realhits_test ..............................   Passed    0.11 sec
+105/238 Test #106: synthetic_luahost_player_controls_test ...............................   Passed    0.10 sec
+        Start 109: synthetic_luahost_sec6_sweep_test
+        Start 110: synthetic_luahost_sec7_sweep_test
+        Start 111: synthetic_luahost_sec9_sweep_test
+        Start 112: synthetic_luahost_sec13_14_batch4_test
+        Start 113: synthetic_luahost_wave2_w23_test
+106/238 Test #107: synthetic_luahost_native_batch1007_test ..............................   Passed    0.22 sec
+107/238 Test #108: synthetic_luahost_character_is_in_vehicle_test .......................   Passed    0.12 sec
+108/238 Test #109: synthetic_luahost_sec6_sweep_test ....................................   Passed    0.12 sec
+109/238 Test #110: synthetic_luahost_sec7_sweep_test ....................................   Passed    0.11 sec
+        Start 114: synthetic_luahost_vehicle_chase_test
+        Start 115: synthetic_luahost_sec8_sweep_test
+        Start 116: synthetic_luahost_ce4556f_answers_test
+        Start 117: synthetic_luahost_trigger_mission_cluster_test
+110/238 Test #111: synthetic_luahost_sec9_sweep_test ....................................   Passed    0.13 sec
+        Start 118: synthetic_save_game_bridge_test
+111/238 Test #112: synthetic_luahost_sec13_14_batch4_test ...............................   Passed    0.22 sec
+112/238 Test #114: synthetic_luahost_vehicle_chase_test .................................   Passed    0.11 sec
+113/238 Test #113: synthetic_luahost_wave2_w23_test .....................................   Passed    0.12 sec
+        Start 119: synthetic_menu_runtime_test
+        Start 120: synthetic_luahost_batch1_sec1_4_core_test
+        Start 121: synthetic_auto_objective_getdist_stall_test
+114/238 Test #115: synthetic_luahost_sec8_sweep_test ....................................   Passed    0.12 sec
+115/238 Test #116: synthetic_luahost_ce4556f_answers_test ...............................   Passed    0.12 sec
+116/238 Test #117: synthetic_luahost_trigger_mission_cluster_test .......................   Passed    0.11 sec
+        Start 122: synthetic_auto_objective_trigger_and_vehicle_seat_test
+        Start 123: synthetic_luahost_batch5_hud_customization_test
+        Start 124: synthetic_luahost_b10_batch3_test
+117/238 Test #119: synthetic_menu_runtime_test ..........................................   Passed    0.12 sec
+118/238 Test #118: synthetic_save_game_bridge_test ......................................   Passed    0.21 sec
+119/238 Test #121: synthetic_auto_objective_getdist_stall_test ..........................   Passed    0.11 sec
+120/238 Test #120: synthetic_luahost_batch1_sec1_4_core_test ............................   Passed    0.11 sec
+        Start 125: synthetic_luahost_b28_batch1_deferred6_test
+        Start 126: synthetic_luahost_b29_sec6_notoriety_mission_test
+        Start 127: synthetic_luahost_sweep_blockers_9c70c61_test
+        Start 128: synthetic_luahost_b30_tranchef_camera_test
+121/238 Test #122: synthetic_auto_objective_trigger_and_vehicle_seat_test ...............   Passed    0.12 sec
+        Start 129: synthetic_engine_callbacks_test
+122/238 Test #123: synthetic_luahost_batch5_hud_customization_test ......................   Passed    0.21 sec
+123/238 Test #124: synthetic_luahost_b10_batch3_test ....................................   Passed    0.12 sec
+124/238 Test #125: synthetic_luahost_b28_batch1_deferred6_test ..........................   Passed    0.11 sec
+        Start 130: synthetic_review_479fedf_test
+        Start 131: synthetic_opens_post6799e45_test
+        Start 132: synthetic_luahost_b31_continuous_spawn_vehicle_enter_tutorial_test
+125/238 Test #126: synthetic_luahost_b29_sec6_notoriety_mission_test ....................   Passed    0.12 sec
+126/238 Test #127: synthetic_luahost_sweep_blockers_9c70c61_test ........................   Passed    0.12 sec
+127/238 Test #128: synthetic_luahost_b30_tranchef_camera_test ...........................   Passed    0.11 sec
+        Start 133: synthetic_luahost_wave2_w24a_test
+        Start 134: synthetic_luahost_wave2_w24b_test
+        Start 135: synthetic_luahost_wave2_w27a_test
+128/238 Test #130: synthetic_review_479fedf_test ........................................   Passed    0.12 sec
+129/238 Test #129: synthetic_engine_callbacks_test ......................................   Passed    0.21 sec
+130/238 Test #131: synthetic_opens_post6799e45_test .....................................   Passed    0.12 sec
+131/238 Test #132: synthetic_luahost_b31_continuous_spawn_vehicle_enter_tutorial_test ...   Passed    0.11 sec
+        Start 136: synthetic_luahost_wave2_w27b_test
+        Start 137: synthetic_luahost_wave2_w25a_test
+        Start 138: synthetic_luahost_wave2_w25b_test
+        Start 139: synthetic_luahost_wave2_w26a_test
+132/238 Test #133: synthetic_luahost_wave2_w24a_test ....................................   Passed    0.12 sec
+        Start 140: synthetic_luahost_wave2_w26b_test
+133/238 Test #134: synthetic_luahost_wave2_w24b_test ....................................   Passed    0.21 sec
+134/238 Test #135: synthetic_luahost_wave2_w27a_test ....................................   Passed    0.12 sec
+        Start 141: synthetic_luahost_wave2_w28_test
+        Start 142: synthetic_luahost_wave2_w22_test
+135/238 Test #136: synthetic_luahost_wave2_w27b_test ....................................   Passed    0.12 sec
+136/238 Test #137: synthetic_luahost_wave2_w25a_test ....................................   Passed    0.12 sec
+137/238 Test #138: synthetic_luahost_wave2_w25b_test ....................................   Passed    0.11 sec
+138/238 Test #139: synthetic_luahost_wave2_w26a_test ....................................   Passed    0.11 sec
+        Start 143: synthetic_respect_progression_test
+        Start 144: synthetic_player_movement_test
+        Start 145: synthetic_player_camera_test
+        Start 146: synthetic_player_vehicle_camera_test
+139/238 Test #140: synthetic_luahost_wave2_w26b_test ....................................   Passed    0.22 sec
+140/238 Test #141: synthetic_luahost_wave2_w28_test .....................................   Passed    0.12 sec
+141/238 Test #142: synthetic_luahost_wave2_w22_test .....................................   Passed    0.11 sec
+142/238 Test #143: synthetic_respect_progression_test ...................................   Passed    0.11 sec
+        Start 147: synthetic_player_vehicle_occupancy_test
+        Start 148: synthetic_seated_ride_pose_test
+        Start 149: synthetic_tables_cutscene_test
+        Start 150: synthetic_cutsceneplay_test
+143/238 Test #144: synthetic_player_movement_test .......................................   Passed    0.12 sec
+        Start 151: synthetic_vintdoc_test
+144/238 Test #145: synthetic_player_camera_test .........................................   Passed    0.22 sec
+145/238 Test #146: synthetic_player_vehicle_camera_test .................................   Passed    0.13 sec
+146/238 Test #147: synthetic_player_vehicle_occupancy_test ..............................   Passed    0.12 sec
+147/238 Test #148: synthetic_seated_ride_pose_test ......................................   Passed    0.12 sec
+148/238 Test #149: synthetic_tables_cutscene_test .......................................   Passed    0.11 sec
+        Start 152: synthetic_vintdoc_document_test
+        Start 153: synthetic_vint_property_test
+        Start 154: real_seated_ride_pose_test
+        Start 155: real_vintdoc_document_test
+        Start 156: real_playtest_smoke_test
+149/238 Test #150: synthetic_cutsceneplay_test ..........................................   Passed    0.23 sec
+        Start 165: real_vehicle_engine_torque_crossmap_test
+150/238 Test #151: synthetic_vintdoc_test ...............................................   Passed    0.23 sec
+151/238 Test #152: synthetic_vintdoc_document_test ......................................   Passed    0.12 sec
+152/238 Test #153: synthetic_vint_property_test .........................................   Passed    0.12 sec
+153/238 Test #155: real_vintdoc_document_test ...........................................   Passed    0.11 sec
+        Start 166: real_vehicle_interaction_hide_occupant_test
+        Start 167: real_zone_objects_test
+        Start 168: real_vorbis_decode_test
+        Start 169: real_hwy_ramp_props_test
+154/238 Test #166: real_vehicle_interaction_hide_occupant_test ..........................   Passed    0.11 sec
+        Start 170: synthetic_vint_font_test
+155/238 Test #165: real_vehicle_engine_torque_crossmap_test .............................   Passed    0.12 sec
+        Start 171: real_vint_font_test
+156/238 Test #170: synthetic_vint_font_test .............................................   Passed    0.01 sec
+        Start 172: synthetic_le_strings_test
+157/238 Test #171: real_vint_font_test ..................................................   Passed    0.11 sec
+        Start 173: real_le_strings_test
+158/238 Test #172: synthetic_le_strings_test ............................................   Passed    0.11 sec
+        Start 174: real_anim_control_parameters_test
+159/238 Test #173: real_le_strings_test .................................................   Passed    0.11 sec
+        Start 175: real_anim_node_graph_test
+160/238 Test #174: real_anim_control_parameters_test ....................................   Passed    0.12 sec
+        Start 176: synthetic_bink_codec_test
+161/238 Test #176: synthetic_bink_codec_test ............................................   Passed    0.11 sec
+        Start 177: ac_tree_phase2_test
+162/238 Test #177: ac_tree_phase2_test ..................................................   Passed    0.01 sec
+        Start 178: ac_tree_gate_ab_golden_trace_test
+163/238 Test #154: real_seated_ride_pose_test ...........................................   Passed    0.70 sec
+        Start 179: ac_tree_phase1_bfs_golden_trace_test
+164/238 Test #178: ac_tree_gate_ab_golden_trace_test ....................................   Passed    0.21 sec
+        Start 180: real_bink_frame0_decode_test
+165/238 Test #175: real_anim_node_graph_test ............................................   Passed    0.45 sec
+        Start 181: real_bink_test_vector_validation_test
+166/238 Test #179: ac_tree_phase1_bfs_golden_trace_test .................................   Passed    0.41 sec
+        Start 182: real_bink_idct_test
+167/238 Test #180: real_bink_frame0_decode_test .........................................***Skipped   0.31 sec
+        Start 183: real_bink_block00_4stage_dequant_idct_test
+168/238 Test #181: real_bink_test_vector_validation_test ................................***Skipped   0.21 sec
+        Start 184: real_bink_5_3x_golden_blocks_test
+169/238 Test #182: real_bink_idct_test ..................................................***Skipped   0.02 sec
+        Start 185: real_bink_merge_group_trace_test
+170/238 Test #183: real_bink_block00_4stage_dequant_idct_test ...........................   Passed    0.02 sec
+        Start 186: real_bink_dc_prestage_gap_test
+171/238 Test #184: real_bink_5_3x_golden_blocks_test ....................................   Passed    0.01 sec
+        Start 187: real_bink_0x10019d10_real_decode_test
+172/238 Test #185: real_bink_merge_group_trace_test .....................................   Passed    0.01 sec
+        Start 188: real_bink_dc_value0_boundary_test
+173/238 Test #186: real_bink_dc_prestage_gap_test .......................................   Passed    0.01 sec
+        Start 189: real_bink_dc_array_519_word_bail_test
+174/238 Test #187: real_bink_0x10019d10_real_decode_test ................................   Passed    0.02 sec
+        Start 190: bink_plane_subchunk_span_test
+175/238 Test #188: real_bink_dc_value0_boundary_test ....................................   Passed    0.02 sec
+        Start 191: bink_flat_fill_cursor_test
+176/238 Test #189: real_bink_dc_array_519_word_bail_test ................................   Passed    0.02 sec
+        Start 192: real_bink_flat_fill_prestage_test
+177/238 Test #190: bink_plane_subchunk_span_test ........................................   Passed    0.02 sec
+        Start 193: real_bink_bitpos_vs_5_3y_test
+178/238 Test #191: bink_flat_fill_cursor_test ...........................................   Passed    0.02 sec
+        Start 194: bridge_diff_py
+179/238 Test #192: real_bink_flat_fill_prestage_test ....................................   Passed    0.02 sec
+        Start 195: lua_host_run_integration_py
+180/238 Test #193: real_bink_bitpos_vs_5_3y_test ........................................   Passed    0.02 sec
+        Start 197: synthetic_ai_runtime_test
+181/238 Test #197: synthetic_ai_runtime_test ............................................   Passed    0.01 sec
+        Start 198: synthetic_navpoint_selector_test
+182/238 Test #198: synthetic_navpoint_selector_test .....................................   Passed    0.01 sec
+        Start 199: synthetic_line_of_sight_test
+183/238 Test #199: synthetic_line_of_sight_test .........................................   Passed    0.01 sec
+        Start 200: synthetic_cover_node_selector_test
+184/238 Test #200: synthetic_cover_node_selector_test ...................................   Passed    0.01 sec
+        Start 201: synthetic_ambient_population_test
+185/238 Test #201: synthetic_ambient_population_test ....................................   Passed    0.01 sec
+        Start 202: synthetic_near_field_vehicle_population_test
+186/238 Test #202: synthetic_near_field_vehicle_population_test .........................   Passed    0.01 sec
+        Start 203: synthetic_near_field_ped_population_test
+187/238 Test #203: synthetic_near_field_ped_population_test .............................   Passed    0.01 sec
+        Start 204: synthetic_traffic_lane_follower_test
+188/238 Test #204: synthetic_traffic_lane_follower_test .................................   Passed    0.01 sec
+        Start 205: synthetic_police_roadblock_spawn_test
+189/238 Test #205: synthetic_police_roadblock_spawn_test ................................   Passed    0.01 sec
+        Start 206: synthetic_notoriety_test
+190/238 Test #206: synthetic_notoriety_test .............................................   Passed    0.01 sec
+        Start 207: synthetic_notoriety_escalation_test
+191/238 Test #207: synthetic_notoriety_escalation_test ..................................   Passed    0.01 sec
+        Start 208: synthetic_police_response_test
+192/238 Test #208: synthetic_police_response_test .......................................   Passed    0.01 sec
+        Start 209: synthetic_sr3steam_test
+193/238 Test #209: synthetic_sr3steam_test ..............................................   Passed    0.01 sec
+        Start 210: synthetic_sr3agora_test
+194/238 Test #210: synthetic_sr3agora_test ..............................................   Passed    0.02 sec
+        Start 211: synthetic_luahost_sweep_blockers_897a7d5_test
+195/238 Test #211: synthetic_luahost_sweep_blockers_897a7d5_test ........................   Passed    0.02 sec
+        Start 212: synthetic_luahost_mission_values_e6691f1_test
+196/238 Test #212: synthetic_luahost_mission_values_e6691f1_test ........................   Passed    0.02 sec
+        Start 213: synthetic_radio_sim_test
+197/238 Test #213: synthetic_radio_sim_test .............................................   Passed    0.01 sec
+        Start 214: real_radio_content_test
+198/238 Test #214: real_radio_content_test ..............................................   Passed    0.01 sec
+        Start 215: real_radio_wav_probe_test
+199/238 Test #194: bridge_diff_py .......................................................   Passed    0.28 sec
+        Start 216: synthetic_physics_vehicle_spec_data_test
+200/238 Test #216: synthetic_physics_vehicle_spec_data_test .............................   Passed    0.01 sec
+        Start 217: synthetic_physics_review_conformance_test
+201/238 Test #217: synthetic_physics_review_conformance_test ............................   Passed    0.02 sec
+        Start 218: synthetic_radio_content_test
+202/238 Test #218: synthetic_radio_content_test .........................................   Passed    0.01 sec
+        Start 219: freeroam_population_test
+203/238 Test #219: freeroam_population_test .............................................   Passed    0.01 sec
+        Start 220: abandoned_vehicle_schedule_test
+204/238 Test #220: abandoned_vehicle_schedule_test ......................................   Passed    0.01 sec
+        Start 221: ambient_vehicle_entry_test
+205/238 Test #221: ambient_vehicle_entry_test ...........................................   Passed    0.01 sec
+        Start 222: road_graph_placement_test
+206/238 Test #215: real_radio_wav_probe_test ............................................   Passed    0.31 sec
+        Start 223: traffic_signals_test
+207/238 Test #195: lua_host_run_integration_py ..........................................   Passed    0.75 sec
+        Start 224: ped_crossing_test
+208/238 Test #169: real_hwy_ramp_props_test .............................................   Passed    1.82 sec
+        Start 225: ped_navigator_test
+209/238 Test #167: real_zone_objects_test ...............................................   Passed    2.79 sec
+        Start 226: real_hood_spawn_category_test
+210/238 Test #222: road_graph_placement_test ............................................   Passed    1.89 sec
+        Start 227: synthetic_luahost_opens_a166141_test
+211/238 Test #227: synthetic_luahost_opens_a166141_test .................................   Passed    0.02 sec
+        Start 228: combat_ai_test
+212/238 Test #228: combat_ai_test .......................................................   Passed    0.01 sec
+        Start 229: npc_ai_runtime_test
+213/238 Test #229: npc_ai_runtime_test ..................................................   Passed    0.02 sec
+        Start 230: combat_ai_host_test
+214/238 Test #230: combat_ai_host_test ..................................................   Passed    0.02 sec
+        Start 231: npc_ai_host_test
+215/238 Test #231: npc_ai_host_test .....................................................   Passed    0.02 sec
+        Start 232: auto_combat_test
+216/238 Test #232: auto_combat_test .....................................................   Passed    0.01 sec
+        Start 233: downed_expiry_test
+217/238 Test #233: downed_expiry_test ...................................................   Passed    0.02 sec
+        Start 234: synthetic_opens_78fb40a_test
+218/238 Test #234: synthetic_opens_78fb40a_test .........................................   Passed    0.02 sec
+        Start 235: synthetic_node_ground_test
+219/238 Test #235: synthetic_node_ground_test ...........................................   Passed    0.02 sec
+        Start 236: synthetic_jump_crouch_test
+220/238 Test #236: synthetic_jump_crouch_test ...........................................   Passed    0.01 sec
+        Start 237: player_vitals_test
+221/238 Test #237: player_vitals_test ...................................................   Passed    0.01 sec
+        Start 238: player_vitals_engine_test
+222/238 Test #223: traffic_signals_test .................................................   Passed    1.91 sec
+223/238 Test #238: player_vitals_engine_test ............................................   Passed    0.01 sec
+224/238 Test #224: ped_crossing_test ....................................................   Passed    1.88 sec
+225/238 Test #225: ped_navigator_test ...................................................   Passed    1.89 sec
+226/238 Test #226: real_hood_spawn_category_test ........................................   Passed    1.90 sec
+227/238 Test #168: real_vorbis_decode_test ..............................................   Passed   25.04 sec
+228/238 Test  #93: synthetic_luahost_refusal_stress_test ................................   Passed   34.44 sec
+229/238 Test #156: real_playtest_smoke_test .............................................   Passed   34.49 sec
+        Start 157: real_activity_e2e_test
+230/238 Test #157: real_activity_e2e_test ...............................................   Passed  333.17 sec
+        Start 158: real_playtest_vehicle_smoke_test
+231/238 Test #158: real_playtest_vehicle_smoke_test .....................................   Passed   33.20 sec
+        Start 159: real_playtest_ground_pavement_collision_test
+232/238 Test #159: real_playtest_ground_pavement_collision_test .........................   Passed   27.64 sec
+        Start 160: real_playtest_traffic_roadblock_smoke_test
+233/238 Test #160: real_playtest_traffic_roadblock_smoke_test ...........................   Passed   32.66 sec
+        Start 161: real_playtest_weapon_fire_smoke_test
+234/238 Test #161: real_playtest_weapon_fire_smoke_test .................................   Passed   25.17 sec
+        Start 162: real_playtest_streaming_longwalk_test
+235/238 Test #162: real_playtest_streaming_longwalk_test ................................   Passed   52.52 sec
+        Start 163: real_playtest_mission_test
+236/238 Test #163: real_playtest_mission_test ...........................................   Passed  177.00 sec
+        Start 164: real_playtest_archive_scan_test
+237/238 Test #164: real_playtest_archive_scan_test ......................................   Passed  176.14 sec
+        Start 196: golden_scene_check
+238/238 Test #196: golden_scene_check ...................................................   Passed  143.38 sec
+
+100% tests passed out of 238
+
+Label Time Summary:
+fast         =  46.22 sec*proc (90 tests)
+golden       = 1035.37 sec*proc (10 tests)
+real-data    =  33.06 sec*proc (16 tests)
+
+Total Test time (real) = 1038.75 sec
+
+The following tests did not run:
+	 64 - real_road_graph_test (Skipped)
+	 67 - real_zone_collision_mesh_test (Skipped)
+	180 - real_bink_frame0_decode_test (Skipped)
+	181 - real_bink_test_vector_validation_test (Skipped)
+	182 - real_bink_idct_test (Skipped)

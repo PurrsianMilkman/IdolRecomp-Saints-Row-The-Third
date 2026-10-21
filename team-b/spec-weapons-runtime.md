@@ -666,12 +666,30 @@ multiplies its own computed damage by the result **before** calling the sink.
 - **Base:** `0x00b86340(V, W, dist², A)`: column `k` = `0x00b86210(V)` (0 = NPC target, 1 = player target,
   2 = third column; HIGH); `near = W+0x14c[k]` (`Damage_Max`), `far = W+0x158[k]` (`Damage_Min`); if
   `far < near` and `Damage_Max_Dist² < dist² < Damage_Min_Dist²` (`W+0x17c`/`W+0x180`) the value is the
-  linear lerp on `sqrt(dist²)`, below the near range `near`, beyond the far range `far`. If both V and A
+  linear lerp on `sqrt(dist²)`, below the near range `near`, beyond the far range `far`.
+  **Exact order [2026-10-19 corrected per Team D emulation D-10: FINAL]:** if `Damage_Min >= Damage_Max` the
+  result is `Damage_Max`. Otherwise, in this order: if `dist² >= Damage_Min_Dist²` (square rounded to single)
+  → `Damage_Min`; else if `Damage_Max_Dist² >= dist²` → `Damage_Max`; else the lerp on `sqrt(dist²)`,
+  computed in double and rounded to single **once** at the end. So for an inverted range
+  (`Damage_Max_Dist > Damage_Min_Dist`) the far test wins and the result is `Damage_Min` (e.g. 100 / 25 with
+  distances 50 / 10 at distance 25 gives 25). If both V and A
   are players and game mode `0x006a3910() == 27`, × `0x006cb2a0()` (mode scalar, OPEN meaning). Then
   × **A's character descriptor `+0x44` = `Firearm_Damage_Multiplier`** (character xtbl, loader at
   `0x00be3ed2`), and when `0x00941f60()` holds × **`W+0x164` `Riot_Shield_Damage_Multiplier`**.
 - **Shotgun pellets** (A not player, `W+0x4c` `Weapon_Class == 3`): × `0x00963920` — distance factor
-  `t = clamp(1 − d/Range_Max, 0, 1)`, result = `max(1, round((1 + (Shots_Per_Round − 1)·t²)·t²))`.
+  `t = clamp(1 − d/Range_Max, 0, 1)`, ~~result = `max(1, round((1 + (Shots_Per_Round − 1)·t²)·t²))`~~
+  **[2026-10-19 corrected per Team D emulation D-9: FINAL]** the factor takes **one random draw**:
+  `A = 1 + (Shots_Per_Round − 1)·t²`; `r = rand(t², 1)` (single precision: `t² + (1 − t²)·u`, `u` in [0, 1));
+  result = `max(1, round_half_away_from_zero(A·r))`. The old formula is only the lowest draw (`u = 0`).
+  Test vectors (Shots_Per_Round 6; u = 0 / 0.25 / 0.5 / 0.75 / near 1): d/Range_Max 0 → 6/6/6/6/6;
+  0.25 → 2/3/3/3/4; 0.5 → 1/1/1/2/2. Player shooters do not use this factor.
+  **RNG (FINAL):** `rand(lo, hi)` is the table random source `0x00dab6a0`: a ring of 8,192 precomputed 32-bit
+  values with a cursor; each draw takes the next value `v` and returns `lo + (hi − lo)·v/2³²` in single
+  precision. The ring is filled at static init (`0x010145e0`) with the first 8,192 outputs of MT19937 seeded
+  with 5489 (MT object `mti` = 0x271; first values 3499211612, 581869302), and is reseeded later from
+  `0x00dad740` (QPC microseconds) at `0x005d2713`, and from a network object id at `0x009c24a1` (HIGH,
+  presumably to share the sequence between co-op peers). Live values are therefore not reproducible; a
+  port may use any uniform source, but the draw must exist.
 - **Hit zone enters as a byte on the shooter, `A+0x13c7`** (the hit-location code; same codes as
   `anim_flinches.xtbl` `Hit_Location`: Head 6, Chest 2, Groin 3, Pelvis 11). In `0x0096aee0`:
   - **6 = head** (and V is not A's own follower, or A is a player): multiplier = **V's descriptor `+0x40`
@@ -720,6 +738,9 @@ multiplies its own computed damage by the result **before** calling the sink.
        chunks; for each chunk `c`: `f = cur/max − c/max` (floored 0); if `f < Damage_assist_start_percent`
        (**0.3**) then `c ×= 1 + (1 − f/0.3)·(Damage_assist_scale_multiplier − 1)` (scale **0.1**, so
        damage falls linearly to ×0.1 as HP → 0); accumulate `c`, `cur −= c`.
+       **[2026-10-19 per Team D emulation D-11: FINAL]** formula confirmed; maxHP is an integer, and a
+       maxHP of 0 makes the original's chunk loop never end (a port should return `dmg` unchanged).
+       Bit-exact evaluation order: Team D `spec-differential-vectors-combat.md` C3.
     d. Bail (player immune) if: player `+0x1d94` bit 2; `0x004d3190(V,0)`; the **full-restore timer
        `V+0x19c4` is armed**; player `+0x1d99` bit 8; or the global game-state `0x012e6aa4` ≠ 2.
 11. Bail if V already dead (`0x0096f4f0`), the **generic damage-immunity timer `V+0x19e4`** is armed,
@@ -746,6 +767,8 @@ multiplies its own computed damage by the result **before** calling the sink.
     `wait = restore_wait_time_ms (6000, 0x014A13E4) − reduction`, where reduction = **3000** if cheat
     bit `0x10000`, else `player+0x276C` (non-players 0); if `P(V)`: `wait ×= R.Health_Regen_Wait_Mult
     (+0x04)` (truncate to int); if `0x009aa4e0(V)` `wait = 0`; arm timer `V+0x19c0` = now + wait.
+    **[2026-10-19 per Team D emulation D-12: FINAL]** the product is single-precision multiplier × int in
+    double, truncated with **no rounding guard**: hard (1.3) gives **7,799** ms, 0.95 gives 5,699.
 20. If `A+0x1c9c` bit 14 (incendiary shots) and W and not `V+0x3b` bit 0 → ignite. If `HP ≤ 0` →
     ragdoll `0x009bc0d0(V,1,1,1)` and death `0x00963530(V)`.
 
@@ -758,6 +781,9 @@ regen-wait timer `+0x19c0` has elapsed, tick `0x009998c0`: skip if `+0x1c98` bit
 `0x014A13CC`) or `restore_per_sec_vampire_sp` (**500**, `0x014A13D0`) when `0x009aa4e0` (HIGH: holding a
 human shield); for players `rate ×= R.Health_Regen_Speed_Mult (+0x08)` (SP 1.3/1.0/1.0, co-op 1.1/1.0/1.0)
 `× player+0x2770` (`Health` unlockable); `HP += rate × (1/30)` (`0x0132a0ac`, fixed 30 Hz step).
+**[2026-10-19 per Team D emulation D-13: FINAL]** HP is single precision and every product is rounded to
+single: `delta = single(rate × single(1/30))`; each tick `HP = clamp(single(HP + delta), 0, maxHP)`.
+0 → 100 HP at 125/s takes **25** ticks (with unlock factor 2: 12). Accumulating in double is off by one tick.
 The `_mp` / `vehicle_mp` variants (`0x014A13D8…13E8`) have no reader in this exe beyond the loader.
 
 #### 4.5.5a Live call-site census of the damage sink (2026-10-13, FINAL for the call sites)
@@ -1015,6 +1041,295 @@ once at boot via a name, the most likely identity is a **cached default/fallback
 record (e.g. "unarmed"/fists)**, not a per-shot "current attacker's weapon" pointer. Not confirmed — a
 good next step: read `0x009e1fc0`'s own name-id `0x21` resolution target and `0x009e3d0f`'s full body.
 
+### 5.4 Reload, switching and weapon selection (2026-10-18)
+
+Closes SPEC-GAPs WH-4, WH-5 and WH-11 of `spec-conformance-review.md`. This extends §2.2c's resolved reload arithmetic (`0x009c0a50`), §3.2, `spec-player-runtime.md` §8.4/§10.2 (holster, vehicle-entry cancel), `spec-lua-api-behaviour.md` §9.19/§26.18/§26.19 (`0x00600720`, radial and grenade natives), `spec-tables-weapons-combat.md` §2 (fields, flags, the `Inv_Slot` enum) and `spec-anim-runtime.md` (clip duration = header word `+0x06` / 30 s; trigger mechanics). Those findings are not repeated here. Method: capstone listings of every function named below; data from `weapons.xtbl`, `tweak_table.xtbl`, `unlockables.xtbl`, `anim_groups.xtbl`, `anim_files.xtbl`, the patch copy of `PLYM.xtbl` (`patch_compressed.vpp_pc`) and the `.anim_pc` headers in `preload_anim.vpp_pc`. Labels: **FINAL** = read in the instructions or the data; **HIGH** = structural inference; **GUESS** = not established. Helper scripts: `tools/scratchpad/wh_*.py`.
+
+#### 5.4.1 Reload: request, duration, completion
+
+**Fields (FINAL).** The equipped weapon instance (holder = `0x00941f40(human)`) keeps the reload deadline in the timer record at holder `+0x1cc` (the `0x00d9e…` family of §3.1). "Is reloading" is `0x009ba8b0(human)`, which checks that `+0x1cc` is armed. The player's reload scalar is the float at player `+0x28b0`, which is 1.0 at construction (`0x009de970`).
+
+**Request (FINAL).**
+- **Manual request:** `CBA_OFC_PICKUP_RELOAD` (CBA id 2) goes through the prompt routine `0x005b6af0`. A tap passes the 0.1 threshold test `0x005bde80` and walks the handler table at `0x0111f328` (walker `0x005b68e0`). Its slot 19 is `0x009da710`, which calls `0x009c4870(human, 0)` when the held weapon passes the ranged-class test `0x00b81440`. Holding the button for `Dual_wield_hold_time_ms` (150) walks `0x0111f380` instead (pickup and dual-wield), not reload.
+- **Automatic request:** the per-frame weapon tick `0x009d26b0` calls `0x009c4870(human, 0)` for the **local player only** (`0x0091f5e0`). It does so when the weapon is ranged and the clip `+0x1a4` ≤ 0, or when the deferred flag holder `+0xdc` bit `0x40` is set, provided that `0x009c05b0(human, 0)` passes and the human has authority (`0x008addb0`). So auto-reload on an empty clip is engine behaviour. Team B's CHOSEN auto-reload is correct.
+
+**Gates in `0x009c4870(human, force)` (FINAL).**
+1. Refused unless the weapon is ranged (`0x00b81440`).
+2. Without `force`, refused when the clip is at maxClip (`0x00b81c30`) and so is the secondary clip `+0x1b0` (only weapons with flag-A bit `0x200000` have a secondary).
+3. Refused when a reload is already running. While running, with `0x00985d80(human, 7, 0)` true and `0x009715d0` false, it cancels the running reload instead.
+4. Refused in several busy states: `0x009562d0`, `0x0095d720`, human `+0x1bd0`, anim tags `0x1d56`/`0x1d5c`, `0x00985d80` states 4/5/6, `0x00943900`, `0x00942040`, `0x00942060`, and the human-shield checks `0x009aa260`/`0x009a9550`.
+5. In a vehicle (`0x009b9160`), for classes other than `launcher` 4 and `vehicle` 22, it may instead set holder `+0xdc` |= `0x40` and return. The tick then retries the reload later (HIGH).
+6. Then `0x009c05b0(human, force)` must pass. It requires all of the following:
+   - not `0x00956390`;
+   - room in the clip (or `force`);
+   - none of the anim tags `0x1d6c`/`0x1d8d`/`0x1d8f`/`0x1da1`/`0x1d56` running;
+   - authority (or `force`);
+   - word-B flag `0x80` "disallow reload" clear;
+   - the overheat check `0x00922dc0` passing when `+0x3ac` & `0x60`;
+   - human `+0xe8` bit `0x100` clear;
+   - without `force`, reserve > 0 from the getter `0x009bff20` (§2.2c).
+
+   If it fails and the clip is ≤ 0, the reload is not started. A **non-player** is then switched to inventory slot 0 (`0x00600720(inv, 0, 1, 0, 0)`, empty-handed). A player only gets `0x009bc0d0(human, 0, 1, 1)` and keeps the empty weapon (see §5.4.3 for the player rule).
+
+**Choosing the animation (FINAL).**
+- **Group argument:** `0x009c1980(human, group)` receives `Reload_Animation_Group` (`+0x38`, which defaults to `Animation_Group` `+0x30`). It returns an action id from the compiled-in preset list `0x011507f8`, or −1. The group is an index into the 34-name list at `0x012F60C8`.
+- **Groups that have a reload animation:** only `AK` 1, `Pistol` 2, `SMG` 3, `RPG` 4, `Shot Gun` 7, `SawedOff` 8, `Rifle` 9, `Sniper` 10, `Stun Gun` 16, `Minigun` 20, `DualPistol` 26, `Luchador` 31, `StagRifle` 32 and `Genki` 33. Every other group (for example `Default`, the melee groups, `Thrown`, `Riot`, `Flamethrower`) returns −1, which means a reload without animation.
+- **On foot:** a player gets `0x180` `Reload Network` (PLYM `Default` maps it to the blend tree `player reload base`). An NPC gets `reload`/`reload b`/`reload c` round-robin, using a global counter mod 3 at `0x0262e8b8`.
+- **Crouched, falling, skydiving, in a vehicle:** these use `crouch reload` `0x27f`, `cvr crouch reload` `0x283`, the freefall reloads `0x489`–`0x48b`, and the vehicle or heli variants `0x3f4`–`0x43a`. In human-shield mode the action is `hs reload` `0x365`, except for groups 4, 30 and 33, which get none.
+
+**Duration and time scale (FINAL unless marked).**
+1. If the action is −1, or the human is a player and the weapon has word-B flag `0x40000000` ("player instant reload", for example `brute_minigun`), there is no animation. If `Reload_override_time_sec` (`+0x3c`) > 0, the timer is set to `trunc(override × 1000)` ms with no scalar applied. Otherwise the transfer runs immediately (`0x009c0970`) and the call returns 1.
+2. Otherwise:
+   - The controller's group is switched to `Reload_Animation_Group` while the clip is looked up (`0x004b2140`) and restored afterwards. HIGH: on the on-foot path the skip condition reads a stack byte that only the in-vehicle path writes.
+   - The clip is that of action `0x271` `reload`. The player's `Reload Network` is looked up through `reload` (`0x009c4cd5`).
+   - `len` = `0x004bd8c0(clip)` = frames / 30 s.
+3. Duration and rate:
+   - With an override: `dur = override` and `rate = len / override` (the animation is stretched to fit).
+   - Without an override: `dur = len` and `rate = 1.0`.
+4. **Reload-speed upgrade:** for a player-class human (`0x00853b30(h, 0x21)` and `0x00971cf0`), with `s` = player `+0x28b0`, the engine applies `rate *= s` and `dur /= s`.
+   - `s` is written only by the replicated setter `0x009e1250` ("reload_scalar"), which is called from the unlockable apply `0x0071f170` for type 55 `Reload_Speed_Bonus` (`spec-tables-progression.md`). It **replaces** the value; it does not multiply.
+   - `unlockables.xtbl`: `Faster_Reload_1/2/3` = **1.25 / 1.5 / 1.75**.
+   - The reload sound `0x009c0ac0` chooses one of 4 variants by the thresholds 1.24 / 1.49 / 1.74.
+   - There is no `Reload_Speed` tweak in `tweak_table.xtbl`.
+5. Playback:
+   - On the human: `0x00959b50(human, action, tag 0x1d5b, …, blend 0.0, rate)`.
+   - On the weapon object `+0xe8`: `reload player` `0x284` for a player when the weapon's set has it, otherwise `reload` `0x271`, with the same rate.
+   - Then the sound, and then holder `+0x1cc` = `trunc(dur × 1000.0)` ms (double `0x012a2d90`).
+
+**Completion and ammo transfer, WH-5 (FINAL).**
+- **At the end of the timer, not at an animation event.** The tick `0x009d26b0` waits until `+0x1cc` is armed and has elapsed (`0x00d9e1e0`) and the human has authority. It then calls `0x009c0970(human)`, disarms `+0x1cc`, and zeroes the refire timer `+0x1c4`.
+- **Triggers are not used.** The trigger ids `clip on` (`0x0153bdfc`) and `clip off` (`0x0153bdf8`) are registered by `0x0073d550` but have no other reader in the executable. The `Misc/prop` "Move clip" frames in `anim_files.xtbl` only move the magazine prop (HIGH).
+
+`0x009c0970`:
+1. If ammo is unlimited, `0x00b816d0(holder, 0|1)`, or the owner is not of player type `0x21`, the clip is set straight to maxClip. NPCs never draw on a reserve. `0x00b816d0` is true for the cheat globals (`0x0262e691`, `0x014f71e8` bit `0x100`, `0x014f71ea` bit 1, `0x006e45b0`) or for the instance bits `+0x1a0` `0x40` (primary) and `0x80` (secondary).
+2. If the owner class has an ammo pool (class-table `+0xa` bit 2) and the class is not `vehicle`, `0x00b6ef80` takes `min(maxClip − clip, pool)` from the owner's pool for the weapon's Ammo row (`+0x110`, and `+0x114` for the secondary) through `0x00b6e300`. This is the player path, and it supports WH-6's "reserve keyed by Ammo row". The local player's HUD is then refreshed (`0x007f8b40`).
+3. Otherwise the §2.2c arithmetic at `0x009c0a50` runs.
+4. **Shotguns load the whole clip at once (FINAL).** There is no per-shell loop. `0x009c0970` is called once, and the shotgun clips are single whole-reload animations.
+
+**Interrupt rules (FINAL for the call sites).**
+- **What a cancel does:** `0x009c07a0(human)` disarms `+0x1cc` and sets human `+0x1a10` |= `0x80`. It ends tag `0x1d5b` on the human and action `0x271` on the weapon with blend `Reload_cancel_blend_out_time_sec` (0.2, global `0x0262e68c`). For a `launcher`, it also deletes the attached child objects (the loaded rocket). It arms human `+0x19bc` = 5000 ms and posts a sound event (`0xc9c88782`).
+- **No ammo moves on a cancel.** Nothing is transferred, and a partly played reload gives no rounds.
+- **The cancel is called by** (36 call sites):
+  - a weapon switch, from inside `0x00600720` itself (FINAL; Team B's "switch cancels reload" is correct);
+  - vehicle entry state 0, `0x00af9a90`;
+  - a melee attack start (`0x00950c30`) and the melee-move helper `0x00964230`;
+  - ragdoll, `0x0097cf80`;
+  - jump, `0x0098bea0`, reached from player input `0x005b2c6b` (HIGH on its role);
+  - fall to freefall, `0x0098ae10` (which also holsters);
+  - the stamina sprint step `0x009ffd00`, but only on the path where sprint is released while `+0x1d96` bit 2 is set;
+  - human-shield and other stance wrappers (`0x00973a90`, `0x009b61d0`);
+  - the Lua natives (`0x00a275e0`, `0x00a3f7d0`).
+- **Not found:** no cancel was found on the sprint-start branch or on the damage and flinch path (GUESS: neither cancels).
+- **Idle top-up (FINAL).** `0x009d18b0` runs for player-class humans while the always-1 byte `0x0130ad8e` is set. Each frame the human is "busy", it re-arms `+0x19bc` = 5000 ms. Busy means a vehicle seat (`+0x16c8` ≠ 0), movement state `+0xccc` = 3, freefall (`0x00994f40`/`0x00994f60`), scope (`+0x1d95` bit `0x10`), in a vehicle (`0x009b91e0`) or captured (`0x0060b530`). The per-shot path `0x009d0500` and the cancel also arm it. When it expires with a ranged weapon whose clip < maxClip, `0x009c0970` runs **with no animation**. So a cancelled or partly emptied clip refills silently after 5 s of calm.
+
+#### 5.4.2 Switching: holster and draw (WH-4)
+
+**There is no flat switch timer (FINAL).** `0x00600720(inv; selector, 1, 0, 0)` on inventory `+0x1b78` runs these steps in order:
+1. It ends tag `0x1d56` with blend 0.2 and cancels any reload.
+2. It zeroes the new weapon's timers `+0x1c4`/`+0x1c8` and sets `+0x1d4` = −1.
+3. It updates the slot memory: `+0xa9` = old `+0xa8`, and `+0xa8` = `Inv_Slot` of the weapon being **left**.
+4. It writes the new handle to `+0x90`/`+0x94`, or to `+0x98`/`+0x9c` for flag-A bit `0x10000000`.
+5. It stows the old weapon at once (`0x008fb4a0`, `0x00b81e40(old, 1)`; there is **no holster animation**).
+6. It asks `0x009568d0` for the draw action. That is `equip` `0x1f6`, or `equip human shield` `0x1f7` in human-shield mode. It is −1 when the target is empty-handed or when the human is in a vehicle, skydiving, or under tags `0x1d53`/`0x1d54`/`0x1d95`.
+7. It plays the action with tag `0x1d86`, rate 1.0 and no reload scalar. If no clip starts, the weapon is attached at once (`0x008fea50(item, human, 1)`).
+
+**Fire-ready (HIGH).** `0x009ba310(human)` (weapon-ready predicate; callers `0x009bd0a0`, `0x009bf780`, `0x009cbcf0`, `0x009d18b0`) returns false while tag `0x1d86` runs and its `impact start` trigger (id at `0x0153be20`) has not been passed (`0x004b4320`). So the weapon can fire from the equip clip's `impact start` frame. `0x005fe220` handles the attach at that trigger.
+
+**Per-class values for the male player (PLYM → `Life_Default` → `anim_Default`; groups fall back through `anim_groups.xtbl` parents; FINAL for the frames, HIGH for the inheritance).**
+
+| Class (weapons) | Reload group → clip | Reload | Equip clip, `impact start` | Ready / full |
+|---|---|---|---|---|
+| Pistol (`Pistol-Gang`, `Pistol-Police`) | `Pistol` → `plym_ps_sd_rload_mvng` 44 f | **1466 ms** | `plym_ps_eqip` 14 f, f10 | 333 / 467 ms |
+| SMG (`SMG-Gang`: group `Pistol`) | `Pistol` 44 f | **1466 ms** | `Rifle` → `plym_rfl_sd_equip` 17 f, f9 | 300 / 567 ms |
+| SMG (`SMG-Storm`: group `Rifle`) | `Rifle` → `plym_rfl_sd_reld` 71 f | **2366 ms** | as above | 300 / 567 ms |
+| Shotgun (`Shotgun-Gang`, `-Bling`: `SawedOff`) | `plym_sht_sd_rload` 85 f | **2833 ms** | `SawedOff`→`Shot Gun`→`Rifle` 17 f | 300 / 567 ms |
+| Shotgun (`Shotgun-Police`: `Shot Gun`) | `plym_pump_sd_rload` 96 f | **3200 ms** | `Rifle` 17 f | 300 / 567 ms |
+| Rifle (`Rifle-Gang`, `Rifle-NG`) | `plym_rfl_sd_reld` 71 f | **2366 ms** | `plym_rfl_sd_equip` 17 f, f9 | 300 / 567 ms |
+| Sniper (`Special-SniperRifle`) | `plym_snip_stnd_rload` 79 f | **2633 ms** | `Rifle` 17 f | 300 / 567 ms |
+| RPG (`Explosive-RocketLauncher`) | `plym_rpg_sd_rload` 38 f | **1266 ms** | `plym_rfl_sd_equip` 17 f | 300 / 567 ms |
+| Grenade launcher (group `Rifle`, reload group `SawedOff`) | 85 f | **2833 ms** (HIGH) | `Rifle` 17 f | 300 / 567 ms |
+| Melee 2h / brute heavy | — (no reload) | — | `plym_bat_sd_equp` 24 f f12; `plym_brt_equip` 41 f f1 | 400 / 800; 33 / 1366 ms |
+
+- **Walk and run reloads:** their clips have the same frame counts as the standing clip (pistol 44, rifle 71, pump 96, sawed-off 85), so the timer does not depend on movement.
+- **Groups without an `equip` clip anywhere in their chain:** for example `Default`, `Melee`, `Thrown`, `Knife`. They draw instantly (HIGH).
+- **Rounding:** values are `trunc(frames/30 × 1000)` and may differ by ±1 ms from the tick conversion.
+
+#### 5.4.3 Selection (WH-11)
+
+**Slot model (FINAL).**
+- **Primary slots:** the inventory holds one handle pair per `Inv_Slot`, at `+slot×8` for slots 0–8. Slot 10 (`single_use`) is at `+0x60`. The lookup `0x005fec20` returns null for slot 9, for 11 and for 255. Selector 12 means "the slot in `+0xa8`", which is the previous weapon.
+- **Grenades:** the four types live in a separate 4-entry table (`0x005fed90(i)`). The current type comes from `0x005fdfb0`, and the setter is `0x005fe530`. Save-format §10.3's "8 + 4" matches this.
+- **One weapon per slot:** there is no cycling within a slot.
+- **Disable bytes:** the 12 bytes at `0x022b7558` (`0x007f01d0(i)`) are per weapon slot 0–7 plus grenades 8–11. `inv_weapon_disable_all_slots` writes them.
+
+**Inputs, read by `0x005ade10(player, 0)` each on-foot frame when `0x007f1740` allows it (FINAL).**
+- `CBA_GAC_WEAPON_SELECT_1..8` (ids `0x5c`–`0x63`) select **slot = id − `0x5c`** (key 1 = slot 0 empty-handed … key 8 = slot 7 special). Empty slots are ignored except slot 0. A weapon must also pass `0x009bc2c0(player, def)`.
+- `CBA_GAC_WEAPON_SWITCH_CW`/`_CCW` (`0x5a`/`0x5b`) map to `0x005ff950(1/0)`, with selectors `0x15`/`0x16`. A press is accepted only when the timer at `0x012e6dec` is idle, and the timer is then set to `Inventory_next_prev_delay_ms` (**50**).
+- `CBA_GAC_GRENADE_SELECT_1..4` (`0x64`–`0x67`) select a grenade type directly. `CBA_GAC_GRENADE_SWITCH` (`0x68`) steps `(current+1) mod 4`, skipping empty or disabled types.
+- After a switch, CBAs 7–11, `0x12`, `0x13`, 2 and `0x52` are suppressed for that frame.
+
+**Cycle order, `0x005ff950` (FINAL).**
+- Start from the current `Inv_Slot` and step ±1, wrapping as 10 → 0 and −1 → 10.
+- Skip slot 8 (vehicle) and empty slots. A slot is also skipped when it fails the seat test `0x00b869b0` while in a vehicle, when `0x005fd880` holds (melee slot exempt), or when it is disabled.
+- **Reaching slot 0 returns null = empty-handed**, so fists are a stop in the cycle.
+- The effective forward order is melee → pistol → smg → shotgun → rifle → explosive → special → single_use → fists. The `grenade` slot 9 never matches.
+
+**Radial (PC).**
+- **Show and hide (FINAL):**
+  - The engine only toggles the flag `0x012ffc6b` and calls the Lua callbacks `hud_inventory_show` (`0x007f00d0`) and `hud_inventory_hide` (`0x007f0140`).
+  - Holding `CBA_OFC_WEAPON_MENU` (id 0) for `Inventory_quickswap_delay_ms` opens the radial. That value is **0**, which per its description disables quickswap, so the radial opens on the first held frame.
+  - A release before the delay would issue selector 12 (last weapon).
+  - Any key or wheel switch shows the radial and hides it `Inventory_close_delay_ms` (**650**) later.
+  - Picks made inside the radial arrive through `game_use_radial_menu_item` (indices 0–7 weapons, 8–11 grenades, 12 last weapon; Lua spec §26.18).
+- **Time scale:** **no time-scale call is made on any engine path that reads the flag** (FINAL for the engine). Whether the Lua script slows time was not read (GUESS: no).
+
+**Out-of-ammo auto-switch for the player, `0x009e62f0` (FINAL).**
+- **When it runs:** after each shot, from `0x009d0ce0` (also from `0x0096dcd0`).
+- **Trigger condition:** the held ranged weapon (not `waterspray`) has clip ≤ 0, clip + reserve (`0x009c0090`) ≤ 0, and no unlimited bits.
+- **Exceptions:** the grenade companion still has ammo (flag-A bit `0x4000000`), overheat applies, `0x009562d0` holds, or `Special_Case_Type` is 7 (satellite drone), or 0 (RC gun) while an RC vehicle is live.
+- **Choice, `0x005ff7a0(1, 1, 0, 0, 0)`:**
+  1. A `single_use` item with ammo.
+  2. Otherwise the vehicle-slot item.
+  3. Otherwise the priority table `0x012ed090` (pairs of slot and dual flag, the dual flag compared with holder `+0x1a1` bit 2): 10, 8, 6, **5 rifle, 3 smg (dual), 4 shotgun, 3 smg, 2 pistol (dual), 2 pistol, 1 melee-slot ranged**, 7. Only the slots in `0x012ed0a8` = {5, 4, 3, 2, 1} are allowed, and each needs ammo (`0x00b81680`: clip, reserve or secondary > 0, or `Ammo_per_Shot` 0).
+  4. Otherwise the melee fallback `0x005ff680`: a melee `single_use` item, else slot 1.
+  5. If nothing is found, the empty weapon stays in hand (dry fire).
+- **Effect:** the switch is `0x00600720(inv, Inv_Slot, 1, 0, 0)`, after which the new holder gets `+0x1a0` |= `0x20`.
+- **NPCs** go empty-handed instead (§5.4.1).
+- **Cross-reference:** `0x009e62f0` reaches the inventory through `[0x0262edfc]`'s `+0x1b78`/`+0x1e48`, which is evidence for §5.3 that `0x0262edfc` is the local player rather than a cached weapon definition (HIGH).
+
+#### 5.4.4 Port recipe
+
+1. **Per weapon:** `maxClip` (`0x00b81c30`), `reloadGroup = Reload_Animation_Group ?? Animation_Group`, `override = Reload_override_time_sec`, the word-B flags `0x80` and `0x40000000`, the unlimited bits, and the Ammo-row pool.
+2. **`reloadMs`:**
+   - Return "instant" if `reloadGroup` is not in {1, 2, 3, 4, 7, 8, 9, 10, 16, 20, 26, 31, 32, 33}, or if the human is a player and the weapon has `0x40000000`. In the instant case, use `override × 1000` when `override` > 0, else 0.
+   - Otherwise `len` = frames of `reload` in the PLYM group chain / 30, `dur = override > 0 ? override : len`, `dur /= scalar` (1.0, 1.25, 1.5 or 1.75), `ms = trunc(dur × 1000)`.
+3. **Request:** apply the §5.4.1 gates, play the animation, and arm the deadline. **Tick:** at the deadline, run `take = min(maxClip − clip, pool)` once. Auto-request when clip ≤ 0, can-reload passes, and the human is the local player.
+4. **Cancel** on switch, vehicle entry, melee, ragdoll, jump or freefall: disarm with no transfer, blend the animation out over 0.2 s, and arm the 5000 ms idle top-up.
+5. **Switch:** stow at once, then play `equip`. `fireReadyMs = impactStartFrame × 1000 / 30`. Groups without an `equip` clip draw instantly. This replaces Team B's 500 ms.
+6. **Selection:** number keys select slot k−1; CW/CCW use the §5.4.3 cycle with a 50 ms repeat; grenades select directly or round-robin; the radial is shown for 650 ms after a switch.
+7. **Auto-switch:** after a shot, when the weapon is fully empty, use the priority list.
+
+#### 5.4.5 Test vectors
+
+1. `Pistol-Gang`, clip 0, pool 40, scalar 1.0 → deadline 1466 ms. At t = 1466 ms the clip is 8 and the pool is 32. FINAL.
+2. As vector 1 with `Faster_Reload_3` (1.75) → 838 ms, animation rate 1.75. FINAL.
+3. `Rifle-Gang` clip 12/30, pool 10 → 2366 ms. Then clip 22, pool 0. FINAL.
+4. `Shotgun-Police` clip 3/8, pool 20, jump at t = 1000 ms → clip 3 and pool 20 (no partial shells). With no further input, 5000 ms after the cancel the clip silently becomes 8 and the pool 15. FINAL.
+5. `TempPickup-LuchadoreGrenadeLauncher` (override 2.5, `Luchador` → `SawedOff` 85 f) → 2500 ms, rate 2.8333/2.5 = 1.133. HIGH (parent fallback).
+6. `brute_minigun` (player instant reload, no override) → transfer on the request frame, `+0x1cc` never armed. FINAL.
+7. Switching pistol → `Rifle-Gang` during a reload → the reload is cancelled and the clip unchanged; the pistol is stowed at t = 0; firing is allowed at 300 ms; the `equip` clip ends at 567 ms. HIGH (ready time).
+8. Inventory {melee, pistol, rifle, explosive}, holding pistol: CW → rifle; CW → explosive; CW → fists; CW → melee. CCW from melee → fists. FINAL.
+9. Holding `Explosive-RocketLauncher`, the last rocket is fired with pool 0; the rifle has 0 total, the shotgun 6, the pistol 20 → auto-switch to the shotgun. FINAL.
+10. PC: number key 3 → pistol, radial shown and hidden 650 ms later. Two CW presses 30 ms apart → only one step. FINAL.
+
+**Residual:** still open are:
+- the female `PLYF` overrides;
+- the in-vehicle reload clips and the `+0xdc` deferral;
+- whether sprint start or flinch cancels a reload;
+- `0x004b4320` when an `equip` clip has no `impact start`;
+- the on-foot group-swap stack byte;
+- the Lua-side radial (time scale, in-wheel navigation).
+
+#### 5.4.x Team B W2 follow-ups (2026-10-19)
+
+Answers Team B's seven open questions on §5.4. Method as in §5.4: capstone listings (`tools/scratchpad/wh_q.py`, `wh_w2*.py`), `weapons.xtbl`, `anim_groups.xtbl`, the patch `PLYM.xtbl`, and `.anim_pc` header word `+0x06` from `preload_anim.vpp_pc` (`tail2_clips.py`). Labels are as in §5.4.
+
+**1. Reload clip durations, male player (clip FINAL; weapon→group from `weapons.xtbl` FINAL; parent fallback HIGH).** `ms = trunc(frames / 30 × 1000)`, scalar 1.0, no override.
+
+| Group (index) | Weapons using it as reload group | PLYM clip (via `anim_groups` parent) | Frames | ms | Label |
+|---|---|---|---|---|---|
+| `AK` (1) | none. No weapon row names `AK`, and neither `PLYM` nor `anim_groups.xtbl` defines the group. The AK-style rifles (`Rifle-Gang`, `Rifle-NG`) use `Rifle`. | — | — | `Rifle` 71 f = **2366** for those rows | FINAL (data) |
+| `SMG` (3) | none directly | `plym_ps_sd_rload_mvng` (own entry) | 44 | 1466 | FINAL |
+| SMG rows | `SMG-Gang` (reload group `Pistol`), `tec9` (`Pistol`) | `plym_ps_sd_rload_mvng` | 44 | **1466** | FINAL |
+| SMG rows | `SMG-Storm`, `SMG-Cyberspace` (`Rifle`) | `plym_rfl_sd_reld` | 71 | **2366** | FINAL |
+| `Stun Gun` (16) | none (`stun_gun` uses `Pistol`) | chain `Stun Gun`→`Melee 1h`→`Melee`→`Default` has no `reload` | — | none | FINAL (data) |
+| `stun_gun` row | `Pistol` | `plym_ps_sd_rload_mvng` | 44 | 1466, but `infinite magazine capacity` + `unlimited ammo` mean the clip never empties | HIGH |
+| `Minigun` (20) | `brute_minigun` | chain `Minigun`→`Default`: no `reload` clip, and the row has `player instant reload` | — | **0** (instant) | FINAL |
+| `minigun` row | `Rifle` | `plym_rfl_sd_reld` | 71 | **2366** | FINAL |
+| `DualPistol` (26) | no row names it; selected when pistols are dual-wielded | `plym_dps_sd_rload` (walk, run and crouch also 44) | 44 | **1466** | clip FINAL; selection GUESS |
+| `StagRifle` (32) | `Rifle-STAG` | `plym_rfl_sd_oh` (overheat vent) | 70 | **2333** | FINAL. The row has `infinite magazine capacity` and `play reload anim`, so this is the vent clip. |
+| `Genki` (33) | `Explosive-Genki` | `plym_genki_sd_rload` (all 8 move variants are 38) | 38 | **1266** | FINAL |
+
+- **Group with a preset action but no clip in the chain** (`AK`, `Stun Gun`, `Minigun`): `0x004bf5e0` returns null, and `0x009c4870` skips the length read (`0x009c4cf6`). The duration keeps its initial value, which was not traced. GUESS: 0, which means an instant reload.
+
+**2. Equip groups (FINAL for the data; impact frames from §5.4.2).**
+- **Melee 2h:** `plym_bat_sd_equp`, 24 f, impact f12, so ready at 400 ms and full at 800 ms. This covers the `Melee 2h` rows (bats, `decker_sword`, the `WP_*` props) and `Sledge` (`sledgehammer`, `RocketHammer`), which inherits it as `Sledge`→`Melee 2h`.
+- **Brute:** the `Minigun` group (`brute_minigun`) uses `plym_brt_equip`, 41 f, f1, so ready at 33 ms and full at 1366 ms. The `Brute` group →`Default` and `brute_flamethrower` (`Flamethrower`→`Minigun`) also use `plym_brt_equip`. `Brute` itself has no `equip`, so it draws instantly (HIGH).
+- **SMG and AK:** the SMG group's parent is `Rifle` and it has no `equip` of its own, so it uses `plym_rfl_sd_equip` (17 f, f9, 300/567 ms). All of `SMG-Gang`, `SMG-Storm` and `SMG-Cyberspace` have `Animation_Group` `Rifle` directly. `tec9` and `stun_gun` use `Pistol` (`plym_ps_eqip`, 14 f, f10, 333/467 ms). `AK` is undefined, so it would draw instantly (GUESS; no row uses it).
+
+**3. Draw-window and reload gates.**
+- **Fire-ready predicate `0x009ba310(human)` (FINAL for the order).** It returns false when any of these holds:
+  - tag `0x1d86` (equip) is running and its `impact start` trigger (id `[0x0153be20]`) has not passed (`0x004b4320` → `0x004c7090`);
+  - action `0x30c` or `0x3da` is running and the trigger `[0x0153bdd4]` has not passed;
+  - none of the actions `0x339`/`0x337` is running and either action `0x30d` is running or `0x00987ae0(human)` fails;
+  - the human is in a vehicle (`0x009b9160`) and holds no weapon.
+  
+  Otherwise it returns true.
+- **Equip clip without `impact start`:** `0x004c7090` finds no matching trigger and returns false. Firing is then blocked until tag `0x1d86` ends, which is the full clip length (HIGH).
+- **Reload start is blocked by** the §5.4.1 gate list (FINAL). That list covers:
+  - an active reload;
+  - the busy states `0x009562d0`/`0x0095d720`/`+0x1bd0`;
+  - tags `0x1d56`/`0x1d5c`;
+  - `0x00985d80` states 4/5/6;
+  - `0x00943900`/`0x00942040`/`0x00942060`;
+  - human shield;
+  - in `0x009c4870`, also tags `0x1d8d`/`0x1d8e`;
+  - in `0x009c05b0`, `0x1d6c`/`0x1d8d`/`0x1d8f`/`0x1da1`/`0x1d56`;
+  - disallow-reload, overheat, human `+0xe8` bit `0x100`, and no reserve.
+- **Tag `0x1d86` (draw) is not in either list,** so a reload may start during the draw window (HIGH).
+
+**4. `0x009c07a0` inside `0x00600720` (FINAL).** The call at `0x00600b30` is guarded by `0x009ba8b0(human)` ("is reloading"), so it runs only when a reload is in flight. The body:
+1. Re-checks the holder's `+0x1cc` armed (`0x00d9e4c0`).
+2. Sets human `+0x1a10` |= `0x80` and disarms `+0x1cc` (= −1).
+3. If tag `0x1d5b` is running, ends it (`0x0073ec10`). For a `launcher` (`+0x4c` = 4) it also deletes the attached child objects of both the human and the weapon (`0x00853ea0`): the loaded rocket. It then blends tag `0x1d5b` out over `[0x0262e68c]` (0.2 s).
+4. Blends weapon action `0x271` out the same way.
+5. Arms `+0x19bc` = 5000 ms.
+6. Posts sound `0xc9c88782`.
+
+No ammo moves. This is the same routine as §5.4.1's cancel; the switch adds nothing else.
+
+**5. Auto-switch priority and the exceptions (FINAL).**
+- **Priority table `0x012ed090`:** 11 pairs (slot, dual) = (10,0) (8,0) (6,0) (5,0) **(3,1)** (4,0) (3,0) **(2,1)** (2,0) (1,0) (7,0). The walker `0x005ff220` compares the dual byte with **exact equality** against holder `+0x1a1` bit 2.
+  - Each slot holds one weapon, so a dual-wielded SMG ranks above the shotgun and a single SMG ranks below it.
+  - Dual pistols rank above a single pistol only nominally, because a slot is either dual or not.
+- **Per-candidate filters:** the weapon must be ranged (`0x00b81440`) and not blocked by `0x005fd880`. When an owner check is set, it must not be disabled (`0x007f01d0`). Optional flags reject `+0x54` slot 6/7, class `0x12` and class 8. In a vehicle, it must also pass `0x00b869b0`.
+- **Fallback when the owner flag `+0x28ac` bit 2 is set:** the table is skipped and the melee fallback `0x005ff680` is used. That fallback rejects class `0x12`/8 results under the same flags.
+- **Grenade exception in `0x009e62f0`:** applies when the held weapon has flag-A `0x4000000`. The switch is skipped when the current grenade type (`0x005fe490`) has pool > 0 (`0x00b6ed40`) or is unlimited (`0x00b816d0` for either bit).
+- **Remote-control exception:** after a candidate is found, the switch is skipped when `0x009562d0` holds, when `Special_Case_Type` (`+0x1c`) = 7, or when it is 0 and the handle at human `+0x16d8`/`+0x16dc` still resolves (`0x004dcf00`, a live RC vehicle).
+- **Class `waterspray` (`0x14`)** never triggers the auto-switch.
+
+**6. Pool seed on a grant, `0x00b84330(human, def, unlimited, amount, …)` (FINAL for this routine; HIGH that walk-over pickup uses it, see §5.1 OPEN).**
+1. **Repeat pickup:** if the slot is already filled, the old instance's totals (clip + reserve, and the secondary) are recorded on the new instance (`+0x2c4`/`+0x2c8`, or `0x7fffffff` if unlimited). The old instance is removed (`0x00602020`) and a new one is created (`0x00601380`). There is no "add to the existing weapon" path; a repeat pickup is a replace.
+2. **New instance:** `+0x1a1` |= 2, and `+0x1a0` bits `0x40`/`0x80` = bit 0 of the `unlimited` argument. The clip `+0x1a4` = maxClip (`0x00b81c30`).
+3. **Pool withdraw:** `0x009bfea0(human, inst, cap)` withdraws `min(cap, pool)` from the pool (`0x00b6eef0`). Here `cap = 0x009c0060` = the Ammo row's maximum, `0x00b6e280`. That maximum is `round(Max_in_Reserve` (or `Level_2/3/4_Ammo` by upgrade level) `× capacity scalar) + overflow`.
+4. **Pool add:** `amount < 0` means the default, `cap`. Then `0x009bfd70` → `0x00b6e330` adds `min(amount, cap − pool)` (no clamp while `[0x028cdc50]` is set). Owners without a pool add to instance `+0x1ac` instead.
+5. **Secondary:** repeated for weapons with flag-A `0x200000` (`+0x1b0` = maxClip, Alt_Ammo pool).
+6. **Net result:** both a first pickup and a repeat pickup with the default amount leave clip = maxClip and pool = cap (a full reserve). An explicit amount N leaves pool = min(N, cap).
+7. **Equip on grant:** if requested, the weapon is selected (grenade `+0x54` 9 via `0x005fe530`, otherwise `0x00600720`).
+
+**7. Word A → `+0x1a0` bit `0x40` (FINAL).**
+- **Mapping:** yes, through the instance property loader `0x00b85560`, which sets `+0x1a0` bit `0x40` = word-A bit `0x8` (`unlimited ammo`). The same loader sets bit `0x80` = word-A bit `0x1` (`alt unlimited ammo`), but only when word-A `0x200000` (secondary clip) is set.
+- **Meaning:** "unlimited ammo, primary/secondary", read by `0x00b816d0(inst, 0|1)`. Reload then fills the clip without drawing on the pool, and auto-switch and the out-of-ammo tests treat the weapon as never empty.
+- **Other writers:**
+  - the grant argument (above);
+  - the save-restore `0x008dcec0` (record byte `+0x19`);
+  - the per-slot upgrade in `0x005ffd20` (player `+0x1e64[slot]` bit 1, read by `0x009db6d0`);
+  - per grenade type in `0x009db630`;
+  - `0x006e5800` for `Category` 1 (pistol);
+  - `0x00816f00`.
+- **Bit `0x40` versus bit `0x8`:** bit `0x40` is not word-B `0x40000`. That word-B bit goes to `+0x1a0` bit `0x8` (`0x009d08a8`).
+
+**Test vectors.**
+1. `SMG-Gang` clip 0, pool 100 → 1466 ms; `SMG-Storm` → 2366 ms; `tec9` → 1466 ms. FINAL.
+2. `Explosive-Genki` reload → 1266 ms; with `Faster_Reload_2` (1.5) → 844 ms. FINAL.
+3. `Rifle-STAG` vent → 2333 ms. `minigun` → 2366 ms. `brute_minigun` → 0 ms. FINAL.
+4. Switch to `baseball_bat` → firing/attacks are ready at 400 ms and the clip ends at 800 ms. Switch to `brute_minigun` → ready at 33 ms. FINAL (frames), HIGH (gate).
+5. Switch while not reloading → `0x009c07a0` is not called and `+0x19bc` is not re-armed. Switch at t = 500 ms into a rifle reload → no transfer, and 5000 ms later the idle top-up fills the clip. FINAL.
+6. Inventory: dual SMG (ammo), shotgun (ammo), rifle empty; the RPG empties → the SMG is chosen. With a single SMG → the shotgun is chosen. FINAL.
+7. RC gun empty while the RC car is alive → no switch. Once the car is gone → switch. FINAL.
+8. Grant `Rifle-Gang` with amount −1, Max_in_Reserve R, capacity 1.0, no upgrade → clip 30, pool R. Re-grant with amount 10 → clip 30, pool 10 (replace, not add). FINAL for the routine.
+9. Weapon with word-A `unlimited ammo` (for example `water_cannon`) → `+0x1a0` & `0x40` ≠ 0, so reload is clip = max with no pool draw. FINAL.
+
 ## 6. What this pass did NOT establish
 
 ~~Stated plainly: **the single instruction that decrements a "rounds remaining in clip" counter when a
@@ -1199,6 +1514,8 @@ plain disassembly/offset terms, independently). No `FUN_`/`DAT_`/`LAB_` names us
 No leaked Volition/Havok/Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-18 — new §5.4: reload, switching and weapon selection (closes review WH-4, WH-5, WH-11).** Reload deadline = holder `+0x1cc`, set from the `reload` clip length (frames/30) of `Reload_Animation_Group`, or `Reload_override_time_sec`, divided by the player reload scalar `+0x28b0` (`Faster_Reload` 1.25/1.5/1.75); ammo moves once at the deadline (`0x009d26b0` -> `0x009c0970`), never at a trigger; cancel list, 5 s idle top-up, draw = `equip` clip with fire-ready at `impact start`, slot/cycle/radial/auto-switch rules, per-class table for PLYM, port recipe and 10 test vectors. Cleanroom self-check: no decompiler tokens.
 
 - **2026-10-12 — §5.1: confirmed negative — the drop ring buffer's only reader is pure
   physics/despawn, not the pickup grant** (SPEC TEAM, self, direct work, no agent). `xref` on both

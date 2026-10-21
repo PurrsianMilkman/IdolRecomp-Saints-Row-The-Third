@@ -466,7 +466,7 @@ CapsuleStepResult CharacterProxyDriver::step(const Vec3& position, const Vec3& d
         const double sinkSpeed = -vy;  // -dot(velocity, up), up = (0,1,0)
         double gravity = kHavokWorldGravityY;
         if (sinkSpeed > 0.0) {
-            const double ratio = sinkSpeed / kControllerTerminalFallSpeedCap;
+            const double ratio = sinkSpeed / terminalFallSpeed_;
             gravity *= (1.0 - ratio * ratio);
         }
         vy += gravity * dt;

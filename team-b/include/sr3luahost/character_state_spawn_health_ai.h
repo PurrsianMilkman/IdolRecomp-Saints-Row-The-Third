@@ -296,6 +296,9 @@ struct CharacterStateSpawnHealthAi {
     // character spawns at full health") - applied together with
     // maxHitPoints by EngineState::applyCharacterSpawnDefaults().
     OpenValue<int32_t> currentHitPoints{"character current hit points (+0x1cb8)", "spec-lua-api-behaviour.md Sec7.31/Sec34.1"};
+    // D-27: the original stores health as a float; the get-up heal (float32(maxHp x pct), not rounded) leaves a
+    // sub-integer remainder. currentHitPoints keeps the whole part, this keeps the fraction [0,1) (0 elsewhere).
+    float currentHitPointsFraction = 0.0f;
 
     // set_current_hit_points' own HIGH-CONFIDENCE-tier consequence (Sec7.31:
     // "if the new value is <= 0 and two further predicates ... are both

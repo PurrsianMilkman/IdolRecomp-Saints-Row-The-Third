@@ -30,8 +30,9 @@
 //   * character-row -> mesh chain (character.xtbl `Character` -> character_definitions.xtbl `Model/Filename`,
 //     `Heads/Head/Name`, `Heads/Head/Lod_Head`) is read from the shipped XML (the spec leaves the
 //     character_definitions field reader undecompiled, spec-tables-customization.md 12.1);
-//   * ped pose: static BIND POSE (a per-ped walk clip would need per-ped CPU skinning + re-upload; see the
-//     report). Peds already face their movement direction (ActorPlacement::heading);
+//   * ped pose: the specced walk clip per ped (ambient-ped-anim task; poseWalk() below lists the spec used and the CHOSEN
+//     stand-ins: male clip set for all, bone-name retarget, frame-0 hold when stationary, per-frame cost bounds).
+//     Peds already face their movement direction (ActorPlacement::heading);
 //   * Height/Height_Class scaling of ped meshes is not applied.
 
 #include "viewer_platform.h"
@@ -44,6 +45,11 @@
 #include "sr3geometry/material_binding.h"
 #include "sr3mesh/mesh_block.h"
 #include "sr3render/mesh_renderer.h"
+#include "sr3airuntime/ped_navigator.h"
+#include "sr3animpose/clip_pose_bridge.h"
+#include "sr3rig/animated_pose.h"
+#include "viewer_walk_support.h"
+#include <cmath>
 #include "sr3render/texture_upload.h"
 #include "sr3rig/bone_palette.h"
 #include "sr3rig/pose.h"
@@ -73,11 +79,23 @@ struct AmbientPedModel {
     std::vector<ID3D11ShaderResourceView*> bodySrv, headSrv;
     bool bodyTextured = false, headTextured = false;
     bool ready = false;
+    // Walk animation (ambient-ped-anim task): skinning inputs kept so the shared per-model buffers can be re-posed
+    // per ped. Vertices are the post-remap (and multi-set-duplicated) decode, i.e. exactly what bind-skinning used.
+    std::vector<sr3mesh::Vertex> bodyVerts, headVerts;
+    bool bodyPalette = false, headPalette = false;
+    std::vector<uint32_t> parentIdx;
+    std::vector<std::array<float, 3>> restRig;  // rig-space rest positions (same input the player path uses)
+    std::vector<std::string> boneNames;         // lower-case bone names, rig order (name retarget of clips)
+    bool poseable = false;                      // dynamic buffers created and skinning inputs stored
+    int64_t lastPoseKey = INT64_MIN;            // (clip record, 30 Hz tick) last uploaded to the shared buffers
 };
 
 struct AmbientVehicleModel {
     std::string key;  // "<name>_<variant>"
     PlaytestVehicleRig rig;
+    // AI_Max_Braking_Decel (+0x770) of this model's own `<name>_veh.xtbl` vehicle-info row; nullopt when the row could
+    // not be found / the lookup is not installed / the value is absent (caller falls back to a CHOSEN constant).
+    std::optional<double> aiMaxBrakingDecel;
     int uses = 0;
 };
 
@@ -90,6 +108,10 @@ struct AmbientModelStats {
     size_t peakWorkingSetBytes = 0;
     size_t setsBuilt = 0;
     std::map<std::string, size_t> vehicleUse, pedUse;
+    // ped walk animation
+    size_t poseUpdates = 0, poseCacheSkips = 0, pedsNoClip = 0, pedDrawsAnimated = 0, pedDrawsStale = 0, pedDrawsStill = 0;
+    double poseMs = 0.0;
+    std::set<std::string> clipMissing, clipBoneMismatch, clipRetargeted;
 };
 
 class AmbientModelRegistry {
@@ -104,11 +126,16 @@ public:
     using HoodCategoryFn = std::function<std::string(double, double, double)>;
 
     bool ready() const { return ready_; }
+    void setNoWalkAnim(bool v) { noWalkAnim_ = v; }  // --no-ped-anim (before init)
+    // Installs the vehicle-row lookup: model name (no "_<variant>" suffix) -> that row's AI_Max_Braking_Decel, or
+    // nullopt. Optional; without it every model's aiMaxBrakingDecel stays nullopt.
+    using BrakingDecelLookupFn = std::function<std::optional<double>(const std::string&)>;
+    void setBrakingDecelLookup(BrakingDecelLookupFn f) { brakingDecelLookup_ = std::move(f); }
     const AmbientModelStats& stats() const { return stats_; }
 
     bool init(ID3D11Device* device, const std::string& vehiclesArchivePath, const std::string& wheelsArchivePath,
               const MappedBytes* characterArchive, const std::function<sr3xtbl::Document(const std::string&)>& docOf,
-              HoodCategoryFn hoodCategory) {
+              HoodCategoryFn hoodCategory, const std::string& animArchivePath = std::string()) {
         device_ = device;
         wheelsPath_ = wheelsArchivePath;
         hoodCategory_ = std::move(hoodCategory);
@@ -152,6 +179,17 @@ public:
             } catch (const std::exception& ex) {
                 std::printf("ambient-models: characters archive unreadable (%s)\n", ex.what());
                 charContainer_.reset();
+            }
+        }
+        if (!animArchivePath.empty() && !noWalkAnim_) {
+            animMap_ = mapFileLargeC(animArchivePath);
+            if (!animMap_.empty()) {
+                try {
+                    animContainer_ = std::make_unique<vpp::Container>(vpp::ByteView(animMap_.data(), animMap_.size()));
+                } catch (const std::exception& ex) {
+                    std::printf("ambient-models: animation archive unreadable (%s) - peds stay in bind pose\n", ex.what());
+                    animContainer_.reset();
+                }
             }
         }
         ready_ = vehContainer_ || charContainer_;
@@ -216,6 +254,64 @@ public:
         return m;
     }
 
+    // ---- police models (feature/police-response) --------------------------------------------------------
+    // The police car and cop character, looked up by name in the same archives (exempt from the streamed-model caps:
+    // a dispatched unit must not depend on the ambient roll). Spec names (spec-ai-runtime.md 20.6.10 test vector):
+    // `car_4dr_police02` (vehicle), `npc_cop` (character). The character.xtbl ROW name for the cop is not given by the
+    // spec (generic_characters `Police Officer` -> `npc_cop` is the spawn name), so rows containing "cop"/"police" are
+    // searched (CHOSEN lookup, logged by the caller). Returns nullptr when nothing loads (caller draws a placeholder).
+    AmbientVehicleModel* policeCarModel(std::string* chosenKey = nullptr) {
+        if (!vehContainer_) return nullptr;
+        std::vector<std::string> cands = {"car_4dr_police02", "car_4dr_police01"};
+        for (const auto& n : vehicleNames_)
+            if (n.find("police") != std::string::npos && n.find("car") != std::string::npos) cands.push_back(n);
+        for (const auto& c : cands) {
+            const bool plain = vehicleNames_.count(c) != 0;
+            if (!plain && !vehicleNames_.count(c + "_0")) continue;
+            if (AmbientVehicleModel* m = loadedVehicle(plain ? vehicleKey(c) : c + "_0", true)) {
+                if (chosenKey) *chosenKey = m->key;
+                return m;
+            }
+        }
+        return nullptr;
+    }
+    AmbientPedModel* policePedModel(std::string* chosenRow = nullptr) {
+        if (!charContainer_) return nullptr;
+        std::vector<std::string> cands = {"npc_cop", "police officer", "police_officer"};
+        for (const auto& kv : charRowToDef_)
+            if (kv.first.find("cop") != std::string::npos || kv.first.find("police") != std::string::npos) cands.push_back(kv.first);
+        for (const auto& c : cands) {
+            if (!resolvable(c)) continue;
+            if (AmbientPedModel* m = loadedPed(c, true)) {
+                if (chosenRow) *chosenRow = c;
+                return m;
+            }
+        }
+        return nullptr;
+    }
+
+    // ---- homie models (feature/homies) ------------------------------------------------------------------
+    // A homies.xtbl `Humans/Character` row and `Vehicles/Vehicle` name looked up by name (exempt from the streamed caps:
+    // a called homie must not depend on the ambient roll). nullptr when it does not resolve (caller draws a placeholder).
+    AmbientPedModel* homiePedModel(const std::string& characterRow) {
+        if (!charContainer_ || !resolvable(characterRow)) return nullptr;
+        return loadedPed(lower(characterRow), true);  // registry keys are lower-case
+    }
+    AmbientVehicleModel* homieVehicleModel(const std::string& vehicleName, std::string* chosenKey = nullptr) {
+        if (!vehContainer_) return nullptr;
+        const std::string n = lower(vehicleName);
+        const bool plain = vehicleNames_.count(n) != 0;
+        if (!plain && !vehicleNames_.count(n + "_0")) return nullptr;
+        if (AmbientVehicleModel* m = loadedVehicle(plain ? n : n + "_0", true)) {
+            if (chosenKey) *chosenKey = m->key;
+            return m;
+        }
+        return nullptr;
+    }
+
+    // AW-15: every vehicle mesh name in the archive (lower case, no extension), for --spawn-vehicle=list.
+    std::vector<std::string> vehicleNameList() const { return std::vector<std::string>(vehicleNames_.begin(), vehicleNames_.end()); }
+
     // ---- peds -----------------------------------------------------------------------------------------
     AmbientPedModel* choosePed(uint64_t id, double x, double y, double z, bool night) {
         if (!charContainer_) return nullptr;
@@ -254,21 +350,177 @@ public:
         for (const auto& kv : stats_.pedUse) p += " " + kv.first + "=" + std::to_string(kv.second);
         std::printf("ambient-models-trace: vehicle_use:%s\n", v.empty() ? " (none)" : v.c_str());
         std::printf("ambient-models-trace: ped_use:%s\n", p.empty() ? " (none)" : p.c_str());
+        std::printf("ambient-ped-anim-trace: clips_ready=%d draws_animated=%zu draws_still_frame0=%zu draws_stale=%zu "
+                    "pose_updates=%zu pose_cache_skips=%zu pose_ms_total=%.1f pose_ms_per_update=%.3f peds_without_clip=%zu "
+                    "(max %d updates/frame, radius %.0f m)\n",
+                    clipsReady() ? 1 : 0, stats_.pedDrawsAnimated, stats_.pedDrawsStill, stats_.pedDrawsStale, stats_.poseUpdates,
+                    stats_.poseCacheSkips, stats_.poseMs, stats_.poseUpdates ? stats_.poseMs / static_cast<double>(stats_.poseUpdates) : 0.0,
+                    stats_.pedsNoClip, kMaxPoseUpdatesPerFrame, kAnimRadiusM);
+        for (const auto& s : stats_.clipMissing) std::printf("ambient-ped-anim-trace: clip missing in archive: %s\n", s.c_str());
+        for (const auto& s : stats_.clipRetargeted) std::printf("ambient-ped-anim-trace: retarget by bone name: %s\n", s.c_str());
+        for (const auto& s : stats_.clipBoneMismatch) std::printf("ambient-ped-anim-trace: bone-count mismatch, clip not used: %s\n", s.c_str());
     }
+
+    // ---- ped walk animation (ambient-ped-anim task) ------------------------------------------------------
+    // SPEC USED: spec-ai-runtime.md 20.6.9(a) clip table (state -> clip -> |root translation| -> speed), spec-anim-format.md
+    // (header +0x0B = target rig bone count, +0x1C root translation, +0x06/30 = duration seconds, 6b track->bone table
+    // handled by sampleClipAtTime), spec-player-runtime 5.4.3 step 4 (speed = clip root speed, so a cycle covers |T| metres).
+    // The per-ped variant is the pool slot nearest to the speed ped navigation already picked (the pools in
+    // ped_navigator.h are listed in clip order: base, _b, _c, _d, _e, _f[, pfl1]).
+    // CHOSEN: no gender source exists on a ped (NearFieldPed has none, navigation draws from the MALE pool), so the male
+    // clips (PEDM) are used for every ped; a female ped model therefore walks with the male set.
+    // CHOSEN: no ped stand/idle clip is specced in 20.6.9; a stationary ped holds walk frame 0.
+    // Clips bind to bones by track INDEX (spec-anim-format 6a), in the clip's own rig order (header +0x0B = that rig's bone
+    // count, spec-rig-format 8). When a ped rig's bone count differs from the clip's, the engine's own cross-instance
+    // retarget is BY BONE NAME (spec-rig-format 11.12.1, 0x004bcb30: name looked up in the second rig). CHOSEN stand-in for
+    // the unspecced reference skeleton: the clip's native rig is taken to be any loaded ped rig whose bone count equals the
+    // clip's +0x0B (index order = clip track order); each clip bone is mapped to the same-named bone of the target rig
+    // (case-insensitive); target bones with no source stay at rest (identity rotation, zero delta). Counts are in the trace.
+    // CHOSEN cost bounds: kMaxPoseUpdatesPerFrame distinct re-poses per frame (nearest peds first), kAnimRadiusM from the
+    // camera; peds beyond either keep whatever pose their model's shared buffer last held.
+    static constexpr int kMaxPoseUpdatesPerFrame = 24;
+    static constexpr double kAnimRadiusM = 80.0;
+
+    struct WalkChoice {
+        int32_t record = -1;
+        float durationUnits = 0.0f;  // clip header +0x06 (30 Hz units)
+        float strideM = 0.0f;        // |root translation| per cycle
+        bool variant = false;        // not the base clip
+        size_t clipBones = 0;        // the clip's own bone count (+0x0B)
+        std::shared_ptr<const std::vector<int>> boneMap;  // clip bone -> target bone (-1 none); null = identity (same rig size)
+    };
+
+    bool clipsReady() const { return static_cast<bool>(animContainer_); }
+
+    // Resolves (and caches) the walk clip for `m` given the ped's picked speed. record < 0 = no usable clip.
+    const WalkChoice& walkChoiceFor(AmbientPedModel& m, double speedMs) {
+        size_t best = 0;
+        double bd = 1e30;
+        for (size_t i = 0; i < sr3airuntime::kPedWalkPoolMaleSize; ++i) {
+            const double d = std::fabs(sr3airuntime::kPedWalkPoolMale[i] - speedMs);
+            if (d < bd) { bd = d; best = i; }
+        }
+        const auto key = std::make_pair(&m, static_cast<int>(best));
+        auto it = walkChoice_.find(key);
+        if (it != walkChoice_.end()) return it->second;
+        WalkChoice c;
+        bool retryLater = false;
+        const size_t order[2] = {best, 0};
+        for (size_t k = 0; k < 2 && c.record < 0; ++k) {
+            if (k == 1 && best == 0) break;
+            const std::string name = std::string(kMaleWalkClips[order[k]]) + ".anim_pc";
+            const int32_t rec = animContainer_ ? clips_.load(*animContainer_, name) : -1;
+            const sr3animpose::ResolvedClip* rc = rec >= 0 ? clips_.lookup(rec) : nullptr;
+            if (!rc) {
+                stats_.clipMissing.insert(name);
+                continue;
+            }
+            const size_t clipBones = rc->animation->field_0x0B_rawCount();
+            c.clipBones = clipBones;
+            if (clipBones != m.restRig.size()) {
+                const AmbientPedModel* ref = nullptr;
+                for (const auto& kv : peds_)
+                    if (kv.second->ready && kv.second->boneNames.size() == clipBones) { ref = kv.second.get(); break; }
+                if (!ref) {
+                    stats_.clipBoneMismatch.insert(name + "(" + std::to_string(clipBones) + " bones) vs " + m.stem + "(" +
+                                                   std::to_string(m.restRig.size()) + "): no reference rig of that size loaded yet");
+                    retryLater = true;  // a compatible model may load later: do not cache this miss
+                    continue;
+                }
+                std::unordered_map<std::string, int> targetByName;
+                for (size_t i = 0; i < m.boneNames.size(); ++i) targetByName.emplace(m.boneNames[i], static_cast<int>(i));
+                auto map = std::make_shared<std::vector<int>>(clipBones, -1);
+                size_t matched = 0;
+                for (size_t i = 0; i < clipBones; ++i) {
+                    auto t = targetByName.find(ref->boneNames[i]);
+                    if (t != targetByName.end()) { (*map)[i] = t->second; ++matched; }
+                }
+                stats_.clipRetargeted.insert(name + ": " + ref->stem + "(" + std::to_string(clipBones) + ") -> " + m.stem + "(" +
+                                             std::to_string(m.restRig.size()) + ") by name, " + std::to_string(matched) + "/" +
+                                             std::to_string(clipBones) + " bones matched");
+                if (matched * 10 < clipBones * 8) {  // < 80% matched: not a plausible skeleton pair
+                    stats_.clipBoneMismatch.insert(name + " vs " + m.stem + ": only " + std::to_string(matched) + "/" +
+                                                   std::to_string(clipBones) + " bone names match - not used");
+                    continue;
+                }
+                c.boneMap = std::move(map);
+            }
+            c.record = rec;
+            c.durationUnits = static_cast<float>(rc->animation->durationTotal());
+            const auto& t = rc->animation->rootTranslation();
+            c.strideM = std::sqrt(t.x * t.x + t.z * t.z);
+            if (c.strideM < 0.05f) c.strideM = static_cast<float>(sr3airuntime::kPedWalkPoolMale[order[k]]) * c.durationUnits / 30.0f;
+            c.variant = order[k] != 0;
+        }
+        if (c.record < 0 && retryLater) {
+            scratchChoice_ = c;
+            return scratchChoice_;
+        }
+        if (c.record < 0) ++stats_.pedsNoClip;
+        return walkChoice_.emplace(key, c).first->second;
+    }
+
+    // Re-poses the model's shared body/head buffers to (clip, whole 30 Hz tick). Returns false when nothing could be
+    // posed (the buffers then keep their previous pose). `uploaded` reports whether a skin+upload actually ran.
+    bool poseWalk(AmbientPedModel& m, ID3D11DeviceContext* ctx, const WalkChoice& c, int tick, bool allowUpload, bool& uploaded) {
+        uploaded = false;
+        if (!m.poseable || c.record < 0) return false;
+        const int64_t key = (static_cast<int64_t>(c.record) << 20) | static_cast<int64_t>(tick);
+        if (key == m.lastPoseKey) { ++stats_.poseCacheSkips; return true; }
+        if (!allowUpload) return false;
+        const auto t0 = std::chrono::steady_clock::now();
+        const size_t nb = m.restRig.size();
+        sr3animpose::ActiveLayer al;
+        al.record = c.record;
+        al.weight = 1.0f;
+        al.group = 0;
+        al.additive = false;
+        al.clipTimeUnits = static_cast<float>(tick);
+        const size_t nbClip = c.clipBones ? c.clipBones : nb;
+        const sr3animpose::PoseComposeResult pr = sr3animpose::ComposeClipPose({al}, clips_, nbClip);
+        if (pr.layersActive == 0) return false;
+        std::vector<sr3rig::Rotation3> rots(nb, sr3rig::identityRotation3());
+        std::vector<std::array<float, 3>> deltas(nb, std::array<float, 3>{0.0f, 0.0f, 0.0f});
+        for (size_t b = 0; b < nbClip; ++b) {
+            const int tb = c.boneMap ? (*c.boneMap)[b] : static_cast<int>(b);
+            if (tb < 0 || static_cast<size_t>(tb) >= nb) continue;
+            const sr3anim::BoneSample& s = pr.bones[b];
+            rots[static_cast<size_t>(tb)] = sr3rig::quatToRotation3(s.rotation.x, s.rotation.y, s.rotation.z, s.rotation.w);
+            deltas[static_cast<size_t>(tb)] = s.translationDelta;
+        }
+        const std::vector<sr3rig::Mat3x4> skinRig = sr3rig::computeAnimatedSkinningMatrices(m.parentIdx, m.restRig, &rots, &deltas);
+        auto skinWith = [&](bool palette, const std::vector<sr3mesh::Vertex>& verts) {
+            std::vector<sr3rig::Mat3x4> skinMesh(nb);
+            for (size_t b = 0; b < nb; ++b)
+                skinMesh[b] = palette ? sr3rig::conjugateToMeshSpaceInverted(skinRig[b]) : sr3rig::conjugateToMeshSpace(skinRig[b]);
+            return sr3rig::skinVertices(verts, skinMesh, nullptr);
+        };
+        bool ok = m.body->updatePositions(ctx, skinWith(m.bodyPalette, m.bodyVerts));
+        if (m.head && !m.headVerts.empty()) ok = m.head->updatePositions(ctx, skinWith(m.headPalette, m.headVerts)) && ok;
+        if (ok) m.lastPoseKey = key;
+        uploaded = true;
+        ++stats_.poseUpdates;
+        stats_.poseMs += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+        return ok;
+    }
+
+    AmbientModelStats& mutableStats() { return stats_; }
 
     // Drawing (same lighting parameters the placeholder draws used).
     static void DrawPed(AmbientPedModel& m, ID3D11DeviceContext* ctx, const float vp[16], const float world[16],
-                        const float* sun, const float* amb, const float* sunCol) {
+                        const float* sun, const float* amb, const float* sunCol,
+                        const float* lightVP = nullptr, ID3D11ShaderResourceView* shadowSrv = nullptr,
+                        ID3D11SamplerState* shadowSmp = nullptr) {
         if (!m.ready) return;
         if (m.bodyTextured)
-            m.body->drawTextured(ctx, vp, m.bodySrv, world, sun, amb, sunCol);
+            m.body->drawTextured(ctx, vp, m.bodySrv, world, sun, amb, sunCol, lightVP, shadowSrv, shadowSmp);
         else
-            m.body->draw(ctx, vp, sr3render::MeshDrawMode::Checker, nullptr, world, nullptr, sun, amb, sunCol);
+            m.body->draw(ctx, vp, sr3render::MeshDrawMode::Checker, nullptr, world, nullptr, sun, amb, sunCol, lightVP, shadowSrv, shadowSmp);
         if (m.head) {
             if (m.headTextured)
-                m.head->drawTextured(ctx, vp, m.headSrv, world, sun, amb, sunCol);
+                m.head->drawTextured(ctx, vp, m.headSrv, world, sun, amb, sunCol, lightVP, shadowSrv, shadowSmp);
             else
-                m.head->draw(ctx, vp, sr3render::MeshDrawMode::Checker, nullptr, world, nullptr, sun, amb, sunCol);
+                m.head->draw(ctx, vp, sr3render::MeshDrawMode::Checker, nullptr, world, nullptr, sun, amb, sunCol, lightVP, shadowSrv, shadowSmp);
         }
     }
 
@@ -426,13 +678,13 @@ private:
 
     static std::string vehicleKey(const std::string& name) { return lower(name) + "_0"; }  // CHOSEN variant 0
 
-    AmbientVehicleModel* loadedVehicle(const std::string& key) {
+    AmbientVehicleModel* loadedVehicle(const std::string& key, bool exemptFromCap = false) {
         auto it = vehicles_.find(key);
         if (it != vehicles_.end()) {
             ++stats_.cacheHits;
             return it->second.get();
         }
-        if (failedVehicles_.count(key) || vehicles_.size() >= kMaxVehicleModels) return nullptr;
+        if (failedVehicles_.count(key) || (!exemptFromCap && vehicles_.size() >= kMaxVehicleModels)) return nullptr;
         ++stats_.cacheMisses;
         const auto t0 = std::chrono::steady_clock::now();
         auto m = std::make_unique<AmbientVehicleModel>();
@@ -446,6 +698,14 @@ private:
             failedVehicles_.insert(key);
             ++stats_.vehicleLoadFailures;
             return nullptr;
+        }
+        if (brakingDecelLookup_) {
+            std::string base = key;
+            if (base.size() > 2 && base.compare(base.size() - 2, 2, "_0") == 0) base.resize(base.size() - 2);
+            try {
+                m->aiMaxBrakingDecel = brakingDecelLookup_(base);
+            } catch (const std::exception&) {
+            }
         }
         m->rig.sim->state_.posX = 0.0;
         m->rig.sim->state_.posZ = 0.0;
@@ -514,13 +774,13 @@ private:
         return charStr2_.count(d->second.name) != 0;
     }
 
-    AmbientPedModel* loadedPed(const std::string& row) {
+    AmbientPedModel* loadedPed(const std::string& row, bool exemptFromCap = false) {
         auto it = peds_.find(row);
         if (it != peds_.end()) {
             ++stats_.cacheHits;
             return it->second.get();
         }
-        if (failedPeds_.count(row) || peds_.size() >= kMaxPedModels) return nullptr;
+        if (failedPeds_.count(row) || (!exemptFromCap && peds_.size() >= kMaxPedModels)) return nullptr;
         ++stats_.cacheMisses;
         const auto t0 = std::chrono::steady_clock::now();
         auto m = std::make_unique<AmbientPedModel>();
@@ -594,6 +854,16 @@ private:
             }
             const auto bindPositions = sr3rig::skinVertices(verts, bindSkin, nullptr);
             m.body = std::make_unique<sr3render::MeshRenderer>();
+            m.body->setDynamicVertices(true);
+            m.bodyVerts = verts;
+            m.bodyPalette = palette;
+            m.parentIdx = parentIdx;
+            m.restRig.resize(bones.size());
+            m.boneNames.resize(bones.size());
+            for (size_t i = 0; i < bones.size(); ++i) {
+                m.restRig[i] = bones[i].restPosition;
+                m.boneNames[i] = lower(bones[i].name);
+            }
             std::string err;
             if (!m.body->initialise(device_, err) ||
                 !m.body->upload(device_, mesh, 0, 0, err, 0, &bindPositions, haveDup ? &dup : nullptr)) {
@@ -611,6 +881,14 @@ private:
                         const std::string* d = b.diffuseFor(i);
                         std::string foundIn;
                         if (d && findAndUploadTexture(cont, *d, device_, m.bodyTex[i], foundIn)) m.bodySrv[i] = m.bodyTex[i].srv;
+                        if (std::getenv("SR3_TRACE_PEDTEX")) {
+                            std::printf("pedtex: %s body mat %u diffuse='%s' -> %s %ux%u %s |", def.stem.c_str(), i, d ? d->c_str() : "(none)",
+                                        m.bodySrv[i] ? "bound" : "UNRESOLVED", m.bodyTex[i].width, m.bodyTex[i].height,
+                                        m.bodyTex[i].dxgiFormatName.c_str());
+                            for (const auto& tr : b.materialsMutable()[i].textures)
+                                std::printf(" [%08x %s]", static_cast<unsigned>(tr.paramHash), tr.name.c_str());
+                            std::printf("\n");
+                        }
                     }
                     m.bodyTextured = true;
                 }
@@ -619,6 +897,7 @@ private:
             if (!def.headLod.empty() && findEntry(cont, def.headLod + ".ccmesh_pc", hcb, hgb, def.headLod + ".gcmesh_pc") &&
                 !hgb.empty())
                 buildHead(m, def, cont, hcb, hgb, bones, parentIdx);
+            m.poseable = true;
             m.ready = true;
             return true;
         } catch (const std::exception& ex) {
@@ -664,11 +943,14 @@ private:
             }
             const auto bindPositions = sr3rig::skinVertices(verts, bindSkin, nullptr);
             auto head = std::make_unique<sr3render::MeshRenderer>();
+            head->setDynamicVertices(true);
             std::string err;
             if (!head->initialise(device_, err) ||
                 !head->upload(device_, mesh, 0, 0, err, 0, &bindPositions, haveDup ? &dup : nullptr))
                 return;
             m.head = std::move(head);
+            m.headVerts = verts;
+            m.headPalette = palette;
             sr3geometry::MaterialBindings b = sr3geometry::MaterialBindings::parse(
                 hv, hg.offset(), hg.meshSubBlockOffset() + mesh.cLength());
             if (!b.located()) return;
@@ -709,6 +991,7 @@ private:
     }
 
     bool ready_ = false;
+    bool noWalkAnim_ = false;
     ID3D11Device* device_ = nullptr;
     std::string wheelsPath_;
     HoodCategoryFn hoodCategory_;
@@ -725,9 +1008,16 @@ private:
     std::unordered_map<std::string, StreamedVehicles> vehSets_;
     std::unordered_map<std::string, StreamedPeds> pedSets_;
     std::map<std::string, std::unique_ptr<AmbientVehicleModel>> vehicles_;
+    BrakingDecelLookupFn brakingDecelLookup_;
     std::map<std::string, std::unique_ptr<AmbientPedModel>> peds_;
     std::set<std::string> failedVehicles_, failedPeds_;
     AmbientModelStats stats_;
+    WalkChoice scratchChoice_;
+    MappedBytes animMap_;
+    std::unique_ptr<vpp::Container> animContainer_;
+    RealClipRegistry clips_;
+    std::map<std::pair<const AmbientPedModel*, int>, WalkChoice> walkChoice_;
+    static constexpr const char* kMaleWalkClips[6] = {"ped_bs_walk", "ped_bs_walk_b", "ped_bs_walk_c", "ped_bs_walk_d", "ped_bs_walk_e", "ped_bs_walk_f"};
 };
 
 }  // namespace sr3viewer

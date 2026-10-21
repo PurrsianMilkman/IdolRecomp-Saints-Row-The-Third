@@ -3095,6 +3095,8 @@ did not have occasion to mention. Observed relation values (0/1/4) line up with 
 scale (§10.3: "0…4+, lower meaning more hostile"): hostile relation → low attitude, allied relation →
 high attitude. **[closes §8 item 12's "team-relationship table" clause by citation, not re-derivation]**
 
+[2026-10-20 Team B CHOSEN Q: FINAL for the data and the dispatch, HIGH for the whole reading — **default team matrix, and what makes mission targets hostile.** The matrix is reset by `0x009b70e0` (called from the world reset at `0x00941c97`) with a 64-byte copy from `0x01175100`. Team ids (Lua team table): 0 Playas, 1 Luchadores, 2 Deckers, 3 Morningstar, 4 Neutral Gang, 5 Police, 6 STAG, 7 Civilian. Values: 0 hostile, 1 unfriendly, 2 neutral, 3 wary, 4 allied. Row = own team: row 0 = 4 1 1 1 1 1 1 2; rows 1, 2, 3 = 1 4 4 4 2 1 1 2; row 4 = 1 1 1 1 4 1 1 2; row 5 = 1 1 1 1 1 4 4 2; row 6 = 1 1 1 1 1 4 4 3; row 7 = 2 2 2 2 2 3 3 2. The writer `0x009b7130` copies every write that involves team 5 to team 6 as well (police and STAG move together). No pair starts at 0. The attitude `0x004fe0f0` gives the player the matrix value unless an override applies, so a gang member sees the player at attitude 1. In the sense pass `0x00506c20`, attitude 1 only runs `0x00502fa0` (view cone, then line of sight, then `0x005029a0`), which writes a **list-6** (suspected) entry; it never creates a list-0 (hostile) entry. Only attitude 0, or the current target, reaches the vision test and "see". So mission enemies are not hostile from the default relation. They become hostile only through: (1) scripts: `set_attack_player_flag(true)` (`attack_player_on_sight`, attitude 0 toward players), `ai_add_enemy_target(npc, player, ...)`, `team_make_hostile` (writes 0), `on_detection` wiring; (2) the player's own acts: damage to the NPC (list 16, notice at attitude below 3), gunfire near it (the hostile-shooter branch of list 3), attacks it witnesses (list 13), and 150 HP of friendly fire for attitude-4 humans (§24.9). m08 and m21 use (1): `ai_add_enemy_target(..., ATTACK_NOW...)` and `set_attack_player_flag`. m06's dock and factory guards only get `ai_do_scripted_move`, so they start fighting when the player shoots near them, hits one, or a fight is witnessed. Port: load the matrix above, give attitude 1 the list-6 path only, wire those natives, and drop the harness `enemyTargets[#PLAYER1#]` once they run. [2026-10-20 per Team D emulation: FINAL] Emulated: matrix = copy of the `.data` table at `0x01175100` into `0x0262D940` by `0x009b70e0` (row = observer team, column = other team): row 0 = 4 1 1 1 1 1 1 2; row 1 = 1 4 4 4 2 1 1 2; rows 2 and 3 = row 1; row 4 = 1 1 1 1 4 1 1 2; row 5 = 1 1 1 1 1 4 4 2; row 6 = 1 1 1 1 1 4 4 3; row 7 = 2 2 2 2 2 3 3 2. The lookup `0x009b7100` returns 2 for team 9. Attitude `0x004fe0f0` for a player-class team-0 human (player team override `+0x27f0` = 9, flags clear): observer teams 1-6 give 1 (unfriendly), team 0 gives 4, team 7 gives 2 (player or NPC team 0 alike). Dispatch of `0x00506c20` on the result: 4 -> `0x00505210` (hostile handler); 3 -> `0x004ff760`; 2 -> skipped; 1 (or any other non-zero) -> `0x00502fa0`. So gangs (teams 1-6) toward the player dispatch to the non-hostile handler `0x00502fa0` and never to the hostile handler `0x00505210`. `0x00502fa0` with detection test `0x004fef80` false calls `0x005029a0`, which looks up or inserts list 6 (`0x004fae00(6, ...)`, called twice); with detection true it updates knowledge records (`0x004ed1e0`, then `0x004ed320` with 3000 ms). No list-0 entry on either path (the full `0x00506c20` sweep was not run).]
+
 ### 12.8 The ally-link geometry test `0x0050cc40`
 
 §10.6 flagged this "not read", with the HYPOTHESIS "the friend stands in or near this human's line of
@@ -4154,6 +4156,27 @@ Cover-stay mode Enter 0x00543480 (dispatch on reason byte)
 - An aerial-vehicle threat bypasses the whole arc test.
 - **A hard player gate, independent of score:** inside `0x00509e50`, if any threat in the human's full perception list that resolves to the local player fails a shield/visibility test, the whole candidate cover is instantly disqualified for the `cover take def` action.
 
+[2026-10-20 per Team D emulation: FINAL — **cover_node frame, orientation and angle bytes.** The cover reader `0x008cef40` and the arc test `0x008cd1d0` were re-read by listing.
+- **Frame: world.**
+  - `cover_pos` (property size `0x0c`) is copied raw to cover `+0x3c`/`+0x40`/`+0x44`.
+  - Nothing in the cover module adds a zone, tile or parent offset. The only other writer of `+0x3c` is the constructor `0x008ccfe0`, which writes the default from `0x01306284`.
+  - The gather `0x008cd960` tests `+0x3c` against the human's world-space box. The arc test subtracts it from the threat's world position, and below 5 m (squared 25.0, `0x01115238`) it runs a line test `0x004de500`.
+  - Covers with a host (a live host handle at `+0x10`/`+0x14`; types `veh_top`, `veh_side`, `veh_door`, `human`) also keep a host-local copy of position and orientation. It is a pooled `0x34`-byte record made by `0x008ccd80` and stored at `+0x6c`.
+  - So a cover hundreds of metres from the road-node pool has a real world position (HIGH: mission interiors), not a frame error.
+- **No quaternion.**
+  - `cover_orient` is a `0x24`-byte property: **nine floats, a 3×3 matrix** with rows right (`+0x48`), up (`+0x54`) and forward (`+0x60`). `0x008cc5a0` copies it raw.
+  - The arc reference heading **is** `cover_orient`: `0x00da3910(cover + 0x48)` returns `0x00dae5b0(forward.x, forward.z)`. When forward.y is within 1.2e‑7 (`0x01122d70`) of ±1, it uses (−right.z, right.x) instead.
+  - **This corrects the first arc-test bullet above ("NOT `cover_orient`").**
+  - The 0.45 pull-back uses forward x and z (`+0x60`, `+0x68`).
+- **Angle bytes.**
+  - On disk the four angles are **floats in degrees** (property size 4), not bytes.
+  - The reader clamps each one to [−180, 180] (`0x0116aed0`, `0x011391e0`). It stores byte = round((deg + 180) / 360 · 255) into `+0x80` left, `+0x81` right, `+0x82` def left and `+0x83` def right. The constants are the doubles `0x012a3080`, `0x0116aec8` and `0x012a2d88`. `0x00dad900` rounds half away from zero.
+  - The arc test then uses (byte/255)·2π − π, as above.
+  - No default is written for an absent angle property (HIGH).
+- **Team D emulation, FINAL (2026-10-20; reader `0x008cef40`).** byte = round_half_away(f32((clamp(a, −180, 180) + 180) / 360 × 255)), with the rounding by `0x00dad900`.
+  - Vectors: −180 gives 0; −90 gives 64; 0 gives 128; 179.9 gives 255.
+  - Extra: 180 gives 255; 90 gives 191; 45 gives 159; −200 gives 0; 400 gives 255; NaN gives 0.]
+
 **Inputs to the overall selection, for a cleanroom implementer:** the human's own position and personality/class (brute vs. normal), its post/defend area if any, its group leader's position for followers, its ENTIRE perception list (every currently-perceived threat, not just one), each candidate cover's position/yaw/angle-byte properties, each candidate's own per-human failure memory (perception-list slot 20), and real navmesh path distance (via the shared `0x00a12a80` multi-destination query). Distance/radius limits: 14.0 base search radius (≥15.0 for brutes), 4.0 fixed vertical half-height, a 5.0-unit degenerate-proximity special case, a 128/328-unit path-search budget.
 
 **[CONFIRMED — direct, complete disassembly+decompile of the core gather/filter/score/pick pipeline (`0x0050a690`) and the full arc-test formula (`0x008cd1d0`). HIGH CONFIDENCE, not independently disassembled to their own last instruction: a scripted-interrupt early-return edge case inside `0x005429b0`, a "hold position"-only refinement, several additive cost sub-terms inside the scoring step's own path/geometry refinement, and `0x00ad5020`'s exact aerial-vehicle-bypass semantics.]** Full detail, every address, and the complete scoring-formula breakdown: `scratchpad/covernode_selection_2026-10-08.md`.
@@ -4329,6 +4352,10 @@ world-cell, farther from the player than `player_vehicle_despawn_distance` (`veh
 `spec-tables-traffic-ai.md` §18, destination `0x02609378`) — confirmed stored squared from the runtime
 side too (compared directly against a squared distance, no `sqrt`). The real shipped metres value was
 not re-extracted from a live data file this pass.
+**[2026-10-18 correction, §20.6.14(c)/(d):** gate (a) is the network-ownership test `0x008addb0`, not a
+no-spawn flag. Gate (c) applies only when the vehicle is the local player's last vehicle (`+0x2880`),
+not "in the player's world-cell". The shipped value is 10000 m. The schedule's num_cars thresholds count
+abandoned candidates (teams 0–3, 5, 6), not all live vehicles.**]**
 
 **Concrete population numbers:**
 - **Hard cap: 48 concurrently-live near-field vehicles** — `0x0090ee10` gates every spawn attempt on the
@@ -5569,6 +5596,23 @@ independently); otherwise the delta is added to the fraction and a roll-over loo
 the fraction exceeds each successive level's own point threshold, calling `0x00606b80` on a resulting
 change.
 
+[2026-10-20 Team B open Q: FINAL/HIGH — **vehicle-hit-ped, run-over and cop-kill records.**
+- **Activity indices.** The 32-name table at `0x012ed0b8` gives each `notoriety.xtbl` row's index: 0 armored truck assault, 1 burglary, 2 carjacking, 3 car assault, 4 civilian assault, 5 civilian kill, 6 civilian shooting, 7 civilian squirting, 8 drug use, 9 firearm discharge, 10 gang alert, 11 gang assault, 12 gang kill, 13 gang shooting, 14 generic gang, 15 generic police, 16 govt car destroy, 17 govt car theft, 18 govt heli theft, 19 helicopter destroy, 20 mover dislodge, 21 public nudity, 22 police alert, 23 police assault, 24 police kill, 25 police shooting, 26 robbery, 27 atm extortion, 28 vandalism, 29 enter owned store.
+- **There is no run-over record.**
+- **The report call.** Reports go through `0x00608550(activity, team, …)`, either directly or through `0x009daad0`. They are queued at `0x014a4c50` (5 slots, stride `0x14`, count `0x014a4580`), and `0x00607960` releases each one to `0x00607840` when its delay timer expires.
+- Teams are those of the `+0x1ca8` byte: 1–3 gangs, 4 neutral gang, 5 Police, 6 STAG, 7 civilian.
+
+| Producer | When it reports | Activity by victim team |
+|---|---|---|
+| **Assault** `0x009e26b0(attacker, victim)` | not when the victim has `+0x1e00` bit 4, or `0x0096f4f0(victim)` is true | 1–3 → 11 gang assault; 4 → none; 5–6 → 23 police assault; 7 → 4 civilian assault (table `0x009e27d8`) |
+| **Kill** `0x009e2950(killer, victim)`, called by the death handler `0x00950300` at `0x0095049b` | for any cause, once the killer resolves to a human with authority (`0x008addb0`) | 1–3 → 12 gang kill, unless the victim's team is the team of the human at `0x0262edfc`; 5–6 → **24 police kill**; 7 → 5 civilian kill (team code 7); 4 → none (table `0x009e2a98`) |
+| **Car vs car** `0x00ac53b0` | the driver of one car assaults the other car's driver through `0x009e26b0` | as Assault, but nothing when the victim is a civilian (7) or team 0 |
+
+- **Cop kills.** Row 24 `police kill` is the cop-kill record (`Police/Points` 75).
+- **Car vs ped.** The (7,5) rule `0x007663e0` calls `0x00a0aa60(character, driver, vehicle, …)`, which passes the **driver as the attacker** to the character's hit virtual (vtable `+0x80`).
+  - A run-over that kills is therefore reported by the Kill row above, with the driver as killer: civilian kill, gang kill or police kill. HIGH.
+  - Whether a hit that does not kill also reports `civilian assault` is OPEN, because the body of that virtual was not read.]
+
 ### 19.3 What lowers it: a genuine decay tick, sharing a primitive with ambient population
 
 `0x00607200` is a real, timer-gated decay tick: it tests the per-track decay-interval timer (record
@@ -5938,8 +5982,16 @@ not in the executable: they come from the base `notoriety_levels.xtbl`, which wa
   A null object gives no bonus. **The real-world meaning of that descriptor flag is OPEN**
   (two other callers: `0x005062d7` and `0x009baa1e`). Pending-flag bit 0 is the caller's "treat as
   witnessed" flag, which skips the detection test. Raw points: `P = Points(sub-block) × (bit1 ? 3 : 1)`.
-- G3. **The award** (`0x00606f40`, `D` = witnessed). Reports are skipped when `Points ≤ 0`, or when
-  the gain-suppress byte `0x014A4C0D` is set and the delta is positive. `D` is 1 unless
+- G3. **The award** (`0x00606f40`, `D` = witnessed). ~~Reports are skipped when `Points ≤ 0`, or when
+  the gain-suppress byte `0x014A4C0D` is set and the delta is positive.~~ **[2026-10-19 corrected per
+  Team D emulation D-21: FINAL] Reports with `Points ≤ 0` are NOT skipped.** In `0x006076a0` a report
+  with `Points ≤ 0` only skips the first-decay re-arm `0x00605020` (G5); the points still go through
+  `0x00606f40`. A negative amount rolls the level down exactly like decay (same floor rule as the
+  decay roll-down below); e.g. gang track at 2 / 200: −20 gives 2 / 180, again 2 / 160; a −200 report
+  gives 1 / 185. A zero-point report still runs the award: below `Min_Level` a witnessed one lifts the
+  track to `Min_Level` (gang 0 / 0, `Min_Level` 2 → 2 / 125 after the entry floor), and an unwitnessed
+  one with `Check_Detection` gives the minimum award of 1 point. The award is skipped only when the
+  gain-suppress byte `0x014A4C0D` is set and the delta is positive. `D` is 1 unless
   `Check_Detection` is set, bit 0 is clear, and neither the local player (`0x009da4e0`) nor the co-op
   player (`0x009df3d0`) passes `0x00606570`. The award `A` is chosen as follows:
   - If level ≥ the maximum bound, or level ≥ the activity's `Max_Level`: `A = 0`.
@@ -5952,10 +6004,15 @@ not in the executable: they come from the base `notoriety_levels.xtbl`, which wa
 - G4. **Roll-up.** `fraction += A`; `+0x0c := -1`. While `level < 5` and `trunc(fraction) ≥
   limit(set, level+1)`: subtract that limit and increment the level. If the level passes the maximum
   bound, clamp to it with `fraction = limit(set, max+1) − 1`. At 5, `fraction = 0`. On a change, call
-  `0x00606b80(level, track)`. Then, if the level is below 5,
-  `fraction = max(fraction, 0.25 × limit(set, level+1))`, using the double `0.25` at `0x012A2EB8`:
-  **a fresh level starts at least a quarter of the way to the next one.**
-- G5. **The decay timer is reset by the crime.** Before the award, `0x00605020(track)` arms `+0x08`
+  `0x00606b80(level, track)`. Then, if the level changed and is below 5,
+  ~~`fraction = max(fraction, 0.25 × limit(set, level+1))`~~
+  `fraction = max(fraction, 0.25 × (limit(set, level+1) + (fraction − trunc(fraction))))`
+  **[2026-10-19 corrected per Team D emulation D-21: FINAL]** — the entry floor includes the fractional
+  part (remainder 0.25 gives 125.0625, not 125), using the double `0.25` at `0x012A2EB8`:
+  **a fresh level starts at least a quarter of the way to the next one.** The floor applies only when the
+  level changed.
+- G5. **The decay timer is reset by the crime.** Before the award (skipped when `Points ≤ 0`, per the
+  G3 correction [2026-10-19 Team D D-21: FINAL]), `0x00605020(track)` arms `+0x08`
   with `FirstDecay(set, level) × difficulty[+0x10]`. `FirstDecay` is read at
   `0x014A4594 + 4·(6·set + level)` and is already in ms. `difficulty[+0x10]` is the
   `difficulty_levels.xtbl` `Notoriety_Decay_Mult` reciprocal (`spec-tables-progression.md` §7),
@@ -5972,8 +6029,12 @@ any other way, and it is not paused by distance.**
   `0x014A45C4 + 4·(6·set + level)`. `saveMult` holds the four floats at `0x014A4584`, the save-file
   decay multipliers of §19.1, defaulting to 1.0.
 - Roll-down: while `fraction < 0`, add `limit(set, level)` and decrement the level. The floor is
-  `floor = minBound`, or 1 when `minBound < 1` and `+0x18` bit 0 is set. On reaching the floor, set
-  `fraction = 0`. On a change, call `0x00606b80`.
+  `floor = minBound`, or 1 when `minBound < 1` and `+0x18` bit 0 is set. ~~On reaching the floor, set
+  `fraction = 0`.~~ **[2026-10-19 corrected per Team D emulation D-21: FINAL]** Only if a roll-down step
+  would take the level **below** the floor is the level set to the floor with `fraction = 0`. Landing
+  exactly on the floor **keeps the positive remainder**, and decay continues at the floor level's rate
+  until the fraction reaches 0. Example (police): one 100-point crime gives 1 / 75; 12 decay steps of 6
+  later 1 / 3; the next step gives **0 / 72**, then 0 / 71, 0 / 70 … On a change, call `0x00606b80`.
 - Re-arm: if `level ≤ minBound` and `fraction ≤ 0`, set `+0x08 = -1` (decay finished). Otherwise
   re-arm with `1000 × difficulty[+0x10]` ms (`1000.0` at `0x012A2D90`). **The decay interval is
   1 s, scaled by difficulty.**
@@ -6690,6 +6751,17 @@ A visible ped fades over 1000 ms (`0x0094fb60`); an unseen one is deleted (`0x00
 - **OPEN:** how many slots of each kind are streamed (`0x00916ef0`/`0x00911e40`), and walk/flee
   speeds. The speeds are not set by the spawner; they are animation-driven and untraced.
 
+[2026-10-20 Team B open Q: FINAL — **ambient ped gender source.** Gender is fixed per character row. There is no separate gender roll: the group → character roll above decides it.
+- **Where it lives.** A spawned human's gender is human `+0xa41`. `0x0096ec80` copies it at `0x0096ed48` from byte `+0x18` of the human's character record (`+0xf0`, looked up by name through `0x00be3360`).
+- **Where the byte comes from: `character.xtbl`.**
+  - Literal `0x01190120`, loader `0x00be4010`, row reader `0x00be3a50`.
+  - Records are at `0x0299b8a0` + 0x54·i, cap 468.
+  - The record init `0x00be1910` presets the byte to 3 ("unspecified").
+  - Element `Gender` (`0x0113cf80`) then sets **0 when its first character is `M` (case-sensitive), else 1** (`0x00be3c51`).
+- **Shipped data.** `misc_tables.vpp_pc` `character.xtbl` has 314 `Male` and 143 `Female`. Rows without `Gender` keep 3.
+- **Clips.** Male peds use `PEDM` and female peds `PEDF` (§20.6.9(a)).
+- **`Sex` filter.** `action_nodes.xtbl` `Sex` (`spec-tables-traffic-ai.md`, `+0xC4`: male 0, female 1, default 3) is a node filter in the same encoding. That `0x009160a0` compares it with this byte is HIGH; not re-read.]
+
 #### 20.6.3 Lane follower (ambient traffic)
 
 **(a) Cruise speed source — FINAL.**
@@ -6948,6 +7020,13 @@ else:                        brake = 0, cap = max(v, 2)                    (hold
 The memory list (`+0xee8`, 24-byte entries, count `+0xfa8`, at most 8) gives the hysteresis: the
 brake decision is taken at 0.75·a_lim and released only below 0.5·a_lim.
 
+[2026-10-19 Team B R3: FINAL/HIGH — **the 8-entry memory list.** It is a traffic **driver's braking memory**, not an NPC attacker list. Read by listing (`0x00b51860` add, `0x00b517e0` lookup, `0x00b540f0` expiry):
+- Entry (24 bytes at vehicle `+0xee8 + 24·i`, count byte `+0xfa8`): `+0x00` target object handle, `+0x08`/`+0x0c` a second key pair (used when the handle is 0, e.g. a signal or stop point), `+0x10` a 300 ms timer, `+0x14` the stored brake value.
+- Add (on "req > f·a_lim"): match by handle (or, for handle 0, by the key pair); a match re-arms 300 ms and overwrites the brake value; no match and count < 8 → append; **count = 8 → the new target is silently not remembered**.
+- Lookup: true while the matched entry's timer is still running; also returns its brake value.
+- Expiry: entries whose 300 ms ran out, and handle-0 entries whose keyed object is gone or dead, are removed by moving the last entry into the hole.
+Needed? Yes in effect: it is the 0.75/0.5 brake hysteresis and the junction-yield "skip when a kind-2 or kind-4 entry is live" rule; Team B's `recentlyBraked` per target with a 300 ms expiry is equivalent. The 8 cap matters only if more than 8 distinct targets braked the car within 300 ms (the probe sees at most a few), so an unbounded set is an acceptable port; to be exact, drop new targets when 8 are live.]
+
 Kinds: 0 = obstacle from the probe; 1 = destination stop (`0x00b57c21`); 2 = traffic signal
 (`0x00b52bc0`); 3 = junction yield (`0x00b5dec0`); 4 = mode-8 stop point (`0x00b52740`, 3 m
 stand-off).
@@ -7192,6 +7271,13 @@ flee selects.]**
 - Open crossing: bits 3–5 are cleared and the ped walks on.
 - Within 0.425 m of the crossing (0.180625 = 0.425², `0x01117f10`) `0x0051b960` reports arrival, and
   the sidewalk tick posts event 8 with a 1000 ms delay.
+
+[2026-10-20 Team B open Q: FINAL (negative) — **0.425 m is not the advance test for intermediate route nodes.**
+- **Only two readers.** The squared radius 0.180625 (`0x01117f10`) has exactly two readers in `.text`:
+  - the crossing test `0x0051b960`. Its only caller is `0x0051bcaa`. It measures the distance to the crossing record through `0x00bbf020` and is gated by bit 2 of `+0xb68`.
+  - a test in `0x00969880` (`0x00969f61`) that works next to the camera's forward row and is not part of the navigator.
+- **The navigator.** The sidewalk navigator `0x00a1bcd0` reads only 2.0 (`0x01187ebc`) and 2.5 (`0x011173ec`). It passes both to the path query `0x00a12180`.
+- **Port rule.** Use 0.425 m for crossings only. The advance radius for intermediate nodes is OPEN; it sits in the path follower, which was not found in this pass.]
 
 #### 20.6.10 Police and gang roadblocks driven by notoriety (2026-10-14, tail pass)
 
@@ -7528,6 +7614,189 @@ as a light's tile streams out; the purpose of flight-AI modes 6/11 and of the ca
 Scripts (read-only, deletable): `tools/scratchpad/tlight_stats.py` … `tlight_stats4.py`, `tlight_xref.py`,
 `tlight_scan.py`, `tlight_scan2.py`, `tlight_rd.py`, `tlight_tbl.py`, `tlight_str.py`; listing in
 `tools/scratchpad/tlight_out/`.
+
+#### 20.6.14 Player-used vehicles: persistence and despawn (2026-10-18)
+
+Answers conformance gap EC-6 (`spec-conformance-review.md`). Static disassembly only. It builds on
+§17.4c (the schedule tick and the predicate), §20.6.1(b)/(d) (the maintenance pass and the distance
+despawn) and the `vehicle_despawn.xtbl` schema (`spec-tables-traffic-ai.md` §18). Shipped values are read
+from `tools/scratchpad/spawn_xtbl/vehicle_despawn.xtbl`.
+
+**(a) Nothing is promoted out of the population. FINAL.**
+- Entering an ambient car does not unlink it from the near-field list `0x026093ac`. It does not touch the
+  live counter `0x02609120` either.
+  - The only unlinker is `0x00907660(handle)`, which tail-calls the release `0x00905790`.
+  - Its callers are the vehicle teardown `0x00a83cb0`, `0x00a39530` and `0x00a9d6c0`.
+  - None of them is on the seating path (`spec-player-runtime.md` §8).
+- There is no vehicle-side "player-used" or "persistent" flag. Protection is a handle compare against
+  one player field, (b).
+- Driving the car has one lasting side effect. The seating commit copies the driver's team into vehicle
+  `+0x16e0` (`spec-lua-api-behaviour.md`, the 2026-10-15 `+0x16e0` note), and nothing restores it. A car
+  the player has driven therefore carries team 0 (`Playas`) from then on, and that enrolls it in the
+  abandoned-car schedule (d).
+
+**(b) The "last vehicle" handle. FINAL.**
+- The handle is the player object's `+0x2880`/`+0x2884`, network name `player_last_vehicle_handle`.
+- Setter: `0x009e1c40(player; vehicle or null, from_network)`, thiscall.
+  - If this machine does not own the player (`0x008addb0`), it sends the change as a network record.
+  - Otherwise it stores the handle, or the null handle `0x01175ac8` when the vehicle is null.
+  - On a co-op host it also swaps a streaming hold on the vehicle (`0x00bbb500`, tag `"player2"`,
+    priority 5, id in `+0x2878`; `0x00bbb5d0` releases it).
+- Writers:
+  - **The seating commit** (`0x00afc56a`, `spec-player-runtime.md` §8, player-only side effects), on every
+    seat. HIGH that a passenger seat counts too: the player-only block shows no driver test.
+  - The Lua native **`vehicle_mark_as_players(vehicle [, player])`** (`0x00a629e0`). The player argument
+    defaults to `#PLAYER1#`.
+  - **Vehicle teardown `0x00a83cb0`** clears the handle for whichever player holds this car, then sets
+    the HUD vehicle band to `"__unloaded"` (`0x007f1930`).
+  - The player constructor clears it at `0x009dedd7`.
+  - Role only: `0x005fa8c3`, `0x006d3dc9` (in the "mission start" routine `0x006d3780`) and `0x008b1460`
+    (network apply).
+- Exit does not write it. Exit writes the human's own `+0x978`/`+0x97c` (`spec-player-runtime.md` §6.10,
+  step 11), which is a different field.
+- There is only one slot per player. No "last N vehicles" list exists.
+- No Lua getter exists. A string census finds only `vehicle_mark_as_players` and
+  `teleport_player_vehicles` (`spec-lua-api-behaviour.md` §22.5, which reads this field).
+
+[2026-10-19 Team B R3: FINAL/HIGH — **vehicle_mark_as_players.** Native `0x00a629e0` read by listing: arg 1 is resolved by `0x00a281e0` (a vehicle name, or a character name meaning that character's current vehicle `+0x16c0`); arg 2 (default `#PLAYER1#`) by `0x00a280c0`; if either is missing it does nothing; else it calls the setter `0x009e1c40(player, vehicle, from_network = 0)` and returns nothing. The setter:
+1. If the call is not from the network and this machine does **not own the player** (`0x008addb0(player, 0)` false), it only sends a network record (kind `0x46`, `"player"` / `"player_last_vehicle_handle"`) and returns; the owner applies it through `0x008b1460`.
+2. Same handle already stored → no-op.
+3. If a streaming hold is held (`+0x2878` ≠ −1) and this machine is the session host (`0x0087ba20` with `+0x5c` = `+0x58`), release it (`0x00bbb5d0`) and set `+0x2878 := −1`.
+4. Store the vehicle's 8-byte handle (`vehicle +0x08/+0x0c`) into player `+0x2880/+0x2884` (null handle `0x01175ac8` for no vehicle).
+5. On the session host only, take a new streaming hold on the vehicle: `0x00bbb500(&+0x2878, "player2", id, priority 5)`.
+So: the field write runs on the **player's owner** (not "host-side"); only the streaming hold is host-only. In single-player the local machine is both owner and host, so both happen. No other state (seat, ownership flags, despawn exemption of §20.6.14 beyond what reads `+0x2880`) is touched.]
+  - `get_char_vehicle` and its family read the current-vehicle pair `+0x16c0`/`+0x16c4` instead.
+- Other readers that were opened:
+  - the jam counter `0x00b2db20` (§20.6.11);
+  - a follower-command check `0x007e7a60`, which acts only within 200 m (squared 40000, `0x0112d1ec`).
+    Role only.
+- About 60 more read sites were not opened. GUESS: there is no minimap blip for the last vehicle.
+
+**(c) What protects the last vehicle. FINAL.**
+- The eligibility predicate `0x00906b00` returns true only when every gate below passes. Read in full;
+  this corrects §17.4c's wording.
+  1. This machine owns the vehicle (`0x008addb0`). This is the network-ownership test, not a no-spawn
+     flag.
+  2. The vehicle has no attachment link (`0x00ad2060`: descriptor `+0x858` ≠ −1 and link `+0x1a3c` holds
+     a handle). HIGH: a hitched trailer, which leaves with its tractor.
+  3. No player-class human (class bit `0x21`) holds any of its seat slots: claimed, pending or the third
+     slot (`0x00ac2f10`). Neither does a human with `+0x1da8` set (`0x0094f690`). PARTIAL: the meaning of
+     `+0x1da8` is not known.
+  4. No member of the local player's group (`0x005083f0`) is in AI mode 18 (`Hijack`) or 41 (`Veh trans`)
+     with this vehicle as its committed target `+0x458` (`0x00ac2fc0`). So a homie on the way to the car
+     protects it.
+  5. Vehicle `+0x16c4` bits `0x2` and `0x4` are clear. PARTIAL: the meaning of these bits is not known.
+  6. No seat 0–7 holds a non-player occupant that belongs to an AI group (`+0x994`; `0x00ab5070` →
+     `0x0097e280` → `0x005088c0`). HIGH: such an occupant is a follower.
+  7. **If the vehicle is the local player's last vehicle**, the horizontal distance² to the player
+     (`0x00d9fc80`, XZ) must be **≥ `player_vehicle_despawn_distance`²**.
+     - The loader squares the value (`0x00905cd0`).
+     - The shipped value is 10000, so the threshold is 10 km (the descriptor's editor default is 100).
+     - HIGH: this is larger than any distance reachable in the city, so in practice the car is never
+       eligible.
+- The predicate gates:
+  - the distance despawn (`0x00907160` → `0x00906b00` at `0x00907176`; §20.6.1(d));
+  - the 48-cap recycler `0x0090df10`, called by the spawn gate `0x0090ee10`, which deletes the
+    farthest eligible car while 48 or more are live;
+  - the schedule's picker (d).
+- `world_despawn_all_vehicles` (`0x00a686b0` → `0x0090f7e0`) uses a sibling test, `0x009092d0`. It spares
+  a vehicle that is not owned locally, any vehicle with a player or follower in a seat, and the last
+  vehicle of **any** player (the player list `0x03171a64`). By contrast, `0x00906b00` checks only the local
+  player.
+- So **the car the player last sat in stays until the player sits in another vehicle**, until it is torn
+  down, or until a script removes it. After that it is an ordinary ambient car with team `Playas`.
+
+**(d) The abandoned-car schedule `0x0090eaf0`. FINAL.** This is step 2 of the maintenance pass. It runs
+only when its own timer `0x013089f8` has expired, then re-arms it at random to 400–600 ms.
+1. **Collect** (at most 20). Walk `0x026093ac`. Skip a vehicle that is dead or being deleted
+   (`0x00853b10`), that is not a vehicle class, or that this machine does not own.
+   - An **occupied** vehicle (`0x00ab5320`, any seat holder) has its entry timer `+0x10` reset to −1 and
+     is skipped.
+   - **The local player's last vehicle is skipped**, unless it is in water (vehicle `+0xc8` bit 0) and is
+     not watercraft (descriptor `+0x2c` ≠ 5, `0x00ad3290`).
+   - A remote-controlled vehicle (`+0x1dec`) is skipped.
+   - Only teams **0, 1, 2, 3, 5 and 6** are kept: Playas, Luchadores, Deckers, Morningstar, Police and
+     STAG (jump table `0x0090ee00`). Teams 4 (Neutral Gang), 7 (Civilian), 9 (None) and above are never
+     "abandoned".
+   - A kept vehicle starts its entry timer if the timer is not running. It joins the candidates
+     {entry, vehicle, own age} unless `0x00a77de0` holds (`+0x16c8` bit `0x10` with bit `0x40` or
+     `0x100`).
+2. **Count gate.** n = the number of candidates.
+   - If n < min(in-view[0].num_cars, out-of-view[0].num_cars), the global timer `0x013089fc` is reset to −1
+     and the pass stops. With shipped data the minimum is 5.
+   - Otherwise the global timer starts if it is not running. E = its age.
+3. **Out of view first.** Shipped rows are {5, 10 s}, {6, 5 s}, {7, 0 s}.
+   - If any row has n ≥ num_cars and E ≥ time, pick with `0x00908cf0(cands, n, out_of_view=1, delay)` and
+     delete the pick at once (`0x0090ccd0`).
+   - If the pick fails, fall through to the in-view rows.
+4. **In view.** Shipped rows are {5, 30 s}, {6, 20 s}, {7, 10 s}, {8, 0 s}.
+   - The in-view gate timer `0x01308a00` must have run for at least `abandon_despawn_delay` (10 s), or be
+     unset.
+   - If any row has n ≥ num_cars and E ≥ time, pick with out_of_view = 0. The pick **fades over 1000 ms**
+     (`0x00a846f0(v, 1000, 1, 0)`), and the gate timer restarts. So there is at most one in-view removal
+     every 10 s.
+5. **Picker `0x00908cf0`.** A candidate qualifies when all of these hold:
+   - its own age ≥ `abandon_despawn_delay` (10 s);
+   - `0x00906b00` is true;
+   - for out-of-view picks only, its entry's visible bit (`+0x14` bit 1, §20.6.1(b) step 4) is clear.
+
+   It returns the qualifying candidate **farthest from the players**: a per-player minimum vector
+   (`0x009dfa90`) that must be strictly greater in all four lanes. HIGH: the four lanes hold one distance.
+   It returns −1 when no candidate qualifies.
+
+   Consequence: a sunk last vehicle counts toward n but is never picked (gate 7 of (c)).
+
+**(e) Budget interaction. FINAL.**
+- A car the player drives or leaves stays in `0x02609120`. It therefore counts toward target − live
+  (§20.6.1(a); target 18 while the player drives, 12 on foot) and toward the 48 cap.
+- While it is protected it permanently takes one slot, and the cap recycler skips it.
+- The 65 m behind-camera and 140 m rules (§20.6.1(d)) apply to it only after it stops being the last
+  vehicle. The radius is then (D + 60 m) horizontal when the player is in a vehicle.
+- The traffic-jam counter `0x00b2db20` ignores both the current and the last vehicle (§20.6.11).
+
+**(f) Does anyone take it? HIGH (negative).**
+- No ambient routine assigns a ped to an empty vehicle.
+  - The ambient spawner creates its own drivers (§20.6.1(e) item 3).
+  - The only AI routes into a seat are the follower actions 37–39 (§11.3, through mode 18 `Hijack`), the
+    mission natives (§22.7) and carjack.
+- An unoccupied car with no directive keeps no driver and gets no new directive (§22.7, "Driver
+  reaction"). It stays where it stopped.
+- GUESS: the engine state (`0x00ab9ea0`, run at exit when no remote controller exists,
+  `spec-player-runtime.md` §6.10 step 8) has no effect on despawn. None of the passes above reads it.
+
+**(g) Port recipe.**
+1. Keep one `lastVehicle` handle per player. Set it at every seating of that player and by
+   `vehicle_mark_as_players`. Clear it when that vehicle is destroyed or unloaded. Never clear it at exit.
+2. Do not remove a car from the ambient list when the player enters it. Seating as driver sets
+   `team = player team (0)`.
+3. Use one predicate, `eligible(v)` = gates 1–7 of (c), for the distance despawn, the cap recycler and the
+   schedule picker. Gate 7 is: if v is the local player's lastVehicle, require XZ distance² ≥
+   `player_vehicle_despawn_distance`². With shipped data this rejects it always.
+4. `world_despawn_all_vehicles` spares every player's lastVehicle and any car with a player or follower
+   aboard.
+5. Run the schedule (d) every 400–600 ms, before the distance despawn, with the shipped rows and the
+   10 s delays.
+6. Team B (EC-5/EC-6): drop the "parked vehicles" list and the rig fallback. Use the rules above. Note
+   that the original car is simply the lastVehicle until the player sits in another car.
+
+**(h) Test vectors** (single player; shipped `vehicle_despawn.xtbl`).
+
+| # | Setup | Expected |
+|---|---|---|
+| 1 | Player drives civilian traffic car A (team 7 → 0), exits, walks 300 m away with a moving camera, A behind the camera | A stays: (c) gate 7, 300² = 90 000 < 10⁸. A different ambient car at 70 m behind the camera is removed (65 m rule). |
+| 2 | Then the player enters car B and drives so that A is 230 m away horizontally, not visible | A is no longer protected; D = 140 + 60 = 200 m < 230 m. A is deleted at once on the next pass. |
+| 3 | 4 unoccupied team-0..6 cars, all unoccupied for 60 s | n = 4 < 5: global timer reset, nothing removed. |
+| 4 | 5 such cars, none visible, all older than 10 s | Global timer starts. At E ≥ 10 s the farthest is deleted at once. n is then 4, so the timer resets. |
+| 5 | 7 such cars, none visible, all older than 10 s | Row {7, 0 s}: the farthest qualifying car is deleted on the first pass where n = 7. |
+| 6 | 6 such cars, all visible | The out-of-view pick fails. In view: at E ≥ 20 s the farthest fades over 1000 ms. The next in-view removal comes no sooner than 10 s later. |
+| 7 | The last vehicle sunk in a canal (not a boat) plus 4 other abandoned cars, all older than 10 s, out of view | n = 5. The pick is never the sunk car; one of the other 4 is deleted at E ≥ 10 s. |
+| 8 | A civilian car whose driver bailed (team 7), unoccupied for 5 min, 100 m away | Never in the schedule. Only the distance rules apply, so it stays until it is beyond 140 m (or 65 m behind a moving camera). |
+
+Residual: the meaning of `+0x16c4` bits `0x2`/`0x4` and of `0x00a39530`/`0x00a9d6c0` (the other unlinkers);
+whether streaming or save/load tears down a protected last vehicle; the four lanes of `0x009dd9b0`; the
+roles of the writers `0x005fa8c3`/`0x006d3dc9`/`0x008b1460`.
+
+Scripts (read-only, deletable): `tools/scratchpad/pv_tool.py`, `pv_disp.py`, `pv_fstart.py`.
 
 ---
 
@@ -8319,7 +8588,7 @@ or 18 (`0x00614d50`) AND `0x00682ad0()` is false. 2 if the character record (`+0
 `npc_Killbane_wrestling` (`0x0149f928`). 3 if it is `npc_Killbane_scifi` (`0x0149f92c`). 4 if avatar
 (`0x005e6ce0`: player-class in stance 16, or 12 with `+0x15c5` bit 2, or record `npc_Matt_Miller_Avatar`
 `0x0149faa4`) and not player-class. 1 if brute (`0x0052a230`) AND gang member (`0x00943190`) AND not `0x009422d0`
-AND not `+0x1c9c` bit 22. Else -1 = no downed state (plain death). A single-player main player has no partner, so
+AND not `+0x1c9c` bit 22. Else -1 = no downed state (plain death). [2026-10-20 per Team D emulation: FINAL] Emulated (default matrix, no party, not player-class, not avatar, name not Killbane): the brute flag is character info (`+0xf0`) `+0x48` bit 0 (`+0x48` = 0x01, team 3 -> 1; 0x81 -> -1 because zombie bit 7 excludes; 0 -> -1). The gang test `0x00943190` is team <= 4 AND relation(team, 0) <= 1: teams 1-4 -> 1; team 0 -> -1 (relation 4 > 1); team 5 and above -> -1. In a party -> 0; `+0x1c9c` bit 17 -> -1; bit 22 -> -1. The Bleed_Out threshold is not read by the selector. A single-player main player has no partner, so
 it never goes down.
 
 **Hook columns (FINAL).** +8 can-use(downed, actor); +0xc use(downed, actor); +0x10 damage(downed, attacker,
@@ -8426,6 +8695,8 @@ downed types 0/2/3/4; apply the brute buffer and timer extension for type 1. Nev
 Residual: names of the selector mode gates (`0x006a3910` == 14, `0x006d2910` in {7, 18}, `0x00682ad0`) and of
 `0x0095d720`/`0x009b9180`; what the m24 follower's `M24 Revive Fail` knock-down (`0x009a48e0` at progress 0.8)
 looks like; whether a `0x0052ede0`-class NPC ever reaches the use wrapper (no static caller found).
+
+[2026-10-20 Team B CHOSEN Q: FINAL — **selector inputs, the script duration and the type-2 hook.** (a) Brute `0x0052a230` = `character.xtbl` row `Flags` value `brute`: character-info record (`+0xf0`) word `+0x48` bit 0x1. The flag reader `0x00be1960` (called from the `character.xtbl` row reader at `0x00be3eab`) maps `brute` 0x1, `commando` 0x2, `dog` 0x4, `medic` 0x10, `roller_blader` 0x40, `zombie` 0x80, and more. (b) The excluded `0x009422d0` = `zombie` (bit 0x80). (c) Gang `0x00943190(human)`: team byte `+0x1ca8` <= 4 **and** matrix(team, 0) <= 1. With the default matrix (§12.7 note) teams 1-4 (Luchadores, Deckers, Morningstar, Neutral Gang) pass. (d) Follower: `0x0097e280` non-null, that is the human is in a party and is not its leader. (e) `Bleed_Out_Hit_Points` (CORRECTION [2026-10-20 per Team D emulation: FINAL]: the selector `0x009735d0` does NOT read this threshold; it belongs to the type-1 predicate `0x00972790`, which calls the threshold reader `0x00972740`): the threshold reader `0x00972740` takes the instance override (`+0x1da8` -> `+0xb8`, when >= 0, only for a class whose descriptor byte `+0xa` has bit 2), else the rank record of the row's `Spawn_Info_Rank` (character-info `+0x28`), u16 at rank `+0x0C` (`0x00be47e0`; `spawn_info_ranks.xtbl`, progression §10.6). (f) `human_enter_downed(name, duration)`: the Lua number is truncated to an integer (`0x00ea2596`) and used as **milliseconds**: the deadline `+0x18e8` is set to now + duration by `0x00d9e140`. An absent or non-positive duration keeps the type's default. A non-owner forwards the request as network message 0x3b. (g) Type-2 hook `0x005e53f0`: it finds `M21_Killbane` and fires that human's registered callback slot 6 (`on_take_damage`, through `0x005e4660` -> `0x00a29920`) with **no attacker**. m21's `m21_killbane_damaged(killbane, attacker, percent, explosion, melee)` then counts nothing (its counter `num_times_killbane_hit_by_weapon` grows only for a hit that has an attacker and either a non-melee prop or an equipped weapon) and refills Killbane's HP. So the type-2 counter lives in Lua and is fed by real damage events that carry an attacker.]
 
 ## 22. Mission-driving AI (2026-10-15)
 
@@ -9052,6 +9323,8 @@ of items 3 and 4.]**
 
 ## Changelog
 
+- **2026-10-19 - §23: GPS waypoints, route planning and replanning** (SPEC TEAM, queue item 3). Per-player record layout; planner state machine (1 ms/frame budget); GPS reuses the traffic A* (g + 0.5·straight-line h, chord costs, Highway ×0.5, lane change 6 / 3, U-turn onto the oncoming lane allowed); include/exclude lane filters; island ids (flag bits 28-29) and GPS shortcuts (bit 15/27); pin arrival √15 m; replan at 25 m off route or 15 m goal move after 3 s, and every 2.5 s beyond 100 m; mission vs player-pin clear/restore rules; aircraft direct mode; turn indicators; no voice cues. Corrects the "navmesh" reading in `spec-hud-runtime.md` §6.5. Static only.
+
 - **2026-10-15 - 21.8-21.10, 22.11: mission stall map** (SPEC TEAM). 32 of 49 missions stall at a Lua wait;
   clustered by behaviour, with the spec section per cluster; engagement/kill-all recipe and scripted-move
   completion added.
@@ -9609,3 +9882,691 @@ This section answers the gap Team B's combat audit raised: there were no accurac
   - A piecewise-linear table in weapon info appears to feed this timer. GUESS.
 - start_burst_box_pct is a player reticle value only (HUD), not NPC accuracy.
 - **Still OPEN:** no reader of Close_accuracy, Far_accuracy, recover_* or bullets_to_unsteady was found by whole-text scanning. Keep the CHOSEN bullet model in §22.12. A reference search outward from the accuracy array in Ghidra is the next step.
+## 23. GPS: waypoints, route planning and replanning (2026-10-19) — FINAL
+
+**Scope.** Orchestrator queue item 3: the player waypoint, mission waypoints, route calculation and
+replanning, so Team B can build GPS in free roam. The drawing of the route (minimap, pause map, 3D arrows)
+is in `spec-hud-runtime.md` H.6. Static analysis only: pefile + capstone over `SaintsRowTheThird.exe`,
+tools `tools/scratchpad/gps_map.py` (function survey of the GPS module), `hudmap_dis.py` (disassembly,
+xrefs, constants). No game run, no Frida.
+
+**What existed before this pass.** `spec-hud-runtime.md` §6.5 found the per-player record (`0x012FDFF0`
+local, `0x012FEB20` co-op partner), the setters (`waypoint_add` → `0x007DD420` → `0x007D6BC0`;
+`pause_map_set_gps` → `0x007DBA10`), `waypoint_is_placed`, and the `vfx_gps_arrows` trail.
+§18.4 item (b) of this file found that `0x007D41A1` reuses the road-graph search.
+`spec-zone-data-format.md` §13.2a(c)–(h) has the byte layout of the road graph, its flags, and the
+path-search side arrays. Three earlier statements are corrected in §23.9.
+
+Status tags: **FINAL** = read in code end to end; **HIGH** = one link inferred; **GUESS** = shape only.
+
+### 23.1 The per-player GPS record — FINAL for layout, HIGH where marked
+
+One record per player slot, stride `0xB30`: slot 0 (local) at `0x012FDFF0`, slot 1 (co-op partner) at
+`0x012FEB20`. The master tick `0x007D8BE0` runs the planner `0x007D89A0` for slot 0, then slot 1, then the
+3D-arrow pass `0x007D7650` (local route only). It is called every frame from `0x00702A50`.
+
+| Offset | Type | Meaning | Status |
+|---|---|---|---|
+| `+0x000` | s32 | planner state: 0 idle, 1–10 planning, 11 route active (§23.3) | FINAL |
+| `+0x004` | float3 | start position: the player's vehicle position if seated, else the player (`0x007D6380`) | FINAL |
+| `+0x010` | float3 | goal position | FINAL |
+| `+0x020` | f32 | 1.5 × straight start–goal distance (`0x012FDFC8` = 1.5) | FINAL (value); use HIGH |
+| `+0x024` / `+0x028` | s32 | island id of the start / goal (−1 = not yet known; 0 = none or water) | FINAL |
+| `+0x840` / `+0x940` | ptr[64] / s32 | start-lane candidates and count | FINAL |
+| `+0x948` / `+0xA48` | ptr[64] / s32 | goal-lane candidates and count | FINAL |
+| `+0xA4C` | s32 | search retry budget, 20 per request | FINAL |
+| `+0xA50` / `+0xA54` | list / f32 | best route found so far and its cost (starts at FLT_MAX) | FINAL |
+| `+0xA5E` | u8 | requested kind: 0 = player pin, 1 = mission or tracked object | FINAL |
+| `+0xA60` | u8 | direct mode: no road route, straight line to the goal | FINAL |
+| `+0xA70` | list | committed route: circular list of nodes, node `+0` next, `+4` previous, `+0xC` lane (segment) | FINAL |
+| `+0xA74` | node | current node: the route node nearest the player (§23.5) | FINAL |
+| `+0xA84` | float3 | goal at commit | FINAL |
+| `+0xA90` | u8 | goal is off the road graph: the draw adds a straight last leg | FINAL |
+| `+0xA91` | u8 | direct mode at commit | FINAL |
+| `+0xA92` | u8 | active kind (colour and clear rules) | FINAL |
+| `+0xAE4` / `+0xAE8` | s32 | pause-map dot-gap N / route nodes counted by the last draw (H.6) | FINAL |
+| `+0xAEE`, `+0xAF0`, `+0xB0B` | u8, float3, u8 | saved mission waypoint, restored when a player pin is cleared | FINAL |
+| `+0xB10` / `+0xB18` | handle / u16 | tracked object (goal follows it) / pending object id | FINAL |
+| `+0xB1C` | timer | 3000 ms replan-check timer, armed at each plan start | FINAL |
+| `+0xB20` | timer | 2500 ms far-off-route timer, armed at commit | FINAL |
+| `+0xB24` | f32 | route-dot animation clock, seconds mod 0.4 (H.6) | FINAL |
+
+The `+0xAC0`/`+0xAD0`/`+0xAE0` raw-position block of §6.5 is written only by `0x007D6BC0`. No reader in
+the planner was found.
+
+### 23.2 Setting and clearing a waypoint; mission versus player — FINAL
+
+**Retarget primitive `0x007D6970(start, goal, kind, b4, b5, replan, slot)`.**
+1. If the player's current or last vehicle is an Airplane (`Vehicle_Type` 2, `0x00AD3160`) or a
+   Helicopter/VTOL (3 or 4, `0x00AD31A0`), go to **direct mode**. The old route is freed and `+0xA60` =
+   `+0xA91` = 1. The goal is stored, kind is written to `+0xA92`/`+0xA5E`, the 3000 ms timer is armed and
+   the state becomes 11. No road search runs. (`Vehicle_Type` enum: `spec-player-runtime.md`.)
+2. Otherwise a fresh request (`replan` = 0) is ignored when its kind equals `+0xA5E`, a route exists or a
+   search is running, and the new goal is less than **1.0 m** (squared XZ < 1.0) from `+0x10`. A request
+   that arrives while a search runs frees the partial result.
+3. A replan request (`replan` = 1) is dropped while a search is already running (state 1–10).
+4. Otherwise `0x007D1450` starts a search: state 1, start and goal stored, retry budget 20, first-pass
+   flag set, candidate lists emptied, `+0xA5F` = (goal not in an interior, `0x005812D0`).
+
+**Who calls it, and with which kind.**
+
+| Source | Path | Kind | Target |
+|---|---|---|---|
+| Lua `waypoint_add(name, mode = 3)` on a vehicle, character or mover | `0x00A68CF0` → `0x007D70E0` | 1 | the object; it is tracked through `+0xB10` and the goal follows it (§23.5) |
+| Lua `waypoint_add` on a trigger, navpoint or other placed object | `0x007DD420(x, y, z, mode)` → `0x007D6BC0` | 1 | the object's position. Mode bit 2 sends net message `0x0C` (HIGH: the id written ahead of the payload); bit 1 applies locally |
+| Pause map "set GPS" on empty map | `0x007DBA10` → `0x007D6BC0` | 0 | the cursor's world X/Z (`0x007D9BC0`), **Y = 0** |
+| Pause map "set GPS" on a hovered blip | same | 0 | the blip's position; on the co-op partner's blip (category 3), `0x007D70E0` tracks the partner |
+| Planner: pending object id in `+0xB18` | `0x007D89A0` | 1 | the object's position once the handle resolves |
+| Co-op partner position | `0x006646C5` | 1 | the partner (`+0x40`) |
+
+**Pause-map validity check, without snapping.** Before a pin is set, `0x007D19E0` asks the road graph
+(`0x00A6CF50`) for lanes with filter `0x08062D00` within **5000 m**. At least 4 must exist (20 when the
+caller's mode is 1). The click is not snapped. Snapping happens later in the planner (§23.3, state 1). On
+failure the GPS is cleared. **FINAL.**
+
+**Pause-map toggle.** If a target is placed (`0x007D2210`: route or direct mode present) and the active
+kind is not 1, the button clears it: `0x007D6DC0(kind 0)` plus the UI event
+`pause_map_interface_event`(1). Otherwise it sets a new pin and sends the event with value 0. So pressing
+"set GPS" while your own pin is active removes the pin. Pressing it while a mission waypoint is active
+replaces the mission route with your pin. **FINAL.**
+
+**Clear `0x007D6DC0(kind, flags, slot)`.** Flag bit 2 sends net message `0x0E` (HIGH, as above); flag bit 1 applies
+locally. The local apply frees the route and zeroes the state **only if `+0xA92` equals `kind`**:
+- A mission clear (`waypoint_remove`, kind 1, via `0x007DD5D0`) never removes a player pin, and a
+  player-pin clear never removes a mission route.
+- Clearing kind 1 also forgets the saved mission waypoint (`+0xAEE`, `+0xB0A`) and the tracked handle
+  (`+0xB10`, `+0xB18`).
+- Clearing kind 0 then **restores the saved mission waypoint**. If `+0xAEE` = 1 and no target is active, it
+  re-issues `0x007D6970(saved +0xAF0, kind 1, …)`. A saved tracked object is re-armed through `+0xB18`.
+
+**Mission versus player priority, net rule.** There is no priority test. The last request wins
+(`0x007D6970` does not check kind). A kind-1 commit always saves its goal in `+0xAF0` (state 10, or the
+direct-mode branch). So a player pin hides the mission route while the pin exists. Once the pin is
+cleared, by the toggle or on arrival, the mission route comes back on its own. A later `waypoint_add`
+replaces the pin. **FINAL.**
+
+**Lua natives.** `waypoint_add(name [, mode = 3])`, `waypoint_remove([mode = 3])` (clears kind 1 only),
+`waypoint_is_placed()` (slot 0: true while a route list or direct mode exists, **of either kind**,
+`0x007D2210`), and `pause_map_set_gps` (menu side). No native sets a kind-0 pin or reads the route.
+**FINAL** (`spec-lua-api-behaviour.md` §6.17, §12.24).
+
+### 23.3 The planner state machine — FINAL for structure, HIGH for candidate details
+
+`0x007D89A0(slot)` first resolves a pending object id (`+0xB18`) into a retarget, kind 1. Then, unless
+`0x00722000` is true (HIGH: the game is paused or loading), it runs states through the jump table at
+`0x007D8B7C`. It repeats while the state is 1–10 and less than **1000 µs** have passed this frame
+(`0x00DAD740`, compared with `0x012A2D90` = 1000.0). State 11 runs once per frame.
+
+| State | Function | Work |
+|---|---|---|
+| 1 | `0x007D6420` | Arm the 3000 ms timer `+0xB1C`. Start island: two ground rays (`0x0075D7E0`, from +10 m to −50 m); a district (hood) containing the start (`0x0084BB20`) gives `+0x5C` = island id; else the nearest lane's island. Goal island: same. If the goal has no island but the start does, the nearest lane to the goal (`0x007D2260`) is used, and when the goal is within **10 m** of it (`0x012FDFC0`) **the goal is moved onto the lane**. Otherwise the goal stays off-road. If the straight line start→goal touches a district boundary (`0x0084B170`), set direct mode (`+0xA60`). Re-snap budget `+0x944` = 10 if the start island is known, else 1. → 2 |
+| 2, 5 | inline | reset the ring counters → 3 / 6 |
+| 3, 6 | `0x007D3040`, `0x007D3230` | ring query around the start (3) or the goal (6). The radius comes from `0x007D1090` plus 10 m, plus 20 m when the island is unknown. At most 15 passes; above 250 m it gives up (→ 11). Up to 64 lanes (filter `0x08062D00`) into `+0x840` / `+0x948`, then `0x007D26A0` keeps the reachable ones → 4 / 7 (HIGH for the radius law) |
+| 4, 7 | `0x007D1620`, `0x007D16B0` | grow each candidate list along links (`0x007D1250`) while fewer than 64 → 5 / 8 |
+| 8 | `0x007D1740` | best cost := FLT_MAX; direct mode → 10, else → 9 |
+| 9 | `0x007D39B0` | one A* (§23.4) per start candidate per step, against the first ≤ 8 goal candidates. The result is trimmed (leading water lanes; a leading oncoming-lane hop) and costed with `0x00B1AE20`. The cheapest route is kept in `+0xA50`/`+0xA54` → 10 after the last candidate (HIGH for the trimming rules) |
+| 10 | `0x007D45A0` | Commit, below. If no route was found: retry (`+0xA4C`, 20) → state 2 with a wider snap (`+0x944`) → state 5 |
+| 11 | `0x007D8410` | monitor (§23.5) |
+
+**Commit (state 10).**
+- The route moves to `+0xA70`; `+0xA74` = first node.
+- `+0xA84` = goal; `+0xA92` = kind; `+0xA90` = (goal island = 0); `+0xA91` = direct flag.
+- A dry-run draw (`0x007D9630` → `0x007D4900` at alpha 0) counts the route nodes into `+0xAE8`. It then
+  sets N `+0xAE4` = 1 when the count ≤ 80, else floor((count − 80)/20) + 1.
+- The three map bitmaps `map_other_waypoint`, `_glow` and `_offscr` are resolved.
+- A kind-1 goal is saved into `+0xAF0`.
+- The 2500 ms timer `+0xB20` is armed; state = 11.
+
+### 23.4 The route search: the traffic A* in GPS mode — FINAL
+
+GPS uses the same search as traffic (`0x00B1A7C0` init, `0x00B1CC60` → `0x00B1BE40` run) over the road
+graph of `spec-zone-data-format.md` §13.2a. The graph's node is a **lane segment**: one lane, one
+direction. GPS sets mode byte `+0x20` = 1, goal island `+0x24`, cost bound `+0x1C` = best cost so far, and
+filters: include `0x08062D00`, exclude `0x01000000` (unless the start or a goal lane itself has bit 24).
+
+- **Open list.** A binary min-heap over the 24-byte path records (§13.2a(h)), keyed on
+  **g + h** (`0x00B1A420`: `+0x08` + `+0x0C`). The search generation is `0x028921DC` (incremented by
+  reset `0x00B1A400`). Decrease-key updates a record when a cheaper g arrives (`0x00B1A963`).
+- **Heuristic** (`0x00B1A870`). h = straight-line 3D distance from the lane's end node B to the goal
+  position (`0x00DA1290`), × **0.5 in GPS mode**, × 1.0 otherwise (`0x0126D2CC` = 0.5).
+- **Edge costs.**
+
+| Move | Cost added to g | Condition |
+|---|---|---|
+| to a successor lane (`+0x34` list) | its chord length `+0x20`/256 (`0x00A69C10`); 0 when the lane has flag bit 31 | always |
+| same, Highway lane (flag bit 4) | **× 0.5** | GPS mode only (`0x00B1C8DF`) |
+| lane change to the `+0x3C` (left) or `+0x3A` (right) neighbour | **6.0 m** (`0x012A2F7C`); **3.0** when the target is Highway (`0x01116444`) | not from a lane that was itself reached by a lane change (record `+0x16` bit 2) |
+| to an **oncoming** left neighbour (flag bit 0) | 6.0 | allowed **only in GPS mode**; this is how a GPS route makes a U-turn on the spot |
+
+- **Lane filter (every expanded lane).** The lane must share a bit with `0x08062D00` (bits 8, 10, 11, 13,
+  17, 18, 27) and none with the exclude mask. In GPS mode a flag bit 15 lane also needs bit 27.
+  Consequences against the shipped data:
+  - ordinary roads (bit 10) and junction connectors (bit 8) are usable;
+  - Offroad lanes (bit 16 only) are not;
+  - bit-24 lanes (301; meaning still open) are avoided unless the trip starts or ends on one.
+- **Shortcuts (bit 15, 263 lanes).** These are the **"GPS shortcuts"**. Bit 27 is set at load by
+  `0x00A6AE90` from a persisted bit array (save block `+0xFAEC`, caller `0x00B980A0`). The k-th bit-15
+  lane in file order is unlocked by bit k. The stat name "GPS Shortcut Unlocks" sits in the stat-name
+  table at `0x00FF58F0`. FINAL for the mechanism; HIGH that the save field is the shortcut-unlock
+  progress.
+- **Islands.** Segment flag bits 28–29 are not 0 at run time. `0x00A6AC70` (from `0x0070841C`) floods each
+  connected lane set with the island id (`hood_island_type`, district record `+0x5C`) of the district
+  containing its start node. Water lanes (bit 18) get 0. The expansion refuses to step from an island lane
+  onto a lane of another island unless that island is the goal's (`0x00B1C01F`–`0x00B1C04A`). FINAL;
+  HIGH for the exact either-side rule.
+- **Goal test.** The pop loop stops when the popped lane is one of the goal candidates
+  (`0x00B1C620`–`0x00B1C628`).
+
+**Not used by GPS:** the sidewalk graph, the navmesh (§14 of this file; it is dead in shipped data), the
+traffic speed class, signal state and occupancy. On foot and in a car the search is identical.
+
+### 23.5 Monitoring: progress, arrival, off-route and replanning (state 11) — FINAL
+
+Every frame, `0x007D8410(slot)`:
+1. **No player:** clear (`0x007D6DC0(+0xA5E, 1, slot)`).
+2. **Tracked object:** goal G = the object's position. If the object is gone, clear.
+3. **Arrival.** dX, dZ = start position (vehicle if seated) − G. The route is cleared with **kind 0**
+   when **dX² + dZ² < 15.0** (`0x01117A60` = 15.0, a squared-metre test). That is an XZ radius of
+   **√15 ≈ 3.87 m**. A second test, against 4.0² in an interior or 15.0² outside (`0x005812D0`), is
+   always looser, so √15 m is the effective radius. Only a **player pin** clears this way; a mission
+   waypoint stays until the script removes it. When a pin clears, any saved mission waypoint is restored
+   (§23.2).
+4. **Progress.** `0x007D2400` walks the whole route and returns the minimum squared 3D distance D² from
+   the player (`+0x40`, the character, not the vehicle) to each lane's nearest point (`0x00A1EB30`). It
+   sets `+0xA74` to that node; a change sets `+0xABC` = 1. The draw starts at `+0xA74`, so the line is
+   consumed as you drive.
+5. **Replan triggers** (the "replan" flag):
+   - **Far off route:** not direct mode, D² > **10000** (100 m), and timer `+0xB20` expired. Then re-arm
+     2500 ms and replan. Exception: when seated in a vehicle that is neither a Watercraft (`0x00AD3290`)
+     nor passes `0x00AD3C50` (identity OPEN), the frame does nothing instead.
+   - Otherwise, once the 3000 ms timer `+0xB1C` has expired:
+     - D² > **625** (25 m off route) → replan;
+     - goal moved more than **15 m** from `+0xA84` (squared 225, `0x01115320`; tracked targets only) → replan.
+   - Direct mode has no route, so D² = FLT_MAX. It therefore re-tries a road plan every time the 3000 ms
+     timer has expired, unless the player passes `0x0098A3F0`, `0x00994F60` or `0x00994F40` (HIGH: still
+     airborne or seated).
+6. **The replan** is `0x007D6970(G, kind = +0xA5E, …, replan = 1)`, which restarts at state 1 and re-arms
+   the 3000 ms timer. **Effective cadence:** at most one plan every ~3 s while 25–100 m off route or
+   chasing a moving target; every 2.5 s when more than 100 m off route on foot or in a boat.
+
+A route under 25 m off-route and with a still goal is never recomputed. There is no lane-level "wrong
+way" test.
+
+### 23.6 On foot, cars, boats, aircraft — FINAL unless marked
+
+| Player state | Start point | Route | 3D arrows (H.6) |
+|---|---|---|---|
+| on foot | the character | road graph (no sidewalks) | none (`0x009B9160`: character `+0x16D4` == 3 is required; HIGH that 3 = seated) |
+| car or bike | the vehicle | road graph | yes |
+| boat (`Vehicle_Type` 5) | the vehicle | road graph (water lanes are island 0, so a boat route only works when the goal is also off the islands; HIGH) | yes |
+| airplane, helicopter, VTOL | the vehicle | **direct mode**: straight line | no route, no arrows |
+
+### 23.7 Cues: turn indicators yes, voice and turn-by-turn text no — HIGH / FINAL negative
+
+- **No audio and no turn-by-turn text.** The GPS module (`0x007D0F80`–`0x007D8D80`) has no audio or
+  voice call. Its only sound is the pause-map UI event `pause_map_interface_event` on set/clear
+  (`0x007D9100`). A whole-image string scan for `gps`, `waypoint`, `route` and `turn` finds no voice or
+  turn-instruction asset. **FINAL (negative).**
+- **The car's turn indicators.** `0x007D7390` (from the 3D-arrow pass) takes the next route corner. It
+  calls `0x00AD5460` on the player's last vehicle (character `+0x16C0`): `(which = 1, on)` sets bit
+  `0x800`, otherwise bit `0x1000`, of the vehicle's `+0x16C0`. The side is the corner's kind byte
+  (`+0x48`, 0 or 1). It turns on when the car is within a speed-scaled distance of the corner and heading
+  toward it. The heading test runs only for corner kinds 0 and 1: the XZ dot product of the car's forward
+  axis (`+0x64`) with the unit direction to the corner must be ≥ **0.5** (`0x0115A1C0`; FINAL). The trigger
+  distance is lerp(`[0x02299E60]`, `[0x02299E70]`, clamp(speed ratio, 0, 1)). Those two are run-time
+  globals with no static value, so the distance law is a GUESS. Otherwise both bits clear. The traffic AI
+  drives the same bits (`0x00B1FD3F`, `0x00B52E7B`), and the RTTI name `vehicle_turn_signal_manager`
+  exists. **HIGH** that the bits are the left/right indicator lamps; which bit is left is a GUESS.
+
+### 23.8 Test vectors (hand-computed from the constants above)
+
+| # | Input | Expected |
+|---|---|---|
+| TV1 | GPS mode. From lane S (g = 0) the successors are A (chord 40.00 m, Highway) and B (chord 40.00 m, plain). A's end is 100 m from the goal, B's end 90 m | g(A) = 20.0, f(A) = 20 + 0.5·100 = **70.0**; g(B) = 40.0, f(B) = 40 + 45 = **85.0**; A pops first |
+| TV2 | Same S, left neighbour L is oncoming (S has flag bit 0), L's end 10 m from the goal | GPS mode: g(L) = 6.0, f = 6 + 5 = **11.0** (U-turn taken). Traffic mode (`+0x20` = 0): not expanded |
+| TV3 | Lane reached by a lane change (record `+0x16` bit 2 set) | no further lane change from it; successors only |
+| TV4 | Player pin, goal (0, 0, 0), player XZ at (3.5, 0) | 12.25 < 15 → cleared (kind 0); saved mission waypoint restored if any |
+| TV5 | Same at (3.9, 0) | 15.21 ≥ 15 → kept. Mission waypoint (kind 1) at (0.5, 0): kept (arrival clears kind 0 only) |
+| TV6 | 4 s after the plan, player 30 m from the nearest route point, goal still | D² = 900 > 625 → replan. At 20 m: 400 → no replan, ever |
+| TV7 | Tracked car target moved 16 m since the plan, player on route, plan 3.5 s old | 256 > 225 → replan. Moved 14 m: 196 → none |
+| TV8 | On foot, 120 m from the route | D² = 14400 > 10000 → replan when `+0xB20` expires, then every 2500 ms |
+| TV9 | Mission waypoint active (kind 1); player presses "set GPS" on the pause map | pin (kind 0) replaces the route. Press again → pin cleared, the mission route is planned again from `+0xAF0` |
+| TV10 | `waypoint_add` to a point 0.6 m from the current goal, same kind, route active | ignored (0.36 < 1.0); no replan |
+| TV11 | Player in a helicopter sets a pin | direct mode: `+0xA60` = `+0xA91` = 1, state 11, straight line; road plan re-tried every 3 s after landing |
+
+### 23.9 Corrections to earlier text
+
+- `spec-hud-runtime.md` §6.5 said `0x007D7650` does "navmesh corridor-funnel pathfinding". **Wrong.**
+  Planning is the road-graph A* of §23.4, run by `0x007D89A0`. `0x007D7650` only walks the committed lane
+  route to place 3D arrows and turn-indicator corners.
+- The same section said the minimap never shows the route. **Wrong.** `0x007D5C90` draws it on the
+  minimap and on the pause map (H.6).
+- The same section's "3D positional audio cues" are the car's turn indicators (§23.7).
+- The same section calls `+0xA70` a "resolved live-object-handle slot". **Wrong.** It is the committed
+  route list; the tracked object is at `+0xB10`.
+- `waypoint_is_placed` is true for a route of either kind, not only a validated mission target.
+- §13.2a(d) of `spec-zone-data-format.md` reads bits 28–29 ("kind", 0 on disk). They are the run-time
+  island id (§23.4). Bit 15 is the GPS-shortcut class, and bit 27 is its run-time unlock bit.
+
+### 23.10 Port recipe (Team B)
+
+1. Load the §13.2a graph. At load, flood island ids (district `hood_island_type` at node A of each
+   unvisited non-water lane, through successors) and set bit 27 on unlocked shortcuts. Before save data
+   exists, use all-locked.
+2. Keep one GPS record per player with the fields of §23.1, a kind byte, a saved mission goal, and two
+   timers.
+3. Start from the player's vehicle position (else the character). Collect lanes near it and near the
+   goal. Moving the goal onto a lane only when it is within 10 m is optional fidelity; the plain rule is to
+   keep it.
+4. Run A* with f = g + 0.5·|B − goal|, the costs and filter of §23.4, and the island rule.
+5. Implement §23.5 exactly: the √15 m pin arrival, the 25 m / 15 m checks behind a 3 s timer, and the
+   100 m / 2.5 s branch. Aircraft use direct mode.
+6. Use the §23.2 clear and restore rules for pins against mission waypoints.
+
+**Residual (OPEN):**
+- the exact ring-radius law of `0x007D1090` and the start-candidate trimming in state 9;
+- the identities of `0x00AD3C50`, `0x0098A3F0`, `0x00994F60` and `0x00994F40`;
+- whether the cost bound `+0x1C` prunes inside `0x00B1BE40`;
+- which turn-indicator bit is left;
+- the meaning of bit 24, which GPS avoids;
+- who writes the shortcut-unlock save bits.
+
+None of these blocks a port.
+
+**Clean-room check.** Plain hex addresses only, no decompiler names or pseudocode, no leaked material.
+
+## 24. Homies and followers (2026-10-19)
+
+Status: FINAL for the follower cap, the dismiss-one choice, the call cooldown, the spawn-point search, the
+friendly-fire rule, the abandon rule and the squadmate spacing rule. HIGH for the drive-up speed, the
+gait choice and the hospital bill. GUESS where marked. This is static analysis of the instruction stream
+only; the game was not run. Each claim carries its own tag.
+
+Builds on: `spec-cellphone-menu-runtime.md` §16a (phone book, dial, busy, summon entry), §11.3 (the
+`Follow` family, actions 30-40, and 17 `move regroup`), §21.2 (the 2000 ms target copy), §21.10.1 (downed
+type 0), §22.11 item 5 (followers entering vehicles), `spec-player-runtime.md` §18.6 (followers dismissed on
+death) and §6.3.2 (exit locks), `spec-save-format.md` §12.7.1 (roster save), `spec-tables-traffic-ai.md` §15
+(`homies.xtbl`), `spec-tables-progression.md` (unlockables, respect levels), and `spec-lua-api-behaviour.md`
+(§7.2, §7.6, §14.17, §15.13, §18.28, §22.8, §22.9, §54.4).
+
+### 24.1 What was already FINAL before this pass
+
+| Topic | Where | Status |
+|---|---|---|
+| Phone book, inclusion and callable rules, dial, busy, connect, garage pick | cellphone §16a.1-16a.2 | FINAL |
+| Service flags of `homies.xtbl` (`clear gang notoriety` ... `requires saints`) | traffic-ai §15 | CONFIRMED |
+| Mission block (`Blocked_for_Mission` answers busy); no cash cost on the homie path | cellphone §16a.3 | FINAL |
+| Follow family: formation 2.5 m, teleport 100 m / 150 m in a vehicle with the height rule, to car within 30 m, closest-seat choice, other car, carjack | §11.3 | FINAL/HIGH as tagged there |
+| Target copy from the player every 2000 ms | §21.2, §22.11 item 5 | FINAL |
+| Downed type 0 for followers: 30000 ms x difficulty, expiry = death, a player revives with a 2.5 s hold, NPCs never revive | §21.10.1 | FINAL |
+| Death of the player dismisses every follower (`force` = 1) | player-runtime §18.6 | HIGH |
+| `follower_remain_in_car` = `cannot_exit_vehicles` exit lock | player-runtime §6.3.2 | CONFIRMED |
+| Follower takes the player's `Damage_Received_Mult`; homie health multipliers (types 42/43) | weapons-runtime §4.5.4; player-runtime §18 | FINAL/HIGH |
+| Roster save: 24 rows of (name hash, status); state 4 re-places an active follower on load | save §12.7.1 | CONFIRMED |
+| Lua party natives (`party_dismiss_all`, `party_allow_max_followers`, `party_set_dismissable`, `party_set_recruitable`, `follower_make_independent`, `follower_set_can_abandon`) | Lua spec | CONFIRMED |
+
+The gaps this section fills were OPEN in cellphone §16a.5: the follower maximum, the cooldown, the arrival
+bodies (`0x007e30b0`, `0x007e3ba0`) and the status names. It also adds the on-foot, vehicle, combat and
+leave rules that §11 states only as action gates.
+
+### 24.2 Roster and unlocks
+
+- **Who can be called.** Every `homies.xtbl` row (base 24 rows, then DLC rows) that passes the phone-book
+  rules of cellphone §16a.1. A row with status 0 is listed only once its name-hash unlock flag is set. That
+  flag is set by an `unlockables.xtbl` row of type `Homie` (progression, type 1), by a stronghold level
+  (Lua spec, stronghold unlock of level-0 contacts) or by mission script. `homie_mission_unlock` and
+  `homie_mission_lock` override this through record `+0xC0` (2 = yes, 1 = no). [FINAL, restated]
+- **Follower slots come from three unlockables** (`unlockables.xtbl`, category `Homies`):
+  `HomieSlot1` is auto-unlocked silently at new game (price 0). `HomieSlot2` is listed at respect level 6
+  (2690 respect) and costs $12000. `HomieSlot3` is listed at the 3840-respect row (level 16) and costs
+  $28000, with `HomieSlot2` as its priority. `Homie_Saints_Backup` is listed at level 7.
+  [FINAL for the data; HIGH that slots 2 and 3 become usable only after purchase in the upgrade store,
+  per progression "most of these ids become available in the upgrade store"]
+
+[2026-10-20 Team B CHOSEN Q: FINAL — **starting status of the roster rows.** Every row starts at status **0**, not 1. The row reader `0x007e6760` writes `+0xBC` = 0 (at `0x007e68a9`), and the new-game reset `0x007e6ea0` walks the base rows then the DLC rows and writes `+0xB8` = 0, `+0xBC` = 0, `+0xC0` = 0 and clears the stamps at `+0xC4` and `+0xD8`. A status-0 row is listed and callable only when its unlock test `0x0071dfd0(row +0x20)` passes: a scan of the unlockables records (base `0x01522754`, stride `0x100`, count `0x015226fc`) for a record of type 1 (`Homie`) whose name hash equals the row key and whose live byte `+0xDC` is set; or when `homie_mission_unlock` set `+0xC0` = 2. A row reaches status 1 only after its first use (removal paths `0x007e81a0`, cooldown release 6 -> 1). Port: start every row at 0 and feed the unlock flags (respect-level unlockables, stronghold level unlocks, `homie_mission_unlock`). "All 24 rows at status 1" lists homies the player has not unlocked yet.]
+
+### 24.3 Follower cap (FINAL)
+
+`0x0097e780(leader)`:
+1. If the leader's class descriptor (`0x02cc9900[+0x34]`) has byte `+0xa` bit 1 clear (not a player), the
+   cap is **5**.
+2. For a player, `0x009dd660(player)` applies:
+   - If the recruitable global `0x0130af60` (`party_set_recruitable`, default 1) is 0 and the player's
+     allow-max flag (`+0x28ac` bit 0, `party_allow_max_followers`) is clear, the cap is **0**.
+   - Otherwise base = **1** in a networked session with more than one player (`0x00867830`: session
+     object present, host or more than one member, `0x00681370` > 1), else **3**.
+   - In a multi-player session in game mode 11 or 12 (`0x006525a0`), the cap is **2**.
+   - If the allow-max flag is clear and player byte `+0x1ef0` is 1, cap = min(base, slots), where slots
+     (`0x0071b740`) = how many of `HomieSlot1`, `HomieSlot2`, `HomieSlot3` are unlocked **in order**
+     (records `0x0152271c`/`0x01522720`/`0x01522724`, byte `+0xe0`; 0 if slot 1 is locked, and the count
+     stops at the first locked slot).
+3. Current size `0x0097e260(leader)` = the leader's party record (`0x005083f0`) `+0x10` minus 1. The record
+   counts the leader.
+
+So in single-player free roam the cap is 1 at new game, 2 after `HomieSlot2`, and 3 after `HomieSlot3`.
+`party_allow_max_followers(true)` gives 3. A co-op player always gets 1 (2 in modes 11/12). The meaning of
+`+0x1ef0` == 1 is GUESS ("local player in normal play"); it must hold for the slot limit to apply.
+
+[2026-10-20 Team B CHOSEN Q: FINAL — **recruitable default.** The bytes `0x0130af60` (recruitable), `0x0130af61` (dismissable) and `0x0130af62` are initialised `.data` values 1, 1, 1, and are registered as the synced flags "player_recruit", "player_dismiss" and "player_chainsaw" (`0x009e2116`, `0x009e214f`, `0x009e218c`). So the default is 1, as the viewer uses; a host-side default of false is wrong.]
+
+### 24.4 Which follower a full party drops (FINAL arithmetic; term meanings HIGH)
+
+`0x009db1b0(leader, force)` walks the leader's party and removes **the member with the lowest score
+below 100**, through `0x0097e610` (`0x009d95a0`, the crew removal; for the local player also `0x00bda680`).
+- A member with `+0x1e02` bit 3 is never taken. Its score is fixed at 100.
+- A member with `+0x1da5` bit 4 or `+0x1e00` bit 7 is taken only when `force` is set.
+- A member whose `+0x1de8` byte is set must be owned here (`0x008addb0`).
+
+Score (`0x0097e2b0`) = (1 - 1/HP) + (1 - 1/(k + 1)) + the character's integer `+0xf8`, plus 5 when an
+instance override `+0x1da8` exists, plus 10 when `+0x1e00` bit 7 is set, plus 20 when the character is bound
+to a homie record (`0x007e7ed0` != -1). Here HP is `+0x1cb8` and k is an inventory count (`0x004efc70` over
+`0x005ff7a0`; HIGH: weapon count). The effect is that generic recruits go before named homies, and weaker
+homies go before healthier ones.
+
+The phone call uses `force` = 0 (cellphone §16a.3), so script-locked members are never dropped by a call.
+If nobody is eligible, the party stays full and the call summons nothing. Player death uses `force` = 1
+until the party is empty (player-runtime §18.6).
+
+### 24.5 Call-in flow (dial, delay, spawn, approach, arrival)
+
+The summon object is the singleton at `0x022ad2e0`. Its state word `+0x3ec` is also read as `0x022ad6cc`,
+and its request type `+0x440` is 11 for a homie. The update dispatcher `0x007e58a0` runs only in states
+other than 0, 1 and 2, and jumps through `0x007e596c[type]`; type 11 goes to `0x007e4060`. [FINAL]
+
+1. **Dial and ring.** As cellphone §16a.2: ring timer 1.0, then connect. Hang-up runs the cap check of
+   24.3/24.4, then summons through `0x007e2c70(index)`. That call refuses while the state word is non-zero
+   (one call at a time). `0x007e30b0` sets state 1 and clears the handles. [FINAL]
+2. **Service rows** (record `+0xF1` & 3, the notoriety clears) run on the host only. `clear gang
+   notoriety` calls `0x00609030(t, 1, 1)` for teams 0, 1 and 2; `clear police notoriety` calls it for team
+   3. Then comes the cooldown (24.6) and the end of the request. Nobody joins. [FINAL]
+3. **Crew rows.** Type 11 is set, and the record status becomes **2** (`0x007e60d0(record, 2)`). The crew
+   (`Humans`) and a weighted vehicle (`0x007e6000`) are picked; a garage-pick row uses the chosen garage
+   vehicle instead. The spawn request starts (`0x009325a0`). [FINAL]
+4. **Spawn point** (`0x00933760(player)`): [FINAL]
+   - The heading is the player's velocity when its length is above 5 m/s, else the facing (`0x009e2d00`).
+   - Four directions are tried in this order: ahead; the two perpendiculars (cross product with up
+     (0, 1, 0)), in random order by a 0.5 coin; then behind.
+   - For each direction the distances 200, 150 and 100 m are tried in that order (table `0x01170340`).
+   - Candidate = player position + direction x distance. It is snapped to a road (`0x00b41530`, height
+     reference max(player y, 10)), then validated by `0x00932fe0`.
+   - **The validator rejects a candidate within 95 m of any player** (squared 9025, `0x01170368`, over the
+     player list `0x03171a64`), and requires a road node (`0x009061d0`/`0x0090af30`).
+   - The first valid candidate wins. If none of the 12 is valid, the spawn fails.
+   - The homie always **arrives by car**. Rows flagged `turn to ped after driveup` leave the car on
+     arrival and do not join (taxi/service).
+5. **Per-character set-up** (`0x007e7770(member, record index)`, once per spawned crew member): [FINAL]
+   - `give random weapons` (`+0xF1` 0x08) gives an inventory roll (`0x006037c0(0)`, `0x006006b0(6, 0)`).
+   - A brute-class member is set up for brute AI (`0x009422d0` path).
+   - `form own squad` (0x04): the members form their own squad around the first member (record `+0x78`).
+     That leader gets a follow/leash order toward the player at 30 m (`0x004e7db0`, 30.0), and the others
+     join its squad (`0x00508ef0`). They are **not** player followers.
+   - Otherwise the member registers as `"homie"`. Record status 2 becomes **3**, and record `+0x78`
+     records the member. Unless `turn to ped after driveup` is set, the member **joins the player's party
+     at once**: `0x0097ead0(player, member, 0, 0, 0)`, with the cap gate skipped because the hang-up
+     already checked it. So a homie is a follower while it is still driving up.
+   - `+0x1da5` bit 4 is set when the set-up output (`0x0094ac40`) is 0, the row has neither `requires
+     saints` nor `turn to ped`, and the character record's `+0x28 -> +8` byte is at least 3. Otherwise
+     the bit is cleared. Meaning GUESS: "temporary, not dismissable by a call" (24.4 skips it unless
+     forced).
+6. **Approach speed** (`0x00934ed0(vehicle, target, follow)`): [HIGH]
+   - With no vehicle the speed is 10.
+   - Otherwise it is min(vehicle top speed `0x00a6baa0`, 35 m/s).
+   - When following, the target is ahead (unit offset . vehicle forward > 0.5) and not closing head-on,
+     and the target is in a moving vehicle, the speed is the target vehicle's speed (`0x00434f60`) clamped
+     to [20, 35].
+   - The route is the drive-to logic of §22 (HIGH; the directive is set inside the generic spawn-group
+     code `0x00932xxx`-`0x00935xxx`).
+7. **Arrival and release.** In state 3, when the member's own vehicle handle (`+0x16c0`) matches the
+   event's vehicle, `0x007e2f00` releases the member from scripted control. It clears the drive flags
+   (`0x00948f90(0)`, `0x009d58a0(0)`, `0x009d6fa0(0)`, four AI-flag clears, `0x007e8810`) and resets its
+   action (`0x004e4130`), then sets state **5**. In state 5, if the member is alive, the row has `repair
+   players vehicle` (0x20) and `0x007e7a60(member, player)` accepts (within 200 m, §20 vehicle notes), the
+   state becomes **6**. State 6 polls `0x007e7ac0` until done, then `0x007e7ae0`. Otherwise the request
+   ends (`0x007e3a40`). Ending releases the request handles; the follower stays. A cutscene
+   (`0x006cecb0`) or a game mode other than -1 ends the request at once. [FINAL for the states; the event
+   that triggers state 3 to 5 is HIGH]
+8. **Arrival radius: OPEN.** It is inside the generic drive code and was not read. CHOSEN stand-in [GUESS]:
+   treat the drive-up as arrived when the car is within 15 m of the player and below 2 m/s, then let the
+   member get out and follow (24.7).
+
+[2026-10-20 Team B CHOSEN Q: FINAL for the arrival test (CONFIRMED by Team D emulation), GUESS for the route goal — **drive-up arrival (replaces the step 8 stand-in).** There is no "within 15 m" test. The homie car runs vehicle directive mode 3 (`+0xc68` = 3) with a sub-state at `+0xc69` (dispatcher `0x00b62390`: 7 -> `0x00b61990`; 8 -> `0x00b62120`, then 9; 9 -> `0x00b61880`). Sub-state 7 drives the planned route (`+0x11a4`, followed by `0x00b2bbc0` or `0x00b58ab0`) at the approach speed of step 6, and moves to 8 on the first tick that the body speed |v| (`0x00abaf10`, length of the linear velocity) is below **1.0 m/s**. So the car arrives when the route follower has braked it to a stop at the route goal (§22.3 stop rule: brake from d < v^2/a_b + r, r = 3.0 m). Sub-state 8 (`0x00b62120`) walks the seats and makes the occupants leave. Each occupant that leaves a mode-3 car runs `0x00b623f0` (called from the exit routine `0x00b0ce40`), which releases a spawned member through `0x007e2f00`, the release of step 7. So the crew always get out of a stopped homie car; they never board the player's moving car straight from it. A moving player is followed (step 6 speed match) and the crew leave only when the homie car stops; after that a follower uses 37 `follow to car` (24.8). GUESS: the route goal is the player position snapped to the lane graph (the goal set inside `0x00932xxx` was not traced). Port: route to the player, stop by §22.3, release the crew when |v| < 1.0 m/s; drop the 15 m / 2 m/s rule and the 3 m/s speed-matched boarding. [2026-10-20 per Team D emulation: FINAL] Emulated `0x00b61990` (test at `0x00b61b48`..`0x00b61b71`): arrival = |linear velocity| of the body (vehicle `+0x81c`, `+0x1b0`, via `0x00abaf10`) < 1.0 m/s, STRICT (exactly 1.0 does not arrive: 1.2 stays 7, 1.039 stays 7, 0.999 -> 8, 0.9873 -> 8, 0.9 -> 8, exactly 1.0 stays 7); the speed reads as 0 when the vehicle state byte `+0xbd0` != 1; sign and direction are irrelevant; all 4 lanes of the compare must pass; then sub-state byte `+0xc69` goes 7 -> 8.]
+
+[2026-10-20 Team B CHOSEN Q: FINAL — **garage-pick vehicle, and phone timing.** A `player selects vehicle` row never uses its own `Vehicles` list: the car is the garage row chosen on the phone (`cellphone_choose_vehicle` `0x0083d5e0` -> `0x007e5c70`, stored at `0x022AD760`; cellphone §16a.2). "First vehicle of the row" is only a fallback for a missing garage. The ring, connect and summon timing is in the 2026-10-20 note of cellphone §16a.2: the summon comes one phone update after the connect, with no 2000 ms talk delay. [2026-10-20 per Team D emulation: FINAL] Team D emulation of `0x0083d150`: dt 0.033333335; second ring at update 30 (1.000 s), connect at update 31 (1.033 s), summon at update 32 (1.067 s), close timer 3.0 s with the close 91 updates after the summon (3.033 s; the timer must go strictly below 0). With homie id -1 the connect is the call-by-name path. Details in cellphone §16a.2.]
+
+### 24.6 Record status and the cooldown (FINAL unless marked)
+
+| `+0xBC` | Meaning | Set by |
+|---|---|---|
+| 0 | locked (listed only with the unlock flag) | load; `0x007e61e0` when the status was 0 or 7 |
+| 1 | available | load; removal paths `0x007e81a0`; cooldown release |
+| 2 | called, en route | summon (24.5 step 3) |
+| 3 | spawned and joined | per-character set-up (24.5 step 5) |
+| 4 | following (HIGH); the save keeps it and the load re-places the follower | save §12.7.1 |
+| 5 | downed (4 -> 5 with `HOMIES_FALLEN` "%s is down!", `0x007e8440`) | downed path |
+| 6 | **cooldown** (listed, not callable -> busy) | `0x007e61e0` |
+| 7 | hidden (not listed) | data/script |
+| 8 | available (special; a clock offset is added on leaving 8, `0x007e60d0`) | data/script, HIGH |
+
+**Cooldown.** `0x007e61e0(record)` sets status 6 (unless the status is 0 or 7, which become 0). It stamps
+`+0xC4` = the live game clock (`0x014ff338`) plus **1 game day** (`0x006fee90(1)`), or plus **1 game hour**
+(`0x006fed60(1)`) for a `player selects vehicle` row. The release `0x007e61a0` turns 6 back into 1 (and
+clears `+0x178`) once the clock has passed the stamp (`0x006fe8d0` false; HIGH for the boundary). It runs
+when the phone book is built (`0x0083d461`), so the homie becomes callable the next time the phone opens
+after the stamp. The cooldown starts on:
+- the end of a service call (`0x007e3e32`);
+- killed, angry-left, dismissed and the other removal notices (`0x007e82ef`, `0x007e8328`, `0x007e8395`,
+  `0x007e841e`);
+- the downed notice (`0x007e857d`);
+- the hospital bill (`0x007e87de`);
+- and `0x007e7c2c`, `0x007e88cd`, `0x007e890b` (HIGH: other removal paths).
+
+There is no real-time re-call timer. The only other lock is the one-call-at-a-time state word. The cost
+is $0 to call; a death costs the hospital bill (24.10).
+
+### 24.7 Following on foot
+
+- **Goal and mode.** A follower runs goal 5 `group` and mode 14 `Follow`, using the actions of §11.3.
+  Restated with the run-time constants now read (FINAL):
+  - 32 `follow formation` accepts beyond 2.5 m from an on-foot leader.
+  - 34 `follow player` accepts beyond **6 m** (`0x013bae40` = 36, squared, set at start-up).
+  - 30 `follow make way` accepts when the player is in a vehicle state within **1.2 m** (`0x013bb1c0` =
+    1.44, squared).
+  - 17 `move regroup` accepts beyond the behaviour record's `seperated_distance` (`_interior` indoors),
+    plus 10 m against an unarmed brute.
+  - 35 `follow teleport` applies beyond 100 m (150 m when the player is in a vehicle) with more than 4 m
+    of height difference.
+  - 36 `follow lemming` follows the player's breadcrumb trail (table base `0x013bae50`, count
+    `0x013bb198`, cursor `0x013bb19c`) when the player is off the navmesh (`+0xc38` bit 7), for example
+    while climbing or jumping.
+- **`seperated_distance` values** come from `ai_behavior.xtbl` per behaviour record: for example `Saint
+  Melee` 20 m (interior 10 m), the `Default` and gang records 6-20 m, and `Oleg Melee` 30 m (interior
+  25 m). [FINAL data]
+- **Arrival box** in the Follow tick (`0x0054a420`): the horizontal radius is 6 m for 34, else the
+  record's `seperated_distance`; the vertical half-height is 3 m or 2 m. When the follower is inside the
+  box it finishes (`0x004f4f50`). [HIGH; the condition picking 3 or 2 was not decoded]
+- **Gait** (`0x005452a0(follower, target)`) [HIGH for the gait names, FINAL for the arithmetic]:
+  gait = max(player gait `+0xccc`, 1) + (d > 7.5 m) + (d > 15 m), capped at 3, where d is the distance to
+  the target (squared thresholds 56.25 and 225). Gait 1 is walk, 2 run, 3 sprint. So a sprinting player
+  makes every follower sprint, and a walking player's follower runs beyond 7.5 m and sprints beyond 15 m.
+  Gait 0 is never chosen while following.
+
+[2026-10-20 Team B CHOSEN Q: HIGH — **gait speeds.** No follower speed constant exists. Follow moves pass the speed sentinel, so the speed is the root motion of the locomotion clip for the chosen gait times human `+0xa64`, as for ambient peds (§20.6.9(a)). Measured clip speeds (ped sets, `+0xa64` = 1.0): male walk 1.386 m/s and run 6.373 m/s; female walk 1.368 m/s and run 4.433 m/s. A homie moves with its own anim set, so the values vary per set; the sprint clip was not measured (OPEN). Port: take the speed from the follower's walk/run/sprint clip; if constants are needed, walk 1.39 and run 6.37 are closer than 1.6 / 4.0 (sprint GUESS). The player-gait thresholds (7.5 m, 15 m, cap 3) above are FINAL.]
+
+- **Squadmate spacing.** If another group member is ahead (unit offset . facing > 0.7071, that is, within
+  45 degrees) and within **2 m** horizontally (squared 4), the follower stops (stance 0) and waits **1500
+  ms** (`+0x460`). [FINAL]
+- **Formation offsets.** No per-slot offset table is read by 32 or 34. Followers path to the leader and
+  are spread by the 2 m wait rule and the arrival box. [GUESS: no fixed formation]
+- **Idle.** Action 69 `idle` is refused to followers; 40 `follow browse` runs on event 97. Inside the box
+  a follower stands. [FINAL, restated from §11.3]
+- **Unstreamed follower.** In the per-frame party monitor `0x007e7050`, a follower that is not
+  instantiated or streamed (`+0x33` bit 3, `0x00861e60` on `+0x70`) while the player is, and that is
+  neither leashed to another anchor nor `independent` (`+0x1e01` bit 0), is teleported to the player
+  (`0x00549cc0`). [HIGH]
+
+[2026-10-20 Team B CHOSEN Q: HIGH — **unstreamed follower.** The test is the streaming state, not a distance: the monitor teleports a follower that is neither leashed nor `independent` when its object is not instantiated or streamed (`+0x33` bit 3, `0x00861e60` on `+0x70`) while the player's is. The distance only enters through the character streaming radius. The distance rule is 35 `follow teleport` (100 m, 150 m in a vehicle, more than 4 m of height difference). Port: if characters are never streamed out, this rule never fires; keep 35. 200 m is a stand-in.]
+
+### 24.8 Vehicles
+
+- **Getting in.** When the player enters a vehicle, each follower is notified (event 0x2e,
+  the player-only enter side effects in `spec-player-runtime.md`). Action 37 `follow to car` takes a seat in the leader's vehicle within
+  30 m. The seat chosen is the closest eligible one; the driver seat wins if it is free, and the front
+  passenger seat wins under a group condition (§11.3). [FINAL, restated]
+- **Too many homies.** When no seat is free, 38 `follow other car` uses a group member's vehicle, and 39
+  `follow carjack` takes the nearest vehicle of the same class group from the vehicle list. The result is
+  a second car that follows the player. `always_follow_in_alternate_vehicle` (`+0x2ba` bit 0) skips 37.
+  [FINAL, restated]
+- **Homie as driver.** In the `Passenger` tick `0x0051f040`, if the follower's leader is a player
+  (class 0x21) in the **same** vehicle, the follower is that vehicle's driver (`0x00ab63f0`), and the game
+  mode is not 4, it runs the driver routine `0x0051db70` (the homie drives for the player). [HIGH; the
+  driving law is §22]
+- **Bail-out.** Unless `cannot_exit_vehicles` (`+0x1c9c` bit 8) or vehicle `+0xc6c` bit 5 is set, a
+  passenger whose vehicle passes `0x00a77a10` with `0x00ad4160` > 20 leaves (`0x004dcd50`). [FINAL test;
+  GUESS meaning: a wrecked or burning car]
+- **Getting out when the player gets out.** `Passenger` is valid only in a vehicle, and the group goal
+  reselects `Follow` when the leader is on foot, so the follower leaves unless `cannot_exit_vehicles` is
+  set (`follower_remain_in_car`; player-runtime §6.3.2). [GUESS for the exact trigger instruction; the
+  lock is CONFIRMED]
+- **Leash in vehicles.** The abandon radius is scaled by 1.2 when the player is in a vehicle the follower
+  is not in (`0x005085a0`; 24.10). [FINAL]
+
+[2026-10-20 Team B CHOSEN Q: FINAL for the source, HIGH for the use — **free seats.** The seat count is per vehicle: `0x00ab4af0(vehicle)` returns vehicle `+0x824` for a vehicle object (8 for other kinds), and the entry code forces 1 when vehicle `+0x16c2` bit 0 is set (player-runtime seat-count rule). A seat is free when its occupant query `0x00ab5070(vehicle, seat)` returns nothing. Followers take the closest free seat of the player's car (37) and the overflow takes another car (38/39). So the free passenger seats are seat count - 1 (driver) - occupied, not a fixed 3. The writer of `+0x824` (from the vehicle's seat data) was not traced.]
+
+### 24.9 Combat
+
+- **Target choice.** Every 2000 ms a follower takes the player's target when the AI accepts it (§21.2).
+  Action 33 `follow acquire` joins a perceived group member or list-5 ally that is in combat, or one in
+  `Fire spray`, `Melee` or `Stunned`. Otherwise the normal §21 selection runs with the follower's team, so
+  a homie engages whoever is hostile to the Saints, including the player's attackers. [FINAL, restated]
+- **Weapons and accuracy.** These come from the character's loadout and its behaviour record (§21; the
+  weapon class picks the record). `give random weapons` rows roll an extra inventory (24.5). The enemy
+  grenade cadence against homies is 15-25 s, and a homie's own grenades come every 45-60 s
+  (`Ai_offhand_grenade_at_homie_*`, `_from_homie_*`, tweak table). `Homie_flinch_chance` is 0.6. [FINAL
+  data; HIGH for the readers]
+- **Notoriety.** No coupling from the player's notoriety level to follower aggression was found; followers
+  fight what the team relations make hostile. [GUESS]
+- **Damage taken.** A follower takes the player's `Damage_Received_Mult` (weapons-runtime §4.5.4). Health
+  is scaled at join by `Homie_Health_Bonus` / `Special_Homie_Health_Bonus` (`0x0097e480`). [FINAL, restated]
+- **Friendly fire: the player hitting a homie** (FINAL; `0x004fa180`, `0x004fa220`; called from the
+  perception damage notice `0x005041c5`/`0x0050642c`):
+  - Each hit by the player adds min(dmg, `Player_friendly_fire_threshold` 150) to a per-follower sum. A
+    hit of dmg <= 0 adds the full 150.
+  - Each hit re-arms an expiry of `Player_friendly_fire_expire_time` 6 s x 1000 = 6000 ms.
+  - The follower is hostile to the player while the sum is at least 150 **and** the expiry is still
+    running.
+  - A follower that leaves its party through the hostility check (`0x009d8ca0`) reports `HOMIES_ANGRY_LEFT`
+    "%s has left you!" and enters the cooldown. [HIGH for the link]
+
+[2026-10-19 Team B R3: FINAL/HIGH — **0x00985cd0 and the provocation meter.** (a) `0x00985cd0(human)` returns human `+0xe8` bit `0x20`: **is crouched** (spec-player-runtime §3 toggle, §4.15 locomotion). Team B's `flag985cd0 = true` means "always crouched"; the right default is the character's real crouch state (false for an NPC standing up). In §11 it gates cover use (2322, 2426). (b) The meter (per human, `+0x200` float sum, `+0x204` enabled byte, `+0x208` timer), all read by listing:
+- **Enable/reset** `0x004fa8a0` (from the sense pass, whenever `never_turn_on_player` `+0x2b9` bit `0x40` differs from the enabled byte, `0x004fa8f0`): sum := 0, timer := −1 (disarmed); enabled := 1 only when `never_turn_on_player` is clear **and** the team relation `0x009b7100(own team +0x1ca8, team 0)` is 3 or more (not hostile; HIGH that team 0 is the player's side); else 0.
+- **Increment** `0x004fa180(dmg)` (from the damage notice, player attacker with the flag set): disabled → return false. add = min(dmg, T) when dmg > 0.0, else T, with T = `Player_friendly_fire_threshold` 150 (`0x013b7fd8`); sum += add (no upper clamp); timer re-armed to `Player_friendly_fire_expire_time` (`0x013b7fd4`, 6) × 1000 = 6000 ms; returns sum ≥ T.
+- **Threshold test** `0x004fa220()`: true when enabled, the timer is still running (`0x00d9e4c0`), and sum ≥ T.
+- **Decay**: none gradual. The sense pass zeroes the sum when the timer runs out (§10.2 step 5.3). So: 150 damage from the player (one hit of 150+, or several summing to 150 with each within 6 s of the previous one) turns a friendly/neutral NPC or homie hostile, and it stays provoked until 6 s pass with no further player hit.
+- **What crossing does**: while `0x004fa220` holds, the attitude `0x004fe0f0` lets an attitude-4+ (friendly) human notice the player (§10.3 Notice), so the player enters its list 0 and is fought; for a follower, the party hostility check `0x009d8ca0` drops it from the party with `HOMIES_ANGRY_LEFT` (above). This is the same mechanism as the 150 HP / 6 s rule: they are one meter, not two. Team B's `provocationAtThreshold = false` default is right only while no player damage has been taken; model the meter instead.]
+- **Downed.** Type 0 of §21.10.1: 30000 ms x `Homie_Revive_Timer_Mult` (1.33 / 1.0 / 0.5), a 2.5 s hold
+  to revive, and death at expiry. Damage while downed is ignored.
+
+[2026-10-20 Team B CHOSEN Q: FINAL unless marked — **combat stand-ins.** (a) Target: every 2000 ms each follower copies the **player's own target** `+0x1e30` (what the player aims at or fights, §21.2), kept only if its own AI accepts it; otherwise it runs its own §21 selection. "The hostile nearest the player, shared by all" is a stand-in. (b) Damage dealt: the follower fires its own weapon through the normal NPC fire path, with the weapon row's damage and the rules of weapons-runtime §4.5; no follower factor exists. (c) Health (HIGH): maximum HP is the rank `Hit_Points` of the character's `character.xtbl` `Spawn_Info_Rank` (character-info `+0x28` -> rank record, `spawn_info_ranks.xtbl`, progression §10.6), then scaled at join by `Homie_Health_Bonus` / `Special_Homie_Health_Bonus` (`0x0097e480`); 100 is a stand-in. (d) Revive: the prompt picks the nearest downed character within **3.0 m** (squared 9, `0x009da510`) and the player holds for `HD_revive_hold_time_sec` 2.5 s; letting go pauses the bleed-out timer and it resumes from what was left (§21.10.1). So 3.0 m, not 2.5 m.]
+
+- **Leaving combat** follows §21; a follower re-enters `Follow` once its target is lost.
+
+### 24.10 Dismissal and leaving
+
+- **Dismiss command.** The player prompt `CBA_GAC_RECRUIT_DISMISS` (player-runtime `+0x2074` bit 4, prompt
+  routine `0x005ad830`) recruits or dismisses the follower being looked at. It is gated by
+  `party_set_dismissable` (`0x0130af61`). The handler body was not read. [GUESS: removes that one follower
+  through `0x0097e610`, with the `HOMIES_DISMISSED` notice and the cooldown]
+- **Script dismiss.** `party_dismiss_all` (Lua §14.17), `party_dismiss_do` (a table of names), and the
+  debug string `Homie force to exit vehicle!`.
+- **Distance abandon** (`0x007e7050`, every frame, local player's party; FINAL):
+  - Out of range means the distance to the player exceeds `Follow_abandon_radius` **55 m** (`0x013b8770`,
+    the same constant as the phone context gate of cellphone §16a.3), x 1.2 when the player is in a
+    vehicle the follower is not in. The flag is mirrored in `+0xec` bit 0x2000.
+  - Only followers with `can_leave_behind` (`+0x2ba` bit 1, `follower_set_can_abandon`) can be abandoned.
+  - For such a follower out of range, a marker is created (`0x00808e10`, kinds 0x11/0x5d; HIGH: a map
+    blip) and a timer of `Follow_abandon_time_out` **20000 ms** (`0x013b8750`) is started. Coming back in
+    range cancels both. At expiry the follower is removed (`0x0097e610`), the marker is freed, and its
+    persona plays a line (`+0x1da8 -> +0xf8`, id 10).
+  - While any are out of range, the count is shown as `PLAYER_ABANDON_FOLLOWER` "You are about to
+    abandon %d of your followers." whenever the count changes.
+  - Followers without the flag are never abandoned; they teleport (24.7).
+  - A downed follower re-arms a 10000 ms timer at `0x012ff8ec` each frame (HIGH: the downed reminder).
+  - Whether phone homies carry `can_leave_behind` by default is OPEN.
+
+[2026-10-20 Team B CHOSEN Q: FINAL — **`can_leave_behind` default, and the dismiss control.** (a) The flag (`+0x2ba` bit 1, set through the AI force-flag setter `0x004e0270`, network name "ai_force_flagscan_leave_behind") has exactly three writers: the Lua native `follower_set_can_abandon` (`0x00a49980`), the network replica (`0x008b1988`) and one activity follower set-up (`0x00652b70`, which sets several force flags after joining the party; callers `0x00659016`, `0x0065cb74`). The phone path (`0x007e7770` -> `0x0097ead0`) never sets it, so phone homies default to **false**: they are never abandoned, they teleport. Correction: the native table entries are {name, handler}, so `follower_remain_in_car` is `0x00a49920`, which sets `cannot_exit_vehicles` (`+0x1c9c` bit 8). (b) The player's dismiss control removes the **whole party**, not one follower. The prompt (`0x005b6bb0`-`0x005b6e47`; texts `HUD_HOLD_DPADUP_PARTY_DISMISS` "%s dismiss party." and `HUD_PRESS_DPADUP_PARTY_DISMISS` "Press %s again to dismiss party.") calls `0x009e2bc0(player)`, which repeats the forced drop `0x009db1b0(player, 1)` until the party is empty (a downed member is killed through `0x009a7610`) and then plays the player line `0x1fe99e32`. Player death uses the same routine. A single-follower dismiss exists only in scripts (`party_dismiss_do` with names). The `party_set_dismissable` gate on the prompt was not re-read. Port: dismiss = dismiss all; "remove the first joined" is a stand-in.]
+
+- **Death and bleed-out.** At the type-0 expiry the follower dies (§21.10.1), reported as `HOMIES_KILLED`
+  "%s has been killed!". The death path (`0x009a7863` -> `0x007e8600`) charges a **hospital bill**: a
+  uniform random cost in [$150, $250], taken as cost x 100 cents from the player's cash (type 9, through
+  `0x0094d920`), with the notice "Hospital bill for %s cost $%0.2f.". The record then enters the cooldown.
+  [HIGH]
+- **Player death.** All followers are dismissed (player-runtime §18.6).
+- **Missions.** A row blocked for the active mission answers busy (cellphone §16a.3). Mission scripts
+  clear parties themselves (`party_dismiss_all` has 17 calls). No engine auto-dismiss at mission start was
+  found. [GUESS: none]
+- **Saving.** Each roster row saves its status. On load, state 4 is re-placed as a follower near the
+  header `0x058` object; states 2, 3 and an unplaceable 4 become 6 (cooldown); everything else is kept
+  (save §12.7.1). So followers survive a save. [CONFIRMED in the save spec]
+
+### 24.11 Port recipe (Team B)
+
+1. Load `homies.xtbl`; keep status (`+0xBC`), override (`+0xC0`) and the cooldown stamp (`+0xC4`, a
+   game-clock date).
+2. Cap = 24.3. On hang-up: if size >= cap, drop one with 24.4 (`force` = 0); if still full, do nothing.
+3. Summon per 24.5:
+   - Service rows clear notoriety, start the cooldown and end.
+   - Crew rows set status 2 and pick the vehicle and crew.
+   - Find the spawn with the 4 x 3 search (200/150/100 m, at least 95 m from every player, on a road).
+   - Spawn each member, apply the flags, set status 3, and add the member to the party immediately.
+   - Drive to the player at min(top speed, 35), matching a moving player's car speed within [20, 35].
+   - On arrival (stand-in: 15 m and stopped), release to the Follow AI; repair if flagged; end.
+4. Follow per 24.7: 6 m follow radius, gait = max(player gait, 1) + steps at 7.5 m and 15 m, the 2 m /
+   1500 ms squadmate wait, breadcrumbs when the player is off the navmesh, teleport per §11.3.
+5. Vehicles per 24.8: closest seat in the player's car within 30 m, otherwise carjack a second car; exit
+   with the player unless `follower_remain_in_car`.
+6. Combat per 24.9: copy the player's target every 2000 ms and run normal §21 combat; friendly fire turns
+   a homie hostile at 150 accumulated within 6 s windows.
+7. Leave per 24.10: dismiss, 55 m / 20 s abandon (flagged followers only), bleed-out death plus a
+   $150-250 bill, dismiss all on player death. Every exit starts the 1 game day cooldown (1 game hour for
+   garage-pick rows).
+
+### 24.12 Test vectors
+
+1. New game (only `HomieSlot1`), single player, flags default: cap = 1. Call A with an empty party:
+   summoned. Call B while A follows: the party is full, 24.4 drops A (score below 100), and B is summoned.
+   (FINAL)
+2. Same, after `party_allow_max_followers(true)`: cap = 3 whatever the slots. With
+   `party_set_recruitable(false)` and allow-max clear: cap = 0, so every call summons nothing. (FINAL)
+3. A co-op session with 2 players: cap = 1 for each; in game mode 11: cap = 2. An NPC leader: cap = 5.
+   (FINAL)
+4. Player at the origin moving along +z at 10 m/s, no road within 95 m of any player at 200 m ahead but a
+   valid road at 150 m ahead: the spawn is 150 m ahead. If all three ahead fail, the next tries are 200,
+   150, 100 m on one random side, then the other side, then behind. (FINAL)
+5. Homie car top speed 50 m/s, the player's car 30 m ahead driving away at 25 m/s: speed 25. At 45 m/s:
+   35. The player on foot: 35. No vehicle: 10. (HIGH)
+6. A homie killed at game time day 3 14:00: status 6, stamp day 4 14:00. The phone opened at day 4 13:59
+   lists the homie as not callable (busy); opened after 14:00 the status is 1 and it is callable. A
+   garage-pick row would be free at day 3 15:00. (FINAL, boundary HIGH)
+7. Player walking (gait 1), follower 10 m away: gait 2 (run); 20 m: gait 3 (sprint); player sprinting
+   (gait 3) at 3 m: gait 3. A follower 5 m from the player is inside the 6 m radius, so 34 does not
+   accept; at 7 m it does. (HIGH gait, FINAL radius)
+8. The player hits a homie for 60 HP three times within 6 s: sums 60, 120, 180, so hostile at the third
+   hit. A single 200 HP hit adds 150 and the homie is hostile at once. Hostility ends 6000 ms after the
+   last hit. (FINAL)
+9. A `can_leave_behind` follower on foot, the player on foot 60 m away for 20000 ms: removed at 20 s. Back
+   to 50 m at 19 s: the timer and marker are cancelled. The player in a car the follower is not in: the
+   radius is 66 m. A follower without the flag at 60 m is never removed. (FINAL)
+10. Party of a generic recruit (score about 1-2) and a homie-record member with an override (score over 25):
+    the recruit is dropped first. (HIGH)
+11. Squadmate 1.5 m ahead at 30 degrees off the facing: the follower stops and waits 1500 ms; at 50
+    degrees it keeps moving. (FINAL)
+12. Bleed-out death with a random draw of 0.5: the bill is $200, 20000 cents are deducted, and the notice
+    is "Hospital bill for <name> cost $200.00." (HIGH)
+
+Residual (OPEN): the drive-up arrival radius and stop rule inside the generic spawn-group code
+(`0x00932xxx`-`0x00935xxx`, stand-in in 24.5 step 8); the event that moves the summon from state 3 to 5;
+the single-dismiss prompt handler; the default of `can_leave_behind` on phone homies; the follower's exact
+vehicle-exit trigger; the meaning of player byte `+0x1ef0`; and the inventory term of the dismissal score.
+None of these blocks a free-roam port.
+
+**Clean-room check.** Plain hex addresses and data values only; no decompiler names, no pseudocode.

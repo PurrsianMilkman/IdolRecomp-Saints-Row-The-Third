@@ -137,6 +137,8 @@
 //   6. kChosenOccupantLifetimeSeconds (the despawn countdown's own
 //      duration) - not spec-stated, CHOSEN for this module's own demo/test
 //      determinism.
+// UPDATED 2026-10-18: the viewer now ALSO arms roadblocks from the police notoriety level via
+// roadblock_notoriety_schedule.h (Sec20.6.10); the note below describes THIS driver's own `armed` flag only.
 //
 // THE HONEST NOTORIETY GATE - READ BEFORE WIRING THIS MODULE UP TO ANYTHING.
 // Sec19.5/Sec19.6/Sec19.7 are ALL explicit and consistent: no function in

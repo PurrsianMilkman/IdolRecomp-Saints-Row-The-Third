@@ -81,6 +81,8 @@
 #include "lua_spec_confirmed_stubs_common.h"
 #include "lua_spec_confirmed_stubs_sections.h"
 
+#include "sr3airuntime/combat_ai.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -552,9 +554,12 @@ int stub_human_enter_downed(lua_State* L) {
     CharacterState& c = st->getOrCreateCharacter(name);
     if (c.lifeState.get() == 6) return 0; // CONFIRMED "already downed" skip, reuses existing field
     c.lastEnterDownedDuration = duration;
-    if (c.enterDownedApplyGate.known() && c.enterDownedApplyGate.get() && duration > 0.0) { // OPEN until set
+    if (c.enterDownedApplyGate.known() && c.enterDownedApplyGate.get()) { // OPEN until set
         ++c.enterDownedAppliedCount;
-        // CHOSEN: duration is milliseconds; the deadline is checked by EngineState::tickDownedExpiry (Sec21.10.1).
+        // Team A 2026-10-20 (Sec21.10.1 note, FINAL): the number is truncated to an integer and is MILLISECONDS; an absent or
+        // non-positive duration keeps the type's default (type 0 default used here: 30000 ms x the difficulty scale).
+        if (duration <= 0.0)
+            duration = static_cast<double>(sr3airuntime::combat::DownedDeadlineMs(0, st->downedTimerScale(), false));
         c.lifeState.set(6);
         c.downedDeadlineSeconds = st->syncedActionNowSeconds() + duration / 1000.0;
         // Type 1 enter (0x009728c0): buffer = int(+0x1588) + threshold; HP is already 0 here, so the buffer is the threshold.

@@ -3,6 +3,8 @@
 #include <d3d11.h>
 
 #include <cstdio>
+#include <mutex>
+#include <unordered_set>
 #include <vector>
 
 namespace sr3render {
@@ -186,15 +188,42 @@ bool uploadTexture(ID3D11Device* device, const sr3texture::TexturePair& pair, si
         error = "CreateShaderResourceView failed: " + hrToString(hr);
         return false;
     }
+    trackSrv(out.srv);
 
     return true;
 }
 
-void releaseTexture(UploadedTexture& texture) {
-    if (texture.srv != nullptr) {
-        texture.srv->Release();
-        texture.srv = nullptr;
+void releaseTexture(UploadedTexture& texture) { releaseSrv(texture.srv); }
+
+namespace {
+std::mutex& trackMutex() { static std::mutex m; return m; }
+std::unordered_set<ID3D11ShaderResourceView*>& trackedSet() { static std::unordered_set<ID3D11ShaderResourceView*> s; return s; }
+}  // namespace
+
+void trackSrv(ID3D11ShaderResourceView* srv) {
+    if (!srv) return;
+    std::lock_guard<std::mutex> lk(trackMutex());
+    trackedSet().insert(srv);
+}
+
+void releaseSrv(ID3D11ShaderResourceView*& srv) {
+    if (!srv) return;
+    {
+        std::lock_guard<std::mutex> lk(trackMutex());
+        trackedSet().erase(srv);
     }
+    srv->Release();
+    srv = nullptr;
+}
+
+size_t releaseTrackedSrvs() {
+    std::unordered_set<ID3D11ShaderResourceView*> taken;
+    {
+        std::lock_guard<std::mutex> lk(trackMutex());
+        taken.swap(trackedSet());
+    }
+    for (ID3D11ShaderResourceView* s : taken) s->Release();
+    return taken.size();
 }
 
 } // namespace sr3render

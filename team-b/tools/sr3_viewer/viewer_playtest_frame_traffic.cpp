@@ -128,7 +128,13 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
             if (nfRunMaintenance || nfRunDespawnSchedule) {
                 std::vector<sr3airuntime::Vec3> nfCandidates;
                 // spawn only while below the target live count (Sec20.6.1(b)); at most one per pass
-                const bool fpSpawn = nfRunMaintenance && static_cast<int>(nearFieldLive.size()) < fpVehTarget;
+                // EC-6 (Sec20.6.14(e)): a car the player drives or leaves stays counted in the live counter, so entered
+            // ambient cars still occupy budget slots (the original car was never in the ambient list).
+            size_t enteredAmbientCars = sess.rigCarIsGenki ? 0 : 1;
+            for (const auto& pk : sess.parkedVehicles)
+                if (!pk.isGenki) ++enteredAmbientCars;
+            const bool fpSpawn =
+                nfRunMaintenance && static_cast<int>(nearFieldLive.size() + enteredAmbientCars) < fpVehTarget;
                 if (fpSpawn && playtestRoadGraph) {
                     // RG-4: live vehicles per segment ("Segment full": 3, or 5 on a bit-4 segment).
                     g_roadOccupancy.Clear();
@@ -188,31 +194,49 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                                                        [&](const sr3airuntime::NearFieldVehicle& v) { return vehDespawn(v.pos); }),
                                         nearFieldLive.end());
                     freeroamVehDespawned += before - nearFieldLive.size();
-                    // Cars the player left parked (enter-ambient-cars): same despawn rule, so they persist while near.
-                    // The original parked car is exempt (CHOSEN: it is the mission/smoke-test car).
+                    // EC-6, spec-ai-runtime.md Sec20.6.14. The car the rig holds is the player's lastVehicle (set at
+                    // every seating, never cleared at exit): the eligibility predicate's gate 7 requires it to be
+                    // >= 10 km away (player_vehicle_despawn_distance 10000 m), which is never reached in the city, so
+                    // it is neither distance-despawned nor ever an abandoned-schedule candidate (no rig fallback).
+                    // Every other car the player has sat in is an ordinary unoccupied team-Playas car (no exemption,
+                    // the original car included): it takes the Sec20.6.1(d) distance rule and the abandoned schedule.
+                    const auto nowMsSched = nowMsAccum;
                     sess.parkedVehicles.erase(
                         std::remove_if(sess.parkedVehicles.begin(), sess.parkedVehicles.end(),
                                        [&](const PlaytestSession::ParkedVehicle& pk) {
-                                           return !pk.isGenki &&
-                                                  vehDespawn(sr3airuntime::Vec3{pk.x, static_cast<double>(pk.y), pk.z});
+                                           if (pk.fadeEndMs >= 0) return nowMsSched >= pk.fadeEndMs;  // fade finished
+                                           return vehDespawn(sr3airuntime::Vec3{pk.x, static_cast<double>(pk.y), pk.z});
                                        }),
                         sess.parkedVehicles.end());
-                    // The rig's own parked car, when it is an ambient car the player left: when it despawns the rig
-                    // goes back to the original parked car (still in parkedVehicles; it never despawns).
-                    if (!inVehicle && !sess.rigCarIsGenki && sess.vehicleRig_ && sess.vehicleRig_->sim) {
-                        auto& rst = sess.vehicleRig_->sim->state_;
-                        if (vehDespawn(sr3airuntime::Vec3{rst.posX, static_cast<double>(sess.vehicleGroundY), rst.posZ})) {
+                    if (nfRunDespawnSchedule) {  // 400-600 ms timer, before the distance despawn in the engine order
+                        std::vector<sr3airuntime::AbandonedCandidate> ac;
+                        for (auto& pk : sess.parkedVehicles) {
+                            if (pk.fadeEndMs >= 0) continue;  // being deleted (0x00853b10): skipped
+                            if (pk.entryStartMs < 0) pk.entryStartMs = nowMsSched;  // "starts its entry timer"
+                            sr3airuntime::AbandonedCandidate c;
+                            c.id = pk.id;
+                            c.ageMs = nowMsSched - pk.entryStartMs;
+                            c.eligible = true;  // gates 1-6 hold for an unoccupied car; gate 7 is lastVehicle-only
+                            c.visible = g_haveFrustum && sr3airuntime::BoxInFrustum(
+                                                             g_frustumViewProj, {pk.x, static_cast<double>(pk.y), pk.z}, 1.5);
+                            c.distance = std::hypot(pk.x - trafficReferencePos.x, pk.z - trafficReferencePos.z);
+                            ac.push_back(c);
+                        }
+                        const auto pick = sess.abandonedSchedule.Run(nowMsSched, ac);
+                        if (pick.found) {
                             for (size_t i = 0; i < sess.parkedVehicles.size(); ++i) {
-                                if (!sess.parkedVehicles[i].isGenki) continue;
-                                const auto g = sess.parkedVehicles[i];
-                                sess.parkedVehicles.erase(sess.parkedVehicles.begin() + static_cast<std::ptrdiff_t>(i));
-                                rst.posX = g.x; rst.posZ = g.z; rst.heading = g.heading;
-                                rst.velForwardBody = 0.0; rst.velRightBody = 0.0; rst.yawRate = 0.0;
-                                sess.rigCarIsGenki = true;
-                                sess.vehicleGroundFollower_.emplace(static_cast<double>(g.y));
-                                sess.vehicleGroundY = g.y;
-                                sess.vehiclePromptShown = false;
-                                std::printf("[ambient-entry] parked ambient car despawned (left behind); rig back to the original car\n");
+                                if (sess.parkedVehicles[i].id != pick.id) continue;
+                                if (pick.inView) {
+                                    // CHOSEN: the 1000 ms fade (0x00a846f0) is only counted down; no alpha fade is drawn.
+                                    sess.parkedVehicles[i].fadeEndMs = nowMsSched + 1000;
+                                    ++sess.abandonedPicksIn;
+                                } else {
+                                    sess.parkedVehicles.erase(sess.parkedVehicles.begin() + static_cast<std::ptrdiff_t>(i));
+                                    ++sess.abandonedPicksOut;
+                                }
+                                std::printf("[ambient-entry] abandoned car %llu removed by the schedule (%s, n=%zu)\n",
+                                            static_cast<unsigned long long>(pick.id), pick.inView ? "in view, 1000 ms fade" : "out of view",
+                                            ac.size());
                                 break;
                             }
                         }
@@ -309,6 +333,41 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
             }
         }
         for (auto& nfv : nearFieldLive) {
+            // Gap #8: a car the player hit leaves its lane follower and slides with its post-impact velocity under a
+            // CHOSEN constant friction decel (5 m/s^2); once stopped for 1.5 s (CHOSEN) its lane state is dropped so the
+            // normal snap-to-nearest-lane path above/below re-acquires it ("recovers").
+            if (const auto kn = sess.vehicleKnock.find(nfv.id); kn != sess.vehicleKnock.end()) {
+                auto& k = kn->second;
+                const double sp = std::hypot(k.vx, k.vz);
+                const double dtD = static_cast<double>(dt);
+                if (sp > 0.2) {
+                    const double ns = std::max(0.0, sp - 5.0 * dtD);
+                    k.vx *= ns / sp;
+                    k.vz *= ns / sp;
+                    nfv.pos.x += k.vx * dtD;
+                    nfv.pos.z += k.vz * dtD;
+                    k.stoppedMs = 0.0;
+                } else {
+                    k.vx = k.vz = 0.0;
+                    k.stoppedMs += dtD * 1000.0;
+                }
+                nearFieldVehicleSpeed[nfv.id] = 0.0;  // followers behind see a stopped car
+                if (k.stoppedMs >= 1500.0) {
+                    nearFieldVehicleLaneState.erase(nfv.id);
+                    nearFieldVehicleHeading.erase(nfv.id);
+                    nearFieldVehicleSpeed.erase(nfv.id);
+                    nearFieldVehicleBrakeMemory.erase(nfv.id);
+                    nearFieldVehicleStopLine.erase(nfv.id);
+                    nearFieldVehicleSignalWait.erase(nfv.id);
+                    nearFieldVehicleProbe.erase(nfv.id);
+                    nearFieldVehicleYield.erase(nfv.id);
+                    sess.vehicleKnock.erase(kn);
+                    ++sess.vcStats.knockRecoveries;
+                    std::printf("[vehicle-collision] frame %d ambient car %llu recovered: rejoining its lane follower\n",
+                                sess.frames, static_cast<unsigned long long>(nfv.id));
+                }
+                continue;
+            }
             auto stateIt = nearFieldVehicleLaneState.find(nfv.id);
             if (stateIt == nearFieldVehicleLaneState.end() && playtestRoadGraph) {
                 // REAL GRAPH: the car was spawned at a lane point chosen by GatherRoadVehicleSpawnPoints();
@@ -410,6 +469,28 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                 // uses) x that throttle fraction of full; an unaligned car stops (as before).
                 const double dtD = static_cast<double>(dt);
                 double v = trackedSpeedMs;
+                // Per-car a_b (Sec20.6.3(b): +0xc58 = AI_Max_Braking_Decel x condition scale) from the car's own model's
+                // vehicle-info row. Condition level 0 is CHOSEN (ambient cars take no damage here). The model is
+                // assigned in the render pass AFTER this tick (chooseVehicle), so a brand-new car has no model on its
+                // first sim frame and uses the CHOSEN fallback constant for that one frame (one-frame lag); the same
+                // fallback applies with the ambient registry off or a row value missing/<=0.
+                bool aBUsedRow = false;
+                const double aB = [&]() {
+                    const auto mIt = sess.nearFieldVehicleModel.find(nfv.id);
+                    const AmbientVehicleModel* mdl = mIt != sess.nearFieldVehicleModel.end() ? mIt->second : nullptr;
+                    return sr3airuntime::PerCarBrakingDecel(mdl ? mdl->aiMaxBrakingDecel : std::nullopt,
+                                                            kNearFieldVehicleAiMaxBrakingDecel, /*conditionLevel=*/0,
+                                                            &aBUsedRow);
+                }();
+                ++sess.aBCarFrames;
+                if (aBUsedRow) {
+                    ++sess.aBRowFrames;
+                    sess.aBRowCars.insert(nfv.id);
+                } else {
+                    sess.aBFallbackCars.insert(nfv.id);
+                }
+                sess.aBMin = std::min(sess.aBMin, aB);
+                sess.aBMax = std::max(sess.aBMax, aB);
                 if (cmd.headingAligned) {  // RG-12: heading half of the Sec18.6 gate only (see LaneFollowCommand::headingAligned)
                     v += kNearFieldVehicleAccelMs2 *
                          sr3airuntime::AmbientThrottleLaw(sr3airuntime::kAmbientLaneSpeedMs, v, /*flag=*/false) * dtD;
@@ -434,7 +515,7 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                     }
                     const double hx = std::cos(heading), hz = std::sin(heading);
                     const double probeL = trackedSpeedMs * trackedSpeedMs /
-                                              (2.0 * (trackedSpeedMs > 20.0 ? 1.0 : 0.75) * kNearFieldVehicleBrakeDecel) +
+                                              (2.0 * (trackedSpeedMs > 20.0 ? 1.0 : 0.75) * aB) +
                                           2.5 + (mem.second > 0.0 ? 6.0 : 0.0);
                     double bestGap = 1e300, leadU = 0.0;
                     uint64_t leadId = 0;
@@ -459,7 +540,7 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                     }
                     if (probeRuns && leadId != 0) {
                         const bool recent = mem.second > 0.0 && mem.first == leadId;
-                        probe.result = sr3airuntime::FollowingLaw(kNearFieldVehicleBrakeDecel, /*kind=*/0, bestGap,
+                        probe.result = sr3airuntime::FollowingLaw(aB, /*kind=*/0, bestGap,
                                                                   leadU, trackedSpeedMs, recent);
                         probe.hasLead = true;
                         if (probe.result.remember) mem = {leadId, 0.3};
@@ -500,11 +581,11 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                                                 playtestRoadGraph->segments[curSeg].flags, dEnd, trackedSpeedMs);
                             }
                             if (sr3airuntime::RunsSignalRule(kNearFieldVehicleMode, kNearFieldVehicleObeysLights) &&
-                                sr3airuntime::SignalRuleStops(laneSt, trackedSpeedMs, dEnd, kNearFieldVehicleBrakeDecel)) {
+                                sr3airuntime::SignalRuleStops(laneSt, trackedSpeedMs, dEnd, aB)) {
                                 auto& smem = nearFieldVehicleBrakeMemory[nfv.id];
                                 const bool recent = smem.second > 0.0 && smem.first == kSignalMemoryId;
                                 const sr3airuntime::FollowingResult fr = sr3airuntime::FollowingLaw(
-                                    kNearFieldVehicleBrakeDecel, /*kind=*/2, dEnd, 0.0, trackedSpeedMs, recent);
+                                    aB, /*kind=*/2, dEnd, 0.0, trackedSpeedMs, recent);
                                 if (fr.remember) smem = {kSignalMemoryId, 0.3};
                                 if (fr.brake > 0.0) v = std::min(v, std::max(0.0, trackedSpeedMs - fr.brake * dtD));
                                 v = std::min(v, fr.cap);
@@ -513,8 +594,12 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                             if (sr3airuntime::RunsStopLineRule(kNearFieldVehicleMode, kNearFieldVehicleObeysLights) &&
                                 (playtestRoadGraph->segments[curSeg].flags & sr3zone::kSegFlagStopLine)) {
                                 auto& slm = nearFieldVehicleStopLine[nfv.id];
+                                // TF-7: recentlyBraked = a live kind-4 memory entry (id + 300 ms), the 0.75/0.5 hysteresis.
+                                auto& slmem = nearFieldVehicleBrakeMemory[nfv.id];
+                                const bool slRecent = slmem.second > 0.0 && slmem.first == kStopLineMemoryId;
                                 const auto sl = sr3airuntime::StopLineStep(slm, static_cast<int32_t>(curSeg), dEnd, trackedSpeedMs,
-                                                                           dtD * 1000.0, kNearFieldVehicleBrakeDecel, false);
+                                                                           dtD * 1000.0, aB, slRecent);
+                                if (sl.remember) slmem = {kStopLineMemoryId, 0.3};
                                 if (sl.active) {
                                     if (sl.brake > 0.0) v = std::min(v, std::max(0.0, trackedSpeedMs - sl.brake * dtD));
                                     v = std::min(v, sl.cap);
@@ -532,7 +617,9 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                                     yc.timerMs = 150.0 + static_cast<double>((nfv.id * 37u + yc.runs * 61u) % 151u);
                                     ++yc.runs;
                                     const auto& sm = nearFieldVehicleBrakeMemory[nfv.id];
-                                    const bool memLive = sm.second > 0.0 && sm.first == kSignalMemoryId;
+                                    // Sec20.6.7(c) / 20.6.13(g) skip rule: a live memory entry of kind 2 OR kind 4.
+                                    const bool memLive =
+                                        sm.second > 0.0 && (sm.first == kSignalMemoryId || sm.first == kStopLineMemoryId);
                                     if (memLive || nearFieldVehicleStopLine[nfv.id].holding) {
                                         yc.yielding = false;
                                     } else {
@@ -543,7 +630,7 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                                         own.speed = trackedSpeedMs;
                                         own.headingX = std::cos(heading);
                                         own.headingZ = std::sin(heading);
-                                        own.aB = kNearFieldVehicleBrakeDecel;
+                                        own.aB = aB;
                                         own.targetSpeed = sr3airuntime::kAmbientLaneSpeedMs;
                                         own.recentlyBraked = yc.yielding;
                                         const auto dec = sr3airuntime::EvaluateJunctionYield(
@@ -562,7 +649,7 @@ void stepTrafficVehicles(PlaytestSession& sess, PlaytestFrame& frm) {
                                 if (yc.yielding) {
                                     const double dRem = yc.dist - yc.travelled;
                                     const sr3airuntime::FollowingResult fr = sr3airuntime::FollowingLaw(
-                                        kNearFieldVehicleBrakeDecel, /*kind=*/3, dRem, 0.0, trackedSpeedMs, true);
+                                        aB, /*kind=*/3, dRem, 0.0, trackedSpeedMs, true);
                                     if (fr.brake > 0.0) v = std::min(v, std::max(0.0, trackedSpeedMs - fr.brake * dtD));
                                     v = std::min(v, fr.cap);
                                     yc.travelled += v * dtD;
@@ -849,6 +936,16 @@ void stepTrafficPeds(PlaytestSession& sess, PlaytestFrame& frm) {
         // shared. ----
         for (auto& nfp : nearFieldPedsLive) {
             if (pedAiCowering.count(nfp.id)) continue;  // cowering (AI Cower mode): the ped stands where it is
+            // Gap #8: run over by the player's car - dead peds stay put, knocked-down peds are frozen until they get up.
+            if (sess.pedKilledByVehicle.count(nfp.id)) continue;
+            {
+                const auto kd = sess.pedKnockedUntilMs.find(nfp.id);
+                if (kd != sess.pedKnockedUntilMs.end()) {
+                    if (static_cast<double>(nowMsAccum) < kd->second) continue;
+                    sess.pedKnockedUntilMs.erase(kd);
+                    nfp.downOrDead = false;
+                }
+            }
             auto destIt = nearFieldPedFleeDestination.find(nfp.id);
             if (destIt != nearFieldPedFleeDestination.end()) {
                 // ---- FLEE (priority branch) - unchanged from the prior task. ----
@@ -1165,19 +1262,8 @@ void stepNotoriety(PlaytestSession& sess, PlaytestFrame&) {
         sess.debugNotorietyPoints = -1;  // inject once, on the first frame this step runs
         notorietyReportCrime(sess, dbg, "--debug-notoriety-points");
     }
-    // Player vehicle hits a ped. CHOSEN: a "hit" is the vehicle moving faster than 3 m/s with a live near-field ped
-    // within 1.5 m (xz) of its pivot; reported once per ped as the CHOSEN "civilian assault" record.
-    if (sess.inVehicle && sess.vehicleRig_ && sess.vehicleRig_->sim) {
-        const auto& st = sess.vehicleRig_->sim->state_;
-        const double speed = std::sqrt(st.velForwardBody * st.velForwardBody + st.velRightBody * st.velRightBody);
-        if (speed > 3.0) {
-            for (const auto& p : sess.nearFieldPedsLive) {
-                const double dx = p.pos.x - st.posX, dz = p.pos.z - st.posZ;
-                if (dx * dx + dz * dz <= 1.5 * 1.5 && sess.vehicleHitPedIds.insert(p.id).second)
-                    notorietyReportCrime(sess, sr3airuntime::kChosenCivilianAssault, "vehicle hit ped");
-            }
-        }
-    }
+    // Player vehicle hits a ped: reported from the REAL contact (OBB vs ped footprint) in stepVehicleCollisions
+    // (viewer_playtest_frame_collision.cpp), which replaced the old speed/radius stand-in that lived here.
     n.Tick(now);
     if (sess.frames % 30 == 0) {
         using sr3airuntime::NotorietyTrack;

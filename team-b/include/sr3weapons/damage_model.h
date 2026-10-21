@@ -12,6 +12,9 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <random>
 #include <cmath>
 #include <cstdint>
 
@@ -31,16 +34,22 @@ enum class DamageProducer : uint8_t {
 // Sec4.5.3 base damage. column: 0 = NPC target, 1 = player target.
 // Lerp only when far < near, between Damage_Max_Dist and Damage_Min_Dist;
 // below the near range -> near, beyond the far range -> far.
+// D-10 (spec-differential-results.md, vectors C2): checks in the ORIGINAL order (far limit first, so an inverted range returns the
+// far value); the interpolation runs in double and is rounded to single once at the end.
+inline float BaseDamageRaw(float nearV, float farV, float maxD, float minD, float dist2) {
+    if (!(farV < nearV)) return nearV;
+    if (dist2 >= static_cast<float>(minD * minD)) return farV;
+    if (static_cast<float>(maxD * maxD) >= dist2) return nearV;
+    const float root = std::sqrt(dist2);
+    const float t = static_cast<float>((static_cast<double>(root) - maxD) / (static_cast<double>(minD) - maxD));
+    return static_cast<float>(static_cast<double>(t) * (static_cast<double>(farV) - nearV) + nearV);
+}
 inline float BaseDamage(const sr3tables_weapons::Weapon& w, int column, float dist2) {
     const float nearV = column == 1 ? w.damageMaxPlayer.value : w.damageMaxNpc.value;
     const float farV = column == 1 ? w.damageMinPlayer.value : w.damageMinNpc.value;
-    if (!(farV < nearV)) return nearV;
     const float maxD = w.damageMaxDist ? *w.damageMaxDist : 0.0f;
     const float minD = w.damageMinDist ? *w.damageMinDist : w.rangeMax.value;
-    if (dist2 <= maxD * maxD) return nearV;
-    if (dist2 >= minD * minD) return farV;
-    const float t = (std::sqrt(dist2) - maxD) / (minD - maxD);
-    return nearV + (farV - nearV) * t;
+    return BaseDamageRaw(nearV, farV, maxD, minD, dist2);
 }
 
 // Sec4.5.3 shotgun pellet factor 0x00963920 (attacker NOT a player and
@@ -53,6 +62,39 @@ inline float ShotgunPelletFactor(float dist, float rangeMax, int shotsPerRound) 
     return std::max(1.0f, std::round((1.0f + float(shotsPerRound - 1) * t2) * t2));
 }
 
+// D-9 (spec-differential-results.md): for a non-player shotgun shooter the original multiplies A = 1 + (Shots-1) t^2 by a random
+// draw r uniform in [t^2, 1] (single precision: t^2 + (1 - t^2) * u/2^32, u the raw 32-bit table-random value), then rounds half
+// away from zero and floors at 1. u = 0 gives the smallest factor (the 3-argument form above).
+inline float ShotgunPelletFactor(float dist, float rangeMax, int shotsPerRound, uint32_t drawU32) {
+    float t = rangeMax > 0.0f ? 1.0f - dist / rangeMax : 0.0f;
+    t = std::clamp(t, 0.0f, 1.0f);
+    const float t2 = t * t;
+    const float a = 1.0f + float(shotsPerRound - 1) * t2;
+    const float u = static_cast<float>(static_cast<double>(drawU32) / 4294967296.0);
+    const float r = t2 + (1.0f - t2) * u;
+    return std::max(1.0f, std::round(a * r));
+}
+
+// The game's table random source (D-9): a ring of 8,192 precomputed 32-bit values filled from MT19937 (default seed 5489 before
+// the game code runs; the game later re-seeds from a microsecond clock, so any uniform source is acceptable for a port).
+class TableRandomRing {
+public:
+    explicit TableRandomRing(uint32_t seed = 5489u) { reseed(seed); }
+    void reseed(uint32_t seed) {
+        std::mt19937 mt(seed);
+        for (auto& v : ring_) v = mt();
+        cursor_ = 0;
+    }
+    uint32_t next() {
+        const uint32_t v = ring_[cursor_];
+        cursor_ = (cursor_ + 1) % ring_.size();
+        return v;
+    }
+private:
+    std::array<uint32_t, 8192> ring_{};
+    size_t cursor_ = 0;
+};
+
 struct ProducerInput {
     int column = 0;                          // 0 NPC target, 1 player target
     float dist2 = 0.0f;
@@ -64,6 +106,7 @@ struct ProducerInput {
     bool victimInVehicleHeadshotRule = false;  // 0x00ad3670 -> 2.0
     float tweakHeadshotMultiplier = 8.0f;    // tweak Headshot_multiplier
     float resistance = 1.0f;                 // 0x009dd8f0 result, applied before the sink
+    uint32_t pelletDrawU32 = 0;              // D-9: raw table-random draw for the NPC shotgun pellet factor (TableRandomRing::next())
 };
 
 struct ProducerResult {
@@ -80,7 +123,7 @@ inline ProducerResult ProduceWeaponHitDamage(const sr3tables_weapons::Weapon& w,
     d *= in.firearmDamageMultiplier;
     if (in.riotShieldPredicate) d *= w.riotShieldDamageMultiplier.value;
     if (!in.attackerIsPlayer && w.weaponClass == 3)
-        d *= ShotgunPelletFactor(dist, w.rangeMax.value, w.shotsPerRound ? *w.shotsPerRound : 1);
+        d *= ShotgunPelletFactor(dist, w.rangeMax.value, w.shotsPerRound ? *w.shotsPerRound : 1, in.pelletDrawU32);
     if (in.hitLocation == 6 && in.attackerIsPlayer) {
         float m = in.victimHeadshotMultiplier;
         if (m == -1.0f) m = in.tweakHeadshotMultiplier;
@@ -98,15 +141,22 @@ inline ProducerResult ProduceWeaponHitDamage(const sr3tables_weapons::Weapon& w,
 inline float DamageAssist(float dmg, float curHp, float maxHp, float startPercent = 0.3f,
                           float scaleMult = 0.1f) {
     if (maxHp <= 0.0f) return dmg;
+    // D-11 evaluation order (vectors C3): single-precision state, the second division and the inner scale term in double.
+    // (The original never ends for maxHP 0; the guard above returns the damage unchanged on purpose.)
     const float chunk = 0.05f * maxHp;
     float remaining = dmg, cur = curHp, acc = 0.0f;
     while (remaining > 0.0f) {
-        float c = std::min(chunk, remaining);
-        remaining -= c;
-        const float f = std::max(0.0f, cur / maxHp - c / maxHp);
-        if (f < startPercent) c *= 1.0f + (1.0f - f / startPercent) * (scaleMult - 1.0f);
-        acc += c;
-        cur -= c;
+        float c = chunk > remaining ? remaining : chunk;
+        remaining = remaining - c;
+        const float q = cur / maxHp;
+        float f = static_cast<float>(static_cast<double>(q) - static_cast<double>(c) / static_cast<double>(maxHp));
+        if (f < 0.0f) f = 0.0f;
+        if (startPercent > f) {
+            const float s = static_cast<float>((1.0 - static_cast<double>(f) / startPercent) * (static_cast<double>(scaleMult) - 1.0) + 1.0);
+            c = c * s;
+        }
+        acc = acc + c;
+        cur = cur - c;
     }
     return acc;
 }

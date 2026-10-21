@@ -39,6 +39,7 @@
 #include "sr3luahost/menu_runtime.h"
 #include "sr3luahost/stub_registry.h"
 #include "sr3vehicleinfo/vehicle_entry.h"
+#include "viewer_craft_rig.h"
 #include "sr3radio/radio_player.h"
 
 using namespace sr3viewer;
@@ -215,9 +216,10 @@ namespace {
 //         population/despawn bookkeeping itself still runs regardless).
 //
 //   * POLICE ROADBLOCK SPAWN (include/sr3airuntime/police_roadblock_spawn.h,
-//     spec-ai-runtime.md Sec19.7) - OFF by default, toggled by a new debug
-//     key, 'R' (edge-triggered, same prevEDown/vehEEdge debounce shape
-//     vehicle entry already uses). THE HONEST NOTORIETY GATE (see that
+//     spec-ai-runtime.md Sec19.7) - UPDATED 2026-10-18: now ALSO driven by the police notoriety level
+//     (NotorietyRoadblockScheduler, Sec20.6.10, via stepNotoriety); the text below is the ORIGINAL
+//     debug-gate design, still live as a force-arm. Debug key is now 'B' ('R' is reload).
+//     ORIGINAL DESIGN (edge-triggered like vehicle entry): THE HONEST NOTORIETY GATE (see that
 //     header's own "THE HONEST NOTORIETY GATE" section): RoadblockPopulation
 //     Driver::armed is NOT wired to any notoriety threshold - that upstream
 //     link is spec-confirmed OPEN (Sec19.5/19.6/19.7's own "no function in
@@ -311,8 +313,8 @@ namespace {
 // HONEST SCOPE (said here once, not scattered): keyboard+mouse only. This
 // project's own spec-tables-ui-controls.md Sec3-Sec5 DOES document a real
 // gamepad/XInput binding layer (control_schemes.xtbl, the 19-entry
-// gamepad-button table) - it is not wired here. No jump, no crouch toggle
-// (PlaytestMoveSource::held() only ever answers Sprint). The DISTANT/LOD
+// gamepad-button table) - it is not wired here. Jump (Space) and crouch (C, held) ARE wired
+// (frame_input.cpp, CHOSEN keys). The DISTANT/LOD
 // ambient PEDESTRIAN population remains out of scope (see above); near-field
 // ambient VEHICLE traffic, near-field ambient PEDESTRIAN population, and the
 // debug-gated police roadblock ARE now wired (see above).
@@ -385,6 +387,7 @@ namespace sr3viewer {
 // and 65 m hidden fallback. The synthetic chords below remain the fallback only when
 // no road graph could be loaded (e.g. archives without sr3_city_0.vpp_pc).
 const sr3zone::RoadGraph* g_playtestRoadGraph = nullptr;
+const sr3airuntime::gps::GpsPlanner* g_playtestGps = nullptr;
 
 std::vector<sr3airuntime::RoadSpawnPoint> g_lastRoadSpawnPoints;  // candidates of the most recent gather (lane lookup for the spawned car)
 
@@ -1089,6 +1092,166 @@ std::string installZsceneTableFromArchives(const std::vector<std::string>& archi
     } catch (const std::exception& ex) {
         return std::string("not installed (exception: ") + ex.what() + ")";
     }
+}
+
+// AW-15: fills sr3viewer_craft::CraftRegistry() with the helicopter / airplane / VTOL / watercraft rows (Vehicle_Type
+// classes 2..5) of every `<name>_veh.xtbl` in misc_tables + dlc1..3 under `cacheDir` (spec-vehicle-data.md Sec7.5). The
+// laws take their numbers from the reader where it exposes them and keep the spec test-vector defaults elsewhere.
+size_t loadCraftTypeRegistry(const std::string& cacheDir, std::string& diag) {
+    using namespace sr3viewer_craft;
+    namespace vi = sr3vehicleinfo;
+    auto setIf = [](double& dst, const sr3xtbl::Always<float>& f) {
+        if (f.present) dst = static_cast<double>(f.value);
+    };
+    auto fillHeli = [&](pc::HeliParams& h, const vi::HelicopterVariant& v, const vi::VehicleEntry& e) {
+        setIf(h.elevationSpeed, v.elevationSpeedMs);
+        setIf(h.elevationAccel, v.elevationAccel);
+        setIf(h.elevationDamp, v.elevationDamp);
+        setIf(h.tiltLiftLoss, v.tiltLiftLoss);
+        setIf(h.steeringAccel, v.steeringAccel);
+        setIf(h.pitchBias, v.pitchBias);
+        setIf(h.tailAccel, v.tailAccel);
+        if (v.tailRotorCenter.complete()) h.tailRotorCenter = {v.tailRotorCenter.x.value, v.tailRotorCenter.y.value, v.tailRotorCenter.z.value};
+        if (v.rotorCenter.complete()) h.rotorCenter = {v.rotorCenter.x.value, v.rotorCenter.y.value, v.rotorCenter.z.value};
+        setIf(h.rotorRadius, v.rotorRadius);
+        if (v.rotorTilt.present) {
+            double t = v.rotorTilt.value;
+            if (std::fabs(t) > 0.5) t *= pc::kPi / 180.0;  // CHOSEN: the reader leaves Rotor_Tilt unconverted; > 0.5 can only be degrees
+            h.rotorTilt = t;
+        }
+        setIf(h.extraSpeedAccel, v.extraSpeedAccel);
+        setIf(h.autolevelAccel, v.autolevelAccelRadians);
+        setIf(h.dragCoefficient, e.dragCoefficient);
+        setIf(h.normalSpinDamping, e.normalSpinDamping);
+        setIf(h.collisionSpinDamping, e.collisionSpinDamping);
+        setIf(h.collisionSpinThreshold, e.collisionSpinThresholdRadians);
+        if (e.maximumSpeedMs.present && e.maximumSpeedMs.value > 1.0f) h.maximumSpeed = e.maximumSpeedMs.value;
+    };
+    auto fillPlane = [&](pc::PlaneParams& p, const vi::AirplaneVariant& v) {
+        if (!v.engines.empty()) {
+            p.enginePoints.clear();
+            for (const auto& en : v.engines) p.enginePoints.push_back({en.xOffset.value, en.yOffset.value, en.zOffset.value});
+        }
+        setIf(p.engineAccel, v.engineParams.engineAccel);
+        setIf(p.engineReverseAccel, v.engineParams.engineReverseAccel);
+        setIf(p.rampUp, v.engineParams.engineRampUpTime);
+        setIf(p.rampDown, v.engineParams.engineRampDownTime);
+        setIf(p.reverseSpeed, v.reverseSpeedMs);
+        const auto& pa = v.pilotAssistParams;
+        setIf(p.liftMinSpeed, pa.liftMinSpeedMs);
+        setIf(p.rollMax, pa.rollMaxAngularSpeedRadians);
+        setIf(p.rollDamp, pa.rollDampAngleRadians);
+        setIf(p.horizMax, pa.horizontalMaxAngularSpeedRadians);
+        setIf(p.horizAccel, pa.horizontalMaxAngularAccelRadians);
+        setIf(p.horizDecel, pa.horizontalMaxAngularDecelRadians);
+        setIf(p.vertMax, pa.verticalMaxAngularSpeedRadians);
+        setIf(p.vertAccel, pa.verticalMaxAngularAccelRadians);
+        setIf(p.turnLinearAccel, pa.turnLinearAccel);
+        setIf(p.barrelRollMax, pa.barrelRollMaxAngularSpeedRadians);
+    };
+    size_t added = 0, files = 0;
+    std::function<void(vpp::Container&)> walk = [&](vpp::Container& c) {
+        const auto& entries = c.entries();
+        for (size_t i = 0; i < entries.size(); ++i) {
+            std::string lname = toLowerLocal(entries[i].name);
+            if (lname.size() > 9 && lname.compare(lname.size() - 9, 9, "_veh.xtbl") == 0) {
+                try {
+                    std::string fileBytes;
+                    if (entries[i].payload.kind == vpp::PayloadKind::Raw) {
+                        vpp::ByteView raw = c.rawEntryBytes(i);
+                        fileBytes.assign(reinterpret_cast<const char*>(raw.data()), raw.size());
+                    } else {
+                        vpp::DecompressResult r = c.decompressEntry(i);
+                        if (!(r.status == vpp::DecodeStatus::Ok || r.status == vpp::DecodeStatus::SizeMismatch ||
+                              r.status == vpp::DecodeStatus::OkUnconfirmedContent ||
+                              r.status == vpp::DecodeStatus::ContentValidated ||
+                              r.status == vpp::DecodeStatus::RecoveredSharedStream ||
+                              r.status == vpp::DecodeStatus::RecoveredSharedStreamLongChain))
+                            continue;
+                        fileBytes.assign(reinterpret_cast<const char*>(r.data.data()), r.data.size());
+                    }
+                    sr3xtbl::Document doc = sr3xtbl::ParseDocument(fileBytes);
+                    ++files;
+                    for (const auto& e : vi::ParseAllVehicles(doc)) {
+                        if (!e.name.has_value() || e.name->empty()) continue;
+                        const int cls = static_cast<int>(e.vehicleType.vehicleClass);
+                        if (cls < 2 || cls > 5) continue;
+                        CraftTypeRow row;
+                        row.name = *e.name;
+                        row.cls = cls;
+                        if (e.mass.present) row.mass = e.mass.value;
+                        if (e.buoyancyModifier.present) row.buoyancy = e.buoyancyModifier.value;
+                        if (e.maximumSpeedMs.present && e.maximumSpeedMs.value > 1.0f) row.maxSpeed = e.maximumSpeedMs.value;
+                        if (cls == 3) {
+                            fillHeli(row.heli, e.vehicleType.helicopter, e);
+                            row.dataHeli = true;
+                        } else if (cls == 2) {
+                            fillPlane(row.plane, e.vehicleType.airplane);
+                            row.dataPlane = true;
+                        } else if (cls == 4) {
+                            fillHeli(row.heli, e.vehicleType.vtol.helicopterMode, e);
+                            fillPlane(row.plane, e.vehicleType.vtol.airplaneMode);
+                            row.dataHeli = row.dataPlane = true;
+                        } else {
+                            const auto& w = e.vehicleType.watercraft;
+                            setIf(row.boat.lbsMinRadius, w.lbsMinRadius);
+                            if (w.lbsMaxLeanAngleRadians.present) {
+                                row.boat.lbsMaxLean = w.lbsMaxLeanAngleRadians.value;
+                                row.boat.lbs = true;
+                            }
+                            setIf(row.boat.lbsCorrectionAccel, w.lbsCorrectionAccelRadians);
+                            setIf(row.boat.lbsTurnRadiusModifier, w.lbsTurnRadiusModifier);
+                            if (e.maximumSpeedMs.present && e.maximumSpeedMs.value > 1.0f) row.boat.maximumSpeed = e.maximumSpeedMs.value;
+                            if (e.maxSteeringAngleRadians.present) row.boat.maxSteeringAngle = e.maxSteeringAngleRadians.value;
+                            row.dataBoat = true;
+                        }
+                        CraftRegistry()[toLowerLocal(*e.name)] = row;
+                        ++added;
+                    }
+                } catch (const std::exception&) {
+                }
+                continue;
+            }
+            if (lname.size() >= 4 && lname.compare(lname.size() - 4, 4, "xtbl") == 0) continue;
+            if (entries[i].payload.kind != vpp::PayloadKind::Raw) {
+                try {
+                    vpp::DecompressResult r = c.decompressEntry(i);
+                    const bool good = r.status == vpp::DecodeStatus::Ok || r.status == vpp::DecodeStatus::SizeMismatch ||
+                                      r.status == vpp::DecodeStatus::OkUnconfirmedContent ||
+                                      r.status == vpp::DecodeStatus::ContentValidated ||
+                                      r.status == vpp::DecodeStatus::RecoveredSharedStream ||
+                                      r.status == vpp::DecodeStatus::RecoveredSharedStreamLongChain;
+                    if (!good || r.data.size() < 4) continue;
+                    const uint32_t magic = (uint32_t)r.data[0] | ((uint32_t)r.data[1] << 8) | ((uint32_t)r.data[2] << 16) |
+                                           ((uint32_t)r.data[3] << 24);
+                    if (magic != 0x51890ACEu) continue;
+                    vpp::Container nested(vpp::ByteView(r.data.data(), r.data.size()));
+                    walk(nested);
+                } catch (const std::exception&) {
+                }
+                continue;
+            }
+            try {
+                vpp::Container nested(c.rawEntryBytes(i));
+                walk(nested);
+            } catch (const std::exception&) {
+            }
+        }
+    };
+    for (const char* n : {"misc_tables.vpp_pc", "dlc1.vpp_pc", "dlc2.vpp_pc", "dlc3.vpp_pc"}) {
+        std::error_code ec;
+        const std::filesystem::path p = std::filesystem::path(cacheDir) / n;
+        if (!std::filesystem::is_regular_file(p, ec)) continue;
+        std::vector<uint8_t> bytes = readFileLargeC(p.string());
+        if (bytes.empty()) continue;
+        try {
+            vpp::Container c(vpp::ByteView(bytes.data(), bytes.size()));
+            walk(c);
+        } catch (const std::exception&) {
+        }
+    }
+    diag = "craft registry: veh.xtbl files=" + std::to_string(files) + " craft rows (classes 2..5)=" + std::to_string(added);
+    return added;
 }
 
 } // namespace missionzoneobj

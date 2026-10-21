@@ -437,6 +437,8 @@ routed path's corner points at `0x02297e80`/`0x02297e34`, and drives **3D positi
 proximity/approach cues tied to those corners (`0x00ad5460` and friends) — a real,
 continuously-recomputed route, not a straight line.
 
+**[2026-10-19 CORRECTED (`spec-ai-runtime.md` §23): the route is not navmesh pathfinding. It is the road-graph A* of `0x00B1BE40`, run by the planner `0x007D89A0` (states 1–11); `0x007D7650` only walks the finished lane route to place arrows. The "3D positional audio" calls (`0x00AD5460`) set the turn-indicator bits of the player's car (`spec-ai-runtime.md` §23.7). The GPS has no audio cue.]**
+
 **The minimap route-draw question is CLOSED as a doubly-confirmed negative — the minimap never
 shows the route, in any form (2026-10-09).** All 4 functions that reference the cached corner-point
 globals (`0x02297e80`/`0x02297e34`) have now been individually read in full, not just xref-counted:
@@ -446,6 +448,8 @@ for a bearing/arrow-widget or VINT-element name (`route`, `nav_arrow`, `gps_arro
 `minimap_arrow`, `waypoint_arrow`, `route_line`, `nav_marker`, `gps_line`) came back with zero hits
 for every term, anywhere in the executable. So the minimap genuinely never shows the GPS route — the
 minimap only ever shows the static player-centred rotation §6.4 already documents.
+
+**[2026-10-19 CORRECTED: this negative is wrong. The minimap draws the route through `0x007D5C90` → `0x007D4900`, called at `0x0080A26A` inside `0x00809910`. It reads the route list `+0xA70`, not the corner array, which is why the corner-array census missed it. The pause map draws it too. See H.6.]**
 
 **But the broader question — is the route ever visualized at all — has a positive answer: yes, via a
 world-space particle-effect arrow trail, CONFIRMED.** The other 3 consumers of the corner array
@@ -522,6 +526,8 @@ the 1.0-unit-distance no-op case and the two other, not-yet-traced direct caller
 own body and the `+0xa70`/`+0xa91`/`+0xa84` field identification; HIGH CONFIDENCE, not independently
 re-verified against a real mission-script call sequence, that the two sub-field clusters always move
 together in practice.]** Full detail: `scratchpad/wave10_natives_batch1_2026-10-09.md`.
+
+**[2026-10-19 CORRECTED (`spec-ai-runtime.md` §23.1/§23.2): `+0xA70` is the committed route list (a circular node list of lanes), not an object handle. `+0xA91` is the direct-mode (straight-line) flag. So `waypoint_is_placed` is true whenever a route or a direct-mode target of either kind (player pin or mission) is active. `0x007D6970` stores the target position, not a resolved handle. Tracked objects live at `+0xB10`/`+0xB18`.]**
 
 ## Free-roam HUD binding map and minimap transform (2026-10-14)
 
@@ -664,6 +670,7 @@ category passes `0x00808AD0` (categories 10, 8, 7, 0, 2, 3, gated by bits 4, 2, 
 second `map_blip` tinted (0, 0.388, 1) for the object returned by `0x009DF3D0` (HYPOTHESIS: the co-op
 partner) and the player glyph. The mask bitmap's own pixel size is in a HUD peg that was not located — OPEN,
 cosmetic. The visible ring is `map_ring_NE`, 148 px across.
+**[2026-10-19 CORRECTED: `0x007D5C90` with callback `0x008037B0` is the GPS route-line draw (H.6), not the shared blip pool.]**
 
 **8. Blip placement and edge clamping (`0x00805B90` → `0x008059E0`).** `r` and `a` as in point 5;
 `R67 = 67 · UI scale` (`0x0115D4E8` = 67.0). The drawn radius is `min(r, R67)`, and the function returns
@@ -734,6 +741,133 @@ notoriety 2.5, previous display health 1.0 and $0):
 
 **Clean-room check.** Plain hex addresses only. No decompiler auto-names, no decompiler pseudocode, no leaked material. The Lua quoted here is shipped game script read for its behaviour.
 
+### H.6 GPS route line on the minimap and the pause map (2026-10-19) — FINAL
+
+**Scope.** Queue item 3 (c). How the GPS route is drawn. The route itself, its planning, and the
+waypoint rules are in `spec-ai-runtime.md` §23. **This section corrects §6.5:** the minimap *does* draw the
+route. `0x007D5C90`, labelled "the shared blip pool" in H.3 point 7, is the route draw.
+
+**Call sites — FINAL.**
+
+| Map | Call | Transform callback | Scale s | Gap mode | Alpha | Slots |
+|---|---|---|---|---|---|---|
+| Corner minimap | `0x0080A26A` inside `0x00809910`, after the region polygons (`0x00805D40`) and before the category passes | `0x008037B0` (H.3 point 5, unclamped polar form) | 1.0; in an interior 1/1.75 (`0x012FFF64` / `Minimap_interior_mag_factor`) | 0 (N = 1) | the element alpha (callback argument 4) | 0 only |
+| Pause map | `0x007DEFA5` (slot 1), then `0x007DEFE9` (slot 0, on top) | `0x007D9570` (pause-map pan/zoom, `0x0229A2B4`–`0x0229A2E0`) | 0.5 (`0x012FF678`) | 1 (N = record `+0xAE4`) | 1.0 | 1, then 0 |
+
+The minimap's round shape comes from the stencil mask and clip rectangle of H.3 point 7. The route draw
+itself culls each dot only to the full screen rectangle (0, 0)–(`0x005DCA00`, `0x005DCA10`), the screen
+width and height.
+
+**Polyline — FINAL (`0x007D4900`).** Nothing is drawn unless the record has a route (`+0xA70`) or direct
+mode (`+0xA91`).
+- **Direct mode:** one straight leg from the player's `+0x40`/`+0x48` to the goal `+0xA84`/`+0xA8C`, then
+  the end marker.
+- **Route:** the walk starts at the current node `+0xA74` (`spec-ai-runtime.md` §23.5), so the part
+  already driven is not drawn.
+  - On that first lane the player is projected onto the lane (`0x00A1EB30`). Shape points behind the
+    projection are skipped.
+  - Every later lane contributes its §13.2a(f) shape points (`0x007D3830`, node A, then the interior
+    points, then node B) up to the last node. Lanes with flag bit 31 are skipped.
+  - On the last lane the points stop at the one nearest the goal (`+0xAA0`). If the goal is off the graph
+    (`+0xA90`), a straight leg runs to the goal.
+- There is **no smoothing** beyond the stored Bézier shape points, **no distance limit**, and **no
+  line-width primitive**. Each world point goes through the callback to screen space, and the screen-space
+  polyline is stamped with dots.
+
+**Dots — FINAL (`0x007D1F90` setup, `0x007D1C00` stamping, `0x007D1A30` single/end stamp).**
+- Bitmaps: dot `map_other_waypoint_dot`; end marker `map_crosshair_waypoint` (`0x00E22290` lookup, size
+  from `0x00E21770`).
+- s′ = max(s, 0.4). Half-extent = **0.3 · s′ · bitmap size** per axis.
+- Spacing = **14.0 · s** px along the screen polyline (`0x0115A230` = 14.0). The leftover length carries
+  from segment to segment, and segments shorter than 0.1 px are skipped (`0x00DAE260`).
+- Each dot k has a cycle index i. Before each stamp, i = i + 1, and i = 0 when i > N + 3. The dot is drawn
+  only when **i ≤ 3** (always for the end marker). So there are 4 lit dots, then N blank, repeating.
+- For a lit dot f = i/3 (the end marker uses f = 1):
+  - size factor = **1 + 0.55·f**;
+  - alpha = trunc((**0.4 + 0.6·f**) · 255 · base alpha);
+  - quad = centre ± half-extent · size factor.
+  So each group of 4 grows and brightens toward the destination, like a chevron.
+- **Gap N.** Minimap: 1. Pause map: `+0xAE4` = 1 when the route has ≤ 80 drawn nodes, else
+  floor((nodes − 80)/20) + 1. It is counted at commit by a dry run at alpha 0 (`0x007D5D50`).
+- **Animation.** Clock T = (T + frame dt) mod **0.4 s** (`0x01117B70`), per record (`+0xB24`). It does
+  not advance while `0x00707490` is true, unless `0x007B3BA0(0x24)` is also true (HIGH: paused, except on
+  the pause map). Starting index = (N + 3) − floor(T/0.4 · (N + 4)). The pattern moves one full period
+  (N + 4 dots) toward the destination every 0.4 s: **175 px/s** on the minimap (5 × 14 px / 0.4 s).
+- **End marker.** At the last point, `map_crosshair_waypoint` at size factor 1.55 and the base alpha.
+
+**Colour per record and kind — FINAL (`0x007D3390`).** RGB bytes, alpha 255. The channel order is HIGH:
+float 3 of the colour is alpha (`0x005D9220`).
+
+| Record | Kind 1 (mission or tracked object) | Kind 0 (player pin) |
+|---|---|---|
+| slot 0 (local) | (0, 209, 223) | (69, 243, 0) |
+| slot 1 (co-op partner) | (255, 128, 64) | (255, 224, 64) |
+
+**3D world guide — FINAL for the gate, HIGH for placement.** `0x007D7650` runs for the local record only,
+and only while `0x009B9160(player)` holds (character `+0x16D4` == 3; HIGH: seated in a vehicle). On foot
+the trail is torn down (`0x007D2650`). It walks the committed lanes from `+0xA74`. It looks for successor
+lists that contain a junction connector (flag bit 2) and builds up to 100 corner records (`0x02297E40`,
+stride `0x50`, side byte `+0x48`). It spawns `vfx_gps_arrows` at the corners as §6.5 describes. The same
+corners feed the car's turn indicators (`spec-ai-runtime.md` §23.7). There is no other world line or
+floating arrow.
+
+**Test vectors.**
+
+| # | Case | Expected |
+|---|---|---|
+| H6-1 | Minimap, outdoors, route polyline 70 px long on screen, carry 0 | dots at 14, 28, 42, 56, 70 px (5 stamps); N = 1 so the indices cycle 0–4 and the stamp with i = 4 is blank |
+| H6-2 | Lit dot alphas at base alpha 1.0, i = 0, 1, 2, 3 | 102, 153, 204, 255; size factors 1.000, 1.183, 1.367, 1.550 |
+| H6-3 | Pause map, route with 130 drawn nodes | N = floor(50/20) + 1 = 3: 4 lit, 3 blank; spacing 7 px; half-extent 0.15 × bitmap |
+| H6-4 | Minimap in an interior | s = 1/1.75 = 0.5714: spacing 8.0 px; half-extent 0.1714 × bitmap |
+| H6-5 | Local mission route on the minimap | dots RGB (0, 209, 223); the player pin would be (69, 243, 0) |
+| H6-6 | T = 0.2 s, N = 1 | starting index = 4 − floor(0.5 · 5) = 2 |
+
+**Residual (OPEN):**
+- the pixel sizes of `map_other_waypoint_dot` and `map_crosshair_waypoint` (HUD peg not located);
+- whether the screen units of `0x008037B0` are reference or physical pixels (it shares H.3's
+  `0x00E23350` conversion: HIGH reference);
+- where `map_other_waypoint`, `_glow` and `_offscr` (resolved at commit into `0x012FDFB0`–`0x012FDFB8`)
+  are drawn — no reader found;
+- the exact corner-selection rule in `0x007D7650` beyond the bit-2 test.
+
+### H.7 HUD vint documents and their art (2026-10-19)
+
+Static work only, from shipped data. The documents were read with the §3 layout of `spec-vint-doc-format.md` (`tools/scratchpad/looks_2026-10-19/vint_crit.py`); bitmap locations come from the sheet tables of `spec-tables-environment.md` §17.4. The format, rendering and data bindings are already specified (`spec-vint-doc-format.md`, `spec-vint-render.md`, H.1–H.6). This adds the document list and where the art lives.
+
+**(a) Containers. FINAL.** The in-game HUD loads from `interface.vpp_pc` containers (`vint_doc_containers.asm_pc` lists them). `interface_startup.vpp_pc` also has top-level copies of the HUD `.vint_doc` files with the same sizes (e.g. `hud.vint_doc` 46,859 bytes; not hashed).
+
+| container (`interface.vpp_pc`) | documents (`.vint_doc`) and scripts |
+|---|---|
+| `hud.str2_pc` | `hud` + `hud.lua`, `hud_mayhem.lua`, `hud_healthbars.lua`, `hud_reticules.lua`, `hud_collection.lua`, `hud_noto.lua`; `hud_predator`; `vdo_hint_bar`, `vdo_hint_button`, `vdo_respect_meter`, `vdo_city_control`, `vdo_gsi`, `vdo_gsi_combo`, `vdo_gsi_info`, `vdo_gsi_meter`, `vdo_gsi_xy`, `vdo_gsi_timer`, `vdo_weapon_radial`, `vdo_weapon_radial_slot` (each with its `.lua`) |
+| `hud_msg.str2_pc` | `hud_msg`, `vdo_hint_button` |
+| `hud_diversion.str2_pc` | `hud_diversion` |
+| `hud_running_man.str2_pc` | `hud_running_man` |
+| `hud_whored.str2_pc` | `hud_whored`, `vdo_gsi_whored` |
+| `hud_qte.str2_pc`, `hud_touch_combo.str2_pc`, `hud_btnmash.str2_pc` | `hud_qte` / `hud_touch_combo` / `hud_btnmash`, each with `vdo_qte_key` |
+| `hud_predator.str2_pc` | `hud_predator`, `vdo_hint_bar`, `vdo_hint_button` |
+
+The `…2.str2_pc` siblings (`hud2`, `hud_msg2`, `hud_qte2`, …) are empty 2,048-byte containers in this build.
+
+**(b) Document tree of `hud.vint_doc`. FINAL.** Version 2. Critical resources, all with selector 1 and autoload byte 0: `vdo_respect_meter`, `vdo_city_control`, `vdo_gsi`, `vdo_hint_button`, `vdo_hint_bar`, `vdo_gsi_meter`, `vdo_weapon_radial`. Metadata: `lua_script_file` ×6 (`hud.lua`, `hud_mayhem.lua`, `hud_healthbars.lua`, `hud_reticules.lua`, `hud_collection.lua`, `hud_noto.lua`), `doc_dependency` = `hud_predator`, `document_depth` = 100. Children:
+- `vdo_gsi` → `vdo_gsi_combo`, `vdo_gsi_info`, `vdo_gsi_meter`, `vdo_gsi_xy`, `vdo_gsi_timer`;
+- `vdo_weapon_radial` → `vdo_hint_button`, `vdo_weapon_radial_slot`;
+- `vdo_hint_bar` and `vdo_respect_meter` → `vdo_hint_button`;
+- `hud_predator` → `vdo_hint_bar`, with `document_depth` 125.
+
+The selector-1 meaning stays OPEN in `spec-vint-doc-format.md` §3.2. The list matches the doc's own named sub-documents, so a port loads these children with the parent (CHOSEN).
+
+**(c) Art: the HUD bitmaps are sub-images of shared bitmap sheets. FINAL (data).** No HUD `.cpeg_pc` exists. Every bitmap a HUD document names (`ui_hud_*`, `ui_blank`, `ui_ctrl_360_btn_*`, …) is a sub-image of a sheet:
+- **Sheet textures**: the peg `interface-backend.cpeg_pc`/`.gpeg_pc` in `misc.vpp_pc` (`interface-backend.peg` is a literal at `0x01123B3C`). Header `GEKV`, version 13, 10 bitmaps: `ui_bms_00` … `ui_bms_04`, `ui_bms_btn_xbox2`, `ui_bms_pc`, `ui_bms_qte_xbox2`, `lut_completion_screen_pc`, `lut_death_pc`. Texture decode: `spec-texture-format.md`.
+- **Sub-image rectangles**: `misc_tables.vpp_pc` → `<sheet>.xtbl` (`StartX`, `StartY`, `ImageWidth`, `ImageHeight`, pixels), loaded through `bitmap_sheets.xtbl` and `0x00E21F70` into the CRC-keyed table at `0x02A4E398`.
+
+`ui_hud_*` counts per sheet: `ui_bms_00` 70 of 190 images, `ui_bms_01` 71 of 128, `ui_bms_02` 15 of 56, `ui_bms_03` 1 of 8, `ui_bms_04` 1 of 43, `ui_bms_btn_xbox2` 4 of 25 (plus the controller glyphs). The minimap base texture is the separate peg `ui_map_world_city` (`misc.vpp_pc`; H.3).
+
+**Test vectors (sheet, StartX, StartY, width, height).** `ui_hud_vignette` → `ui_bms_03` (2, 2, 508, 14). `ui_hud_meter_fill` → `ui_bms_01` (311, 1, 290, 12). `ui_blank` → `ui_bms_00` (50, 1006, 16, 16). `ui_hud_inv_fist` and `ui_hud_gsi_icon_timer` → `ui_bms_00`. `ui_hud_reticule_dot` and `ui_hud_respect_fill` → `ui_bms_01`. `ui_hud_map_notoriety` and `ui_hud_predator_arrow` → `ui_bms_02`. `ui_ctrl_360_btn_a` → `ui_bms_btn_xbox2`. The PC build swaps controller glyphs through `ui_bms_pc` (CHOSEN by name; the swap rule is not traced).
+
+**Residual:** the selector-1 critical-resource semantics; the PC glyph swap rule.
+
+**Review status (2026-10-19): FINAL for (a)–(c) from shipped data.**
+
 ## 7. Confidence summary and open items
 
 **CONFIRMED:** the `hud_display_*`/`hud_bar_*` architecture and full ruling-out as the core-stat path
@@ -768,6 +902,10 @@ Plain hex addresses throughout. No Ghidra auto-names, no decompiler pseudocode, 
 address citation. No leaked Volition/Havok/Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-19 — new H.7: HUD vint document list and art.** Containers and the `hud.vint_doc` child tree. HUD bitmaps are sub-images of the `interface-backend` peg sheets (`ui_bms_00`…`04`, `btn_xbox2`, `pc`, `qte_xbox2`), with rectangles from `misc_tables` `ui_bms_NN.xtbl`. Test vectors. Static only. Cleanroom self-check: 0 hits.
+
+- **2026-10-19 — new H.6: GPS route line on the minimap and pause map; corrections to §6.5 and H.3** (SPEC TEAM, queue item 3). `0x007D5C90` → `0x007D4900` draws the route as animated dots (`map_other_waypoint_dot`, spacing 14·s px, 4 lit + N blank, 0.4 s cycle, crosshair end marker) on both maps, with the colour set by slot and kind. This refutes §6.5's "minimap never shows the route". The planning is road-graph A*, not a navmesh, and the "audio cues" are the car's turn indicators (`spec-ai-runtime.md` §23). `+0xA70` is the route list. Static only. Cleanroom self-check: strict regex 0 hits.
 
 - **2026-10-14 — new section "Free-roam HUD binding map and minimap transform"** (SPEC TEAM, FREE-ROAM-GAPS group C). Binding map for health, ammo, weapon icon, cash, notoriety, respect, minimap and radio: the `hud.vint_doc` elements, the `hud.lua` / `hud_noto.lua` / `vdo_respect_meter.lua` functions, the dataitem names and fields (registered by `0x007F3940`), the C++ producers (`0x007F4A70`, `0x007F2000`, `0x007F7C80`, `0x007F1F00`, `0x007F1A20`, `0x007F1930`) and their encodings. Minimap: the exact world→screen formula, speed zoom from tweaks `Minimap_max_scale` 0.75 / `Minimap_interior_mag_factor` 1.75, the camera-heading rotation `θ = −(h+π)`, per-tile `minimap_CCRR.tga` bounds (tile box ±(160,116), 1 m per texel; registration confirmed against road-graph nodes), blip clamp radius 67 and the north marker at −Z. This also closes §6.4's player-glyph gap (`map_blip` at C, `0x0080A460`). Test vectors and a Team B wiring table are included. Remaining OPEN: the interior-map origin `0x022CB2B8`, the mask bitmap size, and the clip offset `+0x1A4` against `+0x1AC` **[2026-10-14 RESOLVED: clip = `+0x1A4`, reserve = `+0x1AC`]**. Cleanroom self-check: strict regex 0 hits.
 

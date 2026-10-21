@@ -101,8 +101,10 @@ Full field layout, all offsets relative to the start of a given 24-byte entry:
 The engine does not do straightforward linear string comparison to find files by name at runtime; it computes a hash of the filename and uses that for lookup in an in-memory table. **[CONFIRMED — disassembly.]** The exact algorithm (reconstructed from the code's logic, expressed here in our own words/pseudocode, not copied from the binary):
 
 ```
+if the name pointer is NULL: return 0xFFFFFFFF
 hash = 0
-for each character c in the filename (until the null terminator):
+for each byte b in the filename (until the null terminator):
+    c = sign_extend_8_to_32(b)          // byte 0x80..0xFF becomes 0xFFFFFF80..0xFFFFFFFF
     if c is an uppercase ASCII letter ('A'-'Z'):
         c = lowercase(c)
     hash = rotate_left_32(hash, 6)
@@ -110,7 +112,9 @@ for each character c in the filename (until the null terminator):
 return hash
 ```
 
-This is a simple, case-insensitive, rotate-and-XOR string hash (not a standard named algorithm like CRC32 — it is small, custom, and cheap to compute). **Whether the on-disk directory entry also stores a precomputed copy of this hash (common in this class of format, to avoid needing the plaintext name table at all for fast lookups) was not confirmed** — the disassembly traced showed the hash being computed from the plaintext name at load time, not read directly from an entry field, but this doesn't rule out a stored hash existing elsewhere. Flagged as open (§6). **[OPEN — desk review 2026-09-30: handling of bytes ≥ `0x80` (signed vs unsigned character before the XOR) is not stated; to be settled against the executable (`0x00da7890`).]**
+**[2026-10-19 corrected per Team D emulation D-5: FINAL]** Bytes are read **signed** (`movsx`) and widened to 32 bits before the A-Z test and the XOR; a NULL name returns `0xFFFFFFFF`. ASCII names are unaffected (329/329 matched); every name with a byte ≥ 0x80 differs from an unsigned reading (296/296). Vectors: `80` → 4294967168; `ff` → 4294967295; `63 61 66 e9` → 4269143657; `c0 e0` → 4063. The second copy of this hash, `0x00db09d0` (the one `spec-texture-format.md` §10.6 questioned), gives identical values on all 625 inputs except a NULL name, for which it returns **`0xFFFF`**.
+
+This is a simple, case-insensitive, rotate-and-XOR string hash (not a standard named algorithm like CRC32 — it is small, custom, and cheap to compute). **Whether the on-disk directory entry also stores a precomputed copy of this hash (common in this class of format, to avoid needing the plaintext name table at all for fast lookups) was not confirmed** — the disassembly traced showed the hash being computed from the plaintext name at load time, not read directly from an entry field, but this doesn't rule out a stored hash existing elsewhere. Flagged as open (§6). ~~**[OPEN — desk review 2026-09-30: handling of bytes ≥ `0x80` (signed vs unsigned character before the XOR) is not stated; to be settled against the executable (`0x00da7890`).]**~~ **[2026-10-19 CLOSED per Team D emulation D-5: FINAL — signed bytes; see the pseudo-code above.]**
 
 **Review status (2026-09-30): VALIDATED-BY-DATA: algorithm reproduces 22,274/22,274 rig bone hashes (0/22,274 uppercased); byte ≥ `0x80` handling NEEDS-EXE — desk review (not re-derived from the executable).**
 

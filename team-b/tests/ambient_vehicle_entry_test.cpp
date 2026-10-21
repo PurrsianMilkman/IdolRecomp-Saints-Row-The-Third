@@ -21,6 +21,18 @@ static AmbientEntryCandidate C(uint64_t id, double x, double z, bool occ = false
 }
 
 int main() {
+    // EC-2: the fast flag buys ONE retry across both candidates (the engine clears the request bit on the retry).
+    {
+        int calls = 0;
+        auto p = PickAmbientEntryTarget(0, 0, {C(1, 1, 0), C(2, 2, 0)}, 3.0, 0, true,
+                                        [&](const AmbientEntryCandidate&) { ++calls; return false; });
+        CHECK(p.index == -1);
+        CHECK(calls == 3);  // cand 1, its single retry, cand 2 (no retry)
+        calls = 0;
+        PickAmbientEntryTarget(0, 0, {C(1, 1, 0), C(2, 2, 0)}, 3.0, 0, false,
+                               [&](const AmbientEntryCandidate&) { ++calls; return false; });
+        CHECK(calls == 2);
+    }
     // empty / out of range
     CHECK(PickAmbientEntryTarget(0, 0, {}, 3.0).index == -1);
     CHECK(PickAmbientEntryTarget(0, 0, {C(1, 10, 0)}, 3.0).index == -1);

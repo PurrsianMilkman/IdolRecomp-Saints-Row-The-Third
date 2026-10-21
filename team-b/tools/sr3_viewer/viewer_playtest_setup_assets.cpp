@@ -185,7 +185,6 @@ int setupTables(PlaytestSession& sess) {
     auto& miscRead = sess.miscRead;
     auto& docOf = sess.docOf;
     auto& todSegments = sess.todSegments;
-    const auto& kWeatherStageForPlaytest = sess.kWeatherStageForPlaytest;
     auto& spawnCategoryDensity = sess.spawnCategoryDensity;
     auto& playtestHoods = sess.playtestHoods;
     auto& freeroamWeatherPedDensity = sess.freeroamWeatherPedDensity;
@@ -248,8 +247,7 @@ int setupTables(PlaytestSession& sess) {
     try {
         const sr3xtbl::Document wtodDoc = docOf("weather_time_of_day.xtbl");
         todSegments = sr3tables_environment::ParseWeatherTimeOfDayTable(wtodDoc);
-        std::printf("weather  : weather_time_of_day.xtbl - %zu segment(s) loaded; TOD lighting stage (CHOSEN) = '%s'\n",
-                    todSegments.size(), kWeatherStageForPlaytest.c_str());
+        std::printf("weather  : weather_time_of_day.xtbl - %zu segment(s) loaded\n", todSegments.size());
     } catch (const std::exception& ex) {
         std::printf("weather  : weather_time_of_day.xtbl not available (%s) - TOD lighting stays at its old fixed "
                     "CHOSEN defaults\n", ex.what());
@@ -270,21 +268,32 @@ int setupTables(PlaytestSession& sess) {
         std::printf("spawn    : spawn_info_categories.xtbl not available (%s) - Default Spawn stand-in\n", ex.what());
     }
     // Sec20.6.0(d) / RG-10: the ped density factor is the CURRENT weather stage's weather.xtbl Stage_Settings/
-    // PedDensity (Clear Skies 1.0, Overcast 1.0, Post-Storm 0.75, Light Rain 0.5, Heavy Rain 0.1), read from the
-    // table for the stage the playtest renders (kWeatherStageForPlaytest; the weather-stage state machine is not
-    // ported, so the current stage itself stays the CHOSEN constant). 1.0 when the table/stage is unavailable.
+    // PedDensity (Clear Skies 1.0, Overcast 1.0, Post-Storm 0.75, Light Rain 0.5, Heavy Rain 0.1). Gap #9: the
+    // current stage now comes from sr3render::WeatherScheduler (spec-tables-environment Sec18; --weather=<stage>
+    // pins it) and drives BOTH this factor and the TOD lighting stage every frame (weatherTick). Without
+    // weather.xtbl the factor stays 1.0 and the lighting uses the old fixed defaults.
     try {
         const sr3xtbl::Document wxDoc = docOf("weather.xtbl");
-        bool found = false;
-        for (const auto& st : sr3tables_environment::ParseWeatherTable(wxDoc)) {
-            if (st.name && *st.name == sess.kWeatherStageForPedDensity) {
-                freeroamWeatherPedDensity = st.pedDensity.value;
-                found = true;
-                break;
-            }
+        auto infos = sr3render::BuildWeatherStageInfo(sr3tables_environment::ParseWeatherTable(wxDoc));
+        for (const auto& s : infos) {
+            std::string nx;
+            for (int n : s.next) nx += (nx.empty() ? "" : ",") + infos[n].name;
+            std::printf("weather  : stage '%s' chance=%.3f avgDuration=%.1fs variance=%.2f pedDensity=%.2f next=[%s]\n",
+                        s.name.c_str(), static_cast<double>(s.chance), static_cast<double>(s.averageDuration),
+                        static_cast<double>(s.variance), static_cast<double>(s.pedDensity), nx.c_str());
         }
-        std::printf("weather  : weather.xtbl PedDensity for stage '%s' = %.2f%s\n", sess.kWeatherStageForPedDensity.c_str(),
-                    static_cast<double>(freeroamWeatherPedDensity), found ? "" : " (stage not found, default 1.0)");
+        if (!infos.empty()) {
+            sess.weatherSched.emplace(std::move(infos), sess.weatherSeed);
+            if (!sess.weatherPinName.empty() && !sess.weatherSched->Pin(sess.weatherPinName))
+                std::printf("weather  : --weather=%s names no weather.xtbl stage - running the schedule instead\n",
+                            sess.weatherPinName.c_str());
+            sess.weatherRefreshConsumers();
+            const auto st = sess.weatherSched->Current();
+            std::printf("weather-trace: start stage=%s%s seed=0x%X timeScale=%.2f pedDensity=%.2f light=%s\n",
+                        sess.weatherSched->StageName(st.currentStage).c_str(), st.pinned ? " (pinned)" : "",
+                        sess.weatherSeed, sess.weatherTimeScale, static_cast<double>(freeroamWeatherPedDensity),
+                        sess.weatherLightA.c_str());
+        }
     } catch (const std::exception& ex) {
         std::printf("weather  : weather.xtbl not available (%s) - ped density factor 1.0\n", ex.what());
     }
@@ -385,6 +394,39 @@ int setupTables(PlaytestSession& sess) {
             }
         }
         if (bradWeaponDefFound) {
+            // ---- Gap #17: the player's weapon inventory. CHOSEN starting loadout (spec gives none): slot 1 =
+            // Brad's pistol row (above), slot 2 = first SMG-slot row, slot 3 = first shotgun-slot row, each the
+            // first non-vehicle, non-cutscene-only, finite-ammo base-game (framework main) row with a magazine. CHOSEN starting reserve: 3 magazines,
+            // capped by the ammo.xtbl Max_in_Reserve of the row's Ammo (CONFIRMED cap, tables Sec5.1). ----
+            std::vector<sr3tables_weapons::AmmoRecord> ammoRows;
+            try { ammoRows = sr3tables_weapons::ParseAllAmmo(docOf("ammo.xtbl")); } catch (const std::exception&) {}
+            sess.weaponInv = std::make_unique<sr3weapons::WeaponInventory>();
+            auto addToInv = [&](const sr3tables_weapons::Weapon& w) {
+                const int32_t mag = w.magazineSize.present ? static_cast<int32_t>(w.magazineSize.value) : 0;
+                int32_t cap = 0;
+                if (w.ammo) {
+                    for (const auto& a : ammoRows)
+                        if (a.name.size() == w.ammo->size() &&
+                            std::equal(a.name.begin(), a.name.end(), w.ammo->begin(),
+                                       [](char x, char y) { return std::tolower((unsigned char)x) == std::tolower((unsigned char)y); }) &&
+                            a.maxInReserve.present) { cap = static_cast<int32_t>(a.maxInReserve.value); break; }
+                }
+                const int slot = sess.weaponInv->add(w, 3 * mag, cap);
+                std::printf("weapon   : inventory slot %d = '%s' (Weapon_Class=%d Inv_Slot=%d clip=%d reserve=%d/cap %d refire=%d ms)\n",
+                            slot + 1, w.name.c_str(), w.weaponClass, static_cast<int>(w.invSlot), mag,
+                            sess.weaponInv->reserve(slot), cap,
+                            w.timeManagement.refireDelayMs.present ? static_cast<int>(w.timeManagement.refireDelayMs.value) : 0);
+            };
+            addToInv(bradWeaponDef);
+            for (const uint8_t wantSlot : {uint8_t(3), uint8_t(4)}) {  // kInvSlotNames: smg 3, shotgun 4
+                for (const sr3tables_weapons::Weapon& w : allWeapons) {
+                    if (w.invSlot != wantSlot || w.weaponClass == sr3weapons::kVehicleWeaponClass) continue;
+                    if (!w.magazineSize.present || w.magazineSize.value == 0 || (w.flagsB & sr3weapons::kFlagBCutsceneOnly) || (w.flagsA & (sr3weapons::kFlagAInfiniteMagazine | sr3weapons::kFlagAUnlimitedAmmo)) || (w.framework && *w.framework != "main") || w.name == bradWeaponDef.name) continue;
+                    addToInv(w);
+                    break;
+                }
+            }
+            std::printf("weapon   : keys (CHOSEN): R reload, 1-8 select Inv_Slot k-1 (key 1 = fists), 9 last, Q CCW, Tab CW (Sec5.4.3)\n");
             std::printf("weapon   : Brad equipped with real weapons.xtbl row '%s' (Weapon_Class=%d, %zu total rows "
                         "parsed) - LMB fires it on foot\n",
                         bradWeaponDef.name.c_str(), bradWeaponDef.weaponClass, allWeapons.size());

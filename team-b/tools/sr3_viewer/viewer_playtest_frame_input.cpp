@@ -67,16 +67,32 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
     auto& radioNextDownNow = frm.radioNextDownNow;
     auto& roadblockKeyDownNow = frm.roadblockKeyDownNow;
     auto& fireKeyDownNow = frm.fireKeyDownNow;
+    auto& reloadKeyDownNow = frm.reloadKeyDownNow;
+    auto& weaponSelKeysDownNow = frm.weaponSelKeysDownNow;
         // ===================== PAUSE MENU (THIS TASK) ==========================
         // Live-only (same convention as the T/R keys below) - under --no-input there is no
         // real OS keyboard to poll, so this never fires in the ctest smoke test. See this
         // function's own top "PAUSE MENU" doc comment for the full real mechanism and the
         // honest caveats on what is/isn't reproduced.
+        // sr3.exe hook (PlaytestHooks::pauseInput; empty for sr3_viewer): the front end's pause menu can
+        // request open/close/toggle/quit, live or scripted, on top of the Esc edge below.
+        PauseRequest hookReq = PauseRequest::None;
+        if (sess.hooks.pauseInput) hookReq = sess.hooks.pauseInput(sess, frm);
+        if (hookReq == PauseRequest::Quit) {
+            std::printf("quit     : requested by the front end - exiting\n");
+            return true;
+        }
+        const bool hookToggle = hookReq == PauseRequest::Toggle ||
+                                (hookReq == PauseRequest::Open && !pauseMenuOpen) ||
+                                (hookReq == PauseRequest::Close && pauseMenuOpen);
+        bool escEdge = false;
         if (!noInput) {
             const bool escDownNow = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
-            const bool escEdge = escDownNow && !prevEscDown;
+            escEdge = escDownNow && !prevEscDown;
             prevEscDown = escDownNow;
-            if (escEdge) {
+        }
+        {
+            if (escEdge || hookToggle) {
                 if (!pauseMenuOpen) {
                     // GATE: the real engine's 3 "already in blocking UI/cutscene" checks
                     // (0x007e1f40/0x007aaf00/0x007afb90) have no modelled equivalent here (see
@@ -115,6 +131,8 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
                                 hudEs ? "" : " (no EngineState this run)");
                 }
             }
+        }
+        if (!noInput) {
             // F10: the replacement quit key (Esc is repurposed above - Window::create's own
             // escQuits=false for this command). Edge-triggered so holding it doesn't matter;
             // breaks the main loop immediately, same as the window's own title-bar/X button.
@@ -137,7 +155,8 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
         // Advance the CHOSEN TOD clock (see its own declaration above) by one frame -
         // sr3render::AdvanceTodFraction() (tod_clock.h), not inlined here, so
         // tests/synthetic_tod_clock_test.cpp can exercise the real formula directly.
-        todFraction = sr3render::AdvanceTodFraction(todFraction, dt, sr3render::kTodSecondsPerDay);
+        todFraction = sr3render::AdvanceTodFraction(todFraction, dt, sess.todSecondsPerDay);
+        sess.weatherTick(dt, frames);  // weather schedule -> lighting stage + ped density (gap #9)
 
         // vehInputLive/vehEDownNow (THIS TASK): populated by both branches below,
         // consumed only if/when `inVehicle` is true (see the "VEHICLE ENTRY/
@@ -170,11 +189,34 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
             vehInputLive.throttle = kW ? 1.0 : 0.0;
             vehInputLive.brake = kS ? 1.0 : 0.0;
             vehInputLive.steer = (kD ? 1.0 : 0.0) - (kA ? 1.0 : 0.0);
+            // AW-15 aircraft / boat controls from the spec-tables-ui-controls.md 18.3 default PC sets: Helicopter W/S D/A,
+            // L-Shift up, L-Ctrl down, Space turn-mode, F VTOL; Plane S/W pitch, D/A roll, L-Shift throttle, L-Ctrl brake.
+            // The spec lists no default for the turn-left/right actions: Q / C are CHOSEN (heli tail rotor, plane rudder).
+            {
+                sr3viewer_craft::CraftControls& cl = sess.craft.liveControls;
+                cl = sr3viewer_craft::CraftControls{};
+                cl.fwd = (kW ? 1.0 : 0.0) - (kS ? 1.0 : 0.0);
+                cl.right = (kD ? 1.0 : 0.0) - (kA ? 1.0 : 0.0);
+                cl.up = (GetAsyncKeyState(VK_LSHIFT) & 0x8000) ? 1.0 : 0.0;
+                cl.down = (GetAsyncKeyState(VK_LCONTROL) & 0x8000) ? 1.0 : 0.0;
+                cl.turnSelect = (GetAsyncKeyState(VK_SPACE) & 0x8000) != 0;
+                cl.yawKeys = ((GetAsyncKeyState('C') & 0x8000) ? 1.0 : 0.0) - ((GetAsyncKeyState('Q') & 0x8000) ? 1.0 : 0.0);
+                cl.vtolToggle = (GetAsyncKeyState('F') & 0x8000) != 0;  // raw level; edge-detected in stepWorld
+            }
             vehEDownNow = vehicleEnabled && (GetAsyncKeyState('E') & 0x8000) != 0;
             tDownNow = (GetAsyncKeyState('T') & 0x8000) != 0;
             radioPrevDownNow = (GetAsyncKeyState(VK_OEM_COMMA) & 0x8000) != 0;
             radioNextDownNow = (GetAsyncKeyState(VK_OEM_PERIOD) & 0x8000) != 0;
-            roadblockKeyDownNow = (GetAsyncKeyState('R') & 0x8000) != 0;
+            // Roadblock debug toggle moved R -> B (gap #17: R is now reload).
+            roadblockKeyDownNow = (GetAsyncKeyState('B') & 0x8000) != 0;
+            // Gap #17 weapon handling. Spec gives no PC default key for reload/weapon-select (CHOSEN): R = reload,
+            // 1-9 = select slot, Q = previous, Tab = next. No mouse-wheel (no WM_MOUSEWHEEL hook in this viewer).
+            reloadKeyDownNow = (GetAsyncKeyState('R') & 0x8000) != 0;
+            weaponSelKeysDownNow = 0;
+            for (int k = 0; k < 9; ++k)
+                if (GetAsyncKeyState('1' + k) & 0x8000) weaponSelKeysDownNow |= 1u << k;
+            if (GetAsyncKeyState('Q') & 0x8000) weaponSelKeysDownNow |= 1u << 9;
+            if (GetAsyncKeyState(VK_TAB) & 0x8000) weaponSelKeysDownNow |= 1u << 10;
             // Left mouse button fires Brad's weapon (THIS TASK) - unused by
             // anything else in this file's playtest command (mouse motion
             // already drives look via the recentre block just below; no
@@ -187,6 +229,10 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
             if (spaceDownNow && !sess.prevSpaceDown && !sess.inVehicle && sess.jump_) sess.jump_->requestJump();
             sess.prevSpaceDown = spaceDownNow;
             moveSrc.crouchHeld = (GetAsyncKeyState('C') & 0x8000) != 0;
+            // JC-5: toggle mode (Sec3.6.3 step 3) - X = CBA_OFC_CROUCH_TOGGLE, CHOSEN key (no spec binding); one-frame edge.
+            const bool crouchToggleDownNow = (GetAsyncKeyState('X') & 0x8000) != 0;
+            moveSrc.crouchTogglePressed = crouchToggleDownNow && !sess.prevCrouchToggleKeyDown;
+            sess.prevCrouchToggleKeyDown = crouchToggleDownNow;
 
             // Real mouse deltas, poll-and-recentre - only while the window actually has
             // focus (never yanks the user's cursor around if they alt-tab away).
@@ -222,6 +268,9 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
             moveSrc.sprintHeld = false;
             // T2 scripted jump/crouch (--script-jump-at=FRAME, --script-crouch-frames=A-B).
             moveSrc.crouchHeld = sess.scriptCrouchA >= 0 && frames >= sess.scriptCrouchA && frames <= sess.scriptCrouchB;
+            moveSrc.crouchTogglePressed = false;
+            for (int tf : sess.scriptCrouchToggleAt)
+                if (frames == tf) moveSrc.crouchTogglePressed = true;  // JC-5 scripted toggle press
             for (int jf : sess.scriptJumpAt)
                 if (frames == jf && !sess.inVehicle && sess.jump_) sess.jump_->requestJump();
             lookSrc.rotateValue = (frames >= scriptForwardFrames && frames < scriptForwardFrames + scriptTurnFrames)
@@ -233,7 +282,7 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
             // the kScriptVehicle* constants above the main loop for the
             // exact frame schedule.
             vehEDownNow = vehicleEnabled && scriptVehicle &&
-                          (frames == kScriptVehicleEnterFrame || frames == kScriptVehicleExitFrame);
+                          (frames == sess.scriptVehicleEnterFrame || frames == kScriptVehicleExitFrame);
             // --script-enter-ambient-at=FRAME: the scripted stand-in for "walk up to an ambient car and press E":
             // stepVehicleControls warps the player beside the nearest ambient car at FRAME, E enters at FRAME+1,
             // E exits again scriptEnterAmbientDriveFrames later (same throttle script as --script-vehicle).
@@ -249,12 +298,20 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
                 }
                 if (sess.scriptEnterAmbientReenter) {
                     const int rbase = sess.scriptEnterAmbientAt + cycle * sess.scriptEnterAmbientCount;
-                    vehEDownNow = vehEDownNow || frames == rbase || frames == rbase + 30;
+                    vehEDownNow = vehEDownNow || frames == rbase || frames == rbase + sess.scriptEnterAmbientReenterDriveFrames;
                 }
             }
             vehInputLive = sr3physics::DriverInput{0.6, 0.0, 0.08}; // mild constant turn, so the test also exercises steering
+            // AW-15 scripted craft controls (--script-craft=A-B:fwd=..,up=..;...) and scripted E presses (--script-e-at).
+            {
+                bool chuteEdge = false;
+                sess.craft.liveControls = sr3viewer_craft::ScriptControlsAt(sess.craft.script, frames, chuteEdge);
+                sess.craft.chuteEdgeScript = chuteEdge;
+                for (int ef : sess.craft.eFrames)
+                    if (frames == ef) vehEDownNow = vehicleEnabled;
+            }
             // --script-roadblock (THIS TASK): deterministic arm-then-disarm
-            // 'R' press pair - see the kScriptRoadblockArmFrame/
+            // 'B' press pair - see the kScriptRoadblockArmFrame/
             // kScriptRoadblockDisarmFrame declarations above the main loop.
             roadblockKeyDownNow =
                 scriptRoadblock && (frames == kScriptRoadblockArmFrame || frames == kScriptRoadblockDisarmFrame);
@@ -262,6 +319,19 @@ bool stepInput(PlaytestSession& sess, PlaytestFrame& frm) {
             // see kScriptFireFrame's own declaration (near kScriptRoadblock*
             // above the main loop) for the exact frame.
             fireKeyDownNow = scriptFire && frames == kScriptFireFrame;
+            // --script-weapons (gap #17): fire pulses every 10 frames (~333 ms at the fixed 1/30 s step) in three
+            // windows - fire until the first weapon is empty (dry-fire -> auto-reload -> keep firing), then an
+            // explicit mid-clip reload press, switch to slot 2 and fire, then Tab to the next slot and fire.
+            reloadKeyDownNow = false;
+            weaponSelKeysDownNow = 0;
+            if (sess.scriptWeapons) {
+                auto pulse = [&](int a, int b) { return frames >= a && frames < b && (frames - a) % 10 == 0; };
+                fireKeyDownNow = fireKeyDownNow || pulse(60, 460) || pulse(580, 780) || pulse(860, 1000);
+                reloadKeyDownNow = frames == 345;  // mid-clip: a partial explicit reload
+                if (frames == 520) weaponSelKeysDownNow |= 1u << 3;   // key '4' = Inv_Slot 3 (smg), Sec5.4.3
+                if (frames == 800) weaponSelKeysDownNow |= 1u << 10;  // Tab (next)
+            }
+            if (sess.soak.active) soakStep(sess, frm);  // chaos driver overrides the scripted shape above
         }
     return false;
 }
@@ -298,8 +368,16 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
         // Edge-triggered (vehEDownNow && !prevEDown) so holding E does not
         // toggle every frame - same debounce shape this task's own brief asks
         // for, applied to a key this file had not previously used.
-        const bool vehEEdge = vehEDownNow && !prevEDown;
+        // AW-15: while falling (freefall) the E / CBA_GAC_ACTION press is the parachute button (spec-player-runtime.md
+        // Sec19.4 step 2), not a vehicle entry; the freefall step consumes sess.craft.chuteEdgeThisFrame.
+        const bool eEdgeRaw = vehEDownNow && !prevEDown;
         prevEDown = vehEDownNow;
+        const bool fallingNow = !inVehicle && sess.craft.freefallEnabled &&
+                                (sess.craft.ff.inFreefall || (!sess.craft.playerGrounded && sess.craft.ffFallSpeed > 3.0));
+        sess.craft.chuteEdgeThisFrame = (sess.craft.chuteEdgeScript && !inVehicle) || (eEdgeRaw && fallingNow);
+        const bool vehEEdge = eEdgeRaw && !fallingNow;
+        craftSpawnStep(sess);
+        craftPlayerLiftStep(sess);
 
         // ===================== T KEY: TOD TIME-SKIP (v0.3 polish task) ============
         // Same edge-triggered debounce shape as vehEEdge/prevEDown just above
@@ -321,6 +399,25 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                         sr3render::kTodHoursPerTKeyPress, tHour, tMinute, todFraction);
         }
 
+        // --script-warp-to-ped-at=FRAME (evidence helper, headless): put the player 3 m behind the nearest live ambient ped so the
+        // follow camera frames it close up. Pure placement; no gameplay effect beyond the warp.
+        if (noInput && sess.scriptWarpToPedAt >= 0 && frames == sess.scriptWarpToPedAt && !inVehicle) {
+            const sr3airuntime::NearFieldPed* best = nullptr;
+            double bestD2 = 1.0e30;
+            for (const auto& nfp : sess.nearFieldPedsLive) {
+                const double ddx = nfp.pos.x - pm.st.position.x, ddz = nfp.pos.z - pm.st.position.z;
+                if (ddx * ddx + ddz * ddz < bestD2) { bestD2 = ddx * ddx + ddz * ddz; best = &nfp; }
+            }
+            if (best) {
+                const double h = sess.nearFieldPedPlace[best->id].heading;
+                pm.warp(sr3player::Vec3{best->pos.x - std::sin(h) * 3.0, best->pos.y, best->pos.z - std::cos(h) * 3.0});
+                std::printf("[ped-anim] script: frame %d warped player 3 m behind ambient ped %llu at (%.1f %.1f %.1f) (%.1f m away)\n",
+                            frames, static_cast<unsigned long long>(best->id), best->pos.x, best->pos.y, best->pos.z, std::sqrt(bestD2));
+            } else {
+                std::printf("[ped-anim] script: frame %d no ambient ped to warp to\n", frames);
+            }
+        }
+
         if (vehicleEnabled) {
             if (inVehicle) {
                 // Distance accounting for the ambient-entry trace (ground-plane metres while driving).
@@ -337,7 +434,7 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                 auto& st = vehicleRig.sim->state_;
                 const int ambCycle = sess.scriptEnterAmbientDriveFrames + 40;
                 const int ambRel = frames - sess.scriptEnterAmbientAt;
-                if (noInput && sess.scriptEnterAmbientAt >= 0 && ambRel >= 0 && ambRel % ambCycle == 0 &&
+                if ((noInput || sess.soak.active) && sess.scriptEnterAmbientAt >= 0 && ambRel >= 0 && ambRel % ambCycle == 0 &&
                     ambRel / ambCycle < sess.scriptEnterAmbientCount) {
                     // Scripted stand-in for "walk to the nearest ambient car": warp the player 2 m beside it.
                     const sr3airuntime::NearFieldVehicle* best = nullptr;
@@ -395,13 +492,14 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                         double tx = 0, tz = 0, th = 0, tSpeed = 0;
                         float ty = vehicleGroundY;
                         bool tGenki = false;
+                        AmbientVehicleModel* tModel = nullptr;
                         bool found = false;
                         std::vector<PlaytestSession::ParkedVehicle> keepParked = sess.parkedVehicles;
                         if (id >= kParkedIdBase) {
                             for (size_t i = 0; i < keepParked.size(); ++i) {
                                 if (keepParked[i].id != id) continue;
                                 const auto& pk = keepParked[i];
-                                tx = pk.x; tz = pk.z; th = pk.heading; ty = pk.y; tGenki = pk.isGenki;
+                                tx = pk.x; tz = pk.z; th = pk.heading; ty = pk.y; tGenki = pk.isGenki; tModel = pk.model;
                                 reentry = true; found = true;
                                 keepParked.erase(keepParked.begin() + static_cast<std::ptrdiff_t>(i));
                                 break;
@@ -423,6 +521,10 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                                 // is neither simulated nor drawn twice; per-id side maps are pruned by the next
                                 // maintenance tick.
                                 carjack = true; found = true;
+                                {
+                                    const auto mIt = sess.nearFieldVehicleModel.find(id);
+                                    tModel = mIt != sess.nearFieldVehicleModel.end() ? mIt->second : nullptr;
+                                }
                                 sess.nearFieldLive.erase(sess.nearFieldLive.begin() + static_cast<std::ptrdiff_t>(i));
                                 break;
                             }
@@ -433,6 +535,7 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                             old.id = kParkedIdBase + sess.nextParkedId++;
                             old.x = st.posX; old.z = st.posZ; old.heading = st.heading; old.y = vehicleGroundY;
                             old.isGenki = sess.rigCarIsGenki;
+                            old.model = sess.activeCarModel;
                             keepParked.push_back(old);
                             sess.parkedVehicles = std::move(keepParked);
                             // Load the target into the rig (position/heading/velocity carry over; the physics row stays
@@ -441,6 +544,7 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                             st.velForwardBody = tSpeed; st.velRightBody = 0.0; st.yawRate = 0.0;
                             st.steeringAngleCurrentRad = 0.0; st.steeringAngleTargetRad = 0.0;
                             sess.rigCarIsGenki = tGenki;
+                            sess.activeCarModel = tModel;
                             sess.vehicleGroundFollower_.emplace(static_cast<double>(ty));
                             vehicleGroundY = ty;
                         } else {
@@ -458,6 +562,7 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                     }
                     sess.ambientPrevX = st.posX; sess.ambientPrevZ = st.posZ;
                     inVehicle = true;
+                    craftOnEnter(sess);  // AW-15: helicopter / plane / VTOL / boat models fly on the 3-D rig
                     std::printf("[vehicle] entered %s%s - W/S throttle/brake, A/D steer, E to exit, ,/. radio prev/next\n",
                                 carjack ? "ambient car (carjack, driver removed)"
                                         : (reentry ? "previously parked car" : (sess.rigCarIsGenki ? "parked car" : "car")),
@@ -472,12 +577,14 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
                 // (not spawn) position/heading - see this function's own
                 // "VEHICLE ENTRY/DRIVING" doc comment for why this is a
                 // CHOSEN offset, not a real door-hinge position.
+                craftOnExitBefore(sess);  // AW-15: exit from the craft's altitude (an airborne exit falls)
                 const double exHeading = vehicleRig.sim->state_.heading;
                 const double rightX = -std::sin(exHeading), rightZ = std::cos(exHeading);
                 const double exitX = vehicleRig.sim->state_.posX + rightX * static_cast<double>(kVehicleExitOffset);
                 const double exitZ = vehicleRig.sim->state_.posZ + rightZ * static_cast<double>(kVehicleExitOffset);
                 // (y: the car's own ground height, not the spawn-area finalGroundY - the car may be far away now)
                 pm.warp(sr3player::Vec3{exitX, static_cast<double>(sess.vehicleGroundY), exitZ});
+                craftOnExitAfter(sess);  // the empty craft is set down on the ground below
                 pm.world.orientation.set(sr3playeranim::OrientationFromFacing(heldFacing));
                 sr3playeranim::DriveCameraTarget(followCam, pm);
                 followCam.reset(); // immediate snap to the new (post-exit) position, not a long fly-over
@@ -494,8 +601,8 @@ void stepVehicleControls(PlaytestSession& sess, PlaytestFrame& frm) {
             bool radioNextEdge = radioNextDownNow && !prevRadioNextDown;
             prevRadioPrevDown = radioPrevDownNow; prevRadioNextDown = radioNextDownNow;
             if (noInput && scriptVehicle && vehicleEnabled) {
-                radioNextEdge = radioNextEdge || frames == kScriptVehicleEnterFrame + 30;
-                radioPrevEdge = radioPrevEdge || frames == kScriptVehicleEnterFrame + 60;
+                radioNextEdge = radioNextEdge || frames == sess.scriptVehicleEnterFrame + 30;
+                radioPrevEdge = radioPrevEdge || frames == sess.scriptVehicleEnterFrame + 60;
             }
             if (inVehicle && radioNextEdge) radioPlayer->cycle(+1);
             if (inVehicle && radioPrevEdge) radioPlayer->cycle(-1);
@@ -524,7 +631,6 @@ void stepWorld(PlaytestSession& sess, PlaytestFrame& frm) {
     auto& realCameraCollision = *sess.realCameraCollision_;
     auto& reconcile = sess.reconcile;
     auto& finalGroundY = sess.finalGroundY;
-    auto& sampleGroundHeight = sess.sampleGroundHeight;
     auto& vehicleGroundFollower = *sess.vehicleGroundFollower_;
     auto& vehicleGroundY = sess.vehicleGroundY;
     auto& vehicleRig = *sess.vehicleRig_;
@@ -584,7 +690,9 @@ void stepWorld(PlaytestSession& sess, PlaytestFrame& frm) {
         // the SAME vehicle-pivot height used for rendering/the chase cam just
         // below (finalGroundY + kVehPivotHeight) - this model is planar, so
         // there is only ever one world Y to sweep at.
-        if (inVehicle)
+        if (inVehicle && sess.craft.rig.active)
+            craftStepWorld(sess, frm);  // AW-15: 3-D rigid body flown by the Sec10.13 laws (viewer_craft_rig.h)
+        else if (inVehicle)
             vehicleRig.Advance(device.device(), dt, vehInputLive, &realCameraCollision,
                                 static_cast<double>(finalGroundY) + static_cast<double>(kVehPivotHeight));
 
@@ -595,10 +703,17 @@ void stepWorld(PlaytestSession& sess, PlaytestFrame& frm) {
         // vertical model (PlaytestVehicleRig has none of its own) - eased,
         // never a hard per-frame teleport, even though in practice a
         // PARKED car's own (x,z) rarely changes tile.
-        if (vehicleEnabled) {
-            const float vehRawH = sampleGroundHeight(vehicleRig.sim->state_.posX, vehicleRig.sim->state_.posZ,
-                                                      finalGroundY);
+        if (vehicleEnabled && !sess.craft.rig.active) {
+            // G1: same walkable-collision ground ray as the player (start = current ground + ~0.52 m step-up);
+            // a miss / non-resident tile holds the current ground.
+            if (sess.vehicleGroundTarget == 0.0f) sess.vehicleGroundTarget = vehicleGroundY;
+            const float vehRawH = sess.sampleGround(vehicleRig.sim->state_.posX, vehicleRig.sim->state_.posZ,
+                                                    static_cast<double>(vehicleGroundY) + 0.52,
+                                                    sess.vehicleGroundTarget).y;
+            sess.vehicleGroundTarget = vehRawH;
             vehicleGroundY = static_cast<float>(vehicleGroundFollower.update(vehRawH, dt).groundY);
+            // AW-15: a parked helicopter / plane / boat model keeps its mesh origin above the ground by its body offset.
+            vehicleGroundY = craftParkedRenderY(sess, vehicleGroundY);
         }
 
         frm.focusX = inVehicle ? static_cast<float>(vehicleRig.sim->state_.posX)

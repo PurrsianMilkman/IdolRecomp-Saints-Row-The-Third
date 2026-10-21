@@ -67,9 +67,8 @@ static void testP2_FieldRoles() {
 static void testP3_TorqueModifier() {
     // 10.11.10: returned torque = net x P x (0.85 if gated) x G, G = 1.25. net 1000 -> 1250, gated 1062.5.
     EngineCurveTuning e;
-    e.peakTorqueRpm = 4500.0;
-    e.torqueFactorPeak = -1.0;  // net = resistance*throttle - torqueFactor = 0*1 - (-1) = 1 at f = 0
-    e.torqueScale = 1000.0;
+    e.torque = 1000.0; e.minRpm = 1000.0; e.optRpm = 4500.0; e.maxRpm = 6500.0;  // D-17 table roles: at Opt_RPM, T = Torque, R = 0
+    e.clutchSlipRpm = 1750.0;
     const double base = EngineNetTorque(e, 4500.0, 1.0, false, 1.0);
     NEAR(base, 1000.0, 1e-9);
     NEAR(EngineNetTorque(e, 4500.0, 1.0, false, 1.25), 1250.0, 1e-9);

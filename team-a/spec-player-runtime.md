@@ -1111,6 +1111,29 @@ The FOV is written in step 2's helper path: `0x0056ec70(angle block)` (called at
 
 `0x00565d70(out, from, to, filter, out-hit-flag, out-normal)` (205 instructions; CONFIRMED): if *to* is within 1e‑5 of *from* on every axis, out = *to*. Otherwise a swept-sphere world query (`0x0075c880`) from *from* to *to* with radius **0.12** (`0x012e3cec`) and the per-object filter **`0x00566070`** (407 instructions, also used by the snap and the core; read for structure only: it resolves the camera target and the local player's vehicle (`0x009445b0`, `0x009b9210`, `0x009b9230`) — HYPOTHESIS that it excludes them from blocking; OPEN 33). Hits on the local player's own vehicle of kinds 1, 4 and 8 are skipped. With no blocking hit, out = *to*; at the first blocking hit, out = **the hit's sweep position** (`+0x10`; normal `+0x20` to the optional output) and the camera-cut flag `0x013c872c` is set. There is no smoothing of the pull-in: the camera jumps to the contact each update and returns as soon as the path is clear (CONFIRMED for this function; any easing would have to come from the submode blend or the transition blend).
 
+[2026-10-20 per Team D emulation: FINAL — **driver-cam collision query (OPEN 33).** The chase camera uses this same sweep: `0x00565d70`, sphere radius 0.12 from the pivot to the wanted position, filter `0x00566070`, jump to the first blocking hit, no easing. The filter was read in full (407 instructions). It returns 1 = blocks, 0 = ignored:
+- An object without class flag +6 bit `0x08`, or one that `0x00853b10` rejects, is ignored.
+- The camera target itself blocks only while byte `0x013c872d` is set.
+- An object in class set `0x20` (`0x00853b30(obj, 0x20)`) is ignored.
+- **Vehicles** (class +6 bit `0x80`, `0x00b71950`):
+  - The local player's vehicle is ignored. That vehicle is `0x009445b0`: player `+0x16d8` while entering, else `+0x16c0`. ~~The exception: the player's vehicle state `+0x16d4` is 1 or 2 (`0x009b9210`/`0x009b9230`, HIGH: getting in or out) and `0x013c9362` is clear. Then the car goes on to the tests below.~~ **[2026-10-20 per Team D emulation: FINAL]** The exception applies to state **1 only** (getting in): with `+0x16d4` = 1 every car, the player's own included, passes the filter. With `+0x16d4` = 0, 2 or 3 the player's own car (`+0x16c0`) is ignored and other cars within 5 m of the player CHARACTER (|Δ|² < 25 from the human `+0x40`) are ignored too; cars further away pass. If the car is held in `+0x16d8` instead of `+0x16c0`, every car is ignored (a non-null `+0x16d8` with a state other than 1 short-circuits before the distance test). Residual: whether the "state 2" branch of the static reading depends on `0x013c9362` being set; the emulation ran with the cold-image value.
+  - The vehicle `0x00ad2e30` returns for the player's `+0x16c0` is ignored, and so is its tow partner (`+0x1a40` → `+0x38`).
+  - Some cars near the player are ignored. This applies while the player has a vehicle, is not in state 1 and has no car being entered (`+0x16d8` is the null handle `0x0111a3e0`). Then any other vehicle whose origin is within **5 m** of the player's origin is ignored: squared distance < 25.0 (`0x01115238`), and `0x0043aa90` returns the squared length.
+  - Every other vehicle blocks.
+- **Class +6 bit `0x20` objects** (`0x00b71970`; kind not named here):
+  - They are ignored while their timer `+0xf8` runs.
+  - They block when the player is not seated (`+0x16d4` ≠ 3, `0x009b9160`).
+  - When the player is seated, an object with `+0x14c` bit `0x20`, `+0xdd` bit 2, `+0x148` bit 0 clear and bit `0x4000` set blocks only when `+0x12c` = 0. Any other one blocks.
+- **Class +7 bit 4 objects** (`0x005910f0`) attached to the player's vehicle (`+0x210` = player `+0x16c0`) are ignored when their box overlaps the vehicle's (`0x00dc0a90`). The box comes from vtable `+0x60`, with half-extents × 0.5 (`0x0126d2cc`). If the boxes do not overlap, the object blocks.
+- Everything else blocks, world geometry included.
+
+Port rule for the chase cam: sweep 0.12 m from the pivot to the camera. Ignore your own car, its tow partner and other cars within 5 m of the player. Stop at the first other hit. FINAL for the tests and constants. HIGH for the meanings of states 1 and 2.
+
+- **Team D emulation, FINAL (2026-10-20; filter `0x00566070`, flag argument 0).** Local player with `+0x16d4` = 3 and car A's handle in player `+0x16c0`: A gives 0, B (4 m) gives 0, C (6 m) gives 1.
+  - The 5 m test is |candidate `+0x40` − player human `+0x40`|² < 25.0 (double `0x01115238`). It is measured from the player CHARACTER, not from car A.
+  - `+0x16d4` = 1: every car returns 1. `+0x16d4` = 0, 2 or 3: as above (A 0, B 0, C 1).
+  - If car A is held in `+0x16d8` instead of `+0x16c0`, every car returns 0: a non-null `+0x16d8` with state ≠ 1 short-circuits to 0 before the distance test.]
+
 ### 4.10 Outputs and the two position vectors
 
 | Set | Position | Rows (right / up / forward) | FOV (degrees) | Written by |
@@ -1256,6 +1279,35 @@ How a submode record becomes a placement (§4.4, §4.7 step 13 and §4.8, now wi
 | Airborne | no airborne branch exists in the distance, FOV or swing paths read here. Speed is 3-D, so a fall raises the FOV. `vehicle_fallbacks` (distance / ramp-in / duration / return in ms: nitrous 1.0/500/1000/1000, burnout 2.5/0/500/500, stunt cam 1/3/4 1.5/1000/2000/500, parachute open −1/750/1500/1500, chainsaw −2/500/1650/750) drive the distance ramp of §4.7 step 4; how a ramp value combines with d, and what starts "stunt cam", were not read. The `vehicle_defaults` `Camera_Swings` (Burnout/Powerslide/Nitrous offsets, slerp, duration, roll) have no camera-band reader in this pass | PARTIAL |
 | Alt view (`vehicle driver alt`, record 4) | Secondary set: Lookat_Offset from the vehicle row, Follow_Distance/Height from the group or defaults = 0/0, so `0x0056ad50` gives d = 0 and the camera sits **at the pivot**, a near-the-bonnet view at Lookat_Offset.Y. It is chosen when `0x012e3d34` = 4 (setters `0x0056b390`, `0x00575757`, not traced) | PARTIAL |
 
+[2026-10-19 Team B R3: FINAL/HIGH — **VC-5 exact FOV formulas.** `0x0056ec70` re-read by listing. Let base = blended `base_fov` (record `+0x104`, 50°), MF = `Max_FOV` (`0x00a77120(V)`), S = `+0x878`, v = 3-D speed:
+1. S = 0: nothing is written this update (return).
+2. RC (`0x00a77a10(V)`, vehicle byte `+0x1dec` set): fov = base. Otherwise fov = (base + (MF − base)·v/S)·`camera_fov_scale`; if fov > MF then fov = MF.
+3. Store fov. **Watercraft cap** (`0x00ad3290(V)`: vehicle info `+0x2c` = 5, watercraft): cap = MF × 0.9 (double `0x012a2ff8` = 0.8999999762, i.e. the float 0.9); if fov > cap then fov = cap.
+4. **±30° offset**: if `0x006ba890()` (the global at `0x012f06f0` is not −1) then by `0x006ba8a0()` (global `0x012f0728`): 2 → fov += −30.0 (`0x01138a98`); 3 → fov += +30.0 (`0x01138a9c`); any other value → unchanged. No re-clamp afterwards. These two globals belong to a mode object at `0x012f06d0` (installed by `0x006ba8d0`); their writers are this-relative and were not traced, so which feature drives the ±30° is OPEN; it is inactive (−1) in plain free roam.
+Steps 3 and 4 also apply to an RC vehicle (the RC branch only replaces step 2). For a road car in free roam only step 2 matters, so the genki vector is unchanged.]
+
+[2026-10-20 per Team D emulation: FINAL — **reverse swing for road vehicles.** Read by listing: `0x00a90f30`, `0x00a77380` and `0x0056f410`.
+- **The reverse test `0x00a90f30(V)`.** It needs a live body (`+0xbd0` = 1). Then it goes by class (`0x00ad2f80`, table `0x00a90fac`):
+  - classes 0 and 2: byte `+0xb0` of the driving object `+0x808`, the reverse flag of `spec-physics-runtime.md` §10.3;
+  - class 1: `0x00a90710(+0x808)`;
+  - class 4: false when `0x00ad3700` holds, else the same `+0x808` byte `+0xb0`;
+  - class 5: `0x00aedbc0(+0x818)`;
+  - class 3: always false.
+- **Request and rate.** While the test holds, `0x00a77380` sets q = 1 and r = `Swing_Rate_Rev` (`+0x6fc`), as in §4.15.3.
+- **Reference vector D in `0x0056f410` for road vehicles** (class not 2–5). D comes from the velocity and is **not mirrored**:
+  - D = d·unit(h), where h is the horizontal velocity (x, 0, z);
+  - if the 3-D speed squared is below 0.01 (`0x012a2dd0`), D = d·committed forward, so there is no swing;
+  - if |h|² is below 1.0 (`0x01249140`), D = d·unit(|h|²·h + (1 − |h|²)·d·forward). Below 1 m/s the direction blends toward the camera's current forward.
+- **Result.** When a road car reverses, D points backwards along the travel direction. The camera swings round, at the reverse rate, to look the way the car moves, ending in front of the car and looking back over it.
+- **Classes 2–5** are the only ones that use the vehicle's forward row. They negate it while reversing with a signed speed (`0x00a92b20`) that is non-zero (class 5: below 0).
+- **Sticky ramp.** Under the same reverse flag, the sticky ramp reads `From_Sticky_Rev` (`+0x710`) instead of `From_Sticky_Fwd` (`+0x70c`).
+- **Team D emulation, FINAL (2026-10-20; road-car branch `0x0056f5d4`–`0x0056f6aa`).** Camera forward (0, 0, 1), d = [`0x012e4128`] = 4, h = velocity with y = 0.
+  - If the 3-D |v|² < 0.01: D = forward × d.
+  - Else if |h|² < 1.0: D = normalise((1 − |h|²) × forward × d + |h|² × h) × d.
+  - Else: D = normalise(h) × d.
+  - Vectors: (0, 0, −5) gives (0, 0, −4) = d × (0, 0, −1); (0, 0, −0.5) gives blend weight 0.25 and (0, 0, 4); (3, 0, −0.5) gives (3.94558, 0, −0.65760); (0.6, 0, 0.6) gives (1.07262, 0, 3.85350); (0, 3, 0) gives (0, 0, 4).
+  - The reverse flag only (a) picks `Swing_Rate_Rev` (`+0x710`) over `Swing_Rate` (`+0x70c`), and (b) negates the target in the aircraft/boat branch (class 2–5, `0x0056f578`–`0x0056f5cf`). The road-car target follows the velocity and is not mirrored.]
+
 #### 4.15.3 The follow swing (rotation smoothing) — `0x00570d70` → `0x0056f410`
 
 **Inputs per update.**
@@ -1353,7 +1405,21 @@ For comparison:
 - The consumer of `Camera_Swings`.
 - The pivot rotation flags of the driver submode.
 - Whether the FOV is horizontal or vertical (`spec-cutscene-camera-format.md` §10.9).
-- The vehicle reference point that `0x0056e530` returns.
+- The vehicle reference point that `0x0056e530` returns. **[2026-10-20 Team B open Q: FINAL/HIGH — vehicle reference point.** `0x0056e530` was read in full (`0x0056e530`–`0x0056e8d4`). For a vehicle target (class flag +6 bit `0x80`):
+  1. The default is the vehicle position `+0x40`. FINAL.
+  2. **The `license_plate` prop point.**
+     - This applies when the vehicle's render record is loaded (`+0x1e00` → `+0x10`, byte `+0x60` = 1).
+     - The prop point named `license_plate` (`.rdata` `0x0111bdc8`) is looked up by name hash (`0x00ab2a10`). Only the vehicle's active parts count; `0x00a961f0` builds that list from `+0x968`.
+     - If the prop is found, the point is its world position (`0x00ab3020`):
+       - a prop not attached to a bone (`+0x0c` = −1): its translation (`+0x30` of its matrix) through the vehicle transform (orientation `+0x1db8`, position `+0x1ddc`);
+       - a bone-attached prop: through that bone's matrix `+0x68c`[bone] (bone < `0x5c` and < `+0x688`, live body `+0xbd0` = 1).
+     - If it is not found, the point stays at `+0x40`.
+
+     FINAL for the rule. HIGH that every road car's model carries a `license_plate` prop; the mesh data was not checked.
+  3. **Gunner views.** This applies in submodes 7–9 whose record has flag bit `0x20` (`0x013ca330` + 0x50·`0x012e3d38`), or in submode 51, while the local player rides this vehicle (`0x009b9290`). Then the point is the player's seat point: `0x00ab4c40(out, …, vehicle, player +0x16c8)`.
+  4. **Proximity-lock exempt vehicles.** Otherwise, when the proximity-lock exemption holds (`0x00ac04a0`: vehicle `+0x16c4` bit 0) and `0x00a75fe0` holds, the point is the body position `+0x1ddc`.
+
+  So the chase-camera pivot is the license-plate point plus `Lookat_Offset`, rotated by heading. For genki it is 1.15 above the rear plate, not 1.15 above the vehicle origin. This closes the "reference point OPEN" in the §4.15.6 `kVehPivotHeight` row. For a human target the same routine starts from `+0x40`; while swimming (`0x009b5690`) it takes y = `+0xbc` + 0.5, and it has a bone and submode 44–49 branches that do not touch vehicles.]**
 - The bodies of `0x00dade20`/`0x0056bde0` (pad acceleration).
 - Action `0x12`'s name.
 - The display flag `0x01493661`'s writer.
@@ -1736,6 +1802,35 @@ Every function of the bridge — `0x009a02a0`, `0x0099d1b0`, `0x0099ae30`, `0x00
 2. **Gather** (§5.6.3): the NPC LOD skips the controller step for far, unseen NPCs flagged `+0x1da5` bit `0x80`; NPC velocities below 1e‑5 (squared) are zeroed; **only the player gets stick-scaled air control** (\|A\| + \|B\|).
 3. **Per-list wrappers** (§5.4.1): players `0x009da350` (with Δt; camera cues); NPCs `0x009d3340` (network replication, `+0x1da4` upkeep) and an alternative entry gate on `+0xcd2`.
 4. **Upgraded sprint and jump:** the ram (§5.8) and the jump boost (§5.4.3 step 9) depend on `+0x1c9c` bits that only the player's upgrades set (HIGH), but neither is gated on the player class.
+
+[2026-10-20 per Team D emulation: FINAL — **NPC turn rate (§5.4.3 step 5, item 1 above).** `0x009918b0` was re-read at `0x00991aef`–`0x00991c6f`.
+- **Gates.** The limited turn runs only when all three hold:
+  - speed `+0xd1c` > 0.11 (double `0x01152700`);
+  - ground factor `+0x1a64` > 0.9 (`0x012a2ff8`);
+  - vertical speed `+0xd08` < 0.5 (`0x0126d2cc`).
+
+  Otherwise u = `+0xa50` at once.
+- **Wanted turn.** Δ = the signed angle from the current heading to `+0xa50` about the up axis `0x013213e4` (`0x00da1650`). wanted = 0.2·Δ (`0x012a2e30`).
+- **Rate.** R = `0x00dade20(v, 1.5, 5.0, 5.0, 2.0, no clamp)` = 5 − 3·(v − 1.5)/3.5 (constants `0x011743b0`, `0x01187ecc`, `0x01187ebc`). R is then clamped to **[1.3, 5.0]** (`0x01173df4`, `0x01187ecc`).
+- **Turn.** turn = clamp(wanted, −R·Δt, +R·Δt), with Δt from `0x0132a0ac`. `0x00da0280` applies it.
+- **Result.** R is 5 rad/s up to 1.5 m/s, falls linearly to 2 rad/s at 5 m/s, and reaches the 1.3 floor at 5.82 m/s. Inside that cap the heading closes 20 % of the gap each update.
+- **Test vectors** (Δt = 1/30):
+
+  | v (m/s) | Δ | wanted | cap | turn |
+  |---|---|---|---|---|
+  | 1.0 | 90° | 18° | 9.549° | 9.549° |
+  | 4.0 | 30° | 6° | 5.457° (R 2.857) | 5.457° |
+  | 7.0 | 10° | 2° | 2.483° | 2° |
+
+- **Team D emulation, FINAL (2026-10-20; snippet `0x00991b36`–`0x00991c85`).**
+  - Δ = `0x00da1650` (current-heading vector on the stack, target `+0xa50`, up axis) × 0.2.
+  - R = `0x00dade20` linear remap of speed `+0xd1c` from 1.5..5.0 to 5.0..2.0, then clamped to [1.3, 5.0].
+  - turn = clamp(0.2 × angle, ±R × dt), dt = [`0x0132a0ac`] = 1/30. `0x00da0280` applies it to the stack heading toward `+0xa50`.
+  - Gate: speed > 0.11, `+0x1a64` > 0.9, `+0xd08` < 0.5.
+  - Vectors (stack heading 90/30/10 deg from the target): speed 1 gives 9.5493 deg; speed 4 gives 5.4567 deg; speed 7 gives 2.0000 deg. Signs mirror for -90/-30.
+  - Extra: speed 7 at 90 deg gives 2.4828 deg (R = 1.3 floor); speed 1 at 5 deg gives 1.0 deg.
+
+FINAL for the gates, constants and clamps. HIGH that Δ is in radians.]
 
 **The AI throttle does not throttle locomotion.** A human skipped by the AI budget (`spec-ai-runtime.md` §1.4) keeps its last `+0xa50`/`+0xa60`, and the bridge still composes, steps and writes it back every frame; the only locomotion LOD is the gather's (item 2).
 
@@ -4344,6 +4439,7 @@ Putting §13.2–§13.6 together, by the time **`0x00af22a0`** (`spec-player-run
 5. `0x00b0fdf0`'s full gate order (§13.4), especially that it is a pure validator: a port's equivalent must not treat a true return as "seat chosen" — only as "this vehicle/request combination is submittable".
 6. `0x00b0eb90`'s per-seat filter set and its tie-in to the element-selection rule for `fast` entries — reproducing this is what makes "can I jump in here" answers match the original without having to run the full async upkeep.
 7. The two obstruction gates' asymmetry (player-only vs. universal-but-instant-exempt) even if a port stubs their actual geometry query.
+8. After the player leaves an ambient car, see `spec-ai-runtime.md` §20.6.14 (2026-10-18). It covers the last-vehicle handle `+0x2880` set at seating, despawn protection, the abandoned-car schedule, and budget membership.
 
 ### 13.9 Corrections and cross-spec flags raised by U6.2
 
@@ -5039,7 +5135,7 @@ itself.
 
 **Full chain, CONFIRMED by direct disassembly:** per-frame controls (`0x00702ad4`→`0x005aa6c0`→
 `0x005b7430`→`0x005b73c0`) → in-vehicle action dispatcher `0x005b5c50` (586 instructions) →
-driving-input readers `0x00a91800` (ground vehicles) / `0x00a91440` (motorcycles) → two input-shaping
+driving-input readers `0x00a91800` (ground vehicles) / `0x00a91440` (motorcycles **[2026-10-18 correction: `0x00a91440` is the helicopter cyclic reader, §19 and `spec-physics-runtime.md` §10.13.2; motorcycles use the car branch]**) → two input-shaping
 setters, `0x00ae5290` (deadzone/response curve, writes `instance+0x130`) and `0x00ae5420` (writes
 `instance+0x13c`) — both keyed off the vehicle instance via `*(vehicle+0x808)`, the same instance this
 file's own §12 (U6.8) and `spec-physics-runtime.md` already track throughout. The already-documented
@@ -5102,6 +5198,10 @@ consumer of `instance+0x13c`.
 ---
 
 ## Changelog
+
+- **2026-10-18 — new §19: freefall and parachute** (SPEC TEAM). State bits, start/deploy/cut-away/landing
+  rules with the 1500 ms lock, the movement law (camera-relative freefall, facing-relative chute, 10 m/s²
+  limit), terminal speeds through the controller fall law, test vectors. §16 annotated (`0x00a91440`).
 
 - **2026-10-11 — the camera surface-clamp's `HYPOTHESIS: water surface` tag on `0x0079a420`
   RESOLVED: a generic global-box-gated downward raycast, not water-specific** (SPEC TEAM, self,
@@ -5614,6 +5714,78 @@ SR3 has no "Wasted" text. The death overlay is the HUD group `Hud_smoked_busted`
 - **Notoriety:** single-player (`0x00867830` false, and the session singleton `0x024d8534` present with the local member as host): `0x006097a0(0, 0)` clears the 40-entry alert ring `0x014A4C50` (count `0x014A4580` := 0) and calls the `notoriety_reset` helper `0x00609030(track, 0, 0)` for **tracks 0-3 (three gangs + police) → all notoriety to 0**. Co-op or client: instead `0x00605150` arms the track-5 "just cleared" timer `0x012ED168` for 30000 ms, and notoriety is not reset here. [FINAL for both branches; HIGH that single-player always has a host session, because the mission loader and `0x00609030` itself require one]
 - Released handles: `+0x2800`, `+0x2808`, `+0x2810` (each released if it is a live object of a given class, then nulled). [FINAL; their meaning OPEN]
 
+[2026-10-19 Team B R3: FINAL/HIGH — **respawn reset calls, in order.** Re-read `0x009e6f20` (revive) by listing; `0x00703840` phase 2 runs first (point pick §18.5, follower dismissal `0x009e2bc0`, penalty §18.7, clear `+0x1d97` bit 7), then calls it. Order inside `0x009e6f20` (FINAL for the order and the writes; effects of the opened calls HIGH, of the unopened ones only their role):
+1. Gate: return unless `0x0091f5e0(player)` (local player). Game mode 5 only: `+0x2034 := 0x0086be20()`, `0x00891950`.
+2. `0x008cc4d0` / `0x008ccb90(player, 0, 1, 0)`: conditional reset of a carried or attached object (role only).
+3. HUD reset `0x007f0400`, `0x007f00b0` (`hud_player_reset_complete`, `hud_hit_clear_all`).
+4. Health: `+0x1cb8 := float(+0x1cac)` (full HP); `+0x1d99` bit `0x40` cleared; `+0x1324 := float(+0x1320)` (a second current/max pair restored the same way; meaning OPEN); `0x00946470(0)`.
+5. Ragdoll: if ragdolled (`0x009a1dc0`) or `+0xcd2` = 6, stop it with `0x009a1e10(player, 0)`; otherwise clear `+0xe8` bit `0x2` and `+0xcd2 := 0`.
+6. Downed: if `0x009715d0` (is downed) then `0x00973700` (leave the downed state). This is what clears the downed fields; no field is written directly.
+7. `0x0094b070` (handle out-param −1), `0x00989670`/`0x00989900`, `0x00957c80(player, 0.0, 0, 0, 0)`, `0x009762b0` on `+0x1648`: movement and animation state resets (role only).
+8. Clear `+0xe8` bit `0x08000000` and `+0xe0` bits `0x00400000` and `0x20000000`; `+0x20b8 := −1`, `+0x20bc := 0`, `+0xa14 := −1`.
+9. `0x009b9250(player, 0, 0)`; then `0xaf2460(player, 1)` when `0x009b9210`, else `0xaf24d0(player, 0)` when `0x009b9230` (leave a vehicle or seat state; role HIGH).
+10. Clear `+0xe8` bit `0x20` (**crouch**, the bit `0x00985cd0` tests); `0x009b63f0(player, 0)` when `0x009b5690`.
+11. Copy `+0x1cc8` into the controller sub-object, `0x00959ae0`, stop the current animation action (`0x004bcd80`), `0x00986920`, `0x00943960`.
+12. Unless the caller asked to keep the position: teleport (`0x009e2220`, `0x00941cd0`) to the chosen point.
+13. `0x007978c0`; select inventory slot 0 (`0x00600720` on `+0x1b78`); `0x007fd290(3)`.
+14. Notoriety (§18.6): single-player host `0x006097a0(0, 0)`, else `0x00605150`.
+15. `0x009e4940`; clear `+0x1d99` bit `0x08` (controls on); `0x009e4a60`, `0x009e4b70`, `0x009e0c90(0)`.
+16. Clear `+0x1d94` bit `0x02` (busted), `+0x1d96` bit `0x01`; `+0x1598 := 0`; `0x0097cf40` when `0x0097cdd0`.
+17. Release handles `+0x2800`, `+0x2808`, `+0x2810` (§18.6).
+18. Clear `+0xe8` bit `0x01` (the `on_death` latch) and `+0x1ef4 := −1` (death timer off); then `0x00946190`, `0x00a93320`, `0x00566830`, `0x009ff3c0`, `0x0096e6e0`, `0x00942420`, `0x009b0760`, hook slot 5 on `+0x1f00` (`0x004d4b90`), `0x00a353d0`, and a tail that re-reads crouch (`0x00985cd0`) and posture (role only).
+Port rule: Team B's list (lifeState, dead flags, kill-finalized flag, death latch, death timer) matches steps 4, 5, 6, 16 and 18; add the crouch clear (10), controls on (15), slot 0 (13) and the vehicle/seat exit (9). PV-7's CHOSEN label can become this citation.]
+
+[2026-10-19 Team B Q R5 (meaning of the log-only respawn steps): FINAL/HIGH — **what steps 2, 3, 7, 8, 11, 13 and 17 actually reset.** Re-read `0x009e6f20` and every callee below by listing (helpers `tools/scratchpad/*_b7436.py`). FINAL is for the writes; the meanings are HIGH unless marked otherwise.
+- **Step 2: un-hide the player.** `0x008cc4d0` reads object byte `+0x3b` bit 0 (hidden). When it is set, `0x008ccb90(player, 0, 1, 0)` runs: the generic visibility setter with hide = 0 (cutscene `HideChar` calls it with hide = 1). Port: a hidden player becomes visible. FINAL.
+- **Step 3: take down the death overlay.** `0x007f0400` does the following:
+  - It sets byte `0x012ff74c` := 1. The death overlay `0x007f0280` sets it to 0 (HIGH: "HUD enabled").
+  - If the overlay's display slot `0x012ffc80` is held (≠ −1; this is the "Death Display" slot that `0x007f0280` allocates, the same routine that posts `Player_Dies`):
+    - it releases the slot (`0x007efbd0(slot, 1)`);
+    - it posts the Wwise event `Player_Respawned` on the global 2D voice (`0x00462960` → `0x0045d990`);
+    - in single player, when `0x006e44f0` is false and `0x006cf0a0` = −1, it calls `0x005a27a0` (not opened).
+  - It sets the slot to −1.
+  - If the HUD script is loaded (byte `0x022b7943`), it starts the Lua callbacks `hud_player_reset_complete` and `hud_hit_clear_all`.
+
+  `0x007f00b0` looks up the object `0x022b79a8` (`0x00e251a0`) and calls `0x00e251d0` on it (role not opened). FINAL for the writes.
+- **Step 7: movement and animation clean-up.**
+  - (a) `0x0094b070(player, −1)` sets the animation-state override `+0x1cc4` := −1. Under local control the field is written directly; otherwise opcode 0x46 `human`/`anim_state_override` is sent. This is the field the Lua override natives clear with −1.
+  - (b) While the player is climbing or vaulting (`0x00989670`), `0x00989900` aborts it:
+    - movement state through `0x00986920` ((2, 0), or (0 or 1, 0) followed by `0x00942110`);
+    - climb matrix `+0x1940`…`+0x197c` := identity;
+    - climb target handle `+0x1980` := null;
+    - `+0x198c` bit 0 cleared;
+    - for the player, `+0x1d97` bit `0x10` cleared and `+0x203c`…`+0x2044` reset.
+  - (c) `0x00957c80(player, 0.0, 0, 0, 0)` ends every animation request with a 0 s blend.
+  - (d) `0x009762b0` runs on `+0x1648`, the intoxication block (drunk / weed / escort tiger, `spec-tables-progression.md` §10.7). It sets the four floats `+0x1650`…`+0x165c` (the intoxication amounts the ramp of OPEN 27 reads) to 0.0. It releases the four effect handles `+0x1660`, `+0x1670`, `+0x1680` and `+0x1688` with `0x005cfe00(handle, 0, 1)` and sets them to null. Port: the player is sober at once.
+  - FINAL for the writes.
+- **Step 8: four latches and two timers.**
+  - `+0xe8` bit `0x08000000` = intoxication effect active. The intoxication update `0x00978180` runs its "on" branch while the bit is set and clears it itself, with `+0x1668` := −1, when the effect has worn off.
+  - `+0xe0` bit `0x00400000` = hit-reaction animation playing. It is set at `0x0096890a` when a hit reaction starts, with the animation id in `+0x15e4`. `+0xa14` := −1 is that reaction's timer: it is tested together with the bit at `0x00961848`, and the reaction end path at `0x009a7bd6` clears both the same way.
+  - `+0xe0` bit `0x20000000` = a one-shot latch. `0x0099a740` sets it after a ragdoll comes to rest (speed < 0.01) and `0x0099a500` has run; that handler reads the death timer `+0x1ef4`.
+  - `+0x20b8` := −1 and `+0x20bc` := 0 = the intoxication reaction timer and its armed flag:
+    - `0x00976e30` arms it when the amount `+0x1654` is ≥ 100 and byte `0x02625850` is clear, and disarms it when the amount drops below 50;
+    - on expiry, `0x00974f80` plays action `0x30b` with sound hash `0x834431e0` (unless `+0xe8` bit `0x08000000` is set, the movement state is 4, or other gates hold) and re-arms for a random 5000–8000 ms.
+  - Port: clear the four latches and stop both timers. FINAL for the writes.
+- **Step 11: re-seat the animation set.**
+  - (a) If the rig controller `[player+0xd24]+0x10` has a linked listener at `+0x50`, the listener's `+0x08` := player `+0x1cc8` (the gait slot, 2 by default, `spec-ai-runtime.md`).
+  - (b) `0x00959ae0` recomputes the animation set from the held weapon (`0x00b85fa0(player, 0x00941f40(player))`). The set is forced to `0x1b` when `0x00976f50` holds, and replaced by `+0x1da8`→`+0x178` when that is set and the class allows it. It is applied with `0x004b2140(controller, set)`.
+  - (c) If the controller's action instance (`+0x20`) is not −1, the action is stopped: `0x004bcd80` → `0x004c6540`, guarded by the action pool `0x0344c924` of `0x3a0`-byte records.
+  - (d) `0x00986920(player, 0, 0)` sets movement state `+0xccd`/`+0xcce` := 0/0 (the old pair moves to `+0xcd0`/`+0xcd1`).
+  - (e) `0x00943960(player, 0, 0)` turns combat-ready off (the local apply of `character_set_combat_ready`).
+  - FINAL for the calls.
+- **Step 13.**
+  - `0x007978c0([player+0xcc0]+0x14)` is a pure lookup in the list `0x0223684c`, and its result is discarded: **it has no effect** (port: skip it).
+  - Slot 0 select: see §18.6.
+  - `0x007fd290(3)` does two things. Bit 2: when a session exists and this machine is the host, it sends network message 0x40 with code 0x15 (HIGH: "respawned" to the co-op peer). Bit 1: `0x007ff270(1, 1)` closes help/tutorial channel 1, which drops its queued messages and fires the `tutorial_close` script event.
+  - Port (single player): close the on-screen help text.
+- **Step 17: delete three player-owned objects.**
+  - The 8-byte handles `+0x2800`, `+0x2808` and `+0x2810` are null at construction (`0x009df050`).
+  - Each handle is resolved (`0x00458230`, class `0x031d152c`). If the object is live (`+0x33` bit `0x10` clear, class-row byte `+7` bit `0x01` set, `0x00853b10` false), it is removed with `0x00853ea0(object, 0, 0)`, the generic delete that AI code uses for unseen peds.
+  - Then all three handles := the null handle `0x01175ac8`.
+  - Only `+0x2810` has a traced writer: the fire code at `0x0097d73a` stores entry `+8` of the 32-byte table at `0x0262b170` (HIGH: an attached fire or effect object). What the first two hold is OPEN.
+
+Not log-only, but also unmodelled (`spec-conformance-review.md` R5F-5): step 4's `+0x1324` := `+0x1320` and step 16's `+0x1598` := 0. Their meanings are still OPEN.]
+
 ### 18.7 Death penalty
 
 Applied in phase 2 when the apply-penalty byte is 1 (always, unless an activity provider cleared it) and player `+0x1d97` bit 7 is clear. The bit is cleared afterwards; no direct writer that sets it was found. Cash is player `+0x1ca0`, an int in **cents**.
@@ -5657,4 +5829,415 @@ Cash never goes below 0. The amount does not depend on difficulty, notoriety or 
 | 9 | Die at (1300, 20, 100), mainland hood | `nw_hospital` (≈ 83.3 m) chosen over `dt_hospital` (≈ 1183 m) |
 | 10 | Die at t=0 in free roam, `on_death` returns at once | `on_death` ≈ t=4000; fade 4000 ms; teleport ≈ t=8000; HP = max; notoriety 0 on tracks 0-3; weapons unchanged, slot 0 selected; cash − $500 |
 
-**Residual:** OPEN (none blocks free-roam vitals): the post-respawn fade-in; the arming site of the full-restore timer `+0x19c4`; how `Player_Health_Bonus` scales max HP; the writer that sets `+0x1d97` bit 7; which object is the fallback start object; `0x008e8870`'s fix-up; `level_respawn` objects in DLC archives; the hook names for slots 5 and `0xa`; how mission death interacts with this respawn chain. Clean-room: capstone listings and shipped data only, no decompiler output; game files only read. Scripts: `tools/scratchpad/pv_dis.py`, `pv_xref.py`, `pv_opscan.py`, `pv_respawn_scan.py`.
+### 18.10 Arrest ("busted"): trigger, reachability, sequence (2026-10-18)
+
+**Verdict: the arrest path is complete in code, but nothing in the retail build can start it.** [HIGH as a conclusion; every link below FINAL]
+
+- The only way into a bust is the police AI mode 4 `Bust` (mode-table row `0x012e15c8`: enter `0x004d3f20`, exit `0x004d3f90`, tick `0x004d41e0`, event `0x004d3fb0`, net read `0x004d3150`, remote-request slot `0x004d4580`). Its begin `0x004d4350(cop, player)` is the only code that installs mode 4 (`0x004dd380(cop, 4, block)` at `0x004d44a1`). This matches `spec-ai-runtime.md` §3: of the 32 mode-setter call sites only this one passes 4, and the generic mode request ignores mode 4.
+- The begin has exactly two callers (rel32 and absolute scan of the whole image). One is `0x004d40d0`, an ownership-grant callback that only the begin itself installs (`0x008addd0(cop, 0x004d40d0, 0)` at `0x004d44c5`). The other is `0x004d4580`, mode 4's remote-request slot, reached only through the network message handler `0x004ea9b0`. The only sender of a mode-4 request is the begin itself (`0x004d44d2`, message 0x1b). So no cop ever enters `Bust` in single player, and in co-op the chain has no first mover.
+- The shipped data agrees: there is no `busted` respawn point (§18.11), the busted HUD text is blank (§18.4), and none of the 722 extracted Lua files under TEAM A calls `set_player_can_be_busted`.
+- **Port rule:** do not implement arrest. Keep `Busted_cost`, stat 5 "bail money" and stat 11 "arrests" for save compatibility. The rest of this subsection is the dormant behaviour, for completeness.
+
+**Gates.** The begin, the ownership callback and the tick's predicate `0x004d3ff0` test the same list. [FINAL code; meanings HIGH where marked]
+
+1. Cop team byte `+0x1ca8` = 5 (police, HIGH).
+2. Player `+0x28ac` bit `0x40` is clear.
+3. The player is ragdolled (`0x009a1dc0`). The tick skips this test in cop sub-state `0x42`.
+4. The player is not dead (`0x0096f4f0`).
+5. HP / maxHP ≤ `Bust_HP_Pcnt` (0.6) (`0x004d31f0`; maxHP ≤ 0 gives 0).
+6. The player is not in action state 7, sub-state 9 (`0x00985d80`).
+7. Player `+0x1c98` bit `0x40` is clear, and the global gate `0x00720640` is false.
+8. `0x004d3190(player, cop)` is false: it passes when cop `+0x501` = 4, otherwise it needs player `+0x1d99` bit `0x40` clear. Bit `0x40` is the "arrest in progress" lock: the mode-4 enter sets it on the local player, and the revive clears it (§18.6). HIGH on the name.
+9. The squared distance from the cop to an approach point (`0x004d32d0`) is ≤ 25.0, i.e. 5 m. HIGH that `0x00da1330` is a squared distance; the part read sums squares and takes no root.
+
+The begin also needs cop flag `0x22` (`0x00853b30`), a local player and a locally owned cop.
+
+**Sequence.** The cop's AI sub-state byte is `+0x500`, set through `0x004dd2d0(cop, 4, sub)`. [FINAL for the transitions; meanings HIGH]
+
+| Cop sub-state | Tick `0x004d41e0` |
+|---|---|
+| — (enter `0x004d3f20`) | Sets player `+0x1d99` bit `0x40`, aims the cop at the player (`0x004fcb00`), posts area event 0x18 (5000 ms, id 0xb2), sub-state := `0x3f` |
+| `0x3f` | When `0x007868d0(player)` holds: `0x0077cfe0`, `0x004d3ac0`, sub-state := `0x40` |
+| `0x40` | Unless the cop's action state `+0xccd` = 2: `0x004de1f0`, event 0x18 at the cop, sub-state := `0x41` |
+| `0x41` | When `0x007868d0(player)` holds and the cop has a target record (`0x004e55c0`): cop audio event `0x2c89274d`, then `0x004d3be0` puts the player into the cuffing state (below) and sets sub-state `0x42` |
+| `0x42` | When the player is no longer ragdolled: sub-state := `0x43` |
+| `0x43` | `0x00943960(cop, 1, 0)` |
+
+On every tick the mode is left (`0x004e4130(cop, 0)`) in two cases: the local player's `+0x1d99` bit `0x40` is clear, or the sub-state is not `0x43` and the predicate fails.
+
+**Player side.** The player's action-state handler for state 7 is `0x0098ce40` (sub-states 8–12; the 5-entry jump table `0x0098d6ac`).
+
+- **Entering the cuffing state:** `0x009a2b50` requires sub-state `+0xcce` = 8 (state (7, 8), knocked down) and `+0xcd2` not 0 or 6. For the local player it posts event `0x6ba26edd`. It then sets `+0xd48` := 0 and `+0xcd2` := 3, selects animation 0xdc, snaps the player into the cop-relative pose and sets the action state to (7, 10).
+- **Each tick in (7, 10):** `+0xd48 += (1/30) / 1.5`, clamped to [0, 1], a 1.5 s ramp.
+- **Commit:** when the cuffing animation's phase (`0x00956fd0`, HIGH that it is the normalised phase) is ≥ 0.75:
+  1. The action state becomes (7, 11).
+  2. Three calls run: `0x00942420(player, 0x13, 0)`, `0x0096e6c0(player, 0x14, 1)` and `0x0094f450(player, 1, 0)`.
+  3. `+0xe8` bit `0x01000000` is cleared.
+  4. For the local player, the bust `0x009dab20` runs (§18.4), then camera mode 9 (`0x00564880(9)`).
+
+[FINAL code]
+
+**After the bust.**
+
+1. `0x00703770` runs §18.4's busted chain: `+0x1ef4` = now + 4000, controls off, busted overlay `0x007f0280(0)`, hook slot `0xa` (§18.15). With no active mission it also calls `0x00704500(2, 0)`.
+2. The mission failure `"You got busted."` is sent.
+3. `on_death` fires 4000 ms later. The frame update `0x00703c00` tests only the timer, so a bust fires the player's `on_death` hook too.
+4. A 4000 ms fade follows, then phase 2 with flags = 2.
+
+[FINAL]
+
+**Destination, bail, weapons.**
+
+- The player ends up at the start object, because no `busted` point exists (§18.11).
+- Bail: `Busted_cost` $500 (or all the cash if the player has less), stat 5 "bail money", hint 13. Stat 11 "arrests" +1 is counted at the bust itself.
+- **No weapon confiscation:** neither `0x00703840` nor `0x009e6f20` removes inventory for either flag. Only slot 0 is selected.
+- Notoriety is reset as for a death.
+
+[FINAL]
+
+### 18.11 Respawn points: full data scan and the fallback start object (2026-10-18)
+
+**Scan, read-only, every `.czn_pc` reachable through `.str2_pc` containers:**
+
+| Archive | Zones |
+|---|---|
+| `sr3_city_0` | 2068 |
+| `sr3_city_1` | 810 |
+| `dlc1` | 46 |
+| `dlc2` | 31 |
+| `dlc3` | 16 |
+| **Total** | **2971** |
+
+`sr3_city_missions`, `patch_compressed` and `patch_uncompressed` hold no zone files: activity tables, UI and xtbls only. The 2971 zones contain **exactly the four `level_respawn` objects of §18.5**, all `death`. DLC has none. No police station and no `busted`, `indoor`, `passed_out`, `npc`, `vehicle` or `watercraft` point exists anywhere. The only jail objects are mission navpoints (`nav_jailcell01…04` in `sr3_city~fsh02`), not respawn objects. [FINAL]
+
+**The start object is a navpoint.** [FINAL]
+
+- The registrar `0x00707690` has one caller, the navpoint loader `0x008eb410`. That loader calls it when the parsed `navpoint_flags` has bit 8.
+- The flag names are built in the constructor around `0x008eb330`: `heli_landing` 1, `shore` 2, `out_of_world` 4, `player_start` 8.
+- `0x00708010(name)` compares the name case-insensitively with object `+0x18`; a null name returns entry 0. Capacity is 1. The only writer of the count increments it, so the first `player_start` navpoint loaded stays registered.
+
+**`navpoint_flags` census, same 2971 zones:**
+
+| Flag | Count |
+|---|---|
+| `heli_landing` | 316 |
+| `shore` | 230 (2 of them in dlc1) |
+| `player_start` | 1 |
+
+The single `player_start` is an **unnamed navpoint, record 11 of zone `sr3_city~f1709~al`**, type `Ground`. [FINAL]
+
+- Position (1220.9398, 12.1574, 1047.1863).
+- Orientation quaternion (0, −0.9827, 0, 0.185).
+- It sits 0.23 m from the `scripted_mission_start` `m01` at (1221.1721, 12.1574, 1047.1584).
+
+The zone is in `awld_compact.str2_pc`, the always-loaded layer, so the registry is filled at world load. [HIGH]
+
+**Consequences.**
+
+- Busted → this navpoint (position + `+0x4c` orientation, then `0x008e8870`).
+- **Death in a prison (type 2) or power-plant (type 3) hood also lands here**: §18.5's island rule rejects all four hospitals, because they are not in such hoods. [FINAL code + data; HIGH that the hospitals' hoods are mainland]
+
+### 18.12 Fading back in, and the camera after a respawn (2026-10-18)
+
+Phase 2 calls the revive with the teleport byte 0 and the post-hook byte 1. What follows, in order: [FINAL unless marked]
+
+1. **The teleport is queued, not immediate.** The revive calls `0x009e2220(player, &pos, &orient, 1, 1, 0, 0, 1, 1, 1)`. On the local path (`0x008addb0` or `0x00bc5610`) that calls `0x00bda550` and `0x007b4bf0`, then `0x007a7f10` writes a record into the 2-entry ring at `0x02242068`. The ring's stride is `0x3c`; the record's `+0x3b` byte, "fade in when done", is set to 1. Finally it pushes **game mode 8**, the asynchronous teleport, unless mode 8 is already present.
+2. **Mode 8 enter `0x007a7cb0`.** The fade target is already 3, so the mode does not fade out itself (`0x0224205b` = 0). It posts `UI_Async_Teleport`.
+3. **Mode 8 tick `0x007a82c0`.**
+   - Gameplay mode 5 (`0x00703c00`) does not tick meanwhile. The dispatcher `0x007068d0` runs a lower mode only when every mode above it has the pass-through byte set, and mode 8 registers it as 0.
+   - The tick waits for fade state 3.
+   - It points the stream centre and both camera position vectors at the destination (`0x0085bce0`, HIGH on its role; `0x00564c20`).
+   - It waits while `0x007a8140` reports loading. That test includes the blocking stream-load test `0x00dafa90`.
+   - It places the player (`0x009e69d0`) and pops mode 8.
+4. **Mode 8 exit `0x007a7de0`.** Because `+0x3b` = 1 it requests the fade-in `0x0059fc40(0 ms, callback 0x007a7c10, style 0)`, which becomes `screen_fade_do(0, 0, 0)`: style LEFT_TO_RIGHT, type IN.
+   - `screen_fade.lua` sets durations only for style 1, so the duration is ignored.
+   - The animation is `left_to_right_none_anim`. Its completion tween `left_to_right_none_twn` (end event `screen_fade_complete_cb`) runs **0.8333 s** (`screen_fade.vint_doc`).
+   - The result is a 0.83 s left-to-right wipe: the black band moves from anchor (−400, 720) to (1800, 0), with the gun silhouettes. It is not an alpha fade.
+
+   [FINAL data; milliseconds HIGH, frame-quantised]
+5. **Holds** (`spec-lua-api-behaviour.md` §26.24).
+   - Completing the respawn fade-out stamps "loading logo at +1000 ms".
+   - If the destination is still loading then, the logo shows and the fade-in is held until logo + 1000 ms.
+   - At logo + 6000 ms the load images show and hold 1500 ms more.
+   - The held request is replayed by `0x0059fe70` with 250 ms. The stored style is still 0, so it is still the wipe.
+
+**Camera.** The revive calls the camera reset `0x00566830` (§4.2). It clears the mode stack to mode 0 (follow), sets the target to the local player and snaps the follow camera behind the player. Death camera mode 9 is therefore gone before the fade-in. While mode 8 runs, `0x00564c20` has already moved the camera position to the destination. [FINAL]
+
+**Free-roam timeline.** The fade-out completes at ≈8000 ms (§18.4) and phase 2 runs on the next call. If the destination has finished loading by T ≤ ≈9000, the wipe runs from T to T + 833 ms. Otherwise see the holds above. [HIGH]
+
+### 18.13 The full-restore timer `+0x19c4`: its arming site (2026-10-18)
+
+- **Arming.** Besides the constructor's zeroing (`0x00954ed2`), the only writer is `0x007e2d20`. It is the trigger callback stored in `+0xe8` of an interaction marker built at `0x007e4d60` (`STORE_AMBULANCE_MSG`, purchase type `mission_purchase`). The marker belongs to the phone service object `0x022ad2e0` (the homie and service caller: strings `emergency`, `homies.xtbl`, `in ER`). When that object's state `0x022ad720` = 1 and its step `0x022ad6cc` = 0x12, entering the marker sets **local player `+0x19c4` = now + 500 ms** and advances the step to 0x13. [FINAL code; "ambulance service" naming HIGH]
+- **While armed:** the player takes no damage (`spec-weapons-runtime.md` §4.5.4 step 10d). A third reader, `0x0097011c`, also refuses something while it is armed; it is gated together with the busted bit and controls-disabled, and its action is not named.
+- **On expiry:** HP := maxHP (`0x009a0860`).
+- `full_restore_time_ms` (2000) still has no reader; the duration is the literal 500. The free-roam respawn never arms this timer.
+
+[FINAL]
+
+### 18.14 `Player_Health_Bonus`: how the tiers scale max HP (2026-10-18)
+
+**Apply `0x0071e510`** is case type 44 (`0x2c`) of the unlock dispatcher, at `0x0071f2ce`. [FINAL]
+
+```
+base   = maxHP - bonus                        ; 0x009424b0: +0x1cac - +0x1cb0
+bonus' = trunc(base * (Modifier - 1.0))       ; double math, truncation toward 0
+0x0094d380: maxHP += bonus' - bonus ; +0x1cb0 := bonus'
+            if HP > maxHP: HP := maxHP        ; never heals
++0x1cb4 := the dword after the matching row's Modifier (its Level, HIGH), found among type-0x2c rows (0x0071d6b0)
+then 0x009dd8d0
+```
+
+- So **maxHP = base + trunc(base × (M − 1))**. Tiers **replace** each other and do not stack.
+- Raising max HP does not raise current HP; regeneration (§18.3) fills the gap.
+- `set_max_hit_points` (Lua) goes through the sibling `0x0094d1f0`, which sets maxHP = `+0x1cb0` + its argument (`spec-lua-api-behaviour.md`, its `set_max_hit_points` entry).
+
+| Tier | Modifier | max HP | Respect rank (`respect_levels.xtbl`) | Price (`unlockables.xtbl`) |
+|---|---|---|---|---|
+| `Player_Health_1` | 1.25 | base × 1.25 | 6 | $5,500 |
+| `Player_Health_2` | 1.50 | base × 1.5 | 14 | $12,500 |
+| `Player_Health_3` | 1.75 | base × 1.75 | 24 | $18,500 |
+| `Player_Health_4` | 2.0 | base × 2 | 36 | $22,750 |
+
+[FINAL data. HIGH that the rank makes the tier purchasable and the purchase applies it; the purchase path was not traced.]
+
+- Types 42 and 43 (globals `0x012f5d08` / `0x012f5d0c`, default 1.0) are follower health multipliers, applied to characters by `0x0097e480`, not to the player. [HIGH]
+- The player's base max HP comes from the character setup and is not resolved here. [OPEN]
+
+### 18.15 Lua hooks fired on respawn and on bust (2026-10-18)
+
+**Respawn: slot 5 of the player's `+0x1f00` hook record is Lua `on_respawn`.** [FINAL]
+
+- The binding is `0x00a58380`, paired with the string `"on_respawn"` at `0x00a23d64`. Player names (`#PLAYER#`) register slot 5 of `+0x1f00`; script NPCs register slot `0xc` of `+0xf8`.
+- The revive fires it at `0x009e73f0` with one string argument, the player's script name (`0x00a353d0`).
+- The revive has five callers, so **`on_respawn` fires on each of them**:
+  - free-roam respawn `0x00703bdd`
+  - mission start with a dead player `0x006d4c8f`
+  - the save and checkpoint player loader `0x00b97cd9`
+  - two activity routines, `0x006e4e46` and `0x006e75ac`
+- In the free-roam case the hook runs in phase 2, before mode 8 places the player. [ordering HIGH]
+
+**Bust: slot `0xa` of `+0x1f00` has no Lua name and is never filled.** [FINAL census]
+
+- It is fired at `0x007037e8`.
+- Census: all 45 calls of the registration helper `0x005e4660`, and all 52 references to the `+0x1f00` base. No function registers slot `0xa` on `+0x1f00`. The only slot-`0xa` registrar, `on_dismiss`, writes `+0xf8`.
+- No hook-related string contains "bust" except `set_player_can_be_busted`.
+- HIGH that nothing else writes the slot: slots are written only through `0x005e4660`.
+
+**`on_death` (slot 0) fires for both outcomes**, died and busted (§18.10).
+
+### 18.16 Deaths during a mission or activity (2026-10-18)
+
+Code facts:
+
+1. **Activities.** `0x00702810` returns before arming anything while an activity is current (`0x00614d00` ≠ −1) and its record's `+0x41` bit `0x40` is clear (one of the four exceptions). An activity that does arm the chain can still replace the destination and waive the penalty through `+0x27b0` (§18.5). [FINAL]
+2. **Mission: at death.** `0x006da400` (`"You died."`) stores the fail text and arms the 2000 ms debounce `0x012f2630`. It tears down the HUD screens and requests a fade-out: `0x005a0580(0, 0, 0, 1.0)` calls `0x0059f8c0(0 ms, no callback, style 0)`. That is a **left-to-right wipe to black**; its completion tween `left_to_right_black_twn` ends at 1.0333 s. [FINAL]
+3. **Mission: fail screen.** When the debounce expires, the mission update (`0x006db89c`) calls `0x00d27250(mission, 0)`. The fail processing `0x006d9470` (called from the mission phase update `0x006d9820`; the link from `0x00d27250` was not traced) → `0x006d8fb0` then shows **HUD screen 0x38** (`0x007bd890` / `0x007bd910`).
+   - The retry callback is `0x006d8de0` for mission types 0 and 3, and `0x006d8ca0` for type 1. Type 2 never fails (`spec-lua-api-behaviour.md` §21.27c).
+   - The `"mission start"` sentinel decides whether a checkpoint exists.
+
+   [FINAL code; the ≈2000 ms timing HIGH]
+4. **The respawn chain does not know about missions.** Neither `0x00703c00` nor `0x00703840` tests for a mission, so `on_death` still fires at ≈4000 ms.
+   - Phase 1 is held while screen 0x35, 0x38 or 0x39 is up (`0x007bfa70`).
+   - Phase 2 is not held. When the fade is already at state 3 (the wipe of step 2), `0x00703840` goes straight to phase 2.
+
+   [FINAL]
+5. **Retry.** `is_restart` = 1, then `0x006d4a10` runs the checkpoint restore `0x006d3780` (full flag 0). The player loader `0x00b97c90` calls the revive with the saved position, the teleport skipped and the post-hook off. That sets HP to max, `+0x1ef4` = −1 and clears the latch.
+   - **If the hospital respawn has not run yet, it never runs**: no hospital, no $500 penalty, no follower dismissal from `0x00703840`.
+   - The mission's own start function then places the player at the checkpoint (`spec-lua-api-behaviour.md` §36).
+
+   [FINAL for the revive effects; HIGH that `0x00b97c90` runs on a checkpoint restore: it is in the 32-entry driver table at `0x0118be70` and calls the revive before it tests the full flag]
+6. **Quit** (`0x006d89a0`).
+   - If the player is still dead, or a second mission end arrived during the debounce: restore the saved `+0x1d94` / `+0x1d9c`, re-arm `+0x1ef4` to "now" (0 ms), set controls off, set the fade colour to black, and request an instant wipe to black. **The free-roam chain then finishes at once**: nearest hospital, $500, notoriety reset, followers dismissed.
+   - If the player is downed but alive: kill (`0x009a7610`) and arm the timer at 0.
+
+   [FINAL code; outcome HIGH]
+7. **OPEN:** whether phase 2 runs behind the fail screen before the player chooses. By the code above it does, if the gameplay mode keeps ticking while the screen is black. GUESS that it does not: HUD screens whose definition has `+0x1c` bit 8 push a game pause (reason 0xd, `0x007b3e80`, single player only), and screen 0x38's flag was not read.
+
+**Port recipe (missions).**
+
+1. On death: run the death timer as in free roam, start the wipe to black, show the fail screen after 2000 ms, and hold the respawn while it is up (GUESS, item 7).
+2. Retry: restore the checkpoint and revive in place. Apply no penalty and no hospital.
+3. Quit: run the free-roam respawn immediately (wipe, nearest hospital, $500).
+
+**The penalty is skipped only** through an activity provider's byte (§18.5), `+0x1d97` bit 7 (no setter found), or a mission Retry taken before phase 2. There is no difficulty or mission-type waiver.
+
+### 18.17 Co-op, and corrections to other sections (2026-10-18)
+
+- **Co-op (out of scope):** the point gets the 1.5 m offset (§18.5), notoriety is not reset (§18.6), and everything else here was read on the host path only.
+- **Correction to §15.4:** `0x0098ce40` is the player's **action-state-7 handler** (sub-states 8–12: 8 knocked down, 10 cuffing, 11 cuffed; HIGH on the names), not a death-stage tick. Its camera-mode-9 push at `0x0098d592` is the bust commit of §18.10, not a death stage. [FINAL]
+- **Correction to §18.4:** its "plus further gates not opened" is closed by §18.10. The busted variant is unreachable.
+
+### 18.18 Test vectors for §18.10–§18.17
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| 11 | Free roam; a cop within 5 m of a ragdolled player at 50 % HP | No bust: no code path enters AI mode 4 | HIGH |
+| 12 | Bust forced: player in action state (7, 10) | `+0xd48` = 1.0 after 45 ticks (1.5 s). Commit when the cuff animation phase ≥ 0.75. `on_death` at commit + 4000 ms, teleport at ≈ + 8000 ms | FINAL code |
+| 13 | Bust forced; cash 1,000,000 cents; pistol and SMG held | Point (1220.9398, 12.1574, 1047.1863), quaternion (0, −0.9827, 0, 0.185). Cash 950000; stat 5 += 500.0; stat 11 += 1. Inventory unchanged, slot 0 selected | FINAL |
+| 14 | Die in a hood of island type 2 (prison) | No hospital qualifies; same `player_start` point | FINAL |
+| 15 | Free-roam death; destination loaded 300 ms after the fade-out completes (t ≈ 8300) | Wipe-in from ≈8300 to ≈9133 ms. Camera mode 0, snapped behind the player | HIGH |
+| 16 | Same, destination loaded at t ≈ 9500 | Logo at ≈9000. Fade-in held to ≈10000, then the style-0 wipe; screen clear ≈10833 | HIGH |
+| 17 | Ambulance service at step 0x12; player at 300/1000 HP enters the marker at t = 0 | No damage taken during [0, 500) ms. HP = 1000 at the first tick ≥ 500. Step → 0x13 | FINAL |
+| 18 | Base max HP 1000; buy `Player_Health_2`, then `_3` | max 1500, then 1750 (not 2250). Current HP unchanged unless it is above the new max | FINAL |
+| 19 | Base max HP 1337, `Player_Health_3` | bonus = trunc(1337 × 0.75) = 1002; max = 2339 | FINAL |
+| 20 | `on_respawn("cb", "#PLAYER#")`, then a free-roam death | `cb(<player name>)` runs once, in phase 2, before mode 8 places the player | FINAL (ordering HIGH) |
+| 21 | Bust forced; only `on_death` registered | `on_death` fires at + 4000 ms. Nothing fires for slot `0xa` | FINAL |
+| 22 | Die in a mission; choose Retry before phase 2 | Checkpoint restore; HP = max. No $500 from the engine, no hospital | HIGH |
+| 23 | Die in a mission; choose Quit | Instant wipe to black, nearest hospital, cash − $500, notoriety 0 on tracks 0–3 | HIGH |
+
+**Residual (updated 2026-10-18 after §18.10–§18.18).**
+
+OPEN, none blocking free-roam vitals:
+- whether respawn phase 2 runs behind the mission-fail screen before the choice (screen 0x38's pause flag);
+- whether a checkpoint restore restores cash;
+- the player's base max HP;
+- `0x008e8870`'s fix-up;
+- the writer that sets `+0x1d97` bit 7;
+- the meaning of the dormant bust gates `+0x28ac` / `+0x1c98` bit `0x40` and `0x00720640`.
+
+CLOSED this pass:
+- arrest trigger, sequence and reachability;
+- fallback start object;
+- `level_respawn` scan including DLC;
+- fade-in and camera;
+- full-restore arming site;
+- `Player_Health_Bonus` scaling;
+- hook names (slot 5 `on_respawn`; slot `0xa` unnamed);
+- mission interplay.
+
+Clean-room: capstone listings and shipped data only, no decompiler output; game files only read.
+
+Scripts: `tools/scratchpad/pv_dis.py`, `pv_xref.py`, `pv_opscan.py`, `pv_respawn_scan.py`, `da_navflag_scan.py`, `da_hookslots.py`, `da_callargs.py`, `da_around.py`, `da_vpp_list.py`, `da_vpp_nested.py`, `da_vpp_find.py`.
+
+## 19. Freefall and parachute (free roam, local player) (2026-10-18)
+
+Method: read-only capstone listings plus the shipped `tweak_table.xtbl` (`tools/ai_base_xtbl/`) and the tweak registry
+`tools/ai_tweak_registry.tsv` (`spec-tables-progression.md` §10.10). No game run. Helper: `tools/scratchpad/flt_tool.py`.
+The aircraft and boat laws are in `spec-physics-runtime.md` §10.13.
+
+### 19.1 What was already on file (not re-derived)
+
+- §3.2.2: locomotion sub-state `+0xccd` 6 (falling) or 8 (freefall) gives context word `+0x2084` = `0x1010`, so prompt
+  bit 12 is live while falling. §3.3: the `CBA_GAC_ACTION` prompt walk. §3.5.1: condition row 2's move slot is
+  `0x005b0350`. §3.5.4: the intent writer and its skydive speed row (`Player_skydive_move_speed`, mission skydiving).
+- §5.6.5: the character controller's fall law, gravity scaled by `1 − (sink/T)²` with T = controller `+0x170`.
+- §5.6.6: landing and the fall start (`+0xe8` bit `0x80`, fall speed `+0x1aa4`).
+- §11.5.4: the vehicle eject handler's parachute/safety branch.
+- `spec-lua-api-behaviour.md` §12.4, §12.13, §15.15–§15.28a, §20.7, §24.15: the skydiving and parachute natives.
+- New here: the freefall and parachute state machine, the movement law, the deploy and cut-away rules, the vertical
+  speeds and the landing.
+
+### 19.2 Constants (tweak registry destination → shipped value)
+
+| Name | Address | Value | Use |
+|---|---|---|---|
+| `Freefall_normal_terminal_velocity` | `0x0262c648` | 45 | T, no stick |
+| `Freefall_forward_terminal_velocity` | `0x0262c640` | 67 | T, full dive |
+| `Freefall_back_terminal_velocity` | `0x0262c644` | 36 | T, stick back |
+| `Parachute_normal_terminal_velocity` | `0x0262c654` | 9 | T under the chute |
+| `Parachute_forward_terminal_velocity` | `0x0262c64c` | 11.5 | T, stick forward |
+| `Parachute_back_terminal_velocity` | `0x0262c650` | 6.7 | T, stick back |
+| `Freefall_max_forward_speed` / `_reverse_speed` / `_bank_speed` | `0x0140e670` / `66c` / `668` | 30 / 3 / 20 | freefall horizontal |
+| `Freefall_max_bank_rotation_rad` | `0x0140e664` | 0.6 | freefall bank target |
+| `Freefall_approach_rotation_factor` | `0x0140e660` | 0.75 | bank follow rate |
+| `Parachute_slow_` / `normal_` / `fast_forward_speed` | `0x0140e65c` / `658` / `654` | 2 / 8 / 20 | chute forward speed |
+| `Parachute_max_bank_rotation_rad` | `0x0140e650` | 1 | chute bank target |
+| `Player_freefall_acceleration` | `0x0140e640` | 10 | horizontal accel limit |
+| `Parachute_anim_lerp_percent` | `0x0262c614` | 2.0 | dive blend rate |
+| `Parachute_allow_deploy_ms` | `0x0262c620` | 1500 | deploy and cut-away lock |
+| `Freefall_min_clear_distance` | `0x0262c63c` | 10 | ground probe length |
+| `Freefall_min_fall_speed` | `0x0262c638` | 10 | freefall start speed |
+| `Freefall_ragdoll_blend_out_time_sec` | `0x0262c61c` | 0.5 | ragdoll recovery |
+| `Parachute_speed_up_fov` / `_slow_down_fov` | `0x0262c610` / `60c` | 8 / −24 | camera FOV offset |
+| `Human_freefall_blur_intensity_normal` / `_forward` / `_lerp_percent` | `0x0262c62c` / `628` / `624` | 0.25 / 7 / 3.0 | screen blur |
+| `Parachute_adjusted_turn_angle_speed` / `_return_speed` / `_max_…_for_speed` | `0x02624368` / `364` / `360` | 0.03 / 0.02 / 0.025 | animation turn angle `+0xaac` only (`0x00956970`) |
+
+Default fall cap when not in freefall: 44.704 m/s (`0x01119748`, §5.6.5). dt below is the frame-time global
+`0x0132a0ac`.
+
+### 19.3 States and their fields — FINAL
+
+- Human `+0xe8` bit `0x2000000` = **in freefall**, bit `0x4000000` = **parachute open** (`0x00994f40`).
+- `+0xaf4` dive blend b ∈ [−1, 1]; `+0xaf8` bank angle; `+0xafc` blur; `+0x203c` horizontal velocity r (the smoothed
+  move vector of §3.5.5, which the bridge feeds to the controller, §5.4.4); `+0x20fc` the deploy lock timer (on the
+  player record).
+- Locomotion sub-state `+0xccd` = 8 while in freefall (set by `0x00986920(human, 8, 4)`).
+- The chute is a separate object (type `0x1e`, model handle `0x0262c618`) attached to the human, marked `+0xdc` bit 0.
+
+### 19.4 Start, deploy, cut-away, landing — FINAL
+
+1. **Freefall start** (fall code `0x0098af17`): `0x009963f0(human, 1, 0)` is true when not in activity mode 2, not on a
+   moving support (`+0x1c9c` bit `0x2000`), not `0x0096f540`, `+0xccd` = 6, `+0xcc8` ≠ 2, fall speed `+0x1aa4` >
+   `Freefall_min_fall_speed`, `+0xc8` bit 0 clear, and a ray of `Freefall_min_clear_distance` straight down
+   (`0x00995dd0`, filter `0x59`) hits nothing. Then `0x00995410(human, 1, 0)`: set the freefall bit, b = 0, bank = 0;
+   for the player arm the deploy lock = `Parachute_allow_deploy_ms`; r = current velocity; T = 45.
+2. **Deploy / cut-away button** = `CBA_GAC_ACTION` through prompt table `0x0111f2d0` entry 12 (`0x009da790`), enabled
+   by the table `0x0111f488` entry 12 predicate (`0x005b7900`). One press toggles:
+   - **chute open**: if the lock is running → nothing; else **cut away** `0x00995620(human, 0, 0, 0)`: clear the open
+     bit, re-arm the lock, the chute object's own timer = 1000 ms (it fades), the human stays in freefall.
+   - **chute closed**: if `0x00995830` (player only; alive; not activity 15; then: on a moving support → allowed iff
+     fall speed > 0; `0x0098b970` with `+0x1d9c` bit 0 → allowed; otherwise the lock must not be running, `+0xcc8` = 2
+     or mission skydiving `0x009adb00`, and the chute not already open) → **deploy**
+     `0x00995f30(human, 0, 1, 0x151, 0)`: set the open bit, spawn and attach the chute (`+0x100` timer 1000 ms), if
+     not yet in freefall start it (`0x00995410(human, 0, 1)`, no lock), blend 0.2, and **re-arm the lock** (1500 ms).
+   - Network: a non-authoritative human sends opcode `0x41` (sub-types `0x1d` deploy, `0x1e` cut-away) instead.
+3. **Per frame while in freefall** (`0x00995ab0`): ragdoll recovery blend `+0xd48` += dt / 0.5 when ragdolled; landed
+   (`0x0096e670`, or airborne > 1 s with fall speed ≤ 0.01 as §5.6.6) and `+0xec` bit `0x100` clear → landing animation
+   `0x00986b80` and **end** `0x00995950`; `+0xc8` bit 0 or `+0xccd` ≠ 8 → end (cutting the chute first if open). Blur
+   approaches its target at `Human_freefall_blur_lerp_percent` · dt.
+4. **End** `0x00995950`: cut the chute if open (it fades over 1000 ms), clear the freefall bit and the chute marker,
+   T = 44.704, restore the player's saved state (`+0x20f8`), stop the wind sounds (`0x0262c658`, `0x0262c65c`).
+
+### 19.5 Movement law — FINAL except where marked
+
+Condition row 2 move slot `0x005b0350`, every frame, local player. A, B = the move axes of §3.5.2 (A strafe, B
+forward). F, Rt = camera forward and right (`0x009df8c0` → camera rows `0x013c8780`/`0x013c8760`), y set to 0 and
+normalised.
+
+1. **Dive blend and terminal speed** (`0x00994f80(player, B)`), with λ = dt · `Parachute_anim_lerp_percent`:
+   - freefall and B > 0.2: b += (1 − b)·λ (full dive whatever the deflection); otherwise b += (B − b)·λ;
+   - N/Fw/Bk = the normal/forward/back terminal pair of the current mode (freefall or parachute);
+     **T = N + (Fw − N)·b** if b > 0, else **T = N + (Bk − N)·(−b)**; written to the controller `+0x170`;
+   - camera FOV offset = b · `Parachute_speed_up_fov` (b > 0) or −b · `Parachute_slow_down_fov` (b ≤ 0), local player.
+2. **Ground near**: if the 10 m probe of §19.4 hits, the slot only calls the intent writer with the player's own
+   position (no steering) and returns.
+3. **Target horizontal velocity** D:
+   - freefall: **D = B·F·(B > 0 ? 30 : 3) + A·Rt·20**; bank target β = A · 0.6;
+   - parachute: s = 8 while the lock runs (the first 1.5 s after opening); else s = 8 + (20 − 8)·B for B > 0, or
+     8 + (2 − 8)·(−B) for B ≤ 0; **D = facing(`+0x64`)·s**; β = A · 1.0.
+4. **Acceleration limit**: r += unit(D − r) · min(\|D − r\|, `Player_freefall_acceleration`·dt).
+5. Bank `+0xaf8` += (β − bank)·dt·0.75. Facing direction `+0xa50` = unit(r) (unchanged when r ≈ 0); speed `+0xa60` =
+   \|r\|; turn angle `+0xa68` = heading(camera) − heading(r) + bank. The body turns by `+0xa68` through the animation
+   turn angle (`+0xaac`, §5 OPEN 37), so **under the chute the flight path follows the camera heading offset by up to
+   1 rad of stick bank** (HIGH: the consumer of `+0xa68` is animation-driven).
+6. Locomotion update `0x00985df0(player, 0, flag, 0)` (flag = the axis reader's third output and not open).
+7. **Vertical**: no extra force; the controller fall law of §5.6.5 with the T of step 1. Faster than T it slows down
+   (the factor turns negative), slower it speeds up.
+
+Port recipe: velocity_xz ← r (step 4); velocity_y by §5.6.5 with T; heading ← camera heading + bank (rate of the turn
+GUESS: follow the camera at the walk turn rate).
+
+### 19.6 Test vectors (dt = 1/30 unless stated)
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| 1 | Freefall, no stick, settled | T = 45; horizontal 0; steady fall 45 m/s | FINAL |
+| 2 | Freefall, B = +0.3 from b = 0, 15 frames | b = 1 − (14/15)^15 = 0.645; T = 45 + 22 × 0.645 = 59.2 | FINAL |
+| 3 | Freefall, B = −1, settled | b = −1, T = 36; D = −3·F | FINAL |
+| 4 | Freefall, A = +1, B = 0, from r = 0 | D = 20·Rt; \|r\| = 0.333 after 1 frame, 20 after 2.0 s; bank → 0.6 | FINAL |
+| 5 | Chute, no stick, lock expired | s = 8; T = 9 | FINAL |
+| 6 | Chute, B = +1 / +0.5 / −1 | s = 20 / 14 / 2; T = 11.5 / 10.25 / 6.7 | FINAL |
+| 7 | Chute just opened, B = +1 | s = 8 for 1.5 s, then 20 | FINAL |
+| 8 | Opening at sink 45 m/s, T = 9 | step 1: gravity × (1 − 25) = +235.2 up: sink 37.16; step 2: 31.92 | FINAL from §5.6.5 |
+| 9 | Fall starts at t = 0; button at 1.0 s and at 1.6 s | 1.0 s: nothing; 1.6 s: chute opens | FINAL |
+| 10 | Chute open at t = 0; button at 1.2 s and at 1.6 s | 1.2 s: nothing; 1.6 s: cut away, still in freefall, T switches to the freefall pair (45 with no stick); re-deploy possible from 3.1 s | FINAL |
+| 11 | Falling at 9 m/s, or 8 m above ground | no freefall | FINAL |
+| 12 | Landing under the chute | landing animation, chute released and faded after 1000 ms, T = 44.704 | FINAL |
+
+Residual: the facing turn rate of step 5 (animation turn angle), mission skydiving `0x009adb00` (CBA_SKYDIVE_DIVE /
+_FLIP, `Skydive_vertical_dive_vel` 12) which is a separate scripted mode, and `Player_ragdoll_to_freefall_*`.
+
+Corrections to other sections: §16 calls `0x00a91440` a motorcycle reader; it is the helicopter cyclic reader
+(`spec-physics-runtime.md` §10.13.2).
+
+Clean-room: capstone listings and shipped data only, no decompiler output; game files only read.

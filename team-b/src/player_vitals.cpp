@@ -43,9 +43,33 @@ bool PlayerVitals::observeHealth(int32_t hostHealth, int64_t nowMs) {
 
 bool PlayerVitals::respawnDue(int64_t nowMs) const { return dead_ && nowMs - diedAtMs_ >= cfg_.respawnDelayMs; }
 
+bool PlayerVitals::beginFade(int64_t nowMs) {
+    if (!dead_ || fadeStartedMs_ >= 0) return false;
+    fadeStartedMs_ = nowMs;
+    return true;
+}
+
+double PlayerVitals::fadeAlpha(int64_t nowMs) const {
+    if (fadeStartedMs_ < 0) return 0.0;
+    const int64_t d = fadeMs();
+    if (d <= 0) return 1.0;
+    return std::clamp(static_cast<double>(nowMs - fadeStartedMs_) / static_cast<double>(d), 0.0, 1.0);
+}
+
+bool PlayerVitals::bust(int64_t nowMs) {
+    if (dead_ || busted_ || cfg_.maxHealth <= 0) return false;
+    dead_ = true;
+    busted_ = true;
+    diedAtMs_ = nowMs;
+    ++stats_.arrests;
+    return true;
+}
+
 bool PlayerVitals::respawn() {
     if (!dead_) return false;
     dead_ = false;
+    fadeStartedMs_ = -1;
+    busted_ = false;
     health_ = cfg_.maxHealth;
     ++stats_.respawns;
     return true;

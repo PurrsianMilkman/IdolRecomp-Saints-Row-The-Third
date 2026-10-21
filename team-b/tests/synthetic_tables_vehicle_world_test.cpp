@@ -305,7 +305,7 @@ void testWheelGroup() {
     CHECK(rows[0].spinners[1].PriceOrDefault() == 0);  // spec-stated default 0
 
     // Price if-present default 0.
-    Document d2 = P("<root><Table><Wheel_Group><Name>plain</Name></Wheel_Group></Table></root>)");
+    Document d2 = P("<root><Table><Wheel_Group><Name>plain</Name></Wheel_Group></Table></root>");
     std::vector<WheelGroup> rows2 = ParseWheelGroupsTable(d2);
     CHECK(rows2.size() == 1 && !rows2[0].price.has_value() && rows2[0].PriceOrDefault() == 0);
 }

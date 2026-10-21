@@ -202,7 +202,8 @@ public:
     std::vector<sr3tables_progression::RespectLevel>& respectLevelTable() { return respectLevelTable_; }
     // RP-6 (spec-tables-progression.md B.3 item 1): feed the REAL respect_levels.xtbl rows (parsed, 50 max) here. Once set,
     // awardRespect / applyRespectLevelUp run sr3progression::AwardRespect / ApplyLevelUp over it instead of the legacy
-    // test-table path. Not yet called by the viewer: the xtbl load site belongs to the host start-up (see report).
+    // test-table path. Called by the playtest viewer at HUD setup (tools/sr3_viewer/viewer_playtest_setup_audio_hud.cpp,
+    // the "respect_levels.xtbl" try block). AwardResult::overflowCashRaw is still dropped (wallet field: Team A question).
     void setRealRespectTable(const std::vector<sr3tables_progression::RespectLevel>& rows) {
         respectLevelTable_ = rows;
         realRespectTable_ = sr3progression::RespectTable::FromParsed(rows);

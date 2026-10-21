@@ -2,6 +2,7 @@
 // Code moved verbatim out of the former single-function runPlaytest() (see viewer_playtest_session.h).
 #include "viewer_platform.h"
 #include "viewer_playtest_session.h"
+#include "sr3vehicleinfo/vehicle_entry.h"
 
 namespace sr3viewer {
 
@@ -175,7 +176,7 @@ int setupVehicle(PlaytestSession& sess) {
     // follow-up task's entire point, not a bug in this override.
     const int kScriptVehicleDriveFrames =
         scriptVehicleDriveFramesOverride >= 0 ? scriptVehicleDriveFramesOverride : 120;
-    sess.kScriptVehicleExitFrame = kScriptVehicleEnterFrame + kScriptVehicleDriveFrames;
+    sess.kScriptVehicleExitFrame = sess.scriptVehicleEnterFrame + kScriptVehicleDriveFrames;
     if (vehicleEnabled) {
         std::string vehDir;
         {
@@ -219,15 +220,53 @@ int setupVehicle(PlaytestSession& sess) {
         for (auto& ch : vehiclesPath) if (ch == '\\') ch = '/';
         for (auto& ch : wheelsPath) if (ch == '\\') ch = '/';
         sess.ambientModels_.emplace();
+        sess.ambientModels_->setNoWalkAnim(sess.noPedAnim);
+        std::string animPath = sess.animArchiveOverride.empty() ? dir + "preload_anim.vpp_pc" : sess.animArchiveOverride;
+        for (auto& ch : animPath) if (ch == '\\') ch = '/';
         PlaytestSession* sp = &sess;
+        // Per-model AI_Max_Braking_Decel (+0x770) from the model's own `<name>_veh.xtbl` row (misc_tables), used per car
+        // by the traffic tick (feature/ambient-per-car-braking). Missing file/row/tag -> nullopt (CHOSEN fallback there).
+        sess.ambientModels_->setBrakingDecelLookup([sp](const std::string& name) -> std::optional<double> {
+            const sr3xtbl::Document doc = sp->docOf(name + "_veh.xtbl");  // throws when absent; the registry catches
+            for (const auto& row : sr3vehicleinfo::ParseAllVehicles(doc)) {
+                if (!row.name.has_value()) continue;
+                std::string rn = *row.name;
+                for (auto& ch : rn) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                if (rn != name) continue;
+                if (!row.aiMaxBrakingDecel.present) return std::nullopt;
+                return static_cast<double>(row.aiMaxBrakingDecel.value);
+            }
+            return std::nullopt;
+        });
         const bool ok = sess.ambientModels_->init(
             device.device(), vehiclesPath, wheelsPath, &*sess.charArchiveBytes_, sess.docOf,
             [sp](double x, double y, double z) -> std::string {
                 // Same hood BSP lookup as sess.currentSpawnCategory (20.6.8), without its trace-string side effects.
                 if (const sr3zone::HoodVolume* h = sr3zone::FindHood(sp->playtestHoods, x, y, z)) return h->spawnCategory;
                 return "Default Spawn";
-            });
+            },
+            animPath);
         if (!ok) sess.ambientModels_.reset();
+    }
+    // AW-15: the craft rows (Vehicle_Type 2..5) are only read when a craft is requested (reads misc_tables + dlc1..3).
+    if (sess.craft.registryWanted) {
+        std::string dir;
+        {
+            const size_t slash = charactersPath.find_last_of("/\\");
+            dir = (slash == std::string::npos) ? std::string() : charactersPath.substr(0, slash + 1);
+        }
+        std::string diag;
+        missionzoneobj::loadCraftTypeRegistry(dir, diag);
+        sess.craft.registryLoaded = true;
+        std::printf("craft    : %s\n", diag.c_str());
+        if (sess.craft.spawnName == "list") {
+            for (const auto& kv : sr3viewer_craft::CraftRegistry())
+                std::printf("craft    : row %s class %d mass %.0f maxSpeed %.1f buoy %.2f dataBlocks heli=%d plane=%d boat=%d\n",
+                            kv.first.c_str(), kv.second.cls, kv.second.mass, kv.second.maxSpeed, kv.second.buoyancy,
+                            kv.second.dataHeli ? 1 : 0, kv.second.dataPlane ? 1 : 0, kv.second.dataBoat ? 1 : 0);
+            if (sess.ambientModels_ && sess.ambientModels_->ready())
+                for (const auto& n : sess.ambientModels_->vehicleNameList()) std::printf("craft    : mesh %s\n", n.c_str());
+        }
     }
     return -1;
 }
@@ -438,7 +477,7 @@ int setupRoadblockOccupant(PlaytestSession& sess) {
     // itself is entirely unaffected, this cache is draw-only.
     sess.roadblockSlotVisual = std::vector<std::optional<sr3airuntime::RoadblockDispatchResult>>(roadblockSlots.size());
     std::printf("roadblock: police roadblock spawn OFF by default (%zu slots: 4 ped + 4 vehicle [1 Spike_strip "
-                "+ 3 generic]) - press R to arm (spec-ai-runtime.md Sec19.7; debug gate, not tied to "
+                "+ 3 generic]) - press B to arm (spec-ai-runtime.md Sec19.7; debug gate, not tied to "
                 "notoriety)\n",
                 roadblockSlots.size());
     // --script-roadblock (--no-input only): a deterministic arm-then-disarm

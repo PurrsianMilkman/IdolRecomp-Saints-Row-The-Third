@@ -62,7 +62,11 @@ double SteeringRateLimiter::Update(double targetRad, double dt) {
     return current_;
 }
 
+// D-20 (spec-differential-results.md, vectors E3): the minimum-time limiter with the reversal seed. A target of exactly 0 uses the
+// return pair with seed 0; otherwise the turn-in pair, and when the wheel is still turning away from the new target the segment
+// that stops it uses the RETURN pair's acceleration (Vr^2 / (2 dr)) instead of A.
 double SteeringProfileLimiter::Update(double targetRad, double dt) {
+    constexpr double tol = 1e-6;
     const bool centring = (targetRad == 0.0);
     const double V = centring ? p_.returnSpeed : p_.turnInSpeed;
     const double A = centring ? p_.returnAccel : p_.turnInAccel;
@@ -71,45 +75,57 @@ double SteeringProfileLimiter::Update(double targetRad, double dt) {
         vel_ = 0.0;
         return angle_;
     }
+    const double d = V * V / (2.0 * A);  // damp angle of the chosen pair
+    double seed = 0.0;
+    if (!centring && (targetRad - angle_) * vel_ < 0.0) seed = p_.returnAccel;  // Vr^2 / (2 dr)
     double rem = dt;
-    for (int seg = 0; seg < 8 && rem > 1e-6; ++seg) {
+    for (int seg = 0; seg < 8 && rem > 0.0; ++seg) {
         const double e = targetRad - angle_;
-        const double s = (e > 0.0) ? 1.0 : -1.0;
-        const double ae = std::abs(e);
-        const double w = vel_ * s;  // speed toward the target (negative = moving away)
-        if (ae < 1e-9 && std::abs(w) < 1e-9) {
+        if (std::abs(e) <= tol) {
             angle_ = targetRad;
             vel_ = 0.0;
             break;
         }
-        double accel;     // along s
-        double tEvent;    // time until the phase changes
-        if (w < 0.0) {
-            accel = A;
-            tEvent = -w / A;
-        } else if (w * w / (2.0 * A) >= ae * (1.0 - 1e-12)) {
-            accel = -A;  // must brake now
-            tEvent = w / A;
-        } else if (w >= V - 1e-9) {
-            accel = 0.0;  // cruise until the braking point
-            tEvent = (ae - V * V / (2.0 * A)) / V;
-        } else {
-            accel = A;
-            const double tV = (V - w) / A;
-            const double tB = (-w + std::sqrt(w * w * 0.5 + A * ae)) / A;
-            tEvent = std::min(tV, tB);
+        const double s = (e >= 0.0) ? 1.0 : -1.0;
+        const double ae = std::abs(e);
+        double w = s * vel_;  // speed toward the target (negative = moving away)
+        double accel, tEvent;
+        if (w * ae < -tol) {  // moving away: brake with the seed (reversal) or A
+            accel = seed > 0.0 ? seed : A;
+            tEvent = -w / accel;
+        } else if (ae <= d + tol) {  // inside the braking zone
+            const double vt = std::sqrt(w * w / 2.0 + A * ae);
+            if (std::abs(vt - w) <= tol) {  // on the curve
+                w = vt;
+                accel = -A;
+                tEvent = 2.0 * ae / vt;
+            } else if (w < vt) {  // slower than the curve: accelerate until reaching it
+                accel = A;
+                const double dd = (2.0 * A * ae - w * w) / (4.0 * A);
+                tEvent = (-w + std::sqrt(std::max(0.0, w * w + 2.0 * A * dd))) / A;
+            } else {  // faster: stop exactly at the target
+                accel = -w * w / (2.0 * ae);
+                tEvent = 2.0 * ae / w;
+            }
+        } else {  // outside the zone
+            const double z = ae - d;
+            if (std::abs(w - V) <= tol) {  // at cruise speed
+                w = V;
+                accel = 0.0;
+                tEvent = z / V;
+            } else {
+                accel = (w > V) ? -A : A;
+                const double tSpeed = (V - w) / accel;
+                const double tZone = (-w + std::sqrt(std::max(0.0, w * w + 2.0 * accel * z))) / accel;
+                tEvent = std::min(tSpeed, tZone);
+            }
         }
-        const double h = std::min(rem, std::max(tEvent, 0.0));
-        const double step = (h > 0.0) ? h : rem;
-        const double wNew = std::clamp(w + accel * step, -V, V);
-        angle_ += s * (w * step + 0.5 * accel * step * step);
-        vel_ = s * wNew;
-        rem -= step;
-        if (h <= 0.0) break;
-    }
-    if (std::abs(targetRad - angle_) < 1e-9 && std::abs(vel_) < 1e-6) {
-        angle_ = targetRad;
-        vel_ = 0.0;
+        const double t = std::max(0.0, std::min(rem, tEvent));
+        angle_ += s * (w * t + 0.5 * accel * t * t);
+        w += accel * t;
+        vel_ = s * w;
+        rem -= t;
+        if (t <= 0.0 && tEvent <= 0.0 && seg > 0 && rem <= 1e-12) break;
     }
     return angle_;
 }
@@ -127,74 +143,78 @@ double EngineRampRpm(double currentRpm, double targetRpm, double dt) {
     return currentRpm + ease * rate * dt;
 }
 
-double EngineNetTorque(const EngineCurveTuning& t, double rpm, double throttle, bool attachedObjectPenalty,
-                       double finalScale) {
-    double torqueFactor;
-    double resistanceFactor;
-
-    // CHOSEN closed form for the CONFIRMED qualitative shape (Sec10.2): see
-    // this header's own doc comment on EngineNetTorque for the full
-    // CONFIRMED-vs-CHOSEN breakdown of this split.
-    if (rpm >= t.peakTorqueRpm) {
-        const double span = std::max(1e-6, t.redlineRpm - t.peakTorqueRpm);
-        const double f = std::clamp((rpm - t.peakTorqueRpm) / span, 0.0, 1.0);  // clamped AT redline, confirmed behaviour
-        torqueFactor = t.torqueFactorPeak + f * (t.torqueFactorRedline - t.torqueFactorPeak);
-        resistanceFactor = t.resistanceHighBandCoeff * f * f;  // CHOSEN: quadratic in band-position, high-RPM coefficient
-    } else {
-        const double span = std::max(1e-6, t.peakTorqueRpm - t.idleRpm);
-        const double f = std::clamp((rpm - t.idleRpm) / span, 0.0, 1.0);
-        torqueFactor = t.torqueFactorIdle + f * (t.torqueFactorPeak - t.torqueFactorIdle);
-        resistanceFactor = t.resistanceLowBandCoeff * f * f;  // CHOSEN: quadratic in band-position, low-RPM coefficient
-
-        if (rpm < t.idleRpm) {
-            // CHOSEN concrete reading of "additionally scaling by a
-            // clutch/load ratio near idle" (Sec10.2, HIGH role only): a
-            // simple ramp from 0 at rpm=0 to 1 at rpm=idleRpm.
-            const double clutchLoadRatio = std::clamp(rpm / std::max(1e-6, t.idleRpm), 0.0, 1.0);
-            torqueFactor *= clutchLoadRatio;
-        }
-    }
-
-    // CONFIRMED formula, quoted literally (Sec10.2): "netTorque =
-    // resistanceFactor*throttle - torqueFactor."
-    double netTorque = resistanceFactor * throttle - torqueFactor;
-    netTorque *= t.torqueScale;  // CHOSEN placement of the "+0x14, overall torque scale" field
-
-    if (attachedObjectPenalty) {
-        netTorque *= 0.85;  // CONFIRMED exact literal, Sec10.2
-    }
-
-    netTorque *= finalScale;  // models the OPEN `_DAT_02845af4` global, see header doc comment
-    return netTorque;
+double EngineRpmUpdate(const EngineCurveTuning& t, double currentRpm, double throttle, double transmissionRpm, double dt) {
+    const double target = t.minRpm + (t.clutchSlipRpm - t.minRpm) * throttle;
+    if (transmissionRpm >= target) return transmissionRpm;
+    return EngineRampRpm(currentRpm, target, dt);
 }
+
+// D-17 (spec-differential-results.md, vectors E1; 5,400/5,400 random cases bit-exact in the report): the table field names are NOT
+// crossed. Products are rounded to single precision as written. Positive throttle:
+//   target = Min_RPM + (Clutch_Slip_RPM - Min_RPM) * throttle; r = max(engine rpm, target); d = r - Opt_RPM
+//   d < 0:  k = 1/(Min_RPM - Opt_RPM); T = Torque*(1 + (MinTF - 1) k^2 d^2); R = Torque*(OptRes + (MinRes - OptRes) k d);
+//           transmission rpm < Min_RPM -> R *= transmission rpm / Min_RPM
+//   r < Max_RPM: the same with Max_RPM, MaxTF, MaxRes;   else T = 0, R = Torque*MaxRes.
+//   torque = T*throttle - R, then x0.85 (attached-object condition), x finalScale.
+// Zero throttle (coasting): torque = -(mass * 0.35 * engine rpm / Max_RPM), x (transmission rpm / Min_RPM) when below Min_RPM.
+double EngineNetTorque(const EngineCurveTuning& t, double rpmIn, double throttleIn, bool attachedObjectPenalty,
+                       double finalScale, double transmissionRpmIn, double vehicleMass) {
+    const float rpm = static_cast<float>(rpmIn);
+    const float throttle = static_cast<float>(throttleIn);
+    const float transRpm = static_cast<float>(transmissionRpmIn < 0.0 ? rpmIn : transmissionRpmIn);
+    const float minRpm = static_cast<float>(t.minRpm), optRpm = static_cast<float>(t.optRpm), maxRpm = static_cast<float>(t.maxRpm);
+    const float torque = static_cast<float>(t.torque);
+    float net;
+    if (throttle > 0.0f) {
+        const float target = minRpm + (static_cast<float>(t.clutchSlipRpm) - minRpm) * throttle;
+        const float r = std::max(rpm, target);
+        const float d = r - optRpm;
+        float T = 0.0f, R;
+        if (d < 0.0f) {
+            const float k = 1.0f / (minRpm - optRpm);
+            const float kd = k * d;
+            T = torque * (1.0f + (static_cast<float>(t.minTorqueFactor) - 1.0f) * (kd * kd));
+            R = torque * (static_cast<float>(t.optResistance) + (static_cast<float>(t.minResistance) - static_cast<float>(t.optResistance)) * kd);
+            if (transRpm < minRpm) R = R * transRpm / minRpm;
+        } else if (r < maxRpm) {
+            const float k = 1.0f / (maxRpm - optRpm);
+            const float kd = k * d;
+            T = torque * (1.0f + (static_cast<float>(t.maxTorqueFactor) - 1.0f) * (kd * kd));
+            R = torque * (static_cast<float>(t.optResistance) + (static_cast<float>(t.maxResistance) - static_cast<float>(t.optResistance)) * kd);
+        } else {
+            R = torque * static_cast<float>(t.maxResistance);  // the stored engine rpm is also set to Max_RPM by the caller
+        }
+        net = T * throttle - R;
+    } else {
+        net = -(static_cast<float>(vehicleMass) * 0.35f * rpm / maxRpm);
+        if (transRpm < minRpm) net = net * (transRpm / minRpm);
+    }
+    double out = net;
+    if (attachedObjectPenalty) out *= 0.85;
+    return out * finalScale;
+}
+
 
 // ===========================================================================
 // 10.3 Transmission
 // ===========================================================================
 
-void GearShiftStateMachine::Update(double rpm, double dt) {
-    if (shiftTimer_ > 0.0) shiftTimer_ = std::max(0.0, shiftTimer_ - dt);
-    if (upCooldown_ > 0.0) upCooldown_ = std::max(0.0, upCooldown_ - dt);
-    if (downCooldown_ > 0.0) downCooldown_ = std::max(0.0, downCooldown_ - dt);
-
-    if (shiftTimer_ > 0.0) return;  // mid-shift: no new shift decision (CHOSEN gating, matches a timed shift's own intent)
-
-    // CONFIRMED structure (Sec10.3): single shared upshift threshold,
-    // independent per-gear downshift table, max-gear clamp, independent
-    // cooldown gates per direction.
-    if (gear_ < tuning_.maxGear && upCooldown_ <= 0.0 && rpm >= tuning_.upshiftRpmThreshold) {
-        ++gear_;
-        shiftTimer_ = tuning_.shiftDurationSec;
-        upCooldown_ = tuning_.upshiftCooldownSec;
-        return;
-    }
+// D-19 (spec-differential-results.md): the original's per-step rule. The timer and the shifting flag never block a decision, there
+// are no cooldowns, comparisons are strict, and the upshift is checked in the same step after the downshift.
+void GearShiftStateMachine::Update(double rpm, double dt, bool shiftWindowClosed, bool upshiftInhibited) {
+    shiftTimer_ -= dt;
+    if (shiftTimer_ <= 0.0) shiftTimer_ = 0.0;  // the "shifting" flag (midShift) clears at timer <= 0
+    if (shiftWindowClosed) return;
     if (gear_ > 1) {
         const size_t idx = static_cast<size_t>(gear_ - 2);  // downshiftRpmByGear[gear-2] = threshold for downshifting OUT OF `gear_`
-        if (idx < tuning_.downshiftRpmByGear.size() && downCooldown_ <= 0.0 && rpm <= tuning_.downshiftRpmByGear[idx]) {
+        if (idx < tuning_.downshiftRpmByGear.size() && tuning_.downshiftRpmByGear[idx] > rpm) {
             --gear_;
             shiftTimer_ = tuning_.shiftDurationSec;
-            downCooldown_ = tuning_.downshiftCooldownSec;
         }
+    }
+    if (!upshiftInhibited && rpm > tuning_.upshiftRpmThreshold && gear_ < tuning_.maxGear) {
+        ++gear_;
+        shiftTimer_ = tuning_.shiftDurationSec;
     }
 }
 
@@ -235,20 +255,25 @@ double ComputeTargetEngineRpm(const std::array<double, 4>& wheelAngularSpeedRadP
 // ===========================================================================
 
 double SuspensionSpringDamperForceNoXDenominator(const SuspensionWheelTuning& t, double currentLength,
-                                                  double compressionVelocity) {
-    // 0x00c59630 (CONFIRMED formula, Sec10.4): force = ((restLength-
-    // currentLength)*spring*loadFactor - damper*compressionVelocity) *
-    // (1/X). X is CHOSEN as 1.0 here (see header doc comment) - this
-    // function's own name flags that choice rather than silently baking it
-    // in.
-    const double springTerm = (t.restLength - currentLength) * t.spring * t.loadFactor;
-    // Damper branch selected by compression-velocity sign (CONFIRMED,
-    // Sec10.4): compressing further (positive compressionVelocity, i.e.
-    // currentLength shrinking) uses damperCompression; rebounding uses
-    // damperRelaxation.
-    const double damper = (compressionVelocity > 0.0) ? t.damperCompression : t.damperRelaxation;
-    const double damperTerm = damper * compressionVelocity;
-    return springTerm - damperTerm;
+                                                  double closingSpeed, bool touching) {
+    // 0x00c59630 FINAL (D-25): float32 steps, damper = compression when v < 0 else relaxation, times chassis mass.
+    if (!touching) return 0.0;
+    const float diff = static_cast<float>(t.restLength - currentLength);
+    const float spring = static_cast<float>(static_cast<double>(diff) * t.spring * t.loadFactor);
+    const double damping = (closingSpeed < 0.0) ? t.damperCompression : t.damperRelaxation;
+    const float inner = static_cast<float>(static_cast<double>(spring) - damping * closingSpeed);
+    return static_cast<double>(static_cast<float>(static_cast<double>(inner) * t.chassisMass));
+}
+
+double ChassisMassFromInverseMass(double inverseMass) {
+    const float inv = static_cast<float>(inverseMass);
+    if (inv == 0.0f) return 0.0;
+    return static_cast<double>(1.0f / inv);
+}
+
+SuspensionWheelTuning WithChassisInverseMass(SuspensionWheelTuning base, double inverseMass) {
+    base.chassisMass = ChassisMassFromInverseMass(inverseMass);
+    return base;
 }
 
 SuspensionStepResult RunSuspensionSubstep(const SuspensionWheelTuning& tuning, double outerDt,
@@ -266,7 +291,7 @@ SuspensionStepResult RunSuspensionSubstep(const SuspensionWheelTuning& tuning, d
         timeIntoStep += microDt;
         const double newLength = currentLengthFn(timeIntoStep);
         const double compressionVelocity = (length - newLength) / std::max(1e-9, microDt);  // shrinking length = positive compression velocity
-        const double force = SuspensionSpringDamperForceNoXDenominator(tuning, newLength, compressionVelocity);
+        const double force = SuspensionSpringDamperForceNoXDenominator(tuning, newLength, -compressionVelocity);  // spec sign: compression is negative
 
         forceSum += force;
         ++microSteps;

@@ -27,6 +27,7 @@
 #include "sr3audioruntime/audio_output_device.h"
 #include "sr3audioruntime/wav_writer.h"
 #include "sr3audioruntime/wwise_vorbis_setup.h"
+#include "sr3airuntime/gps_route.h"
 #include "sr3luahost/engine_state.h"
 #include "sr3luahost/vint_property_types.h"
 #include "sr3luahost/minimap_live_transform.h"
@@ -37,6 +38,10 @@
 
 namespace sr3viewer {
 extern const sr3zone::RoadGraph* g_playtestRoadGraph;
+// GPS route for the HUD (spec-hud-runtime.md H.6, Team C): read-only. Null until the road graph is loaded.
+// Use g_playtestGps->route() (lane list + polyline + currentLane + goal/kind/direct flags) or
+// RemainingPolyline() (route from the current node to the goal, what the draw consumes).
+extern const sr3airuntime::gps::GpsPlanner* g_playtestGps;
 
 extern std::vector<sr3airuntime::RoadSpawnPoint> g_lastRoadSpawnPoints;
 
@@ -84,6 +89,9 @@ std::string installVehicleTypeClassTableFromArchives(const std::vector<std::stri
                                                       sr3luahost::EngineState& es);
 
 std::string installZoneObjectsFromArchives(const std::vector<std::string>& archivePaths, sr3luahost::EngineState& es);
+
+// AW-15: loads the craft (Vehicle_Type 2..5) rows into sr3viewer_craft::CraftRegistry(); returns the row count.
+size_t loadCraftTypeRegistry(const std::string& cacheDir, std::string& diag);
 
 std::string installZsceneTableFromArchives(const std::vector<std::string>& archivePaths, sr3luahost::EngineState& es);
 

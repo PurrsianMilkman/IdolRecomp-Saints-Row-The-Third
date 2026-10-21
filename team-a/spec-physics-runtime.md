@@ -2082,36 +2082,40 @@ Direct follow-up to §6 (D-U0): that unit covers the 13 Havok-internal vehicle s
 
 ### 10.2 Engine (`hk_custom_vehicle_engine`, row 30)
 
-`0x00ae31a0` combines two sibling virtual calls into a `{torque; rpm}` output pair, RPM-first. `0x00ae31f0` (CONFIRMED) ramps RPM **up-only** toward a throttle-lerped target: `rate = clamp((target-current)/dt, ±10000.0)`, `ease = clamp(|target-current|/750.0, 0, 1)` (both constants confirmed by direct byte read, `0x0118533c`/`0x012a2f74` and `0x01185338`/`0x01185330`), `new = current + ease*rate*dt` — no explicit fall-rate path (falling RPM presumably comes from the torque curve's own rotational dynamics). `0x00ae3330` (CONFIRMED) is the **real 9-field piecewise torque/resistance curve**, every field read directly off the engine component:
+`0x00ae31a0` combines two sibling virtual calls into a `{torque; rpm}` output pair, RPM-first.
 
-| Field | Role |
-|---|---|
-| `+0x8`/`+0xc`/`+0x10` | idle, peak-torque, redline RPM |
-| `+0x14` | overall torque scale |
-| `+0x18`/`+0x1c` | quadratic resistance-shape coefficients, low/high-RPM bands |
-| `+0x20`/`+0x24`/`+0x28` | torque-factor at idle/peak/redline |
+**RPM update `0x00ae31f0` — FINAL [2026-10-19 corrected per Team D emulation D-18: FINAL].** ~~ramps RPM up-only~~ (the earlier "up-only, no fall-rate path" reading was wrong). Rule: `target = Min_RPM + (Clutch_Slip_RPM - Min_RPM) * throttle`. If the transmission RPM is `>= target`, the new engine RPM **is the transmission RPM** (no ramp). Otherwise `diff = target - current`; `rate = clamp(diff/dt, -10000.0, +10000.0)`; `ease = |diff|/750.0` if `|diff| < 750`, else 1; `new = current + ease*rate*dt` — this eases toward the target in **both** directions (constants by direct byte read, `0x0118533c`/`0x012a2f74` and `0x01185338`/`0x01185330`). Test vector (Min 1,000, Slip 1,750, dt 1/30, current 800, throttle 0.5): transmission 1,200 gives 1,055.556; transmission 2,000 gives 2,000.
 
-At/above peak-torque RPM the curve lerps torque/resistance factors toward redline (clamping at redline); below peak it lerps toward idle, additionally scaling by a clutch/load ratio near idle. `netTorque = resistanceFactor*throttle - torqueFactor`, then gated through a water/attached-object check (`0x00758780`→`0x00756cb0`→`0x004dcf00`→`0x00853b10`, the already-named liveness check, independently re-confirmed here) that applies an exact **`×0.85`** penalty (confirmed double literal `0x0112f7e8`) if a specific bit is set on the attached object — HIGH: a damage/environment torque penalty. Final scale by a runtime global `0x02845af4` that reads **zero on disk** (writer not located, OPEN — something must set it at runtime or the engine never produces nonzero torque). **[2026-10-14 Team B audit: writer found, it is a tweak variable loaded from `tweak_table.xtbl` with value 1.25; see the note in §10.11.10.]**
+**Torque curve `0x00ae3330` — FINAL [2026-10-19 corrected per Team D emulation D-17: FINAL; 5,400/5,400 random cases bit-exact, 1,620 shipped-engine cases].** The 10 engine fields are read off the component; the runtime offsets (constructor `0x00aba4c0`, re-read 2026-10-19) are:
 
-**Construction site and the real xtbl field mapping, CONFIRMED (2026-10-08):** the component is built by `0x00aba4c0`–`0x00aba599` (read to its true end, single `RET`), a bare, zero-derivation 10-field `FLD`/`FSTP` copy from the per-vehicle xtbl-parsed struct's `Torque`/`Min_RPM`/`Opt_RPM`/`Max_RPM`/`Min_RPM_Torque_Factor`/`Max_RPM_Torque_Factor`/`Min_RPM_Resistance`/`Opt_RPM_Resistance`/`Max_RPM_Resistance`/`Clutch_Slip_RPM` fields (offsets `+0x4D0`/`+0x4D4`/`+0x4D8`/`+0x4CC`/`+0x4DC`/`+0x4E0`/`+0x4E4`/`+0x4E8`/`+0x4EC`/`+0x4F0`, per `spec-vehicle-data.md` §7.4) into engine component `+0x8`…`+0x2c`. This settles a premise some consumers may carry that the shipped schema has only 6 author-facing fields for this component — it has all 9 (10 counting the transmission field riding along), confirmed on both the loader side (`spec-vehicle-data.md`) and the consuming side (this constructor) independently. **The authored field names and their runtime roles are crossed** — cross-checked instruction-by-instruction against `0x00ae3330`'s own consuming formula above: every xtbl field named `*_Torque_Factor` actually drives a **resistance**-shaped runtime field, and every field named `*_Resistance` actually drives a **torque-factor**-shaped runtime field:
+| Field | xtbl source | Role |
+|---|---|---|
+| `+0x8`/`+0xc`/`+0x10` | `Min_RPM`/`Opt_RPM`/`Max_RPM` | idle, peak-torque, redline RPM |
+| `+0x14` | `Torque` | overall torque scale |
+| `+0x18`/`+0x1c` | `Min_RPM_Torque_Factor`/`Max_RPM_Torque_Factor` | torque term at idle / redline (quadratic bump) |
+| `+0x20`/`+0x24`/`+0x28` | `Min_RPM_Resistance`/`Opt_RPM_Resistance`/`Max_RPM_Resistance` | resistance term at idle / peak / redline (piecewise linear) |
+| `+0x2c` | `Clutch_Slip_RPM` | throttle-lerped RPM floor |
 
-| Runtime field (this table, above) | Source xtbl field (by constructor copy, confirmed) |
-|---|---|
-| `+0x18` (idle→peak resistance-shape coeff) | `Min_RPM_Torque_Factor` |
-| `+0x1c` (peak→redline resistance-shape coeff) | `Max_RPM_Torque_Factor` |
-| `+0x20` (torque-factor at idle) | `Min_RPM_Resistance` |
-| `+0x24` (torque-factor at peak, shared pivot) | `Opt_RPM_Resistance` |
-| `+0x28` (torque-factor at redline) | `Max_RPM_Resistance` |
+Positive throttle (all products rounded to single precision as written):
+1. `target = Min_RPM + (Clutch_Slip_RPM - Min_RPM)*throttle`; `r = max(engine RPM, target)`; `d = r - Opt_RPM`.
+2. `d < 0`: `k = 1/(Min_RPM - Opt_RPM)`; `T = Torque*(1 + (Min_RPM_Torque_Factor - 1)*k^2*d^2)`; `R = Torque*(Opt_RPM_Resistance + (Min_RPM_Resistance - Opt_RPM_Resistance)*k*d)`; if transmission RPM `< Min_RPM`, `R *= transRPM/Min_RPM`.
+3. Else if `r < Max_RPM`: the same with `k = 1/(Max_RPM - Opt_RPM)`, `Max_RPM_Torque_Factor`, `Max_RPM_Resistance`.
+4. Else (`r >= Max_RPM`): `T = 0`, `R = Torque*Max_RPM_Resistance`, and the stored engine RPM is set to `Max_RPM`.
+5. `torque = T*throttle - R`.
 
-A clean-room implementation that assumes authored field names match their code role gets the torque curve's resistance/torque-factor shape backwards — e.g. `Opt_RPM_Resistance`, which by name reads as "the well-behaved middle sample," is the one driving the torque-factor-at-peak pivot used as the shared blend anchor for both branches. **[CONFIRMED — disassembly, both halves (constructor and consumer) independently re-read this pass.]** Full detail: `scratchpad/havok_vehicle_tyreslip_enginetorque_groundfriction_2026-10-08.md`.
+Zero throttle (coasting): `torque = -(vehicle mass * 0.35 * engineRPM / Max_RPM)`, times `transRPM/Min_RPM` when the transmission RPM is below `Min_RPM`; 0 while an unidentified vehicle timer runs. T is a quadratic bump peaking at exactly `Torque` at Opt_RPM and falling to `Torque * *_Torque_Factor` at Min/Max RPM; R is a straight line between the three resistance points. Test vectors: engine 350/1000/5700/6500, TF 0.9/0.9, Res 0/0/0.2, Slip 1750, rpm 0, throttle 1.0 gives 325.279; coasting mass 1,500, Max_RPM 6,500: RPM 3,000 gives -242.308, RPM 6,500 gives -525.0.
+
+~~At/above peak-torque RPM the curve lerps torque/resistance factors toward redline (clamping at redline); below peak it lerps toward idle, additionally scaling by a clutch/load ratio near idle. `netTorque = resistanceFactor*throttle - torqueFactor`~~ (superseded by the rule above). The result is then multiplied by one of two per-vehicle multipliers (picked by a vehicle state flag), and gated through a water/attached-object check (`0x00758780`→`0x00756cb0`→`0x004dcf00`→`0x00853b10`, the already-named liveness check, independently re-confirmed here) that applies an exact **`×0.85`** penalty (confirmed double literal `0x0112f7e8`) if a specific bit is set on the attached object — HIGH: a damage/environment torque penalty. Final scale by a runtime global `0x02845af4` that reads **zero on disk** (writer not located, OPEN — something must set it at runtime or the engine never produces nonzero torque). **[2026-10-14 Team B audit: writer found, it is a tweak variable loaded from `tweak_table.xtbl` with value 1.25; see the note in §10.11.10.]**
+
+**Construction site and the real xtbl field mapping, CONFIRMED (2026-10-08):** the component is built by `0x00aba4c0`–`0x00aba599` (read to its true end, single `RET`), a bare, zero-derivation 10-field `FLD`/`FSTP` copy from the per-vehicle xtbl-parsed struct's `Torque`/`Min_RPM`/`Opt_RPM`/`Max_RPM`/`Min_RPM_Torque_Factor`/`Max_RPM_Torque_Factor`/`Min_RPM_Resistance`/`Opt_RPM_Resistance`/`Max_RPM_Resistance`/`Clutch_Slip_RPM` fields (offsets `+0x4D0`/`+0x4D4`/`+0x4D8`/`+0x4CC`/`+0x4DC`/`+0x4E0`/`+0x4E4`/`+0x4E8`/`+0x4EC`/`+0x4F0`, per `spec-vehicle-data.md` §7.4) into engine component `+0x8`…`+0x2c`. This settles a premise some consumers may carry that the shipped schema has only 6 author-facing fields for this component — it has all 9 (10 counting the transmission field riding along), confirmed on both the loader side (`spec-vehicle-data.md`) and the consuming side (this constructor) independently. ~~The authored field names and their runtime roles are crossed: every xtbl field named `*_Torque_Factor` drives a resistance-shaped runtime field, and every field named `*_Resistance` drives a torque-factor-shaped runtime field.~~ **The field names are NOT crossed — FINAL [2026-10-19 corrected per Team D emulation D-17: FINAL].** The fields named `*_Torque_Factor` (`+0x18`/`+0x1c`) shape the torque term T and the fields named `*_Resistance` (`+0x20`/`+0x24`/`+0x28`) shape the resistance term R, exactly as their names say (see the field table and rule above). Shipped values agree (resistances 0 to 0.2, torque factors around 0.9). The earlier "crossed" reading produced 0 or near-0 torque over most of the range for shipped data (DLC compact at Opt_RPM, full throttle: original 350, crossed reading 0); a port must not use it. Full (historical) detail: `scratchpad/havok_vehicle_tyreslip_enginetorque_groundfriction_2026-10-08.md`.
 
 ### 10.3 Transmission (`hk_custom_vehicle_transmission`, row 32)
 
-`0x00aecd60` composes 4 sibling virtual calls into a gear/clutch-state byte, a clutch-engagement float (forced to 0 if instance `+0x160` is set), a reaction-torque float mirrored to vehicle-instance `+0x158` (the engine/transmission coupling point), and a per-wheel torque-split apply. `0x00aece20` (CONFIRMED) is a **real automatic gear-shift state machine**, not a thin pass-through: a per-gear downshift-RPM table (`+0x34[gear-1]`) with independent cooldown gates per direction, a single shared upshift threshold (`+0xc`, unlike the per-gear downshift table), a max-gear clamp, and a shift-duration timer. Manual-shift input handling is gated out entirely at the mode byte and was not located (OPEN). **[2026-10-14 Team B audit: RESOLVED for the car path (reverse trigger and reverse-ratio source FINAL). Manual shifting: none found on this path, PARTIAL (only the transmission code was read, not a whole-binary writer scan). TRIGGER: reverse is a flag byte on the vehicle physics object (`+0xb0`). Its only writers are the drive-command function `0x00ae8fd0` and the network-state setter `0x00a906d0`. The brake wrapper `0x00a90aa0` submits command x = -brake, the throttle wrapper submits x = +throttle; x is clamped to [-1, 1] and kept at `+0x154`. When the byte at `(chassis wrapper +0x20 object) +0x14` is non-zero (full logic; the source of that byte was not traced), s = linear velocity dot chassis forward axis (`+0x1b0`), in m/s, and: (a) x = 0: accel = brake = 0; flag cleared if |s| <= 1.0, else unchanged. (b) s > 1.0: flag cleared unless the handbrake (`+0x14f`) is set; x > 0 gives accel = x, x < 0 gives brake = -x. (c) s < -1.0: flag set unless handbrake; x > 0 gives brake = x, x < 0 gives accel = -x (vehicle class value 1 from `0x00ad2f80` returns without touching accel). (d) |s| <= 1.0: accel = |x|, brake = 0 (class-1 vehicles only when x > 0 or s > 0), flag = (x < 0). If the byte is zero (plain mode): accel = max(x, 0), brake = max(-x, 0), flag untouched. So reverse engages in the same frame the brake axis is non-zero and |s| <= 1.0 m/s (about 2.2 mph); there is no hold time and no timer. It releases when x >= 0 at |s| <= 1.0, or when s > 1.0 with the handbrake off. GEARBOX: the Havok transmission selects reverse when the flag is set and the current gear index is <= 0 (`0x00c59b10`); the result goes to state byte `+0xd`. The automatic shift machine `0x00aece20` returns immediately while that byte is set, so there is no shifting in reverse. The wheel torque ratio (`0x00c59b40`) is -(Reverse_Gear_Ratio x Diff_Gear_Ratio) in reverse and Gear_Ratios[gear] x Diff_Gear_Ratio otherwise. RATIO SOURCE: transmission `+0x18` from xtbl `Reverse_Gear_Ratio` (entry `+0x5B0`, §10.10). Among the shipped vehicle xtbls that set it, 3.38 is the most common value (35 of 50 files; others range 1.0 to 14); files that omit it (exoticsports01, pickup03) take a base value whose source was not traced. **[2026-10-15 closed: FINAL. The base is the vehicle's `<Group>` row in `vehicle_groups.xtbl`, which is 3.38 for both test cars. Load chain: the vehicle-row reader `0x00acbfc0` is called with a "defaults" flag (third argument), 0 for vehicle rows (`0x00ace3dc`) and 1 for group rows (`0x00ace77a`, which fills the group table at `0x0282cfa0`, stride `0xB80`, count `0x0282cb10`). For a vehicle row it looks up `<Group>` by name in that table (`0x00acb300`, `0x00acc079`-`0x00acc0ac`) and passes the group entry to the transmission reader `0x00ac7c70` (`0x00acd7ec`). That reader seeds entry `+0x5B0` from the group entry's `+0x5B0` (`0x00ac7e0b`), or from the global default `0x0282cc38` when the flag is set (`0x00ac7df9`). It then overwrites the value only if the row has its own `Reverse_Gear_Ratio` (`0x00dacd40` at `0x00ac7e24`). The global default comes from `vehicle_defaults.xtbl` `Transmission/Reverse_Gear_Ratio` = 1.0 (`0x00acb975`). Upshift, diff and clutch fields inherit the same way. Data: `car_2dr_exoticsports01` has Group "Car - sports" (3.38) and `truck_2dr_pickup03` has "Truck - small (pickups)" (3.38). PORT RULE: reverse = row value, else group value, else 1.0. Group values: 3.38 for most groups, Station Wagon 3.54, cop car 2, Truck - trailer 2.5, Car - luxury 3.5; "Trailers" has none, so it gets 1.0. TEST VECTOR: exoticsports01 reverse wheel ratio = −(3.38 × 4.2) = −14.196; pickup03 = −(3.38 × 5.0) = −16.9.]** MANUAL SHIFT: the only gear-state writer found is the automatic machine (plus or minus one gear per shift, rpm and timer gated by `0x00ae4280` / `0x00ae42b0`; bit 2 of instance `+0x1b4` blocks upshifts). No manual-shift input reaches it, so PC has automatic shifting only. PORT RULE: command = throttle - brake; reverse flag per (a)-(d) with the 1.0 m/s threshold; in reverse use ratio -(3.38 x diff) and suspend the shift machine. TEST VECTORS (handbrake off, full logic): s = 0.5, x = -1 gives flag set and accel 1.0; s = 1.2, x = -1 gives brake 1.0 and flag cleared; s = -1.5, x = -1 gives flag set and accel 1.0; s = -1.5, x = +1 gives brake 1.0; diff 4.2 with reverse 3.38 gives a wheel ratio of -14.196.]** `0x00aecef0` (CONFIRMED) computes a torque-split-weighted average wheel RPM using the exact `60/(2π)` conversion (confirmed literals `60.0`/`0.15915493667...`), subtracts the cached reaction-torque field, rate-limits, and double-clamps — the transmission's half of the engine/transmission RPM-matching loop that feeds the clutch-side correction term §10.2's torque curve subtracts.
+`0x00aecd60` composes 4 sibling virtual calls into a gear/clutch-state byte, a clutch-engagement float (forced to 0 if instance `+0x160` is set), a reaction-torque float mirrored to vehicle-instance `+0x158` (the engine/transmission coupling point), and a per-wheel torque-split apply. `0x00aece20` (CONFIRMED) is a **real automatic gear-shift state machine**, not a thin pass-through: a per-gear downshift-RPM table (`+0x34[gear-1]`) ~~with independent cooldown gates per direction~~, a single shared upshift threshold (`+0xc`, unlike the per-gear downshift table), a max-gear clamp, and a shift-duration timer. **Per-step rule — FINAL [2026-10-19 corrected per Team D emulation D-19: FINAL]:** there are **no per-direction cooldowns** and the shift timer **does not block** decisions. (1) `timer -= dt`; if a shift was in progress and `timer <= 0`, the shifting flag clears. (2) In reverse, stop. (3) If the 500 ms vehicle shift window (`0x00ae4280`) is closed, stop (what arms its timer was not traced). (4) Downshift first: if `gear > 0` and `downshiftTable[gear-1] > RPM` (strict), `gear -= 1`, `timer = shift time`, flag set. (5) Then, in the same step, upshift: unless the upshift inhibit (`0x00ae42b0`; bit 2 of instance `+0x1b4`) is active, if `RPM > Upshift_RPM` (strict) and `gear+1 < gearCount`, `gear += 1`, `timer = shift time`, flag set. Consequences: at exactly the threshold no shift; RPM held above the upshift threshold climbs one gear per step. Test vectors (5 gears, 30 steps/s, RPM held): 7,000 vs Upshift 5,500 gives gears 2,3,4,5,5,5 over the first 6 steps; 5,500 vs 5,500 gives 1,1,1,1,1,1. Manual-shift input handling is gated out entirely at the mode byte and was not located (OPEN). **[2026-10-14 Team B audit: RESOLVED for the car path (reverse trigger and reverse-ratio source FINAL). Manual shifting: none found on this path, PARTIAL (only the transmission code was read, not a whole-binary writer scan). TRIGGER: reverse is a flag byte on the vehicle physics object (`+0xb0`). Its only writers are the drive-command function `0x00ae8fd0` and the network-state setter `0x00a906d0`. The brake wrapper `0x00a90aa0` submits command x = -brake, the throttle wrapper submits x = +throttle; x is clamped to [-1, 1] and kept at `+0x154`. When the byte at `(chassis wrapper +0x20 object) +0x14` is non-zero (full logic; the source of that byte was not traced), s = linear velocity dot chassis forward axis (`+0x1b0`), in m/s, and: (a) x = 0: accel = brake = 0; flag cleared if |s| <= 1.0, else unchanged. (b) s > 1.0: flag cleared unless the handbrake (`+0x14f`) is set; x > 0 gives accel = x, x < 0 gives brake = -x. (c) s < -1.0: flag set unless handbrake; x > 0 gives brake = x, x < 0 gives accel = -x (vehicle class value 1 from `0x00ad2f80` returns without touching accel). (d) |s| <= 1.0: accel = |x|, brake = 0 (class-1 vehicles only when x > 0 or s > 0), flag = (x < 0). If the byte is zero (plain mode): accel = max(x, 0), brake = max(-x, 0), flag untouched. So reverse engages in the same frame the brake axis is non-zero and |s| <= 1.0 m/s (about 2.2 mph); there is no hold time and no timer. It releases when x >= 0 at |s| <= 1.0, or when s > 1.0 with the handbrake off. GEARBOX: the Havok transmission selects reverse when the flag is set and the current gear index is <= 0 (`0x00c59b10`); the result goes to state byte `+0xd`. The automatic shift machine `0x00aece20` returns immediately while that byte is set, so there is no shifting in reverse. The wheel torque ratio (`0x00c59b40`) is -(Reverse_Gear_Ratio x Diff_Gear_Ratio) in reverse and Gear_Ratios[gear] x Diff_Gear_Ratio otherwise. RATIO SOURCE: transmission `+0x18` from xtbl `Reverse_Gear_Ratio` (entry `+0x5B0`, §10.10). Among the shipped vehicle xtbls that set it, 3.38 is the most common value (35 of 50 files; others range 1.0 to 14); files that omit it (exoticsports01, pickup03) take a base value whose source was not traced. **[2026-10-15 closed: FINAL. The base is the vehicle's `<Group>` row in `vehicle_groups.xtbl`, which is 3.38 for both test cars. Load chain: the vehicle-row reader `0x00acbfc0` is called with a "defaults" flag (third argument), 0 for vehicle rows (`0x00ace3dc`) and 1 for group rows (`0x00ace77a`, which fills the group table at `0x0282cfa0`, stride `0xB80`, count `0x0282cb10`). For a vehicle row it looks up `<Group>` by name in that table (`0x00acb300`, `0x00acc079`-`0x00acc0ac`) and passes the group entry to the transmission reader `0x00ac7c70` (`0x00acd7ec`). That reader seeds entry `+0x5B0` from the group entry's `+0x5B0` (`0x00ac7e0b`), or from the global default `0x0282cc38` when the flag is set (`0x00ac7df9`). It then overwrites the value only if the row has its own `Reverse_Gear_Ratio` (`0x00dacd40` at `0x00ac7e24`). The global default comes from `vehicle_defaults.xtbl` `Transmission/Reverse_Gear_Ratio` = 1.0 (`0x00acb975`). Upshift, diff and clutch fields inherit the same way. Data: `car_2dr_exoticsports01` has Group "Car - sports" (3.38) and `truck_2dr_pickup03` has "Truck - small (pickups)" (3.38). PORT RULE: reverse = row value, else group value, else 1.0. Group values: 3.38 for most groups, Station Wagon 3.54, cop car 2, Truck - trailer 2.5, Car - luxury 3.5; "Trailers" has none, so it gets 1.0. TEST VECTOR: exoticsports01 reverse wheel ratio = −(3.38 × 4.2) = −14.196; pickup03 = −(3.38 × 5.0) = −16.9.]** MANUAL SHIFT: the only gear-state writer found is the automatic machine (plus or minus one gear per shift, rpm and timer gated by `0x00ae4280` / `0x00ae42b0`; bit 2 of instance `+0x1b4` blocks upshifts). No manual-shift input reaches it, so PC has automatic shifting only. PORT RULE: command = throttle - brake; reverse flag per (a)-(d) with the 1.0 m/s threshold; in reverse use ratio -(3.38 x diff) and suspend the shift machine. TEST VECTORS (handbrake off, full logic): s = 0.5, x = -1 gives flag set and accel 1.0; s = 1.2, x = -1 gives brake 1.0 and flag cleared; s = -1.5, x = -1 gives flag set and accel 1.0; s = -1.5, x = +1 gives brake 1.0; diff 4.2 with reverse 3.38 gives a wheel ratio of -14.196.]** `0x00aecef0` (CONFIRMED) computes a torque-split-weighted average wheel RPM using the exact `60/(2π)` conversion (confirmed literals `60.0`/`0.15915493667...`), subtracts the cached reaction-torque field, rate-limits, and double-clamps — the transmission's half of the engine/transmission RPM-matching loop that feeds the clutch-side correction term §10.2's torque curve subtracts.
 
 ### 10.4 Suspension (`hk_custom_vehicle_suspension`, row 34)
 
-`0x00aebe30` (CONFIRMED structure, 992 insn, mostly a per-thread bump-allocator) **internally re-slices the incoming `dt` into ≤1/60s (`0.016666668`, confirmed literal) chunks and loops** — an internal sub-stepping layer independent of, and not previously documented alongside, the outer variable-Δt physics step (§4.3/§4.6). Each internal micro-step predicts wheel-anchor position, calls `0x00aeb760` — a ray-vs-plane intersection against a **cached ground-plane**, not a fresh Havok query — then calls **Havok's base suspension method, `0x00c59630`, once per internal micro-step**. `0x00c59630` (CONFIRMED, body `0x00c59630`-`0x00c596f8`, exactly **71 instructions**, 1 callee — `0x00c14790`, 28 instructions, returns `1.0/chassis+0xcc`) implements an asymmetric compression/rebound spring-damper: `force = ((restLength-currentLength)*spring*loadFactor - damper*compressionVelocity) * (1/X)`, with a per-wheel `{spring, damperRelaxation, damperCompression}` record (stride `0xC`) — damper branch selected by compression-velocity sign, load factor scaling only the spring term (HIGH: anti-roll/weight-transfer weighting). After the internal loop, two virtual calls on the chassis vtable (`+0x40`/`+0x44`, HIGH: apply linear/angular impulse) commit the aggregated reaction.
+`0x00aebe30` (CONFIRMED structure, 992 insn, mostly a per-thread bump-allocator) **internally re-slices the incoming `dt` into ≤1/60s (`0.016666668`, confirmed literal) chunks and loops** — an internal sub-stepping layer independent of, and not previously documented alongside, the outer variable-Δt physics step (§4.3/§4.6). Each internal micro-step predicts wheel-anchor position, calls `0x00aeb760` — a ray-vs-plane intersection against a **cached ground-plane**, not a fresh Havok query — then calls **Havok's base suspension method, `0x00c59630`, once per internal micro-step**. `0x00c59630` (CONFIRMED, body `0x00c59630`-`0x00c596f8`, exactly **71 instructions**, 1 callee — `0x00c14790`, 28 instructions, returns `1.0/chassis+0xcc`) implements an asymmetric compression/relaxation spring-damper. ~~force = ((restLength-currentLength)*spring*loadFactor - damper*compressionVelocity) * (1/X), record {spring, damperRelaxation, damperCompression}~~ **[2026-10-20 per Team D emulation: FINAL] (D-25, emulated; the routine is thiscall (dt, vehicle, wheelsInfo, out[]), ret 0x10).** M = chassis mass from `0x00c14790` (= 1/invMass, read from motion `+0xCC`, the w of `+0xC0`; returns 0 when invMass is 0), stored as f32. Per wheel i < byte [vehicle data (`+0x1C`) `+0x20`]: wheel params = this `+0x08` array, stride `0x30`, rest length C at `+0x20`; spring params = this `+0x14` array, stride `0xC`, order **{strength S, dampingCompression, dampingRelaxation}**; wheel info = arg 3, stride `0x60`: contact body `+0x24`, current length L `+0x48`, closing speed v `+0x4C`, spring scale `+0x50`. No contact: out = 0. Otherwise **spring = f32(f32(L - C) x S x scale); damping = dampingCompression if v < 0 else dampingRelaxation (v = 0 and v = -0 count as relaxation); out = f32(f32(spring - damping x v) x M).** So the spec's `1/X` has X = chassis inverse mass: the force IS multiplied by the mass. Modelled bit-exact on 12,000/12,000 cases. Team B's suspension lacks the mass factor and has the damper branch reversed (see SUS-1 in spec-conformance-review.md). After the internal loop, two virtual calls on the chassis vtable (`+0x40`/`+0x44`, HIGH: apply linear/angular impulse) commit the aggregated reaction.
 
 ### 10.5 Wheel collision (`hk_custom_vehicle_raycast_wheel_collide`, row 36 + collector, row 37)
 
@@ -2162,7 +2166,7 @@ Direct follow-up to §10.5's friction-coefficient finding and §6's own D-U1 cit
 
 **`0x00c63c70` is the real combined-slip tangential-friction solve**, run once per axle pair, in stages: (1) a one-time Havok build-string/version-assert gate, confirmed unrelated to physics; (2) a textbook sequential-impulse **effective-mass** computation per tangent axis per wheel — `effectiveMass_rigid = 1/(sumSq+1.0)`, `effectiveMass_soft = 1/(sumSq+1.0+wheelExtra)` (both reciprocal formulas, exact constants verified by direct byte read); (3) a **friction-ellipse apportionment** between the two tangent axes, packing a coupling scalar `X` into a `{1,X,X,1}` 2×2 matrix; (4) `0x00c63570` computes that matrix's exact closed-form inverse (`invDet·[[1,−X],[−X,1]]`, `det=1−X²`), with a tolerance-gated degenerate-case signal when the axes are too strongly correlated (`|X|` near 1) — byte-exact, fully traced; (5) `0x00c63930` is the real **combined-slip saturation test — the literal unit friction circle**, `(A·B)²+(C·D)² < 1.0` (the `1.0` comparand independently confirmed at `0x012a2d70`), guarded by confirmed `FLT_EPSILON` and `1e-4` deadzone constants and a confirmed `±1.1` overshoot clamp, then a bounded **16-entry table-driven piecewise evaluation** (a discretized friction/slip-response curve, evaluated as a per-entry quadratic form kept via running-best comparison — a real search/interpolation step, not a closed-form expression or a plain indexed lookup). **[2026-10-14 Team B audit: the lookup rule is a sequential first-exceed search with linear interpolation; see the note in §10.11.6.]** **The table's exact location is now pinned (CONFIRMED, 2026-10-08): 16 consecutive floats at `a1[wheel]+0x8` through `+0x44`** (`a1` = the per-wheel array at `(vehicleInstance+0x1c)+0xa4`, stride `0x64`, the same array already holding `wheelExtra` at `+0x54`) — it is not a separate tuning asset, it lives inside the same per-wheel Havok-side tuning record as the other already-named fields. Two companion scalars at `a1[wheel]+0x48`/`+0x4C` are read by the same walk (a pre-loop boundary value and a per-entry multiplier). The real sampled curve values, and the constructor that populates `a1` from vehicle data, remain OPEN — a literal-displacement scan (the technique that found §10.2's engine constructor) doesn't generalize here since `a1`'s own small generic offsets are too common across the binary to narrow a scan; the real next step is finding `*(vehicleInstance+0x1c)`'s own constructor directly. (6) a final application loop writes the now friction-circle-corrected tangential impulse into the SAME chassis force (`+0xe0`)/torque (`+0xf0`) accumulators §6.5 already names — confirming those fields carry both an earlier non-friction contribution (loop 2, contact-point relative velocity) and this friction contribution.
 
-**The contact-point relative-velocity ("slip") computation itself, CONFIRMED and address-pinned (2026-10-08): `0x00c64252`–`0x00c64306`, inside this function's own "Loop 2."** It reads the per-wheel contact record (`*(a2+0x48)`, gated on the same "live contact" flag already named), differences the chassis's own force-accumulator-shaped velocity field (`a2+0xe0..0xe8`) against the struck/ground object's own cached linear-velocity field (read off a fixed, non-wheel-looped pointer at `a2+0x30`), and projects the result onto the wheel's two tangent-basis rows to get the longitudinal/lateral slip-velocity components — written to the per-wheel record's own `+0x20`/`+0x24`/`+0x28`/`+0x2c` fields, then clamped against a *second*, previously-undocumented per-wheel limit (`a2+0x38`/`+0x3c`/`+0x40`, read just ahead of the per-wheel record array). **This settles the question §10.5 left hedged** ("believed to live in the D-U1 cluster") — it does, specifically here, not in wheel-collide's `0x00aea160` (that function computes a structurally similar but genuinely separate relative velocity that feeds suspension's compression-velocity field instead, §10.4/§10.5). This raw relative velocity is what feeds the effective-mass and friction-ellipse stages above — i.e. **the saturation test's own `A`/`B`/`C`/`D` are a downstream, already-rescaled version of this slip, not the raw slip itself.** The exact field-for-field chain from Loop 2's four outputs to the `A`/`B`/`C`/`D` stack slots is confirmed to exist (both only ever written inside the aggregate effective-mass/friction-ellipse block) but not pinned byte-exact — narrowed to one ~250-instruction span, `0x00c64605`–`0x00c646c1`, OPEN for a future pass.
+**The contact-point relative-velocity ("slip") computation itself, CONFIRMED and address-pinned (2026-10-08): `0x00c64252`–`0x00c64306`, inside this function's own "Loop 2."** It reads the per-wheel contact record (`*(a2+0x48)`, gated on the same "live contact" flag already named), differences the chassis linear velocity (`a2+0xe0..0xe8`) against the ground body's linear velocity (via the fixed pointer at `a2+0x30`) ~~and projects the result onto the wheel's two tangent-basis rows~~ **[2026-10-20 per Team D emulation: FINAL] (Team D, code read `0x00c64252..0x00c64306`): the slip is a FULL Jacobian-row relative velocity, not only a linear difference projected on two rows.** Let ebx = the axle/solver context (`a2`), G = [ebx+0x30] (ground body velocity record), edi = the per-wheel friction row block. dv = chassis linear vel [ebx+0xE0] - ground linear vel [G+0x10]; wA = chassis angular vel [ebx+0xF0]; wB = ground angular vel [G+0x20]. slip1 = dot(row1.lin [edi-0x40], dv) + dot(row1.angA [edi-0x30], wA) + dot(row1.angB [edi-0x20], wB), in SSE single precision: lane sum (angA*wA + angB*wB) + lin*dv, then the horizontal sum (x+y)+z; stored at [edi+0x20]. slip2 = the same with row2 (lin [edi-0x10], angA [edi], angB [edi+0x10]) plus 0.25 x [ecx-4] (a per-wheel scalar; 0.25 is the double at `0x012A2EB8`), summed in x87 and stored as f32 at [edi+0x28]. The clamp that follows: |[edi+0x2C]| x [arg1] (the step context's first float), then the limits at [esi]/[esi-0x10]/[esi-0xC], a sqrt (`0x00EA3F60`) of slip2^2 + x^2, and so on (the full solver was not emulated; parked). **Port consequence: both bodies' angular velocities enter the slip through the Jacobian angular rows, so a wheel on a spinning chassis has slip even with zero linear relative velocity.** The results are written to the per-wheel record's own `+0x20`/`+0x24`/`+0x28`/`+0x2c` fields — written to the per-wheel record's own `+0x20`/`+0x24`/`+0x28`/`+0x2c` fields, then clamped against a *second*, previously-undocumented per-wheel limit (`a2+0x38`/`+0x3c`/`+0x40`, read just ahead of the per-wheel record array). **This settles the question §10.5 left hedged** ("believed to live in the D-U1 cluster") — it does, specifically here, not in wheel-collide's `0x00aea160` (that function computes a structurally similar but genuinely separate relative velocity that feeds suspension's compression-velocity field instead, §10.4/§10.5). This raw relative velocity is what feeds the effective-mass and friction-ellipse stages above — i.e. **the saturation test's own `A`/`B`/`C`/`D` are a downstream, already-rescaled version of this slip, not the raw slip itself.** The exact field-for-field chain from Loop 2's four outputs to the `A`/`B`/`C`/`D` stack slots is confirmed to exist (both only ever written inside the aggregate effective-mass/friction-ellipse block) but not pinned byte-exact — narrowed to one ~250-instruction span, `0x00c64605`–`0x00c646c1`, OPEN for a future pass.
 
 **Corrects the existing "decay-toward-limit terms and a final friction-impulse clamp" framing (D-U0 §6.4 items 10/13's own language, used loosely to describe what D-U1 was *believed* to do before it was opened):** this is not one clamp, it's a 3-stage combined-slip friction-ellipse pipeline (effective-mass → friction-circle saturation with an explicit 2×2 axis-coupling inverse → impulse application) — closer to a proper tire-friction-ellipse solver than a single `min(limit, x)`.
 
@@ -2599,8 +2603,9 @@ per call, time tolerance 1e-6): maximum angular speed `V` = turn-in speed and ac
 (centring), the return pair is used. On a direction reversal it passes a seed of `V_ret²/(2 × damp_ret)`
 (§10.1). Velocity state is instance `+0xd8`, applied angle `+0xdc`; instance `+0x164` bit 1 bypasses the
 limiter. A full-lock step from rest takes `2√(θ/A)` if `θ ≤ V²/A`, otherwise `2V/A + (θ − V²/A)/V`. There is
-no Ackermann split (§10.1). PARTIAL: the reversal seed's exact role inside `0x00dae970` and the speed-vector
-projection (§10.1) were not re-derived.
+no Ackermann split (§10.1). ~~PARTIAL: the reversal seed's exact role inside `0x00dae970`~~ The seed's role is
+now FINAL (§10.11.11 item 9) [2026-10-19 corrected per Team D emulation D-20: FINAL]; the speed-vector
+projection (§10.1) was not re-derived (still PARTIAL).
 
 #### 10.11.8 Brakes, aerodynamics, velocity damper, extra gravity — FINAL
 
@@ -2728,7 +2733,7 @@ These assume the chassis is unrotated at data init. Under yaw the roll/pitch ter
 6. ~~The extra-gravity enable predicate `0x00ad31a0` and the `+0x2d` speed term.~~ **[2026-10-14 Team B audit: both RESOLVED, see the notes in §10.11.8.]**
 7. Rigid-body info `+0xa4` (0.1) name.
 8. The `+0x9c` object.
-9. The reversal-seed role in `0x00dae970`.
+9. ~~The reversal-seed role in `0x00dae970`.~~ **CLOSED — FINAL [2026-10-19 corrected per Team D emulation D-20: FINAL]** (15 sequences reproduced to 0.000005; 3,999/4,000 random single calls to 0.0001). Seed choice: if target `T == 0` use the return pair `(Vr, dr)` and seed 0; else use the turn-in pair `(V, d)` and seed `Vr²/(2·dr)` when `(T − p)·v < 0` (still turning away from the new target), else 0. Limiter (`A = V²/(2·d)` of the chosen pair, tol 1e-6, up to 8 segments while time remains): (1) `e = T − p`; if `|e| <= tol`: `p = T`, `v = 0`, done; `s = sign(e)` (+1 when `e >= 0`). (2) **Moving away** (`v·e < −tol`): **`a = s·seed` if seed > 0, else `a = s·A`**, for time `−v/a` — this is the only place the seed acts. (3) Braking zone (`|e| <= d + tol`): `vt = s·sqrt(v²/2 + A·|e|)`; on the curve (`|vt − v| <= tol`): `v = vt`, `a = −s·A` for time `2e/vt`; slower: `a = s·A` until reaching the curve; faster: `a = −v²/(2e)`. (4) Outside the zone: `vt = s·V`, `z = e − s·d`; at cruise: `v = vt`, `a = 0` until the zone; else `a = s·A` (or `−s·A` when `|v| > V`) until cruise speed or the zone, whichever first. (5) Each segment: `p += v·t + a·t²/2`, `v += a·t`. Test vector (V 2, d 0.35, Vr 3, dr 0.3, 30 steps/s; target +0.6 for 10 steps then −0.6): peak +0.424 at step 13, zero crossing at step 25, −0.6 at step 39. The helicopter collective (§10.13.2) uses the same limiter.
 10. ~~Speed-limiter mechanism behind `Maximum_Speed`.~~ **[2026-10-14 RESOLVED: a per-frame hard clamp of the chassis velocity to cap + bonus in `0x00a86620`, applied to all vehicles; see §10.11.10.]**
 11. Live-capture confirmation of everything in §10.11.9–10.
 
@@ -2875,6 +2880,725 @@ role of the key-`0x14` zeroing; whether `forceOut` is consumed only by the tyre 
 plane and clamped to `[0, L]`; `F = max(0, (L − len)·Strength·Mass − c·Mass·vel)` with `c` chosen by the sign of
 `vel` (negative → `Wheel_Damp_Comp`); `F = min(F, Wheel_Spring_Max_Force)` after the grace time; impulse
 `normal × F × h` at the contact point.
+
+### 10.13 Player-flown aircraft and watercraft: the per-step laws (2026-10-18)
+
+Method: read-only capstone listings of `SaintsRowTheThird.exe` plus the shipped `_veh.xtbl` rows in
+`tools/scratchpad/vehphys_xtbl_out/` and `tweak_table.xtbl`. No game run. Helpers: `tools/scratchpad/flt_tool.py`
+(disassembly, xrefs, callers, constants) and `flt_index.py` (displacement index). Labels as in §10.11. Units: a field
+marked (r) in `spec-vehicle-data.md` §7.5 is radians after load, (v) is m/s after load (mph × 0.44704); all others
+are used as authored. "Block" = the class block of `spec-vehicle-data.md` §7.5 (helicopter block = entry `+0x30`, or
+entry `+0x1E4` for a VTOL; airplane block = entry `+0x30`; watercraft block = entry `+0x30`). Block-relative offsets
+below are entry offset − `0x30`.
+
+#### 10.13.0 What was already on file (not re-derived)
+
+- `spec-vehicle-data.md` §7.5/§7.6: the six classes, the block layouts, the Surface record, `Is_Attack_Aircraft`,
+  `Drop_off_copilot`. FINAL there. This pass adds the watercraft child names (§10.13.5) and the helicopter hole
+  (entry `+0xCC`–`+0xD7` = rotor thrust axis, §10.13.2).
+- §10.11.0 here: the factory `0x00abde60`; §10.11.8: the extra-gravity action is off for classes 3/4; §10.11.10: the
+  top-speed clamp `0x00a86620` runs for every class (only the nitrous blend skips classes 3/4/5).
+- `spec-ai-runtime.md` §22.8: AI helicopter fly-to/follow (steer helper `0x00b38f10`). AI only.
+- `spec-player-runtime.md` §4.7 (helicopter camera pitch), §16 (driving input chain), §5.6.5 (character fall law).
+- `spec-lua-api-behaviour.md` §13.23 `helicopter_set_max_bank_angle` (AI pilot object `+0x15c`), skydive natives.
+- Nothing described the flight forces, the inputs of aircraft, the boat controller or buoyancy. All of it is new.
+
+#### 10.13.1 Instance classes, body interface and step order — FINAL
+
+`0x00abde60` builds, by class `Vehicle_Type` (`0x00ad2f80`): Automobile 0 and Watercraft 5 → ground instance
+`0x00ae7e40` (vtable `0x011853f4`, `0x580` bytes); Motorcycle 1 → `0x00ab89f0`; Airplane 2, Helicopter 3, Vtol 4 →
+**one flight instance** `0x00adf3b0(…, mode)` (vtable `0x0118522c`, `0xA40` bytes) with **mode `+0x588`: 0 airplane,
+1 helicopter, 2 VTOL**. The flight vtable overrides the ground one at `+0x00`, `+0x0c` (the Havok action step,
+`0x00ae0b10`), `+0x20` (`0x00adabf0`) and `+0x50` (`0x00adab40`). Constructor state: `+0x9b0` = 1 and `+0x9bc` = 1
+(VTOL starts in hover), `+0xa04`…`+0xa10` = 4.0 (airplane) or 3.0 (heli/VTOL), `+0x580` = 0.
+
+A watercraft additionally gets a **watercraft controller**, an `hkpUnaryAction` (`0x00aee490`, vtable `0x011855ac`,
+`0xD0` bytes, step `0x00aeeb30`) stored at physics object `+0x190` = **vehicle `+0x818`** and filled from data at
+`0x00abac84`–`0x00abad9b` (§10.13.5). Its `+0x1c` is the vehicle, `+0x20` the chassis body.
+
+Body interface used by every law below (Havok rigid body, offsets read off the uses): rotation columns `+0xf0` right,
+`+0x100` up, `+0x110` forward; `+0x120` position (`+0x124` = height y); `+0x1b0` linear and `+0x1c0` angular velocity;
+mass = 1 / (motion `+0xc0`).w (`0x00c14790`); linear/angular damping = the upper 16 bits of a float written to body
+`+0x194`/`+0x196`. Motion vtable (checked on `0x01185524`): `+0x40` set linear velocity, `+0x44` set angular velocity,
+`+0x4c` linear impulse, `+0x58` force at a point (dt, F, P), `+0x5c` force at the centre of mass (dt, F), `+0x60`
+torque (dt, τ). World gravity = (0, −9.8, 0).
+
+Flight step `0x00ae0b10` (runs when instance `+0x58c` is set), in order:
+1. AI hold: when AI-driven (`+0x580`, HIGH for the name) and a hold predicate holds (heli/VTOL `0x00b34920` on the AI
+   pilot record, plane `vehicle+0x320` ≠ 0), run `0x00adfc20`/`0x00adf530` and skip steps 6–9. Not a player path.
+2. Airplane mode only: ground step `0x00ad97c0` (the wheeled step `0x00ae9b40` of §10, so a plane taxis on wheels).
+3. Helicopter model active (mode 1, or mode 2 with `+0x9b0` = 1): settle timer `0x00add700` (§10.13.2 step 10).
+4. Body damping `0x00ada960` (§10.13.2 step 9, §10.13.3 step 8).
+5. VTOL only: mode switch `0x00ad9730`, jet kick `0x00adddd0`, camera blend `0x00addf40` (§10.13.4).
+6. `0x00adf2e0`: heli model → lift and cyclic `0x00adce60`, tail rotor `0x00add320`; plane model → wheel-contact
+   summary `0x00ada850`, engine `0x00ade700`.
+7. `0x00adeff0`: control surfaces, then (plane model, pilot assist on) `0x00adb830`.
+8. `0x00ae0a50`, heli model only: extra speed `0x00add830`, linear drag `0x00addab0`, auto-level `0x00addb50`, spin
+   damping `0x00ad9500` (these four only while the settle timer has under 500 ms left), then rotor wash `0x00ae05d0`.
+9. Altitude ceiling `0x00ad95e0` (all three modes).
+
+Altitude ceiling `0x00ad95e0` — FINAL. Tweaks `Max_vehicle_altitude` (`0x02845ad4`, shipped 1333 m) and
+`Max_vehicle_altitude_ramp_time_ms` (`0x02845ad0`, shipped 6000). Below the ceiling the accumulator `+0x584` = 0. At or
+above it: `t += dt`; if `vy > 0`: `k = min(1, 1000·t / ramp)`; `vy ← vy·(1 − k)`; then `v += g·k·dt`. Ground
+vehicles never run it.
+
+#### 10.13.2 Helicopter (class 3, and the VTOL hover mode) — FINAL except where marked
+
+**Player inputs** (in-vehicle dispatcher `0x005b5c50` → reader `0x00a91800`, class switch at `0x00a91da0`). Action
+ids are the CBA/CAA tables of `spec-player-runtime.md` §1 (pairs at `0x01121f00`…).
+
+| Channel | Source | Setter → field |
+|---|---|---|
+| collective c ∈ [−1, 1] | analog `CBA_VDC_HELI_UP` (0x36) → `0x00a90b50` (+), `CBA_VDC_HELI_DOWN` (0x35) → `0x00a90aa0` (−); throttle path `0x005b5110` (both held: the later write wins, HIGH) | `0x00ad9910` → `+0x944` |
+| cyclic magnitude m, angle ψ | pad: X = −`CAA_WALK_TURN_LEFT_RIGHT`, Y = −`CAA_WALK_FORWARD_BACKWARD`; keyboard: −`CAA_HELI_DRIVE_LEFT_RIGHT` (0x11), −`CAA_HELI_DRIVE_FORWARD_BACKWARD` (0x12); then the vehicle drunk modifier `0x00975c00` (reader `0x00a91440`) | `0x00ad9950`: `+0x948` = clamp(√(X²+Y²), 0, 1); `+0x94c` = atan-quadrant angle of (X, Y) in [0, 2π] (stick forward = 3π/2, right = π) |
+| yaw y | `CBA_VDC_HELI_TURN_LEFT` (0x33) → −1, `_RIGHT` (0x34) → +1 (keyboard: with `CBA_VDC_HELI_DRIVE_TURN_SELECT` 0x37 held, axis 0x11 acts as the turn keys) (`0x00a90990`) | `0x00ad9a00`: `+0x950` = clamp(−y, −1, 1) |
+| camera-relative flying | byte `0x011807dc` (1 in the image, no writer found): d = wrap(heading(vehicle) − heading(camera right row `0x013c8790`)) to (−π, π]; ψ ← wrap(ψ + d) to [0, 2π); if m ≥ 0.1 and \|d\| ≥ 0.1 and no turn key: auto-yaw `+0x950` = clamp(d/(π/4), −1, 1) and the key yaw is skipped | `0x00a91440` |
+
+Correction to `spec-player-runtime.md` §16: `0x00a91440` is the **helicopter cyclic reader** (class 3, and class 4 in
+hover), not a motorcycle reader; motorcycles take the car branch `0x00a91bcc`.
+
+[2026-10-19 Team B Q (camera-relative heli byte): FINAL — **`0x011807dc` is live and always 1 in retail; nothing can change it.** It is an initialised `.data` byte with value 1. A scan of every section of the image for the address finds exactly four references, all reads (`cmp byte [0x011807dc], 0`): `0x00a91614` (the cyclic reader above: camera-relative ψ and auto-yaw), `0x00a90a60` (the heli yaw-key reader: when set and the camera-relative condition holds, the key yaw `0x00ad9a00` is skipped), and two follow-camera sites `0x0057098a` and `0x00571dc8` (they test it together with the heli turn actions 0x33/0x34/0x37; not traced further). There is no write in `.text` and no pointer to the byte anywhere in the image, so there is no options entry, tweak-table registration, console variable, save field or script native for it. Port rule: camera-relative heli flying is a constant ON (the table row above, with its m ≥ 0.1, \|d\| ≥ 0.1 and no-turn-key conditions).]
+
+**Per-step law** (block B = helicopter block; mass M; up U = body `+0x100`; settled S = timer `+0x978` has more than
+500 ms left):
+1. **Vertical target** `v_t = c · Elevation_Speed − Tilt_Lift_Loss · sign(U.y) · (1 − |U.y|)`.
+2. **Collective acceleration**: the minimum-time limiter `0x00dae970` (§10.11.7) is run with position = current world
+   vy (body `+0x1b4`), velocity state `+0x970`, target `v_t`, maximum rate `Elevation_Accel`, damp distance
+   `Elevation_Damp` (so the deceleration is `Elevation_Accel² / (2·Elevation_Damp)`); `a_lim` = the new `+0x970`.
+3. **Gravity compensation**: `a = a_lim + 9.8` when (not S or c > 0) and the rotor is healthy (`0x00af0c20`: VTOL
+   always, heli unless vehicle `+0xf8` bit 0) and the vehicle has a driver (`0x00ab50c0`) or is remote-controlled
+   (`0x00a77a10`); otherwise `a = a_lim + 4.9`. Stored in `+0x974`. When `0x00adcbf0` holds, no rotor force is applied
+   this step (role OPEN).
+4. **Rotor forces** (`0x00adce60`): twelve ring points `P_i` (block `+0x0c` + 12·i, built by the reader `0x00ac6b20` as
+   `Rotor_Center + tilt(R·cos φ_i, 0, R·sin φ_i)`, φ_i = 2π·i/12, φ = 0 → +x, φ = π/2 → +z) and the thrust axis
+   **D = block `+0x9c`** = (0, cos `Rotor_Tilt`, sin `Rotor_Tilt`) (the entry `+0xCC`–`+0xD7` "hole"), both taken to
+   world. For each point: `Δ_i` = angular distance (≤ π) between ψ and φ_i; `w_i = 1 − 2Δ_i/π`; `e` = |π/2 − ψ| (or
+   |3π/2 − ψ| when ψ > π); `g = cos(e)⁴` if e ≤ 0.785385 else 0 (the constant is a hair under π/4, so an exact
+   diagonal gets g = 0); `k_i = Steering_Accel · m · w_i · (1 + (Pitch_Bias − 1)·g)`, forced to 0 while S;
+   **F_i = M · (a/12 + k_i) · D** applied at `P_i` (`+0x58`). Net lift = M·a along D; Σw_i = 0, so the cyclic is a pure
+   torque; the ring point opposite the stick lifts (stick forward pushes the rear up, nose down).
+5. **Tail rotor** (`0x00add320`, not while S): `s = +0x950 · Tail_Accel`, or `s = Tail_Accel` when the rotor test of
+   step 3 fails; force `M · s · (body right axis)` at world `Tail_Rotor_Center`.
+6. **Extra speed** (`0x00add830`, not while S): `h` = horizontal part of U (= (W×U)×W, W = world up), its length
+   capped at 0.70711 (45°); `F = M · E · h · f` at the centre of mass, where E = `Extra_Speed_Accel` (AI:
+   `AI_Extra_Speed_Accel`, or `AI_Chase_Extra_Speed_Accel` in AI chase modes 1/3) and `f = 1 − remaining(+0x978)/500`
+   while that timer runs, else 1.
+7. **Linear drag** (`0x00addab0`, not while S): `v ← v · max(0, 1 − Drag_Coefficient · dt)` (entry `+0x5F0`).
+8. **Auto-level** (`0x00addb50`, not while S): `A = Autolevel_Accel` (AI: `AI_Autolevel_Accel`), ×5.0 while timer
+   `+0x9a0` runs (writer not traced); axis = normalise(U × W) (the angular velocity direction instead when U.y <
+   −0.95); θ = acos(U.y) in [0, π]; **ω += axis · √(2θ/π) · A · dt** (the alternative `|sin 2θ|` branch is dead: its
+   selector byte `0x0130e31c` is 1 and never written).
+9. **Damping** (`0x00ada960`): body linear/angular damping = (1.0, 5.0) while S, else (0.4, 0.05). Spin damping
+   (`0x00ad9500`, not while S): `ω ← ω · max(0, 1 − dt·d)` with d = `Collision_Spin_Damping` when \|ω\| >
+   `Collision_Spin_Threshold`, else `Normal_Spin_Damping` (entry `+0x848`…`+0x850`).
+10. **Settle timer** (`0x00add700`): re-armed to 800 ms every step while the heli rests (pilot-record landing flags,
+    or `0x00ad3b40` contact and `0x00add4a0`: \|v\| < 3 m/s with c < 0.4, or a looser bound with c < −0.4); if U.y <
+    0.766 (tilt > 40°) and ≥ 500 ms remain, cut to 499 ms (HIGH for the reading "resting on the ground").
+11. Top speed: §10.11.10 clamp to `Maximum_Speed` (FINAL there). Altitude ceiling: §10.13.1.
+
+**Rotor wash** (`0x00ae05d0`): while `+0x974` > 0, each body overlapping the rotor phantom `+0x97c` (not the heli
+itself, not keyframed) is pushed along the rotor axis `+0x990` from `+0x980`, scaled by the heli mass, `+0x974` and
+the distance; humans through `0x00755640`, vehicles through `0x005252c0`. HIGH (gain constants `0x014a1510`/`14` not
+read).
+
+Test vectors (`heli_standard_02`: M 1360, `Elevation_Speed` 25 mph = 11.176 m/s, `Elevation_Accel` 9,
+`Elevation_Damp` 1.25, `Autolevel_Accel` 155° = 2.7053, `Steering_Accel` 0.05, `Pitch_Bias` 14, `Tail_Accel` 4, tail
+(0, −0.12, −7), `Rotor_Radius` 4, `Extra_Speed_Accel` 45, `Tilt_Lift_Loss` 0, `Drag_Coefficient` 0.2, `Maximum_Speed`
+70 mph):
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| H1 | Level, c = 0, vy = 0, piloted | `a_lim` = 0, `a` = 9.8: lift cancels gravity, altitude held | FINAL |
+| H2 | Level hover, c = 1 | `v_t` = 11.176; `a_lim` rises at ≤ 81/2.5 = 32.4 m/s³ to ≤ 9 m/s²; ≈ 1.5 s to reach 11.18 m/s | HIGH (limiter internals §10.11.7) |
+| H3 | Nose down 20°, c = 0 | horizontal accel = 45·sin 20° + 9.8·sin 20° = 15.39 + 3.35 = 18.74 m/s²; vertical shortfall 9.8·(1 − cos 20°) = 0.59 m/s² is taken up by the limiter | FINAL |
+| H4 | Nose down 60° | extra speed uses the 45° cap: 45 × 0.70711 = 31.82 m/s² | FINAL |
+| H5 | Tilt 20°, ω = 0, not settled | Δω per 1/30 s = √(0.2222) × 2.7053 / 30 = 0.0425 rad/s toward level; at 90°: 0.0902 | FINAL |
+| H6 | Cyclic full forward (ψ = 3π/2) | g = 1, k_max = 0.05 × 14 = 0.7; pitch torque = M·R·k_max·Σw_i·cos Δ_i = 1360 × 4 × 0.7 × 4.976 = 18949 N·m nose down | FINAL |
+| H7 | Cyclic full right (ψ = π) | e = π/2 → g = 0, k_max = 0.05; roll torque 1353 N·m (14 × weaker than pitch); diagonal ψ = 5π/4: e = 0.78540 > 0.785385 → g = 0 | FINAL |
+| H8 | `CBA_VDC_HELI_TURN_LEFT` held | `+0x950` = +1; force 4M along body +x at z = −7: yaw torque −28·M (nose left in a y-up, z-forward, x-right frame) | FINAL (handedness HIGH) |
+| H9 | Camera 30° off the heli heading, stick deflected | auto-yaw = 0.5236 / 0.7854 = 0.667; at 60°: 1.0 | FINAL |
+| H10 | y = 1400, vy = +10, 3.0 s above 1333 m, dt 1/30 | k = 0.5: vy → 5 − 9.8 × 0.5 / 30 = 4.837; after 6 s any positive vy → −0.327 | FINAL |
+
+Residual: `0x00dae970`'s exact output on the first step (shared with §10.11.7), the role of `0x00adcbf0` and of timer
+`+0x9a0`, and the rotor-wash gains.
+
+#### 10.13.3 Airplane (class 2, and the VTOL jet mode) — FINAL except where marked
+
+**Player inputs**: raw X/Y = (walk turn axis A, −walk forward axis B) when `0x005bc5d0` reports the pad, else
+(`CAA_PLANE_ROLL_LEFT_RIGHT` 0x21, −`CAA_PLANE_PITCH_UP_DOWN` 0x20) (HIGH for which device each branch is). X′/Y′ =
+the circle-to-square remap in `0x00a91800` (polar (r, θ); θ folded into [−π/4, π/4]; r′ = r / cos θ′; X′ = r′cos θ,
+Y′ = r′sin θ). Roll: X′ → `0x00a90740` → steering setter `0x00ae5290` → instance
+`+0x130` (shaped as §16). Pitch: Y′ → `0x00ae5420` → `+0x13c`. Rudder: `CBA_VDC_PLANE_TURN_LEFT`/`_RIGHT`
+(0x4c/0x4d) → `0x00ae54a0` → `+0x140` = clamp(−turn). Throttle: analog `CBA_VDC_PLANE_ACCELERATE` (0x47) /
+`_BRAKE_REVERSE` (0x48) → `0x00ae8fd0` → `+0x154`. Barrel roll (HIGH): `CBA_VDC_PLANE_ROLL_TURN_SELECT` (0x4b)
+press of query mode 2 with a turn direction (last direction remembered in `0x0278caf4`) → `0x00ae5510` → bytes
+`+0x14c`/`+0x14d`. The
+input block is instance `+0x128`: roll `+0x08`, pitch `+0x14`, rudder `+0x18`, barrel-roll left/right `+0x24`/`+0x25`,
+inverted request `+0x26` (writer not traced).
+
+[2026-10-19 Team B Q R5 (+0x14c/+0x14d and blend-back): FINAL — **`+0x14c` (block `+0x24`) is the RIGHT barrel-roll request and `+0x14d` (block `+0x25`) the LEFT one.** This corrects "barrel-roll left/right `+0x24`/`+0x25`" above, which is reversed. Re-read by listing (`0x00a90780`, `0x00ae5510`, `0x00adabf0`, `0x00adb830`). **[2026-10-19 checked per Team D emulation 1c: FINAL — the orientation stands.]** Team D emulated the setter: arg +1.0/+0.5 sets `+0x14c`; arg −1.0/−0.5 **and 0.0** set `+0x14d` (d = clamp(−arg, −1, 1); d < 0 → `+0x14c`, else `+0x14d`). In `0x00a90780`, +1.0 comes from the flag built from `0x005bea10(0x21)` and −1.0 from `0x005beab0(0x21)`. Static check of the slot order: `0x005bea10` reads the axis record's **first** slots (`0x01411428`/`30`/`38`/`40` + 0x34·axis = runtime record `+0x10`/`+0x18`/`+0x20`/`+0x28`) and `0x005beab0` the second (`0x0141142c`/`34`/`3c`/`44` = `+0x14`/`+0x1c`/`+0x24`/`+0x2c`); the axis evaluator `0x005bb530` **adds** 1.0 for a held first-slot key (`0x005bb6a8`-`0x005bb6e4`) and **subtracts** 1.0 for a held second-slot key (`0x005bb6da`-`0x005bb71a`); the loader `0x005babd0` fills the slots in file order `Key_Pos, Key_Neg, Alt_Key_Pos, …` (`spec-player-runtime.md` §1.9, `spec-tables-ui-controls.md` §2.3). Shipped `control_binding_sets.xtbl`: `CAA_PLANE_ROLL_LEFT_RIGHT` has `Key_Pos` = D, `Key_Neg` = A. So the first slot is the **positive (right)** half: `+0x14c` = RIGHT (D held), `+0x14d` = LEFT (A held, or no direction with arg 0).
+- **Request.** The input reader `0x00a90780` (vehicle `+0xbd0` = 1) raises a LEFT request on `CBA_VDC_PLANE_TURN_LEFT` (0x4c) went-down-this-frame, or on `CBA_VDC_PLANE_ROLL_TURN_SELECT` (0x4b) went-down (key or mouse, out code 2) while the negative half of the roll axis 0x21 is held, or with neither half held and the remembered direction `0x0278caf4` = 1. RIGHT is the mirror (0x4d; positive half; remembered value 0). `0x0278caf4` is set to 1 by a held negative half or a left request and to 0 by a held positive half or a right request. Left calls `0x00ae5510(−1.0)`, right calls `0x00ae5510(+1.0)`.
+- **Setter `0x00ae5510`.** It returns at once while the lockout timer `+0x150` is armed and not expired, or while controller `+0x164` bit 0 is set. d = clamp(−arg, −1, 1). d < 0 (right) selects byte `+0x14c` and window timer `+0x144`; otherwise (left) byte `+0x14d` and timer `+0x148`. If less than 500 ms have elapsed on that window timer, the byte is set to 1; otherwise the window is restarted (`0x00d9e140(0)`). **So a roll needs two requests in the same direction within 500 ms (a double tap).** The controller reset `0x00adabf0` sets both window timers to −501 ms and clears both bytes.
+- **Start.** The flight step `0x00adb830` reads the bytes through the input block. When either is 1 and no roll is active, it sets roll-active (bit 0 of the roll state byte), arms the roll timer for trunc(π / `Barrel_Roll_Max_Angular_Speed` × 1000) ms, and stores bit 1 = (`+0x14c` = 1). Both bytes are cleared every step, so a request that arrives during a roll is dropped.
+- **Rate and blend-back.** While a roll is active, ω = `Barrel_Roll_Max_Angular_Speed`. After the roll timer expires, let e = \|φ_t − φ\| (step 3's bank target and bank). **If e < π/2, ω = Roll + (Barrel − Roll) · clamp((e − 0.34906) / 1.22171, 0, 1)**, where Roll = `Roll_Max_Angular_Speed`. This is linear, from the barrel rate at e = π/2 down to the normal rate at e = 20°. While e ≥ π/2 the barrel rate is kept. **When e < 0.34906 rad (20°) the roll ends** (bit 0 cleared). The 0.34906 is a fixed constant (`0x01117798`, `0x0112c0b4`), not `Roll_Damp_Angle`. ω is then multiplied by W·L and **negated when bit 1 is set (a right roll)**. It goes to the same apply as step 4, skipping the `0x00dae970` limiter call (HIGH for the skip). A positive ω about forward raises the +x wing, so a left roll has a positive rate (§10.15).
+- **Test** (`plane_standard01`: barrel 6.1087, roll 1.6581 rad/s, W = L = 1). Timed phase 514 ms. At e = 1.0 rad after it, ω = 1.6581 + 4.4506 × 0.53281 = 4.0295 rad/s. At e = 2.0 rad, ω = 6.1087. At e = 0.30 rad the roll ends. Two left presses 300 ms apart give a left roll (ω > 0). Two presses 600 ms apart give none. A right double tap gives ω < 0.]
+
+**Pilot assist** is the default: byte `0x0130e551` (1 in the image; set only by the options code, `pause_menu`
+category 0 option 2, `0x00aef8c0`). With it set, the per-surface aerodynamics `0x00adaf90` is skipped entirely and
+`0x00adb830` flies the plane. With it clear, the surface model runs instead (lift curve with a stall break at
+±0.314 rad and slope 4.775 per rad; not tabulated here, residual).
+
+**Per-step law** (block B = airplane block; PA = `Pilot_Assist_Params` at B `+0x18c`; fwd = body `+0x110`):
+1. **Engine** (`0x00ade700`): throttle t = `+0x154`; target `T = |t| · (t ≥ 0 ? Engine_Accel : −Engine_Reverse_Accel)`
+   (AI: 8.0, ramps 0.2 s). The applied acceleration `+0x8c0` moves toward T by at most
+   `Engine_Accel/Engine_Ramp_Up_Time · dt` when moving in the throttle's direction, else
+   `…/Engine_Ramp_Down_Time · dt`, clamped to [−`Engine_Reverse_Accel`, `Engine_Accel`]; on partial ground contact the
+   negative bound is scaled by clamp(u/13.4112, 0, 1) (u = forward speed). When reversing on the ground the result is
+   limited so that forward speed stays ≥ −`Reverse_Speed`. **Force M·a along fwd at every engine point** (`0x00ade0c0`);
+   the full force is applied at each listed engine, it is not split.
+2. **Lift fraction** `L = clamp(u / Lift_Min_Speed, 0, 1)²`; wing integrity `W` = mean of the left/right Wing surface
+   factors (§10.13.7); **lift: vy += W·L·9.8·dt**. Below `Lift_Min_Speed` the plane sinks: this is the stall.
+3. **Bank target** φ_t: π if inverted requested; else ±π/2 when \|rudder\| > 0.1 (knife edge, sign of rudder); else
+   −r·π/3 when \|r\| > 0.1, r = −clamp(roll + (W_R − W_L), −1, 1); else 0. Current bank φ = signed angle between body
+   right and the level right axis R = normalise(fwd.z, 0, −fwd.x).
+4. **Roll rate**: V = `Roll_Max_Angular_Speed` (×1.5 when \|φ_t − φ\| > 0.785 and the wings are equal), times W·L;
+   limiter `0x00dae970`(φ → φ_t, V, `Roll_Damp_Angle`); the angular velocity about fwd is replaced by the result
+   (scaled by W·L). Barrel roll: rate `Barrel_Roll_Max_Angular_Speed` for π / rate seconds, then blended back to the
+   normal rate once the error is under π/2, ends under 0.349 rad.
+5. **Yaw (turn) rate** about the level-up axis U′ = R × fwd: target `q · W·L · Horizontal_Max_Angular_Speed · r` with
+   q = clamp(|φ|/(π/2), 0, 1); approached at ≤ `Horizontal_Max_Angular_Accel` · W·L · dt (`…_Decel` when the target is
+   below 0.001).
+6. **Pitch rate** about R: target `(1 − 0.5·b) · W·L · Vertical_Max_Angular_Speed · p`, p = −clamp(pitch), b = the
+   bank triangle (0 level, 1 at 90°, 0 at 180°); approached at ≤ `Vertical_Max_Angular_Accel` · W·L · dt.
+7. **Nose follows velocity**: s = \|fwd × v̂\| (sine of the slip angle); **v += n · s · W·L · Turn_Linear_Accel · dt**
+   with n the unit vector perpendicular to v toward the nose. On the ground with all wheels down and the nose not
+   pointing more than 5° below the contact normal, a pitch-down correction of up to 60°/s (rate limit 100°/s²), scaled
+   by (1 − W²·L), levels the plane (HIGH).
+8. Body damping (0.01, 0.05) every step (`0x00ada960`). Top speed §10.11.10. Altitude ceiling §10.13.1.
+
+Test vectors (`plane_standard01`: M 1500, `Engine_Accel` 7.5, `Engine_Reverse_Accel` 4.5, ramps 2 s, `Reverse_Speed`
+10 mph = 4.470 m/s, `Lift_Min_Speed` 65 mph = 29.058 m/s, roll 95°/s = 1.6581, roll damp 20° = 0.3491, horizontal
+52°/s = 0.9076 and 100°/s² = 1.7453, vertical 32°/s = 0.5585 and 172°/s² = 3.0020, `Turn_Linear_Accel` 600, barrel
+350°/s = 6.1087):
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| P1 | u = 29.06 m/s, intact | L = 1: lift 9.8 m/s², level flight holds height | FINAL |
+| P2 | u = 14.53 m/s | L = 0.25: lift 2.45, net sink accel 7.35 m/s² | FINAL |
+| P3 | Full throttle from a = 0, airborne | a after 1 s = 3.75, after 2 s = 7.5 m/s²; force 11250 N at the one engine | FINAL |
+| P4 | Full roll stick, level | φ_t = π/3; max rate 1.6581 rad/s; braking at 1.6581²/(2 × 0.3491) = 3.94 rad/s² | FINAL |
+| P5 | Banked 60°, full roll stick held | yaw-rate target 0.667 × 0.9076 = 0.605 rad/s, reached at 1.745 rad/s² | FINAL |
+| P6 | Full pitch, level / at 90° bank | 0.5585 / 0.279 rad/s about R; rate limit 3.002 rad/s² | FINAL |
+| P7 | Slip 10° at u ≥ `Lift_Min_Speed` | lateral accel 600 × sin 10° = 104.2 m/s² toward the nose | FINAL |
+| P8 | Rudder held | φ_t = ±90° knife edge | FINAL |
+| P9 | Barrel roll | 6.1087 rad/s for π/6.1087 = 0.514 s, ends within 0.349 rad of φ_t | FINAL |
+| P10 | Reversing on the ground | forward speed floor −4.470 m/s | HIGH |
+
+Residual: the surface-model path (assist off), the writers of `+0x26` and of the AI hold, and the rule that snaps the
+engine to 0 when the throttle is released mid-ramp.
+
+[2026-10-19 Team B Q R5 (plane `Maximum_Speed` source): FINAL — **the plane's cap is the descriptor field `+0x878` = `Maximum_Speed`, the same field and the same per-frame 3-D clamp `0x00a86620` as cars (§10.11.10).** The reader `0x00ac8eb0` (re-read by listing) works like this:
+- For a vehicle row, it first copies the parent row's `+0x878`. For a group row, it first sets 44.704 m/s (`0x00ac1d20`).
+- If the element `Maximum_Speed` is present, the value becomes mph × 0.44704, capped at 44.704 m/s (100 mph).
+- `Maximum_Speed_With_Nitrous` (`+0x87c`) is read the same way and then raised to at least `+0x878`.
+
+For planes, the parent row is `Airplane` in `vehicle_groups.xtbl`: `Maximum_Speed` **80 mph = 35.763 m/s** (nitrous 90). `vehicle_defaults.xtbl` has no `Maximum_Speed`. Shipped airplane rows: `plane_standard01` 85 mph = **37.998 m/s**, and `plane_jet01` and `plane_fighter02` 100 mph = 44.704 m/s. (`plane_giant01`/`02` are helicopter class.)
+
+At run time:
+- The script override `vehicle_max_speed` (`+0x1d84` ≥ 0) replaces the cap.
+- Class 2 is not exempt from the nitrous blend (only 3/4/5 are). The blend only rises while the controller's `+0x10c` (nitrous active) is set, and no shipped plane path sets it (HIGH).
+- The bonus term is 0 for class 2, except for the forced 100.0 case of §10.11.10 step 3.
+
+**So the plane limit is `Maximum_Speed` in m/s, on the full 3-D speed.** Default when a plane row omits the element: 35.763 m/s from the Airplane group (44.704 m/s only if the group row also omitted it).]
+
+#### 10.13.4 VTOL (class 4) — FINAL except where marked
+
+Two complete models: hover = §10.13.2 with the `Helicopter_Mode` block (entry `+0x1E4`), jet = §10.13.3 with the
+`Airplane_Mode` block. Model in use: `+0x9b0` (1 hover, 0 jet); request `+0x9bc` (`0x00ad9900`). Test
+`0x00ad3700` = heli model active, `0x00ad3750` = plane model active; they also pick the throttle actions (hover:
+`HELI_UP`/`HELI_DOWN`; jet: `PLANE_ACCELERATE`/`PLANE_BRAKE_REVERSE`).
+
+Transition: vehicle `+0xf8` bit 0 is the "jet wanted" bit, toggled at `0x00af0338`…`0x00af03a8` (ignored while bit 1
+is set); the step consumes `CBA_VDC_VTOL_TRANSITION` (0x46) through `0x005bbdd0(0x46)` (binding of the press to the
+toggle HIGH). The vehicle state machine `0x00af0070` at `+0x5e8`: 0 hover (`+0x16c4` \|= 8) → when the
+bit is set: 1 → waits for the wing animation state `0x1dab` → requests jet (`0x00ad9900(0)`), sound → 2 jet → when the
+bit clears: requests hover (`0x00ad9900(1)`) → 3 → waits for animation state `0x1dac` → 0. In the flight step
+`0x00ad9730` (player only) applies a change of request: hover → jet sets `+0x9b0` = 0 and arms the **jet kick** timer
+`+0x9b4` = 1200 ms; jet → hover sets `+0x9b0` = 1 at once. Both re-base the 2000 ms camera blend timer `+0x9b8` so a
+reversal keeps its progress (elapsed e < 2000 → elapsed becomes 2000 − e).
+
+Jet kick `0x00adddd0`: while `+0x9b4` runs in jet mode, with u = forward speed < 300: `k = 50`, or
+`k = (300 − u)/10 · 50` when u > 290; **linear impulse M·k·dt along forward**. Camera `0x00addf40`: the
+`Camera_Overrides` block (entry `+0x410`) blended over 2000 ms for the local player (HIGH).
+
+| # | Setup (`sp_vtol01`) | Expected | Status |
+|---|---|---|---|
+| V1 | Hover, `HELI_UP` full | §10.13.2 with `Elevation_Speed` 40 mph = 17.88, `Elevation_Accel` 16 | FINAL |
+| V2 | Transition pressed in hover | state 0 → 1, model still hover until the wing animation ends | FINAL (anim length data) |
+| V3 | Jet model starts, u = 0 | +50 m/s² for 1.2 s: +60 m/s from the kick alone (plus `Engine_Accel` 10) | FINAL |
+| V4 | Kick with u = 295 | k = 25 m/s²; u ≥ 300: no kick | FINAL |
+| V5 | Jet, `Lift_Min_Speed` 75 mph = 33.53 | after V3, L = 1 | FINAL |
+| V6 | Back to hover pressed in jet | `+0x9b0` = 1 on the next step, no ramp | FINAL |
+| V7 | Reversal at camera-blend elapsed 800 ms | elapsed becomes 1200 ms | FINAL |
+| V8 | VTOL rotor test | `0x00af0c20` = 1 always: a VTOL never gets the tail-loss spin | FINAL |
+
+Residual: the wing-animation durations (animation data) and `0x00aef830`.
+
+#### 10.13.5 Watercraft (class 5) — FINAL except where marked
+
+**Watercraft block children** (reader `0x00aca3e0`, block-relative): `Engine_Thrust_Position` vec3 `+0x00`,
+`Engine_Thrust_Position_Steering_Offset` `+0x0c`, `Engine_Thrust_Pitch_Angle` `+0x10`, `Engine_Thrust_Ramp_Up_Rate`
+`+0x14`, `_Ramp_Down_Rate` `+0x18`, `Maximum_Forward_Acceleration` `+0x1c`, `Maximum_Reverse_Acceleration` `+0x20`,
+`Center_Of_Mass_Offset_For_Leaning` `+0x24`, `Audio_T_Derivative_Max` `+0x3c`, `Audio_T_Damp_Distance` `+0x40`,
+`Audio_T_Turning_Modifier` `+0x44`, `Steering_While_Coasting` `+0x48`, `Steering_Input_Rate` `+0x4c`,
+`Pitch_Input_Rate` `+0x50`, `Lean_Based_Steering` flag `+0x54` and its four fields `+0x58`…`+0x64` (as §7.5),
+`Spawn_Height_Offset`, `Drift_Parameters`. This names the offsets §7.5 left unlabelled.
+
+Controller fields: `+0x40` thrust point, `+0x50` steering offset, `+0x54` pitch angle, `+0x58`/`+0x5c` ramp rates,
+`+0x60` steer input, `+0x64` pitch input, `+0x68` throttle input, `+0x6c` stop-assist, `+0x70`/`+0x74` forward/reverse
+acceleration, `+0x78` boost scale (1.0), `+0x80` thrust state, `+0x84` `Max_Steering_Angle` (entry `+0x5BC`), `+0x88`
+coasting steer, `+0x8c` steer rate, `+0x90` smoothed steer, `+0x94` rudder angle, `+0x98` pitch rate, `+0x9c` smoothed
+pitch, `+0xa0` lean CoM offset, `+0xa4`…`+0xb0` LBS fields, `+0xb4` lean target, `+0xcc` flags (bit 1 boost, bit 2 prop
+in water this step, bit 4 LBS).
+
+**Player inputs**: steer = X′ (pad: walk turn axis; otherwise `CAA_DRIVE_STEER` 9) → `0x00aed340` → `+0x60`;
+pitch/lean = Y′ (pad: −walk forward axis; otherwise analog brake − accelerate) → `0x00aed390` → `+0x64`; throttle = accelerate − reverse (`CBA_VDC_ACCELERATE` 0x28 / `CBA_VDC_BRAKE_REVERSE` 0x29) → `0x00aed2f0` →
+`+0x68` = clamp(t, −1, 1), and `+0x6c` = 0 when t = 0.
+
+**Step `0x00aeeb30`**:
+1. Thrust state (`0x00aed440`): `+0x80` moves toward the throttle at `+0x58`/s rising, `+0x5c`/s falling (× `+0x78` with
+   boost), and resets to 0 when its sign disagrees with the input. With `+0x6c` > 0 the target is the throttle that
+   stops the boat in one step (−u/dt over the forward or reverse acceleration).
+2. **In water** (vehicle `+0xc8` bit 0, set by the in-water hook `0x00abb080`) → `0x00aee990`; **out of water** →
+   unless `0x00ad3b40`, air control `0x00ad9420` (entry `+0x58` `Air_Control` block; ω about forward and right moves
+   toward input × `Max_Roll_Speed`/`Max_Pitch_Speed` at ≤ the `_Accel` values; `Watercraft_Defaults` 180°/s, 360°/s²).
+3. Spin damping `0x00ad9500` as §10.13.2 step 9.
+
+In water (`0x00aee990`):
+- `+0x90` → `+0x60` at `Steering_Input_Rate`/s; rudder `+0x94` = `Max_Steering_Angle` · `+0x90`; `+0x9c` → `+0x64` at
+  `Pitch_Input_Rate`/s; with LBS, lean target `+0xb4` = clamp(`LBS_Max_Lean_Angle` · `+0x90`, ±1.55332).
+- Lean CoM (`0x00aeda10`): centre of mass x = base + `Center_Of_Mass_Offset_For_Leaning` · `+0x90` · clamp(\|v\|/7, 0, 1).
+- **Thrust** (`0x00aeded0`): world thrust point P (`0x00aedc80`, uses the rudder and steering offset) must be under
+  water (`0x00aed6e0`), else no thrust and bit 2 stays clear. Direction D from `0x00aedd30` (pitch angle and rudder).
+  `F = M · (t ≥ 0 ? Maximum_Forward_Acceleration : Maximum_Reverse_Acceleration) · +0x80 · D`. Without LBS: applied at P
+  (the rudder steers by thrust vectoring). **With LBS**: applied at the centre of mass, then the yaw rate is set
+  kinematically: v_h = horizontal speed, R = v_h² / (9.8 · tan(`+0xb4`)), R ← R · (1 + (`LBS_Turn_Radius_Modifier` −
+  1) · max(`+0x9c`, 0)), \|R\| ≥ `LBS_Min_Radius`, target ω_y = v_h / R (negated when moving backward); ω_y moves toward
+  it at ≤ `LBS_Correction_Acceleration` · dt. Skipped when the thrust state or the lean target is zero.
+- **Coasting steer** (`0x00aee310`): prop in water and throttle input exactly 0: angular acceleration about up =
+  `Steering_While_Coasting` · clamp(\|v\| / `Maximum_Speed`) · `+0x90` (sign flipped going backward), applied as a torque
+  through the world inertia.
+
+Buoyancy and drag are not in the controller; they are the shared water code of §10.13.6. Top speed: §10.11.10 (class
+5 adds controller `+0x7c` while flag bit 1 is set).
+
+| # | Setup (`boat_speed01`: M 8600, accel 20/7, ramps 1/s, steer rate 3, LBS 10 m / 57° / 1000°/s² / 0.5, coast 5, buoyancy 0.8, 65 mph) | Expected | Status |
+|---|---|---|---|
+| B1 | Throttle 0 → 1 | thrust state 1.0 after 1 s; full force 172000 N (20 m/s²) | FINAL |
+| B2 | Throttle +1 → −1 at state 0.6 | state resets to 0, then falls at 1/s | FINAL |
+| B3 | Prop point above the water (jump, beach) | no thrust; out of water: air control only | FINAL |
+| B4 | v_h = 20, steer settled at 1, no pitch input | R = 400/(9.8 × tan 0.9948) = 26.5 m; ω_y = 0.755 rad/s | FINAL (tan HIGH) |
+| B5 | v_h = 5, same | R = 1.66 → floor 10 m: ω_y = 0.5 rad/s | FINAL |
+| B6 | v_h = 20, full pitch input | R = 13.25 m: ω_y = 1.51 rad/s, approached at ≤ 17.45 rad/s² | FINAL |
+| B7 | Steer stick 0 → 1 | `+0x90` = 1 after 0.333 s | FINAL |
+| B8 | Coasting at 10 m/s, steer 1 | yaw accel = 5 × 10/29.06 = 1.72 rad/s² | FINAL |
+
+Residual: `0x00aedc80`/`0x00aedd30` (thrust point and direction geometry), `0x00aee580` (entry `+0x748`…`+0x750`), the
+writers of `+0x6c` and flag bit 1, and `Drift_Parameters`.
+
+[2026-10-19 Team B Q batch B: `0x00aee580` is closed (it re-applies the inertia tensor M·diag(Pitch, Yaw, Roll) from entry `+0x74C`/`+0x750`/`+0x748`). The full reader table with defaults is §10.13.9 Q5. `Drift_Parameters` is a Group-row reader, not a watercraft child.]
+
+#### 10.13.6 Water: buoyancy and drag (every body in water) — PARTIAL
+
+Pre-step `0x0079a380` (§4.3 step 3): `0x00796f60` and `0x00797fd0` maintain the list `0x02236840` of in-water records
+(fed by the in-water listeners, §2 rows 19–20); each record is stepped by `0x0079a150(dt)`:
+1. **Submerged samples** (`0x00799850`): the body's collision shapes are clipped against a **flat horizontal water
+   plane** (normal (0, 1, 0), height passed in by the caller); each submerged piece gives (centroid, volume)
+   (`0x00798800`). HIGH for "flat plane"; where the height comes from is OPEN.
+2. **Buoyancy** (`0x00796440`): V = Σ volumes, centre of buoyancy C = volume-weighted centroid; **F = (0, −1000 · V ·
+   g_y · k, 0)** at C (ρ = 1000.0, `0x012a2d90`; g_y = world gravity y = −9.8), k from `0x00796380`: vehicle →
+   `Buoyancy_Modifier` (entry `+0x86C`, `0x00ab89c0`); human → `0x00a056f0`; item class → `0x00780c50`; other 1.0.
+   FINAL.
+3. Vehicles additionally run the in-water hook `0x00abb080` (sets the watercraft "in water" bit; HIGH).
+4. **Drag** (`0x0078d8f0`): an implicit solve of linear and angular velocity, up to 4 iterations (`0x012fc420`),
+   tolerance 1e-4 (`0x012fc424`), then both velocities are set. The drag model and the use of
+   `Water_Linear_Drag_Modifier`/`Water_Angular_Drag_Modifier` were not read (OPEN).
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| W1 | `boat_speed01` at rest | submerged volume 8600 / (1000 × 0.8) = 10.75 m³ | FINAL |
+| W2 | `boat_wavecraft01` (800 kg, 1.0) | 0.80 m³ | FINAL |
+| W3 | `boat_speed04` (20000 kg, 0.7) | 28.57 m³ | FINAL |
+| W4 | Car (no `Water_Physics`) | k = group/default `Buoyancy_Modifier` | HIGH |
+| W5 | Body half submerged, C 0.5 m aft of the centre of mass | pitch torque = 0.5 × F | FINAL |
+| W6 | Body fully out | V = 0, no force | FINAL |
+
+Residual: water height source, the drag law and its modifiers, and the shape-clipping routine `0x00798800`.
+
+[2026-10-19 Team B Q batch B: answered in §10.13.9: Q1 water height (sea level 0.0 from the ocean-flagged `0x2247` volumes, local volume tops, wave term) and Q2 (the clip uses the body's own collision shape; drag law F = −175·A·\|c\|·u·v_p plus lift 75·A·u²·g(α)·t̂; there are no drag modifiers).]
+
+#### 10.13.7 Aircraft damage and crashes — HIGH
+
+- **Tail rotor loss** (helicopter): `0x00af0c90` scans the vehicle parts of type `0x19`; when at least two are counted
+  and the extreme one (by the `0x00a8b380` position compare) carries part flag `0x200000`, vehicle `+0xf8` bit 0 is
+  set and `0x00adae20(instance, 1)` runs. Effects (FINAL, from §10.13.2): yaw force pinned at full `Tail_Accel` (a
+  constant spin) and lift compensation 4.9 instead of 9.8.
+- **Wing damage** (plane): `0x00adeb80` sets each surface's factor = intact parts / all parts of that surface type
+  and side (part types `0x0b`…`0x10`, side by the part's x sign; flag `0x200000` = gone). W (§10.13.3 step 2) scales lift
+  and every rate; W_R − W_L adds roll.
+- Rotor wash on bodies below (§10.13.2). Altitude ceiling (§10.13.1).
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| D1 | `heli_standard_02` tail rotor shot off, no yaw input | constant yaw torque −28·M; net sink 4.9 m/s² at c = 0 | FINAL from §10.13.2 |
+| D2 | Plane loses the whole left wing | W = 0.5: lift and rates halved; roll command +1 | FINAL from §10.13.3 |
+| D3 | Plane loses half of each wing | W = 0.5, no roll bias | FINAL |
+| D4 | VTOL hit anywhere | never the tail-loss spin (V8) | FINAL |
+
+Residual: what a destroyed (dead) aircraft does, `0x00adae20`, and rotor-blade collision damage.
+
+[2026-10-20 Team B CHOSEN Q: HIGH — **crash damage and empty craft (AW-15).** (a) There is no separate aircraft crash model. Aircraft and boats are vehicles: they take the ordinary vehicle contact damage of §10a into the vehicle damage sink and die through the shared destruction trigger `0x00a9e1d0` (spec-vehicle-damage-runtime §2; class 2 gets the extra call `0x00aa5ab0` there). The part losses above (tail rotor, wing surfaces) come on top. "No crash damage" is a NOT-YET, not a game rule. HIGH: the contact handlers were not re-read for a class gate. (b) An empty craft is not set down. The step laws keep running: a helicopter with no driver and no remote control uses a = a_lim + 4.9 instead of + 9.8 in step 3 of §10.13.2, with collective 0, so it sinks under half-cancelled gravity and lands by physics (FINAL from §10.13.2); a plane loses its throttle, so the engine force stops and lift fades with speed (§10.13.3); a boat floats on its buoyancy (§10.13.9 Q2). Rotor spin follows the engine state (spec-vehicle-geometry §12.4). Port: keep stepping unoccupied craft; do not snap them to the ground.]
+
+#### 10.13.8 Team B wiring
+
+1. One flight instance with a mode; heli: twelve ring forces + tail force + extra-speed force + auto-level ω step +
+   drag, in the order of §10.13.1; plane: engine force, lift as vy += W·L·g·dt, the three rate controllers and the
+   velocity realignment of §10.13.3; VTOL: both, switched by `+0x9b0`, with the 1.2 s kick.
+2. Boats: car body + the controller of §10.13.5 + buoyancy F = ρ·V·g·k at the centre of buoyancy (§10.13.6). Until
+   the drag law is known, use per-step v ← v·(1 − c·dt) under water as a placeholder (GUESS).
+3. Clamp height with the ceiling of §10.13.1 and speed with §10.11.10.
+
+#### 10.13.9 Team B 7436a78 questions, batch B (2026-10-19, Team B Q batch B)
+
+Method: read-only capstone listings of `SaintsRowTheThird.exe`; shipped data read by streaming (mmap) the
+`sr3_city_*.vpp_pc` zones and `vehicles.vpp_pc`. Helpers `tools/scratchpad/wq_*.py` (`wq_water_vols.py` zone census,
+`wq_aircraft_mesh.py`/`wq_mesh_check.py` meshes, `wq_vectors.py` test-vector arithmetic). No game run.
+
+**Q1 Water height source — FINAL for the sea level and the selection rule, HIGH for the wave term.**
+
+Every body that touches water carries Havok property `0xd` = {f32 surface height, u8 flags}. Flag bits 0 and 1 =
+touched this step, bit 2 = ocean. The per-step pass `0x00797fd0` clears bits 1–2 on every listed body, then writes the
+height in two passes:
+1. **Ocean** (`0x00797d30`), only while the ocean object `0x0223a700` is active (`+0x1e0` bit 0). Every body overlapping
+   the ocean phantom gets height = the current sea level (y of ring entry `0x0223a728 + 12·[0x0223a7c4]`) and bit 2.
+2. **Local water volumes** (loop at `0x00798180`). For each water-volume phantom (list `0x02236834`) and each
+   overlapping body without bit 2: height = the top (max y) of that phantom's world AABB. When a body overlaps several
+   volumes the last one processed wins (HIGH).
+
+Sea level (`0x00796f60`, every step): walk the loaded zones' `0x2247` volumes (zone `+0xd4` count, `+0xd8` array, see
+`spec-zone-data-format.md` §13.3). Only volumes with entry `+0x44` bit 0 (the "ocean" bit) that overlap the ocean
+window count. Sea level = centre y + half y of the one with the largest x–z overlap. The ocean rectangle (object
+`+0xcc`…`+0xd8` = x0, z0, x1, z1) is the union of the counted volumes; `+0x1e0` bit 0 = at least one counted.
+**Shipped city data: 681 of 833 volumes carry the ocean bit; 676 of them have top = 0.000 exactly (centre y −10.65,
+half y 10.65); 5 (tiles 1310/1311/1411 and their `^stag` variants) have top 5.236. City sea level = 0.0 m.** The 152
+non-ocean volumes are pools, canals and a barge (sample tops 0.553, 1.431, 19.879, 40.911 and 61.373 m).
+
+Point query `0x00797500(x, y, z)`: returns 1 (not ocean) outside the ocean rectangle or when `0x0078dbe0`/`0x0078a780`
+exclude the point (meaning OPEN); else surface = sea level + wave(x, z); returns 2 when y ≥ surface, 3 when below.
+
+Wave term. Inside the ocean simulation grid (object `+0x94` data, `+0xbc`/`+0xc0` dimensions) a bilinear sample of a
+two-channel height grid is used (`0x00795110`, HIGH; grid contents OPEN). Outside the grid, the analytic ripple
+`0x00794eb0` applies, with P = 6·((t_ms mod 3 600 000)/1000) and t_ms = the engine millisecond clock:
+
+    h = 0.05·sin(0.1232·(x+P))·sin(0.3696·(z+P)) + 0.05·sin(0.1698·(x+P))·sin(0.2732·(z+P))      (|h| ≤ 0.1 m)
+
+The constants are `0x012fc428`…`0x012fc434` and 0.05 (`0x01115d6c`). x and z are in the ocean frame (world minus a
+runtime offset at `0x029cdb98`, HIGH). The hull clip (`0x00798800`) asks `0x00796d00` for the height at every hull
+vertex with this rule, so ocean hulls are cut by the wavy surface, not a flat plane (HIGH). Record `0x2249` is not read
+by any of this.
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| W7 | Ripple, t = 0, (x, z) = (0, 0) / (12.75, 4.25) / (100, −50) | h = 0 / 0.0880 / 0.0380 m | FINAL (formula), HIGH (frame offset) |
+| W8 | Ripple, t = 1000 ms, (0, 0) | P = 6: h = 0.0694 m | FINAL |
+| W9 | Tile f1024 ocean volume, centre (−800, −10.65, −2970), half (160, 10.65, 30) | sea level 0.0 | FINAL |
+| W10 | Body only in the f1014 barge volume (centre y 0.80, half y 0.63) | height 1.431 (plus any shape radius) | HIGH |
+
+**Q2 Buoyancy shape and drag law — FINAL except where marked.**
+
+- **Shape.** The body's own collision shape (rigid body `+0x10`, all child shapes), clipped at every vertex against the
+  water height above. There is no sample-point list in the vehicle data and no hull boxes. The clip gives submerged
+  faces (at most 4 vertices) and (volume, centroid) pieces. Each face is packed as 1–4 vertex vec4s: vertex count − 1
+  in the low 2 bits of vertex 0's w, the face weight A = vertex 0's w (area; whether it is the whole area or area / k is
+  OPEN), and the face normal n in the w of vertices 1–3. A body with property `0xc` gets one more clip pass against a
+  linked object's shape (role OPEN).
+- **Buoyancy** is unchanged (§10.13.6 step 2): F = 1000·V·9.8·k upward at the centre of buoyancy, k = `Buoyancy_Modifier`.
+- **Drag law** (`0x0078cba0`). For each face vertex P with face normal n and weight A:
+  - v_p = v + ω × r (r measured from the body origin; HIGH) and u = |v_p|. v̂ = v_p / u, or 0 when u² < 1.19e-7.
+  - c = clamp(n·v̂, −1, 1). α = |c + (π/2 − 1)·c⁷|, which approximates asin.
+  - g = α / 0.2617950 for α ≤ 0.2617950 (15°); otherwise g = max(0, (α − π/2) / (0.2617950 − π/2)). Negate g when c < 0.
+  - t̂ = normalise(c·v̂ − n).
+  - **F_drag = −175·A·|c|·u·v_p** (quadratic in speed, on the projected area). **F_lift = 75·A·u²·g·t̂.**
+  - Torque += r × F. Linear acceleration = ΣF / mass; angular acceleration = (world inverse inertia)·Στ.
+- **Integration** (`0x0078d8f0`) is implicit. It solves v = v0 + dt·a(v, ω) and ω = ω0 + dt·α(v, ω) by Newton
+  iteration, with the Jacobian from finite differences (`0x0078d110`; step size OPEN). It runs at most 4 iterations
+  (`0x012fc420`) and stops when |Δv| and |Δω| are below 1e-4 (`0x012fc424`). Both velocities are then set directly.
+- **Modifiers: none.** The exe has no string `Water_Linear_Drag_Modifier` or `Water_Angular_Drag_Modifier`. The
+  `Water_Physics` reader `0x00ac8e60` reads only `Buoyancy_Modifier` (entry `+0x86C`), and the shipped xtbls set only
+  that element. The 175 and 75 (`0x011546a0`, `0x0111974c`) and the 15° knee (`0x01154234`) are global literals; k
+  does not scale the drag.
+- This replaces the §10.13.8 item 2 placeholder (v ← v·(1 − c·dt), GUESS).
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| W11 | 1 m² face, n = (0, 1, 0), v_p = (0, −2, 0) | c = −1, α = π/2, g = 0: F = (0, +700, 0) N, no lift | FINAL |
+| W12 | 1 m² face, u = 10 m/s at 10° to the face plane (c = 0.17365) | α = 0.17365, g = 0.6633; \|F_drag\| = 3038.8 N against v_p; \|F_lift\| = 4974.8 N along t̂ | FINAL |
+| W13 | g at 5° / 15° / 30° / 45° / 60° / 90° | 0.333 / 0.989 / 0.815 / 0.621 / 0.379 / 0 | FINAL |
+
+**Q3 Inertia tensor and pitch/roll limiter — FINAL for the tensor and for "no limiter", HIGH for the derived tilts.**
+
+- **Tensor.** Every class uses the chassis body of §10.11.2 (`0x00abc160`, no class switch): I = Mass ×
+  diag(`Pitch_Unit_Inertia`, `Yaw_Unit_Inertia`, `Roll_Unit_Inertia`) on body (x, y, z). Watercraft apply the same
+  tensor again when the controller is built: `0x00abad75`–`0x00abad9b` calls `0x00aee580(Yaw +0x750, Pitch +0x74c,
+  Roll +0x748)`, which sets the motion inertia to M·diag(Pitch, Yaw, Roll). This closes the `0x00aee580` residual of
+  §10.13.5.
+- Team B's chosen tensors (heli radius of gyration 0.8 × rotor radius; box tensors for plane and boat) are not the
+  game's.
+- Values (kg·m², x/y/z):
+  - `heli_standard_02`: 6823.1 / 6300.3 / 1230.1
+  - `plane_standard01`: 21750 / 29250 / 9000
+  - `boat_speed01`: 87904.9 / 96151.4 / 12126.0
+  - `sp_vtol01`: 1500 × (17.22, 24.1941, 7.7178)
+- **Limiter: none.** No aircraft or boat law clamps a pitch or roll angle.
+  - Helicopter: the tilt is the balance between the cyclic torque (constant in the body frame) and the auto-level step
+    (§10.13.2 step 8). Steady tilt θ = (π/2)·(α_c / A)², where α_c = τ_cyclic / I. The 45° cap of step 6 limits only
+    the extra-speed force, and the 40° cut of step 10 limits only the settle timer.
+  - Plane (§10.13.3): the bank target is ±π/3 for full roll stick, ±π/2 knife edge with rudder and π inverted. The roll
+    rate is at most `Roll_Max_Angular_Speed`, with the limiter braking. Pitch is rate-only, with no angle limit.
+  - Boat: in water, the only clamp is the LBS lean target (±1.55332 rad). Airborne, the `Air_Control` rate limits apply.
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| I1 | `heli_standard_02`, full roll stick held | α_c = 1353 / 1230.1 = 1.0999 rad/s²; steady bank 0.2597 rad = 14.9° | HIGH (derived; body damping 0.05 ignored) |
+| I2 | Same, full forward stick | α_c = 18949 / 6823.1 = 2.7772 rad/s² > A = 2.7053: steady pitch 1.655 rad = 94.8° (past vertical, nothing stops it) | HIGH (derived) |
+
+**Q4 Wheeled plane ground step `0x00ad97c0` — FINAL.**
+
+Each step (airplane mode only, §10.13.1 step 2):
+1. Save the car accelerator input `+0x128` and set it to 0. Set `+0x160` = 1, which forces the clutch engagement to 0
+   (§10.3), so the engine never drives the wheels.
+2. When pilot assist is on (`0x00aef8b0` returns byte `0x0130e551`) and `+0x8a4` bit 0 is set, save and zero the
+   velocity damper's normal and collision spin damping (instance `+0x44` component `+0x8`/`+0xc`, §10.11.8).
+   `+0x8a4` comes from the previous step's contact summary `0x00ada850`:
+   - bit 0 = not resting (`0x00ad3b40` false) and not every wheel in contact;
+   - bit 1 = at least one wheel in contact;
+   - `+0x8b0` = the normalised sum of the contact normals.
+3. Run the whole wheeled step `0x00ae9b40`: suspension, tyres, wheel brakes, steering and Havok aero with the plane's
+   `Drag_Coefficient`/`Lift_Coefficient`.
+4. Restore `+0x128` and the damper values.
+
+What this means on the ground:
+- The wheels roll freely, with suspension and tyre friction. Propulsion comes only from the engine force (§10.13.3
+  step 1); lift (step 2) and the rate controllers act at the same time.
+- **Taxi steering:** the roll stick X′ goes through the steering setter `0x00ae5290` to `+0x130`, the same field the car
+  steering uses. It turns the `Wheel_Does_Steer` wheels up to `Max_Steering_Angle` (35° in `plane_standard01`).
+- **Brakes:** throttle −1 with u > 1 m/s gives brake = 1 (§10.3 drive command `0x00ae8fd0`). That applies the wheel
+  brakes (`Wheel_Braking_Torque` 300 N·m per wheel in `plane_standard01`). The engine also ramps toward
+  −`Engine_Reverse_Accel`; on partial contact its negative bound is scaled by clamp(u / 13.4112, 0, 1).
+- **Reverse:** at |u| ≤ 1 m/s with throttle < 0 the reverse flag is set, and engine reverse is held to forward speed ≥
+  −`Reverse_Speed`. The handbrake acts on the `Wheel_Does_Handbrake` wheels (the rear ones).
+- **Extra gravity:** the extra-gravity action applies, because class 2 is not exempt (§10.11.8). With all wheels down
+  the force is M·`Extra_Gravity`·n (`plane_standard01` 0; `plane_jet01`/`plane_fighter02` −20).
+- **Takeoff:** there is no rotation-speed rule. L = (u / `Lift_Min_Speed`)², so the plane leaves the ground once lift
+  plus the pitch-up rate beat gravity, which in practice means u ≥ `Lift_Min_Speed` with the nose raised. Step 7's
+  ground pitch-down correction holds the nose down while every wheel touches.
+- OPEN consequence: §10.11.8's airborne branch, (0, −10·M, 0) when no wheel touches and `Extra_Gravity` ≠ 0, would also
+  apply to the two jets in flight. Nothing found disables it for class 2; not traced further.
+
+| # | Setup (`plane_standard01`) | Expected | Status |
+|---|---|---|---|
+| G1 | Full throttle from rest, ignoring tyre and aero drag | a = 3.75·t for 2 s, then 7.5 m/s²; u = 29.06 m/s (`Lift_Min_Speed`) at t = 4.874 s after 57.5 m | HIGH (drag terms omitted) |
+| G2 | Full roll stick while taxiing | front wheel at 35°; wheelbase 2.25 m (`PD_wheel_FL` z 1.21, rear z −1.04): kinematic turn radius 3.21 m | HIGH |
+| G3 | Airborne with pilot assist on / all wheels down | velocity damper off (`Normal_Spin_Damping` 3 not applied) / on | FINAL |
+| G4 | Throttle −1 at 10 m/s on the runway | brake = 1 on every wheel (300 N·m each) plus the engine ramping toward −4.5 m/s² | FINAL |
+
+**Q5 Watercraft reader children (`0x00aca3e0`) — FINAL.** Offsets are block-relative (entry = block + 0x30). The
+block is cleared first (`0x00d9fc60`, HIGH).
+
+| Block offset | Element | Unit after load | Default when absent |
+|---|---|---|---|
+| `+0x00` | `Engine_Thrust_Position` (vec3) | m | 0 |
+| `+0x0C` | `Engine_Thrust_Position_Steering_Offset` | m | 0 |
+| `+0x10` | `Engine_Thrust_Pitch_Angle` | deg → rad | 0 |
+| `+0x14` / `+0x18` | `Engine_Thrust_Ramp_Up_Rate` / `_Ramp_Down_Rate` | 1/s | FLT_MAX (instant) |
+| `+0x1C` / `+0x20` | `Maximum_Forward_Acceleration` / `Maximum_Reverse_Acceleration` | m/s² | none: read by `0x00daccb0`, keeps the inherited (Group row) value (HIGH) |
+| `+0x24` | `Center_Of_Mass_Offset_For_Leaning` | m | 0 |
+| `+0x28` | `Air_Control` (reader `0x00ac68c0`, mode 0): u8 present bit 0; `+0x2C` `Max_Roll_Speed`, `+0x30` `Max_Roll_Accel`, `+0x34` `Max_Pitch_Speed`, `+0x38` `Max_Pitch_Accel` | deg → rad | pre-filled from the 20 bytes at `0x0282cf80` (the defaults row) |
+| `+0x3C` | `Audio_T_Derivative_Max` | as authored | 3.0 |
+| `+0x40` | `Audio_T_Damp_Distance` | as authored | 0.2 |
+| `+0x44` | `Audio_T_Turning_Modifier` | as authored | 1.0 |
+| `+0x48` | `Steering_While_Coasting` | rad/s² per unit | 0 |
+| `+0x4C` | `Steering_Input_Rate` | 1/s | FLT_MAX |
+| `+0x50` | `Pitch_Input_Rate` | 1/s | FLT_MAX |
+| `+0x54` | `Lean_Based_Steering` present (u8) | — | 0 |
+| `+0x58` | `LBS_Min_Radius` | m | 0 |
+| `+0x5C` | `LBS_Max_Lean_Angle` | deg → rad | 0 |
+| `+0x60` | `LBS_Correction_Acceleration` | deg → rad | FLT_MAX |
+| `+0x64` | `LBS_Turn_Radius_Modifier` | — | 1.0 |
+| `+0x68` | `Spawn_Height_Offset` | m | 0 |
+
+Correction to §10.13.5: `Drift_Parameters` is **not** a watercraft child. Its reader `0x00aca6f0` runs only for Group
+rows (branch at `0x00acc021`). It writes entry `+0x30`…`+0x3C` (`Drifting_Yaw_Torque_Factor` default −1,
+`Drifting_Forward_Force` 0, `Drifting_Forward_Force_Speed_Cap` 500, `Drifting_Boost_Strength` 0) and `+0x870` bit 6
+(cleared by `Drifting_Possible` = "no").
+
+| # | `boat_speed01` row | Expected block values | Status |
+|---|---|---|---|
+| X1 | thrust position (0, −0.5, −5), pitch −2°, ramps 1/1, accel 20/7 | `+0x00` (0, −0.5, −5); `+0x10` −0.034907; `+0x14`/`+0x18` 1/1; `+0x1C`/`+0x20` 20/7 | FINAL |
+| X2 | no `Pitch_Input_Rate`, no steering offset, no CoM lean | `+0x50` FLT_MAX; `+0x0C` 0; `+0x24` 0 | FINAL |
+| X3 | LBS 10 / 57° / 1000 / 0.5, coasting 5, steer rate 3, spawn 0.7, audio 3 / 1 | `+0x54` 1; `+0x58` 10; `+0x5C` 0.99484; `+0x60` 17.4533; `+0x64` 0.5; `+0x48` 5; `+0x4C` 3; `+0x68` 0.7; `+0x3C`/`+0x40`/`+0x44` 3 / 1 / 1.0 | FINAL |
+
+Q6 (aircraft mesh layout and rotor transforms) is answered in `spec-vehicle-geometry.md` §12.4. The water-volume
+record layout is in `spec-zone-data-format.md` §13.3.
+
+[2026-10-20 Team B CHOSEN Q: FINAL (pointers) — **the rest of the AW-15 CHOSEN list.** Flat water at 0.0 m matches Q1 for the city ocean (local water volumes have their own tops). The 2 x 5 hull cells, the 1.2 m hull cap, the 0.5/s drag, the keel and the heave damping are not game rules: Q2 (the body's own collision shape clipped per vertex, per-face drag and lift) replaces them. "Radius of gyration 0.8 x rotor radius" and the box tensors are replaced by Q3: I = Mass x diag(Pitch_UI, Yaw_UI, Roll_UI) for every class. Plane taxi on the car wheel step matches Q4. Ground for craft comes from the walkable mesh of spec-zone-data-format §13.5.3, so the node-height fallback is not needed there. Aircraft meshes: draw LOD0 of each sub-mesh run; group 0 is a small part, not the hull (spec-vehicle-geometry §12.4 M1-M2).]
+
+### 10.14 Nitrous and Rim Jobs performance upgrades: the handling laws (2026-10-19) — FINAL except where marked
+
+Scope: orchestrator queue item 6. Static disassembly of the shipped exe only (helpers `tools/scratchpad/rj_*.py`).
+Already on file and not re-derived: the torque product P and the global G = 1.25 (§10.11.10, `0x00ae3330`), the
+top-speed clamp and its nitrous blend (§10.11.10 step 2, `0x00a86620`), the descriptor fields
+`Maximum_Speed_With_Nitrous` +0x87C, `Nitro_Capable`/`Hydraulics_Capable` flag bits, and the upgrade table
++0xAF8/+0xB38 (`spec-vehicle-data.md` §7.3). Store flow: `spec-store-runtime.md` §9a. Data: `spec-vehicle-data.md`,
+"Vehicle customisation data (2026-10-19)".
+
+#### 10.14.1 Nitrous state — FINAL
+
+Nitrous lives on the ground controller (vehicle `+0x808`; only vehicles whose `+0xbd0` byte is 1, i.e. the
+ground-car classes):
+
+| Controller field | Meaning |
+|---|---|
+| `+0x10c` u8 | active (getter `0x00ae4100`) |
+| `+0x110` f32 | torque multiplier while active |
+| `+0x114` i32 | expiry deadline (engine millisecond timer; set `0x00d9e140`, "expired" `0x00d9e1e0`) |
+| `+0x118` i32 | duration in ms |
+
+Setter `0x00ae55d0(active, duration_ms, multiplier)`: writes `+0x10c`; when active, arms the deadline to
+now + duration and stores the duration and the multiplier. Controller init (`0x00ae84b0`) clears active, sets the
+multiplier to 0.0 and the deadline to -1.
+
+#### 10.14.2 On/off routine `0x00ab7920(vehicle, on, force)` — FINAL
+
+1. Return if the vehicle fails `0x00ad31a0`, is class 5 (`0x00ad2f80` = 5, watercraft), or the requested state
+   equals the current one. Unless `force`, also require `0x008addb0(vehicle, 0)` (the local-control test; the
+   network-replay caller `0x008ac2d1` passes force = 1).
+2. On: clear the pending-start deadline `vehicle+0x17f0` (= -1). Duration = **5000 ms**, or **1500 ms** when
+   the descriptor's name hash equals the CRC of `sp_mdsphere_genki`. Call the setter with (1, duration, **1.5**).
+   Start the nitrous effects (descriptor `+0x804` effect id, ten emitters into `vehicle+0x1800`) and play the
+   foley `nitro`.
+3. Off: setter (0, 0, 0.0), stop the ten emitters, `0x00558fa0`.
+
+#### 10.14.3 The laws while active — FINAL
+
+- **Engine torque × 1.5.** §10.11.10's P = (`+0x110` while `+0x10c` = 1, else 1.0) × (`+0x11c` or `+0x124`),
+  so returned torque = netTorque × 1.5 × upgrade × G. No separate force or impulse is applied.
+- **Top-speed cap** blends to `Maximum_Speed_With_Nitrous` (blend 1 while active; after it ends it decays
+  0.5/30 per call, to 0 after 60 calls) — §10.11.10. Classes 3/4/5 are exempt.
+- **Expiry.** The per-frame vehicle update (the routine containing `0x00a866bd`) calls `0x00ae4180`
+  (active and deadline passed) and then turns nitrous off with `0x00ab7920(v, 0, 0)`. It then tests the
+  pending-start deadline `+0x17f0` and, when it has passed, turns nitrous on with `0x00ab7920(v, 1, 0)`.
+- Other callers, each passing on = 0 (contexts not named; HIGH that they are exit/reset paths) (`0x005b758d`, `0x0070408d`, `0x00952e5f`, `0x00a83ff1`,
+  `0x00a9ee53`, `0x00abe743`, `0x00af428b`), all with on = 0.
+
+#### 10.14.4 Input, gates, capacity and HUD
+
+- **Enable.** On entering a vehicle, the player's driving-control mask `human+0x207c` gets bit `0x2000` when the
+  vehicle's `+0x16c0` bit 14 ("has nitrous": getter `0x00ab6cd0`, setter `0x00ab6cf0`) is set
+  (`0x005b3973`, `0x005b39ae`; the first site also needs `0x00614d00()` = 0x10, meaning OPEN). FINAL.
+- **Press.** With the bit set, control action 0x2f is polled (`0x005bae10(0x2f, 0)` at `0x005b608a`) and
+  `0x005b59c0` runs. HIGH that 0x2f is `CBA_VDC_NITRO` (the action-index table was not re-read).
+- **Request gates** (`0x005b59c0`), all must pass: not already active (`0x00ab7000`); no start pending
+  (`+0x17f0` < 0); hydraulics not raised (`vehicle+0x1d7a` bit 6 clear, `0x00aaa340`); and the vehicle-frame
+  velocity term ≥ 0.0 or the descriptor's `+0x4c4` = 0xe (`0x00ad3140`). Then: pending start = now + **300 ms**
+  (`0x00ab6c90`), play `nitro_start` (`0x00ab7830`), consume the press (`0x005bbdd0(0x2f)`). FINAL.
+- **Capacity and recharge: none.** No charge, count or cooldown field exists anywhere in this chain. A boost is
+  always 5 s (genki 1.5 s), and the next press is accepted as soon as the boost ends, so the shortest cycle is
+  5.3 s. HIGH (absence in a fully traced chain).
+- **HUD meter: none found.** No reader of `+0x10c` outside the vehicle and camera code above (GUESS that the
+  HUD shows no nitrous gauge). The camera's `nitrous` row of `vehicle_fallbacks` is in `spec-player-runtime.md`.
+- **Who grants "has nitrous".** Setter callers: the spawn-option applier `0x00a93a90` (option byte `+0x10`),
+  `0x00a97ec0`, `0x0071f8c5` (unlockable apply), `0x00665606`, `0x00afc995`. Which one the Rim Jobs nitrous
+  purchase reaches is OPEN (Residual).
+- **Ramming.** Tweak `Vehicle_collision_damage_nitrous_bonus_factor` = 5 (damage × 5 to a vehicle struck by a
+  nitrous vehicle). Data FINAL; consumer not traced.
+
+#### 10.14.5 Performance upgrades — FINAL except where marked
+
+**Levels.** Four bytes at the start of the applied-customisation object (`vehicle+0xA88` pointer, the same
+object `spec-render-pipeline.md` §20.12.16 calls the applied-option tree): [0] Torque, [1] Tire,
+[2] Collision, [3] Hitpoints, each 0..4. Add routine `0x00ab7800(category, delta, vehicle)`: rejects
+category ≥ 4 or a new level > 4 (unsigned, so a negative result is also rejected), stores, then reapplies all
+four through `0x00ab7070`.
+
+**Apply `0x00ab7070`.** For each category c with level L: m = 1.0 when L = 0, else the descriptor f32 at
+`+0xAF4 + 0x10·c + 4·L` (= `Level_L`). Then:
+
+| c | Name | Write | Effect | Label |
+|---|---|---|---|---|
+| 0 | Torque | ground controller `+0x124` = m | engine torque × m (the P factor, when controller `+0x164` bit 1 is clear) | FINAL |
+| 1 | Tire | if m > 0: object `vehicle+0x1544`, `+0x1d0` = m | tyre-strength scale; consumer not traced | GUESS meaning |
+| 2 | Collision | if 0 < m < 1: `vehicle+0x1cf4` = m | collision-damage scale | HIGH meaning |
+| 3 | Hitpoints | `0x00ab6c00(v, m, 0)`: skipped if m = 1.0 or the vehicle is a network replica | max HP = trunc(`Max_Hitpoints` × m) via `0x00a80510` | FINAL |
+
+Consequences: there is **no braking, top-speed or suspension upgrade**; top speed only changes through nitrous.
+"Bulletproof tyres" is not a Rim Jobs level: the spawn-option applier writes Tire = 4.0 directly (option byte
+`+0x13`); that equals Tire level 4. Spawn options also write Hitpoints 1.2 (`+0x14`), Collision 0.25
+(`+0x15`), torque = `Perf_Torque_Multiplier` (descriptor `+0x9B4`, option `+0x12`), hydraulics
+(`0x00aaa1e0`, `+0x11`). A level reset to 0 rewrites Torque/Tire to 1.0, but leaves Collision and Hitpoints
+at their old values (both guarded). HIGH that no shipped path lowers a level.
+
+#### 10.14.6 Test vectors
+
+| # | Input | Expected |
+|---|---|---|
+| 1 | netTorque 1000, P = 1, Torque L0..L4 (1.05/1.10/1.15/1.20), G 1.25 | 1250, 1312.5, 1375, 1437.5, 1500 |
+| 2 | same, nitrous active, Torque L4 | 1000 × 1.5 × 1.2 × 1.25 = 2250 |
+| 3 | `car_4dr_compact01` (`Max_Hitpoints` 7000), Hitpoints L1/L2/L4 | 10500 / 14000 / 21000 |
+| 4 | Collision L3 | `+0x1cf4` = 0.625; L0 after L3: stays 0.625 |
+| 5 | Nitro pressed at t = 0, ordinary car | boost on at 300 ms, off at 5300 ms |
+| 6 | same, `sp_mdsphere_genki` | on at 300 ms, off at 1800 ms |
+| 7 | compact01 cap 80 mph, nitrous 90 mph | 35.76 m/s → 40.23 m/s while active; back to 35.76 after 60 calls |
+| 8 | level 4 + 1, or category 4 | `0x00ab7800` returns 0, nothing written |
+| 9 | press while hydraulics raised (`+0x1d7a` bit 6) | no request |
+| 10 | press while reversing (velocity term < 0, `+0x4c4` ≠ 0xe) | no request |
+
+**Residual:** the Rim Jobs nitrous/hydraulics purchase native's write (which "has nitrous" setter caller);
+consumers of the Tire (`+0x1544`/`+0x1d0`) and Collision (`+0x1cf4`) scales; `0x00614d00()` = 0x10 in the
+enable gate; the action-index → name table for 0x2f; the meaning of the velocity term's sign convention.
+
+### 10.15 World axes and heading convention (2026-10-19) — FINAL (math), HIGH (screen sense)
+
+[2026-10-19 Team B Q8 (car-rig heading convention): FINAL/HIGH — the canonical convention, re-read by listing (`0x00da3910`, `0x00dae5b0`, `0x00da5aa0`).
+
+- **Axes.** Y is up (gravity −Y) and the ground plane is X/Z. An orientation is a row-major 3×3 whose rows are the world images of the local X (right), Y (up) and Z (forward) axes. Points are row vectors: world = pos + v·M (`spec-world-streaming.md` §10.7.1; with column-vector APIs, use Mᵀ). Body frames are x right, y up, z forward (§10.11.2, §10.13). Vehicle meshes share that frame: the long axis is Z and the nose is +Z (the heli tail rotor is authored at z = −7, §10.13.2). FINAL.
+- **Heading from a matrix.** `0x00da3910` returns h = atan2(fwd.x, fwd.z), with fwd = row 2 (`+0x18`, `+0x20`). It goes through `0x00dae5b0`, which is the x87 atan2(first argument, second argument) and returns 0 when both are 0. When fwd.y is ±1 it falls back to atan2(−right.z, right.x). FINAL.
+- **Matrix from a heading.** forward = (sin h, 0, cos h), right = (cos h, 0, −sin h), up = (0, 1, 0). The look-along builder `0x00da5aa0` stores row 2 = forward, row 1 = up and row 0 = up × forward. The yaw-only rows (cos h, 0, −sin h) / (0, 1, 0) / (sin h, 0, cos h) are exactly the SR3Z record decode with c = h (§10.7.1). The plane's level right axis R = normalise(fwd.z, 0, −fwd.x) (§10.13.3 step 3) is the same right vector. FINAL.
+- **Zero and sign.** h = 0 faces +Z, and increasing h turns +Z toward +X. The camera keeps its heading in [0, 2π) (`0x00dadeb0`); differences are wrapped to (−π, π] (`spec-player-runtime.md` §4.15).
+- **Screen sense.** The rows obey X = Y × Z, so the rotation formula is the right-handed one (this is what "right-handed" means in §10.7.1). But +X is the body's **right** when it faces +Z. Three independent readings agree:
+  1. heli `TURN_LEFT` gives a yaw torque of −28·M about +Y, so the nose goes toward −X (§10.13.2 H8);
+  2. the plane's `TURN_LEFT` double tap gives a barrel roll with a positive rate about forward, which raises the +X wing (§10.13.3, R5 note);
+  3. the plane's level right is R above.
+
+  So the displayed frame is the D3D one (X right, Y up, Z forward, left-handed as seen), and **+h is a clockwise turn seen from above, i.e. a right turn**. **FINAL for the stick/keyboard path (2026-10-19, Team D 1b, see the steering note below); the polar-remap branch is untraced.**
+
+  **[2026-10-19 corrected per Team D emulation 1b: FINAL for the stick/keyboard path] "+h = right turn" holds.** The Havok chassis right column is (−1, 0, 0) (vehicle data constructor `0x00abc590`, stores at `0x00abc66e` / `0x00abc684` / `0x00abc69f`; up = (0, 1, 0), forward = (0, 0, 1)), but the steering setter `0x00AE5290` (writes instance `+0x130`) multiplies its input by −1.0 (double at `0x012A3038`) before clamping to [−1, 1], which cancels that column. So Havok positionX = −s, and **game steer s > 0 turns the nose toward body +X, so h increases**. Independent confirmation: the AI driver `0x00B29580` (ground path ending in `0x00A929E0` then `0x00AE5290`) computes angle = atan2(dot(row0, d), dot(row2, d)) for the target delta d (row0 = +X right row, row2 = forward), s = angle / max steer, negated only when the reversing byte `+0xB4` is set, so it passes s > 0 for a target on the +X side and the shipped AI drives correctly. Player path: in controller state 0xE (`0x00AD3140` true) the ground-input reader `0x00A91800` passes the left-stick X global `0x0140E6C0` (written by the stick reader at `0x005B482C`) straight to the setter (call `0x00A91BE9`). The keyboard binding convention (first binding slot = positive half, Key_Pos = D; see the §10.13.3 R5 note and spec-tables-ui-controls) makes right input positive, so right input gives s > 0 and h increases. **Caveat (untraced):** when `0x00AD3140` is false, `0x00A91800` takes a polar remap of axes 3 and 2 (`0x00A918F0`, axis 2 negated at `0x00A918FD`; atan `0x00EA4630`, cos/sin `0x00EA3A70` / `0x00EA2470`) and passes a stack local to the setter that emulation could not tie to an input; the sign of that branch is OPEN. (The plane barrel-roll reading 2 above is independently re-confirmed: first binding slot = positive = D = right, see the §10.13.3 R5 note.)
+
+  **Heading math test values — FINAL [2026-10-19 corrected per Team D emulation 1a: FINAL].** `0x00da3910` (thiscall, rows at `+0`/`+0xc`/`+0x18`) on yaw matrices for h = 0, π/2, π, −π/2, 0.6435, 1.0, −2.5 returned exactly 0, 1.5708, 3.14159, −1.5708, 0.6435, 1.0, −2.5 = atan2(fwd.x, fwd.z), range (−π, π]. fwd = (0, 1, 0) with right = (0, 0, −1) gave π/2 = atan2(−right.z, right.x); an all-zero matrix gave 0. `0x00da5aa0`(fwd, up = (0, 1, 0)) built rows h = 0: (1,0,0)(0,1,0)(0,0,1); h = π/2: (0,0,−1)(0,1,0)(1,0,0); h = 0.6435: (0.8,0,−0.6)(0,1,0)(0.6,0,0.8). These match the table below exactly.
+
+| h | forward | right |
+|---|---|---|
+| 0 | (0, 0, 1) | (1, 0, 0) |
+| +90° (π/2) | (1, 0, 0) | (0, 0, −1) |
+| 180° | (0, 0, −1) | (−1, 0, 0) |
+| −90° | (−1, 0, 0) | (0, 0, 1) |
+| atan2(0.6, 0.8) = 0.6435 rad | (0.6, 0, 0.8) | (0.8, 0, −0.6) |
+
+**Verdict on the suspected mirror: YES, it is a real mirror wherever the two conventions meet without a conversion.**
+- A sim heading θ with forward = (cos θ, sin θ) on (X, Z) is the engine frame with **θ = π/2 − h**. If its right vector is (sin θ, −cos θ), that is the engine's right, so the sim alone is not mirrored. It only measures the angle from +X with the opposite sense.
+- A yaw builder that maps mesh +Z to (sin yaw, 0, cos yaw) uses the engine convention (yaw = h). If θ is passed to it unconverted, the nose points along (sin θ, cos θ) while the body moves along (cos θ, sin θ). These are reflections of each other across the x = z diagonal (determinant −1). They agree only at θ = 45° and 225°, and the mesh turns the opposite way to the path. Example: at θ = 0 the car moves along +X with its nose along +Z.
+- **Port rule:** use one convention, preferably the engine's (h, forward (sin h, 0, cos h)). Convert at every boundary with h = π/2 − θ. Swapping sin and cos alone, or negating alone, is still a mirror.
+- Where to look in Team B's tree: the non-craft fallback paths of the craft world-matrix helpers pass the sim heading straight to the yaw builder, while the craft path converts with π/2 − h. The vehicle-camera velocity conversion in the player frame uses the right vector (−sin θ, cos θ), the opposite of the sim's own (sin θ, −cos θ).]
 
 ## 10a. Contact-listener collision detection and response — vehicle and generic (2026-10-08)
 
@@ -3246,6 +3970,15 @@ offset mechanism, `0x00762ab0`'s zero-callee pure-arithmetic body, vtable `+0x60
 
 ## Changelog
 
+- **2026-10-18 — new §10.13: player-flown aircraft and watercraft** (SPEC TEAM). One flight instance for
+  classes 2–4 (mode `+0x588`) and its step order; helicopter collective/cyclic/tail/extra-speed/auto-level
+  law with the twelve rotor-ring forces; airplane engine, lift fraction and the default pilot-assist rate
+  controllers; VTOL mode switch and 1.2 s jet kick; watercraft controller (thrust at a submerged prop,
+  lean-based steering, coasting steer); shared buoyancy (ρ = 1000, flat water plane, `Buoyancy_Modifier`);
+  altitude ceiling 1333 m; tail-rotor loss and wing damage. Names the watercraft block offsets and the
+  helicopter rotor-axis hole of `spec-vehicle-data.md` §7.5. Corrects `spec-player-runtime.md` §16
+  (`0x00a91440` is the helicopter cyclic reader). Capstone + shipped data; no game run.
+
 - **2026-10-14 — new §10.11: vehicle component values from data** (SPEC TEAM; FREE-ROAM-GAPS group A
   deliverable). All component slots mapped by constructor store (closes §11 item 9); suspension
   strength/damping are per unit mass (`1/X` = Mass), ride-height formula `0x00aba5a0`; wheel radius =
@@ -3337,9 +4070,10 @@ offset mechanism, `0x00762ab0`'s zero-callee pure-arithmetic body, vtable `+0x60
   component-array slots resolved, ground-friction splice sharpened** (SPEC TEAM, agent
   `af3a5dab60b06fa21`, relayed by `purrsian-62` after Team B wired §10 into a working drive_demo).
   §10.2: construction site `0x00aba4c0`-`0x00aba599`, a bare 10-field copy from the per-vehicle
-  xtbl struct — confirms the real schema has 9/10 fields (not 6), and that authored
+  xtbl struct — confirms the real schema has 9/10 fields (not 6), ~~and that authored
   `*_Torque_Factor`/`*_Resistance` field names are crossed with their runtime resistance/
-  torque-factor roles. §10.7: 3 more component slots identified (`+0x20`=driver input,
+  torque-factor roles~~ [2026-10-19 corrected per Team D emulation D-17: FINAL — the names are
+  NOT crossed; see §10.2]. §10.7: 3 more component slots identified (`+0x20`=driver input,
   `+0x24`=steering HIGH, `+0x28`=engine) via the per-vehicle component-construction cluster. §10.8:
   the real slip-velocity computation pinned to `0x00c64252`-`0x00c64306` (Loop 2, a genuinely
   separate computation from wheel-collide's §10.5 relative velocity); the 16-entry friction/slip
@@ -3406,8 +4140,8 @@ offset mechanism, `0x00762ab0`'s zero-callee pure-arithmetic body, vtable `+0x60
   framing — that holds exactly for the top-level step, but at the component level three patterns coexist
   (full replacement: engine/transmission; unconditional wrap-Havok's-base: suspension/brakes;
   conditional delegation: steering/wheel-collide AABB). Real formulas confirmed: steering's
-  inverse-square speed falloff lives in Havok's own base method, not the override; engine's up-only RPM
-  ramp and full 9-field piecewise torque curve with a confirmed ×0.85 damage/environment penalty;
+  inverse-square speed falloff lives in Havok's own base method, not the override; engine's ~~up-only~~ RPM
+  ramp [2026-10-19 corrected per Team D emulation D-18: FINAL — two-way ease, see §10.2] and full 9-field piecewise torque curve with a confirmed ×0.85 damage/environment penalty;
   transmission's real automatic gear-shift state machine; suspension's own internal ≤1/60s sub-stepping
   (a second, independent sub-stepping layer not previously documented) plus a cached-ground-plane
   shortcut between real queries; wheel-collision confirmed as a genuine point-to-point line-segment ray

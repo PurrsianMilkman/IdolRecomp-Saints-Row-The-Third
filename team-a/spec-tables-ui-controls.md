@@ -503,8 +503,122 @@ All 17 tables extracted with Team A's mode-(a) extraction harness (not in this r
 
 None of these gaps block the deliverable: the two priority targets (`control_binding_sets.xtbl`/`control_schemes.xtbl`, §2–§5) are complete to the byte-offset and vocabulary-table level and directly close two of `spec-save-format.md` §7.6/§7.7's own open items; the QTE pair (§6–§7) is complete to the byte-offset level with a genuine, exhaustively-confirmed data anomaly found along the way **[the capacity-overflow anomaly was RETRACTED, §7.3]**; the camera-preset group (§8) is fully schema-confirmed for all five files with one family (`vehicle_cameras`/`vehicle_group_cameras`) closed to the byte-offset level and the other honestly partial; and the remaining six tables (§9–§14) range from fully closed (`hud_qte_interface*`, `credits_pc`, `voice_control`) to schema-confirmed-only (`control_scheme_text`, `control_filters`/`control_parameters`), each labelled accordingly rather than overstated.
 
+## 18. Pause menu, options and PC control rebinding (2026-10-19)
+
+Sources: the shipped UI Lua (`interface.vpp_pc`; dumps in `scratchpad/ui_lua_dumps/pause_*.lua`), the shipped `control_binding_sets.xtbl` (extracted by `tools/scratchpad/pm_extract_bind.py`, dumped by `pm_bind_dump.py`), the shipped `display.ini`, and disassembly of the routines named below. This section collects and fills gaps; facts already owned elsewhere are cited, not repeated: the pause-open binding chain (`spec-frontend-menu-runtime.md` §7), the pause-depth counter (`spec-lua-api-behaviour.md` §37.3), the options struct (`spec-save-format.md` §7.5), the binding tables (`spec-save-format.md` §7.6, §2–§5 here), the `display.ini` keys (`spec-render-pipeline.md` OPEN item 8), and the difficulty multipliers (`spec-player-runtime.md` §18).
+
+**Already FINAL before this pass:** options struct layout and its storage in the profile; binding table A/B shape; `control_binding_sets.xtbl`/`control_schemes.xtbl` schemas; the pause-open path (`CBA_GAC_PAUSE_MENU` → pause push with reason 4 → `"dialog_pause_show"`); the difficulty global `0x012ece10` and its multiplier records.
+
+### 18.1 (2026-10-19) — Pause menu — FINAL
+
+- **Open:** action `CBA_GAC_PAUSE_MENU`, default key **Esc** (General set). Tab opens the map (`CBA_GAC_MAP_MENU`), which is a separate screen and not a page of the pause menu. The phone is not reachable from the pause menu. [FINAL]
+- **Correction 2026-10-19 (`spec-frontend-flow.md` §6):** the menu opens through `0x007B4190` (pause or map action while gameplay mode 5 is on top) → game mode 6, whose enter opens screens 9/10 (`pause_menu_common`/`pause_menu_top`) or 25 (map). The `0x007074a0(4, 1)` push named in the next line belongs to the `dialog.lua` "PAUSED" overlay. The pause menu's own freeze is pause reason `0xD`, popped by `pause_menu_common`'s close method `0x007AF580` (HIGH). The Lua behaviour below is unchanged.
+- **Freeze rule:** opening pushes the shared game-pause depth (`0x007074a0(4, 1)`). While the depth is non-zero, mission/script threads are not resumed and game simulation stops. The UI (vint documents, tweens, `thread_new` UI threads, `delay`) keeps running, because `get_frame_time` is never gated by pause (`spec-lua-api-behaviour.md` §37.5). UI sound events still post. A purple LUT (`"lut_completion_screen"`) is applied on open and removed on close. [FINAL for threads and UI; HIGH that world audio is paused, because no audio-pause call was traced in this pass]
+- **Top list, built in this order and only when the condition holds** (`pause_menu_top_init`). The header reads `SYSTEM_PAUSED`.
+  1. Save Game, then Load Game: shown unless machinima recording is active.
+  2. Cancel Mission/Activity/Stronghold/Diversion: shown only when one is in progress. The label depends on the in-progress type 0/1/3/4. It is disabled while the host is in character creation.
+  3. Options.
+  4. Co-op: shown unless recording. Choosing it first runs a co-op DLC check.
+  5. Video record mode: shown only if `game_record_mode_is_supported()`.
+  6. Quit: asks for destructive confirmation, then calls `pause_menu_quit_game_internal`.
+  - **In horde (Whored) mode** the list is Options, then Retry and New Game (host only), then record mode, then Quit.
+  - **Load is disabled** when you are a co-op client and a mission or activity is running.
+  - **Save** is refused while an autosave is in progress. The first time per session, saving during a mission or activity shows a warning first.
+  [FINAL]
+- **Resume:** pressing Back or the Pause key on the top list closes it. On any options sub-page, the Pause key (`"pause"` input, which is only subscribed when `In_pause_menu`) pops the whole stack in one go (4 levels: page, options, top, common), after the page first commits its values. Closing pops the pause depth. Threads resume on the next frame. There is no countdown or grace period. [FINAL for the Lua side; HIGH for the exact pop site]
+
+### 18.2 (2026-10-19) — Options pages, values and when they apply — FINAL unless marked
+
+**Options list (PC):** Mouse, Gameplay, Display, Audio. **Options list (console):** Control Options, Control Schemes, Difficulty, Display, Audio. On PC the "Difficulty" page is renamed **Gameplay** and gets extra rows. On PC, Controller Options and Remap are reached from inside the Mouse page. [FINAL]
+
+Each change is sent with `pause_menu_update_option(page, id, bool, float)` **as the slider or toggle moves**. Sliders send `ui/100`, toggles send a bool, and enumerations send a 0-based value. `pause_menu_accept_options()` runs when you back out of the page. Every page except Display has its own Restore Defaults (`pause_menu_restore_defaults(page)`), confirmed through a dialog. [FINAL]
+
+| Page | Item (UI id) | UI range / choices | Engine storage (`spec-save-format.md` §7.5 offset) | Default seen in a shipped profile | Applies |
+|---|---|---|---|---|---|
+| Mouse (PC) | Invert Y (1) / Invert X (2) | No/Yes | `+0x4C` bit1 / bit2 | No | live [FINAL] |
+| Mouse | Vertical / Horizontal sensitivity (3/4) | 0–100 step 1 | `+0x54` (Y) / `+0x50` (X) f32 (UI value = engine value through the `(v−c0)/c1` scaling) | 0.24 raw | live [FINAL store; HIGH UI scaling] |
+| Mouse | Vehicle camera snap (5) | Instant / Delayed / Smart (0–2) | `+0x58` i32 ("mouse-group item 5", **closes that OPEN item**) | 2 = Smart | live [HIGH] |
+| Controls (pad) | Invert Y (1), Invert rotation (2) | No/Yes | `+0x04` bit0, bit1 | No | live [FINAL] |
+| Controls | Vehicle camera snap (3) | Instant/Delayed | `+0x60` bit0 | Instant | live [FINAL] |
+| Controls | Airplane controls (4) | Advanced/Normal | `+0x60` bit1 | Advanced | live [FINAL] |
+| Controls | Vertical / Horizontal sensitivity (5/6) | 0–100 step 1, sent as /100 | `+0x10` / `+0x0C` f32 | 1.0 (shows 100) | live [FINAL] |
+| Controls | Vibration (7) | No/Yes | `+0x04` bit3 | Yes | live [FINAL] |
+| Controls | Crouch toggle (8) | No/Yes | `+0x04` bit4 | Yes | live [FINAL] |
+| Difficulty/Gameplay | Difficulty | Casual / Normal / Hardcore (0–2) | global `0x012ece10`, **not** the options struct | 1 Normal | when you leave the page (§18.4) [FINAL] |
+| Gameplay (PC) | Airplane handling, Subtitles, Radio, Minimap view, Pause on focus loss | as named; Radio = Always on / Hijack / Life-like (0–2); Minimap = Rotational/Static | `+0x60` bit1, `+0x20`, `+0x44`, `+0x21`, `+0x4C` bit0 | Advanced, No, 0, Rotational, Yes | live [FINAL] |
+| Display (console + PC common) | Monitor adjustment (brightness/gamma sub-screen), Gameplay vsync, Cutscene vsync, Minimap view | slider / No-Yes | `+0x24`, `+0x1C` (gamma clamped to [0,1]), `+0x22`, `+0x23`, `+0x21` | 1.0, 0.5, No, —, Rotational | live [FINAL; `+0x23` width still OPEN] |
+| Display (PC) | Monitor, Aspect, Resolution, Window mode, Preset (Low/Med/High/Ultra/Custom), AA, Texture filter (Trilinear, 2x–16x aniso), Scene detail (3), Lighting (Low/High), Shadows (Off/Low/Med/High), Reflections (Off/Low/High), Post-processing (Off/Low/High), SSAO (Off/Low/Med/High), VSync, Brightness | as listed | **`display.ini`**, not the profile; sent as one call to `options_display_pc_set_options(vsync, display, mode, fullscreen, msaa, filter, lighting, shadow, scene, reflections, post, ssao)` | the shipped `display.ini` has: Preset 4, AA 8, Aniso 16, Lighting 2, SSAO 3, Shadow 4096, Scene 3, Refl 2, Post 2 | on **Apply** (F2 or pad Y), live, with a 15-second keep-or-revert dialog that reverts if you do not answer [FINAL] |
+| Audio | SFX, Music, Voice | 0–100 step 10 | channels 3/4/5, 1, 2 (`+0x28`…) | 80 / 80 / 100 | live [FINAL] |
+| Audio | Radio, Subtitles | as above | `+0x44`, `+0x20` | | live [FINAL] |
+| Audio | Overall (only on some platforms), Voice chat (Disabled / Always on / Push-to-talk), Mic setup | 0–100 step 10; 0–2 | channel 6/0 [HIGH]; voice chat not in struct [GUESS] | | live |
+
+**Storage summary.** There are three separate stores, and none of them is in the save game:
+- **Profile file** `sr3def_profile`, under the user's Documents `Saints Row The Third` folder (there is a second copy under LocalAppData). It is binary, with no checksum. It holds the options struct (§7.5) and the key bindings (§7.6).
+- **`display.ini`**, a plain-text `key = value` file in the game folder, rewritten each time display options are applied. Toggles are written as `true`/`false` (`1`/`0` is also accepted on read). It holds the PC display options. Its keys and their mapping to the menu items are in `spec-render-pipeline.md`.
+- **Difficulty** (§18.4).
+[FINAL for the profile and `display.ini`]
+
+### 18.3 (2026-10-19) — PC control rebinding — FINAL unless marked
+
+- **Screen** `pause_options_remap`. Six categories are shown in this order: General, On Foot, Car, Helicopter, Plane, Tank. The Lua hard-codes 7 categories; the 7th is the `Camera_Bindings` set, which is never shown, so mouse-look axes cannot be rebound. Each row has a **primary** and a **secondary** column (left/right switches between them).
+  - X restores **all** sets to the shipped defaults (`vint_options_remap_reset_bindings`, after confirmation).
+  - Back commits with `pause_menu_accept_options()`.
+  [FINAL]
+- **Capture.** Choosing a cell calls `vint_options_remap_set_key_binding(category, row, column==2)`. **Correction to `spec-lua-api-behaviour.md` §11.12:**
+  - Argument 2 is the *row index within the category*, not a key code. Argument 3 is the *secondary-column* flag.
+  - Argument 1 (category) is stored minus 1 at `0x012fde38`, argument 2 at `0x012fde3c`, and the flag at `0x022971cc`.
+  - A "press any key" dialog then opens (UI opcode `500`).
+  - When a key or mouse button is pressed, `0x007cda30` maps (category, row) to an action. If the row index is at or above the category's button count (`0x022978b0 + 0x4C·cat`), the row is an axis, and each axis row covers one direction.
+  - The commit routines are: button primary `0x005c00b0`, button secondary `0x005c0340`; axis positive `0x005c05d0`/`0x005c0840`; axis negative `0x005c0ab0`/`0x005c0d20`.
+  [FINAL addresses; HIGH for the pos/neg naming]
+- **Accepted inputs:** a keyboard scan code `< 0x100`, or a mouse button `0..6`. A mouse button can be bound to any button action (mouse buttons are separate fields, not mapped to keys). The two wheel directions are mouse buttons. [FINAL]
+- **Conflict rule** (`0x005bfbb0`, run before the write): every other action in the **same binding set** that holds the same key or mouse button has that slot **cleared to 0** (`UNBOUND`). The action that loses the key is recorded in a conflict list (`0x012e8748`). Exceptions:
+  - **Allowed-sharing pairs** are skipped: one pair list for keys (`0x012e6f18`, count `0x012e6f20`) and one for mouse buttons (`0x012e7f38`, count `0x012e7f40`). Examples in the defaults: Q is shared by secondary attack and detonate charges; Mouse Left by attack and melee.
+  - If the target set has `Common_Bindings` (only `General_Bindings` does), the conflict sweep runs over **every** set. So a General key steals from all vehicle and on-foot sets.
+  There is no refusal and no swap; the other action simply loses the key. [HIGH: structure fully read; the exact pair-list contents were not dumped]
+- **Unbindable actions:** actions that are absent from the shipped sets (for example `CBA_GAC_CELL_OPEN`, and 11 of 165 CBA names in total, §17 item 1), `Debug_Only`/`Non_Release_Final` rows, and the Camera set's mouse axes. [HIGH]
+- **Default PC bindings** (from the shipped `control_binding_sets.xtbl`, primary key / alt key / mouse button):
+  - **General:** Esc pause; Tab map; E action; Z recruit/dismiss; wheel up/down weapon cycle; 1–8 weapon slots; G grenade; V push-to-talk; T text chat; F11 screenshot; F10 machinima quicksave.
+  - **On Foot:** W/S and D/A move; LMB fire; RMB zoom/shoulder; Q or MMB secondary fire; F nut-shot/execute; Space jump; L-Shift sprint; L-Ctrl crouch; R reload/pickup; X and C taunts; wheel up/down zoom (alt keys E/Q).
+  - **Car:** W/S throttle/brake; D/A steer; Space handbrake; L-Ctrl cruise; L-Shift nitro; X/C radio; F horn; R look back; L-Alt lean back; LMB fire; Q/MMB grenade.
+  - **Helicopter:** W/S, D/A; L-Shift up; L-Ctrl down; Space turn-mode; F VTOL.
+  - **Plane:** S/W pitch (inverted pair); D/A roll; L-Shift throttle; L-Ctrl brake.
+  - **Tank:** RMB main gun; LMB secondary.
+  - **Camera:** mouse X/Y for look in every mode; wheel for zoom.
+  [FINAL: read from the data]
+- **Gamepad:** this is not rebindable per action. You choose one preset from `control_schemes.xtbl` (§3); options struct `+0x14`/`+0x18` hold the preset indices, clamped. [FINAL]
+- **Storage:** profile tables A (164 × 20 bytes) and B (34 × 40 bytes), `spec-save-format.md` §7.6. Applied live at commit. [FINAL]
+
+### 18.4 (2026-10-19) — Mid-game difficulty change — FINAL unless marked
+
+- `game_difficulty_select(v)` (`0x007e18a0`) leads to `0x005f4a80`. When `v ≤ 2` **and** v differs from the current value, the routine writes `0x012ece10`; otherwise it does nothing. The pause page calls it **once, when you back out** (Back, or Pause from the page). It does not call it on each toggle. [FINAL]
+- **Effect is immediate and needs no reload.** The difficulty record picker (`spec-player-runtime.md` §18, `0x005f4a50`) reads `0x012ece10` on every damage, regen and revive evaluation. The next hit uses the new `Damage_Received_Mult` (SP 0.3 / 0.75 / 1.5), the regen wait and speed multipliers, `Homie_Revive_Timer_Mult`, and `Vehicle_Damage_Received_Mult`. HP already lost is not rescaled. [FINAL for the read path; HIGH that nothing else caches the level]
+- **Co-op:** `0x012ece10` is registered as the session-replicated variable `"difficulty"` (`0x0086d770`, 4 bytes, at `0x005f4d06`). A joining client takes the host's value through `0x005f4a80` (call at `0x00b97e27`). The co-op multiplier set is chosen by session size, not by this value. [HIGH]
+- **Persistence:** `0x012ece10` is not the profile's `0x2068` session dword (that is `0x012f44fc`). Its home is the save game, through the replicated-variable system. [GUESS]
+
+### 18.5 Test vectors
+
+| # | Input | Expected |
+|---|---|---|
+| 1 | Not in horde mode, not recording, mission in progress, host | Top list: Save, Load, Cancel Mission, Options, Co-op, (Record), Quit |
+| 2 | Same as 1 but co-op client | Load is shown but disabled |
+| 3 | Horde mode, non-host | Options, (Record), Quit |
+| 4 | PC Options list | Mouse, Gameplay, Display, Audio |
+| 5 | `game_difficulty_select(3)` | no change (value stays) |
+| 6 | Difficulty 1→2 mid-mission, then 100 raw damage in single player | HP drop 150 (was 75) |
+| 7 | Rebind On Foot "Reload" primary to Q | Q is removed from any On Foot action that is not on an allowed-sharing pair with Reload; General is untouched |
+| 8 | Rebind General "Map" to W | W is removed from conflicting actions in **all** sets (General is the common set) |
+| 9 | Mouse button 7 or key code 0x100 | rejected; no write |
+| 10 | Audio Music slider at 70 | `pause_menu_update_option(audio, MUSIC, true, 0.70)`; channel 1 = 0.70 |
+| 11 | PC Display Apply, then no answer for 15 s | dialog force-closes and the old settings are restored |
+| 12 | Tab pressed in gameplay | map screen opens; pause top list is not shown |
+
+**Residual:** the contents of the two allowed-sharing pair lists; the save-game home of `0x012ece10`; the exact audio-pause call while paused; the cutscene-vsync byte width (`+0x23`); the console "Overall" volume channel mapping.
+
 ## Changelog
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 4 cross-references (§1.2 §8.3→§8.2; §1.4 vehicle cameras §7→§8.1 and QTE node §6.2→§7.2; §7.3 `+0xA0`-global reworded as the 160-slot cap), corrected the "sole reader" claim for `0x005d25f0` in place (§14, §15.1 ×2, §17 item 5) per `spec-tables-animation.md` §1.4 and `spec-tables-traffic-ai.md` §22, fixed the §4.6 three-names/four-targets slip, and marked the §17 closing "data anomaly" as retracted (§7.3).
 - 2026-09-30 (format-spec desk review, `review/adv_tables-ui-controls.md`): added 32 per-unit review-status lines and a summary; removed repo-absent tool/dump paths (§1 method, §1.1, §4, §4.1–§4.3, §16) and a real person's name (§13) outright; reworded a decompiler signature and a format-string call (§12) and a code-shaped guard and decompiler-view wording (§9, §9.1); marked OPEN: ordinary-reader count 15 vs 12 traced (§1.2), final complement/seeds (§1.4), per-set stride arithmetic (§2.1), capacity inference and UNBOUND 0 vs −1 (§2.2/§2.3/§4.1), Scheme_Type selector and 0xFC0 layout (§3), 20 unlisted key entries (§4.3), STICK_UNBOUND collision (§4.6), negative Cooldown_Time (§6), Synced_Animation resolvers (§7.1/§7.2), 0x00ea4acc/+0x6F8/attributes (§8.1), 16-row cap and offsets (§9), and others; downgraded §5 item 4 to HIGH CONFIDENCE (own wording); struck the §14 hardcoded-default-list claim; wrote out the §4.7/§4.8 shorthand; marked Team B-reproduced rows in §16.
 - 2026-10-01 (executable re-derivation applied, `review/exe-notes-2026-10-01/rederive_tables-ui-controls.md`, bridge jobs 20261001T123123-team-a-ytgi and, for the name-hash routine 0x00D9E8B0, 20261001T123128-team-a-dvje): re-derived 17 of the 18 NEEDS-EXE units from the executable, each with its own 2026-10-01 Review status line — §1.2 (reader count corrected to 12), §1.4 (hash seed corrected to 0 everywhere), §2.1/§2.2 (per-set slot layout corrected; UNBOUND 0 vs absent −1 confirmed distinct), §3/§3.1/§3.2 (0xFC0 layout corrected to two sub-arrays; Action_Name storage and Alternate_Inverted corrected), §4.6 (reader confirmed), §6 (Cooldown_Time formula corrected to a positive millisecond sum; scale identified as 1000.0), §7.1/§7.2 (resolver conflict confirmed as two tables; seeds corrected), §8.1 (0x00EA4ACC identity and group-reader attribution corrected; 0x00AC5CF0 sub-layout read), §8.2 (poll return values confirmed; "finalize" role downgraded to HYPOTHESIS), §9.1/§9.2 (hash seed and Button_Animation_Type scan count corrected), §10 (ratio constants and all four fill functions confirmed and tabulated), §11 (3-entry scheme-name table confirmed; Platform filter 360/All corrected in), §12 (bit-packing clamps/thresholds made exact; External_source/Play_event reader corrected), §13 (strides, record layouts, nested lists and the name patch confirmed); only §4.3 remains NEEDS-EXE outright (xref-only dump, contents still needed). Updated the top-of-file Review status summary with the final 17/18 count; cross-spec notes added in place for `spec-conversation-format.md` §6 (§1.4) and `spec-vehicle-data.md` §7.1/§7.3 (§8.1); next-dump list written to `review/exe-notes-2026-10-01/nextdump_tables-ui-controls.txt`.
+- **2026-10-19 — §18 added:** pause menu, options pages, PC rebinding and conflict rule, mid-game difficulty change (FINAL/HIGH/GUESS per claim, 12 test vectors).
+- **2026-10-19 — §18.1 open/freeze correction note** (pause menu = game mode 6 via `0x007B4190`; reason-4 push is the "PAUSED" overlay). Full text: `spec-frontend-flow.md` §6.

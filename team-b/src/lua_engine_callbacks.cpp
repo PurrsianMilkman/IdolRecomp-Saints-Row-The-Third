@@ -308,7 +308,10 @@ EngineState::DamageModelResult EngineState::applyDamageModelHit(const std::strin
     in.dmg = amount;
     in.flags = flags;
     in.victimDead = characterReadsDead(c);
-    in.victimIsPlayer = isPlayerName(victimName);
+    in.victimIsPlayer = isPlayerName(victimName) || victimName == "player";  // "player" = the free-roam playtest character (CHOSEN alias)
+    in.victimFollowsLocalPlayer = !in.victimIsPlayer && isFollowerOfLocalPlayer(victimName);
+    in.damageReceivedMult = damageReceivedDifficultyMultiplier();  // Sec18.3 item 4 (PV-6), applied inside ApplyDamageSink
+    in.playerImmune = playerFullRestoreArmed(victimName);  // Sec18.13 / step 10d
     in.attackerIsPlayer = isPlayerName(attackerName);
     in.attackerIsVictim = !attackerName.empty() && attackerName == victimName;
     in.curHp = static_cast<float>(curHp);
@@ -329,6 +332,7 @@ EngineState::DamageModelResult EngineState::applyDamageModelHit(const std::strin
     const int32_t newHp = static_cast<int32_t>(std::lround(r.newHp));
     c.currentHitPoints.set(newHp);
     c.lastDamageMagnitude = std::max(static_cast<double>(curHp - newHp), 0.0);
+    if (isLocalPlayerName(victimName) && r.damage > 0.0f) armHealthRegenWait(c);  // Sec18.3 item 1
     out.newHp = newHp;
     // Review N-9: every applied non-0x200 hit fires, also when max hit points read 0 (fraction 0 then).
     fireCharacterHitCallbacks(victimName, attackerName, maxHp > 0 ? static_cast<double>(curHp) / maxHp : 0.0,
@@ -562,7 +566,10 @@ void EngineState::tickDownedExpiry() {
         if (c.downedType == 1 || c.downedType == 2) {
             const int32_t maxHp = drawOrGetMaxHitPoints(name);
             const bool enemySide = !isPlayerName(name) && teamIdOfCharacter(c) != 0;
-            c.currentHitPoints.set(sr3airuntime::combat::DownedGetUpHeal(maxHp, enemySide));
+            const float heal = sr3airuntime::combat::DownedGetUpHeal(maxHp, enemySide);  // D-27: float, not truncated
+            const float whole = std::floor(heal);
+            c.currentHitPoints.set(static_cast<int32_t>(whole));
+            c.currentHitPointsFraction = heal - whole;
         }
     }
 }

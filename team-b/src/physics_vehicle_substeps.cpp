@@ -174,6 +174,10 @@ EngineCurveTuning VehicleTuning::ToEngineCurveTuning() const {
     e.torqueFactorIdle = minRpmResistance;
     e.torqueFactorPeak = optRpmResistance;
     e.torqueFactorRedline = maxRpmResistance;
+    e.torque = peakTorqueNm; e.minRpm = minRpm; e.optRpm = optRpm; e.maxRpm = maxRpm;  // D-17 table roles
+    e.minTorqueFactor = minRpmTorqueFactor; e.maxTorqueFactor = maxRpmTorqueFactor;
+    e.minResistance = minRpmResistance; e.optResistance = optRpmResistance; e.maxResistance = maxRpmResistance;
+    e.clutchSlipRpm = clutchSlipRpm;
     return e;
 }
 
@@ -856,7 +860,7 @@ void VehicleSubstepSimulator::Step08_ForceTorqueAccumulate(double dt) {
     // reading that does not make the engine always produce zero torque.
     state_.currentEngineTorqueNm =
         EngineNetTorque(tuning_.ToEngineCurveTuning(), state_.engineRpm, state_.lastInput.throttle,
-                        /*attachedObjectPenalty=*/false, tuning_.engineTorqueModifier);
+                        /*attachedObjectPenalty=*/false, tuning_.engineTorqueModifier, /*transmissionRpm=*/-1.0, tuning_.mass);
 
     // Per-wheel normal load (Fz) via longitudinal+lateral load transfer
     // (CHOSEN - a standard simplified-vehicle-sim approximation, using the

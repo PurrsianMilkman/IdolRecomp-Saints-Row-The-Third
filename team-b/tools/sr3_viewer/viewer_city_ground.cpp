@@ -19,6 +19,8 @@
 #include "sr3zone/hood_volumes.h"
 #include "sr3zone/road_graph.h"
 #include "sr3zone/zone_heightmap.h"
+#include "sr3zone/zone_collision_mesh.h"
+#include <cctype>
 #include "vpp/container.h"
 
 using namespace sr3viewer;
@@ -620,9 +622,9 @@ bool looksLikeNonDiffuseMapName(const std::string& nameLower) {
 // candidates to.
 void resolveGroundTextureBindings(const vpp::Container& top, const std::vector<uint8_t>& cznBytes,
                                   const std::vector<sr3zone::ZoneMeshBlockEntry>& blocks,
-                                  const sr3mesh::MeshBlock& mesh, size_t channelIndex, ID3D11Device* device,
-                                  TextureSearchCache* texCache, CityGroundTile& tile) {
-    if (texCache == nullptr || !mesh.drawGroupsLocated()) return;
+                                  const std::vector<std::pair<const sr3mesh::MeshBlock*, size_t>>& meshes,
+                                  ID3D11Device* device, TextureSearchCache* texCache, CityGroundTile& tile) {
+    if (texCache == nullptr || meshes.empty()) return;
     size_t firstBlockOffset = cznBytes.size();
     for (const auto& b : blocks) firstBlockOffset = (std::min)(firstBlockOffset, b.cznOffset);
     const std::vector<std::string> pool = findTgaNamesBefore(cznBytes, firstBlockOffset);
@@ -633,9 +635,12 @@ void resolveGroundTextureBindings(const vpp::Container& top, const std::vector<u
     if (diffuseCandidates.empty()) return;
 
     std::set<uint32_t> materialIds;
-    for (const auto& group : mesh.drawGroups())
-        for (const auto& dr : group)
-            if (dr.submeshIndex == channelIndex) materialIds.insert(dr.materialId);
+    for (const auto& mc : meshes) {
+        if (!mc.first->drawGroupsLocated()) continue;
+        for (const auto& group : mc.first->drawGroups())
+            for (const auto& dr : group)
+                if (dr.submeshIndex == mc.second) materialIds.insert(dr.materialId);
+    }
     if (materialIds.empty()) return;
 
     // SR3_GROUND_TEX_DEBUG=1: dumps the exact rank->materialId->name->
@@ -683,7 +688,7 @@ void resolveGroundTextureBindings(const vpp::Container& top, const std::vector<u
 bool tryRenderZoneEntry(const vpp::Container& top, const std::string& cznName, ID3D11Device* device,
                         CityGroundTile& tile, std::string& why, bool* outBytesUnreadable = nullptr,
                         TextureSearchCache* texCache = nullptr,
-                        std::vector<std::array<float, 3>>* outCollisionTris = nullptr) {
+                        std::vector<std::array<float, 3>>* outCollisionTris = nullptr, bool allBlocks = false) {
     if (outBytesUnreadable) *outBytesUnreadable = false;
     std::string gznName = cznName;
     {
@@ -775,7 +780,45 @@ bool tryRenderZoneEntry(const vpp::Container& top, const std::string& cznName, I
     // RESOLUTION" doc comment above for the full citation) - purely
     // additive: on any failure to find/resolve a real name,
     // tile.perMaterialSrv stays empty and nothing below is affected.
-    resolveGroundTextureBindings(top, cznBytes, blocks, mesh, channelIndex, device, texCache, tile);
+    // allBlocks (Team C, playtest / sr3.exe) - spec-zone-data-format.md 13.5.2 port recipe: every Mesh
+    // sub-block and every layout-0/2 channel a draw range uses is ground, drawn at identity; near-origin
+    // local-space blocks are skipped until their placement is specified (spec CHOSEN rule: bounds within
+    // +-50 m of the origin while the tile is elsewhere) - which includes the first block the original
+    // first-block path draws (in ~s0915 block #0 is such a template). Material ids share the one rank
+    // mapping above. Off for every golden-scene command (unchanged).
+    auto nearOrigin = [](const sr3mesh::MeshBlock& m, size_t ch) {
+        try {
+            for (const auto& v : m.decodeChannel(ch))
+                if (std::fabs(v.position[0]) > 50.0f || std::fabs(v.position[2]) > 50.0f) return false;
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    };
+    std::vector<std::pair<const sr3mesh::MeshBlock*, size_t>> drawn = {{&mesh, channelIndex}};
+    bool skipPrimary = false;
+    if (allBlocks) {
+        skipPrimary = nearOrigin(mesh, channelIndex);
+        if (skipPrimary) drawn.clear();
+        for (size_t bi = 0; bi < blocks.size(); ++bi) {
+            const sr3mesh::MeshBlock& m = blocks[bi].block;
+            const auto& channels = m.channels();
+            std::set<size_t> used;
+            if (m.drawGroupsLocated()) {
+                for (const auto& g : m.drawGroups())
+                    for (const auto& r : g) used.insert(r.submeshIndex);
+            } else {
+                for (size_t ci = 0; ci < channels.size(); ++ci) used.insert(ci);
+            }
+            for (size_t ci : used) {
+                if (ci >= channels.size() || (channels[ci].layoutCode != 0 && channels[ci].layoutCode != 2)) continue;
+                if (static_cast<int>(bi) == resolvedBlock && ci == channelIndex) continue;  // the primary, above
+                if (nearOrigin(m, ci)) continue;
+                drawn.push_back({&m, ci});
+            }
+        }
+    }
+    resolveGroundTextureBindings(top, cznBytes, blocks, drawn, device, texCache, tile);
 
     struct GroupTarget {
         size_t groupIndex = 0;
@@ -884,6 +927,42 @@ bool tryRenderZoneEntry(const vpp::Container& top, const std::string& cznName, I
             }
         }
     }
+    // A near-origin primary block (allBlocks) is dropped again: its renderers were the first ones added.
+    if (skipPrimary) {
+        tile.renderers.clear();
+        tile.rangesRendered = 0;
+        tile.triangles = 0;
+    }
+    // The other blocks (allBlocks): same per-draw-group upload, no collision (that comes from the 0x2237 path).
+    for (size_t di = skipPrimary ? 0 : 1; di < drawn.size(); ++di) {
+        const sr3mesh::MeshBlock& m = *drawn[di].first;
+        const size_t ch = drawn[di].second;
+        std::vector<std::pair<size_t, std::vector<bool>>> groups;
+        if (m.drawGroupsLocated()) {
+            for (size_t gi = 0; gi < m.drawGroups().size(); ++gi) {
+                std::vector<bool> mask(m.drawGroups()[gi].size(), false);
+                size_t n = 0;
+                for (size_t r = 0; r < mask.size(); ++r)
+                    if (m.drawGroups()[gi][r].submeshIndex == ch) {
+                        mask[r] = true;
+                        ++n;
+                    }
+                if (n > 0) groups.push_back({gi, std::move(mask)});
+            }
+        } else {
+            groups.push_back({0, {}});
+        }
+        for (const auto& g : groups) {
+            auto r = std::make_unique<sr3render::MeshRenderer>();
+            std::string err;
+            if (!r->initialise(device, err)) continue;
+            if (!r->upload(device, m, ch, 0, err, g.first, nullptr, nullptr, g.second.empty() ? nullptr : &g.second))
+                continue;  // a block that does not upload is skipped, the rest still draw
+            for (bool b : g.second) tile.rangesRendered += b ? 1 : 0;
+            tile.triangles += r->trianglesEmitted();
+            tile.renderers.push_back(std::move(r));
+        }
+    }
     tile.cznName = cznName;
     return true;
 }
@@ -902,8 +981,9 @@ namespace sr3viewer {
 // prop's local-space triangles). Defaults to false, which is every
 // pre-existing caller (plain `city` without --collision), so this costs
 // nothing and changes nothing for them.
-bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives, ID3D11Device* device,
-                        CityGroundTile& tile, std::string& why, bool buildCollision) {
+static bool loadCityGroundTileRender(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives,
+                                     ID3D11Device* device, CityGroundTile& tile, std::string& why,
+                                     bool buildCollision, bool allBlocks) {
     tile.col = col;
     tile.row = row;
     bool foundAnyEntry = false;
@@ -945,7 +1025,7 @@ bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchiv
         if (haveBase) {
             bool bytesUnreadable = false;
             if (tryRenderZoneEntry(*a.top, cznName, device, tile, archiveWhy, &bytesUnreadable, &a.texCache,
-                                    collisionOut)) {
+                                    collisionOut, allBlocks)) {
                 tile.archiveIndex = ai;
                 if (collisionOut != nullptr && !localCollisionTris.empty())
                     tile.collisionBvh = BuildCollisionBvh(localCollisionTris, 0.0f, 0.0f, 0.0f);
@@ -969,7 +1049,7 @@ bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchiv
             // rendered already returned true above, so this never
             // overrides real `~f` ground data.
             std::string sWhy;
-            if (tryRenderZoneEntry(*a.top, sBaseName, device, tile, sWhy, nullptr, &a.texCache, collisionOut)) {
+            if (tryRenderZoneEntry(*a.top, sBaseName, device, tile, sWhy, nullptr, &a.texCache, collisionOut, allBlocks)) {
                 tile.archiveIndex = ai;
                 if (collisionOut != nullptr && !localCollisionTris.empty())
                     tile.collisionBvh = BuildCollisionBvh(localCollisionTris, 0.0f, 0.0f, 0.0f);
@@ -1016,6 +1096,104 @@ bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchiv
         }
     }
     return false;
+}
+
+// ---------------------------------------------------------------------------
+// WALKABLE GROUND SOURCE (TEAM B task G1, spec-zone-data-format.md Sec13.5.1 port recipe, steps 1-2).
+// Loads the world-space `0x2237` TAIL COLLISION MESH of this tile's `sr3_city~s<CCRR>.czn_pc` (no transform; the `^name`
+// variant file when that variant is active; `~f` is never a source) and builds tile.collisionBvh from it. This REPLACES
+// the earlier render-mesh-derived collision triangles (which were the near-origin render content, not the walkable
+// surface - results/freeroam_ground_height_20261018.md). The true triangle list needs a MOPP walker the spec does not
+// give, so the spec's GUESS strip stand-in is used (CHOSEN, labelled): (v, v+1, v+2) for every v with s[v] != 0x38ff.
+// Placed `.clmesh_pc` objects of <CCRR>h0..h3 (recipe step 1, second source) are NOT added here: they are buildings/props,
+// "none of them is a road or terrain surface" (13.5.1(b)2), and their real object placement (Sec11 object -> clmesh
+// binding) is not decoded by this project (CityLoadedCell lays props on a stand-in grid) - see the final report.
+namespace {
+std::string g_activeZoneVariant;  // "" = none ("megab1" selects the `^megab1` file)
+
+bool collisionEntryMatchesVariant(const std::string& entryName, const std::string& variant) {
+    std::string low = entryName;
+    for (char& ch : low) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    std::string want = "^" + variant;
+    for (char& ch : want) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return low.find(want + ".") != std::string::npos;
+}
+}  // namespace
+
+
+void setActiveZoneVariant(const std::string& variant) { g_activeZoneVariant = variant; }
+const std::string& activeZoneVariant() { return g_activeZoneVariant; }
+
+bool loadCityGroundTileCollision(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives,
+                                 CityGroundTile& tile, std::string& why) {
+    tile.collisionLoaded = false;
+    tile.collisionBvh = CollisionBvh();
+    tile.collisionVertexCount = 0;
+    tile.collisionTriangleCount = 0;
+    tile.collisionSource.clear();
+    bool sawSEntry = false;
+    for (size_t ai = 0; ai < archives.size(); ++ai) {
+        CityArchive& a = *archives[ai];
+        std::string unusedBase;
+        std::vector<TileZoneCandidate> cands;
+        findTileZoneEntryName(*a.top, col, row, unusedBase, &cands);
+        std::string chosen;
+        const std::string& variant = g_activeZoneVariant;
+        if (!variant.empty()) {
+            for (const auto& c : cands)
+                if (c.kind == "s_variant" && collisionEntryMatchesVariant(c.entryName, variant)) { chosen = c.entryName; break; }
+        }
+        if (chosen.empty()) {
+            for (const auto& c : cands)
+                if (c.kind == "s_base") { chosen = c.entryName; break; }
+        }
+        if (chosen.empty()) continue;
+        sawSEntry = true;
+        std::vector<uint8_t> cznBytes, unusedSibling;
+        if (!findEntry(*a.top, chosen, cznBytes, unusedSibling, "") || cznBytes.empty()) {
+            why = chosen + ": could not read czn bytes";
+            continue;
+        }
+        std::vector<sr3zone::CollisionMesh> meshes;
+        if (!sr3zone::LocateCollisionMeshes(vpp::ByteView(cznBytes.data(), cznBytes.size()), meshes)) {
+            why = chosen + ": no 0x2237 tail collision mesh located";
+            continue;
+        }
+        std::vector<std::array<float, 3>> tris;
+        for (const auto& m : meshes) {
+            tile.collisionVertexCount += m.v.size();
+            auto t = sr3zone::BuildKeyTriangles(m);
+            if (t.empty()) t = sr3zone::BuildStripStandInTriangles(m);  // LABELLED FALLBACK (wrong; only if MOPP walk failed)
+            tris.insert(tris.end(), t.begin(), t.end());
+        }
+        if (tris.empty()) {
+            why = chosen + ": collision mesh decoded but the strip stand-in produced no triangles";
+            continue;
+        }
+        tile.collisionBvh = BuildCollisionBvh(tris, 0.0f, 0.0f, 0.0f);  // world-space, identity placement (13.5.1(b)1)
+        tile.collisionTriangleCount = tile.collisionBvh.tris.size();
+        tile.collisionSource = chosen;
+        tile.collisionLoaded = !tile.collisionBvh.empty();
+        return tile.collisionLoaded;
+    }
+    if (!sawSEntry) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "no sr3_city~s%02d%02d*.czn_pc in any archive", col, row);
+        why = buf;
+    }
+    return false;
+}
+
+bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives, ID3D11Device* device,
+                        CityGroundTile& tile, std::string& why, bool buildCollision, bool allBlocks) {
+    // Render path: unchanged, but no longer the source of collision triangles (see the section comment above).
+    const bool ok = loadCityGroundTileRender(col, row, archives, device, tile, why, false, allBlocks);
+    if (buildCollision) {
+        std::string collWhy;
+        loadCityGroundTileCollision(col, row, archives, tile, collWhy);
+        tile.collisionWhy = collWhy;
+    }
+    return ok;
 }
 
 } // namespace sr3viewer

@@ -178,6 +178,289 @@ Wiring (after the viewer split step 3, same rules as section 6): replace the pla
 auto-skip with `CutscenePlayer` (H step 10), executing its events through the existing anim,
 audio and Bink paths.
 
+## 8. Activities — `feature/activity-fraud` (library `sr3activity`, test `synthetic_activity_test`)
+
+Source: `spec-activity-runtime.md` 6.1 (shared frame, reward grant) and 6.2 (Insurance Fraud), with
+`spec-tables-diversions.md` 10 (`fraud_globals.xtbl`, parsed by Team B's `sr3tables_diversions`).
+
+| File | What |
+|---|---|
+| `include/sr3activity/activity.h`, `src/activity_instance.cpp` | `ReadActivityInstance` (Activity row, up to 6 Levels; awards only inside Level), `TypeFromInstanceName`, `GrantActivityRewards` (done bit per level, Reward/Reward2, Props then round(Props x (m-1)) respect, Cash_Award, hints 0x5b/0x5c(+0x13/0x33/type hint), completion counter; replay pays nothing) |
+| `include/sr3activity/fraud.h`, `src/activity_fraud.cpp` | `FraudRun`: ragdoll-episode hits, crush/scrape impacts with the mass multiplier, body multipliers, money gate, scoring-area/spot/adrenaline gate, struck vehicles (<= 6, luxury), the *_Element category grid, hit value, banking with spot consumption, adrenaline meter, 3 s cooldown, on-fire bonus, win (1 s timer) / timer fail deferred by ragdoll or adrenaline, death; `FraudParamsFromTables` (+ the Mass_*/Crush/Scrape/Adrenaline scalars 6.2 names) |
+| `tests/synthetic_activity_test.cpp` | 83 checks |
+| `tools/sr3_viewer/viewer_playtest_activity.cpp` | `--activity _a_if_<hood>_<nn>`: real instance xtbl from `<inst>_modal.str2_pc`, real fraud_globals, HUD line, tick, death fail, reward grant into the HUD EngineState; `--fraud-test-hit-every S` test aid |
+
+CHOSEN: adrenaline-grid gain clamped at the grid ends; the 3 s cooldown blocks arming a new hit;
+mass-multiplier speed test on |component|; adrenaline mode has no specified end (`endAdrenalineMode`
+exists, nothing calls it); viewer: run starts where the player stands, scoring area counted as
+reached (the hood latch needs the instance hood's volume), no player ragdoll/contacts in the viewer
+yet so real hits never happen (test aid only). The viewer success/reward branch was not reached
+live (the cooldown caps synthetic hits at $468 per 3 s against $80,000); it is unit-tested.
+OPEN (spec): the per-hit cap +0x5c writer; bonus slots +0x70/+0x74/+0x88; what 0x005e97a0 gates on;
+the "all instances done" test before activity_types Unlockables; bonus-spot placement.
+Snatch (6.4, `feature/activity-snatch`): `include/sr3activity/snatch.h` / `src/activity_snatch.cpp`
+(`SnatchRun`: Ho_Win_Amount, Duration/Coop_Duration, drop-off 6/8, In_Range_Pickup_Dist 60, win
+before timer, death; notoriety bump clamp). The shipped rows keep the per-type fields in
+`Level/Snatch_Info` (checked on the real `_a_sn_ne_01.xtbl`), so the instance reader also looks
+one element below Level. Viewer `--activity _a_sn_*` + `--snatch-test-deliver-every S` (test aid):
+smoke deliver 4 in 320 s -> SUCCEEDED, unlock Activity_Unlock_SN, +$2,000, respect 200.
+OPEN: the recapture complication's mechanism (only its parameters are specified).
+Mayhem / Tank Mayhem (6.6/6.7, `feature/activity-mayhem`): `include/sr3activity/mayhem.h` /
+`src/activity_mayhem.cpp` (`MayhemRun`: combo count/multiplier with the class multipliers and the
+Combo_Max_Multiplier cap, immediate credit, combo timer start/extend/end with the tweak times,
+Combo_Decay_Cutoffs as absolute speeds, Completion_Mult, scoring gates, HVT Value, win wrap-up
+waiting for the combo to close and the HVT groups, fails: timer / Tank leash / tank destroyed /
+death; `ReadMayhemParams` from the real layout `Level/{Destruction_Goal, Duration, Combo_Info/...,
+Activity_Center{Center,Radius}}`; Tank rows carry no Combo_Max_Multiplier = uncapped). Literal
+reading kept: when the goal-meeting event also crosses a cutoff, the speed gets Completion_Mult
+there AND again at the win (6.6 states both steps). Viewer `--activity _a_mh_*|_a_tm_*` +
+`--mayhem-test-kill-every S` (test aid); the Activity_Center navpoint is not resolved (no leash).
+OPEN: the vehicle record's value field (xtbl name not matched by the spec); 0x006641c0's HVT test.
+Next: real hooks once the viewer has them (player ragdoll/contacts for Fraud, rescue NPCs and
+the SN_Ho_Dropoff navpoint for Snatch, kill/destroy events and navpoint positions for Mayhem);
+All eight instanced activity types (6.2-6.9) are now in sr3activity and the viewer.
+Heli Assault (6.5, `feature/activity-heli`): `include/sr3activity/heli.h` / `src/activity_heli.cpp`
+(`HeliRun`: Objectives_Needed, Use_Timer-gated Time_For_Level, fails death / heli destroyed /
+protected car destroyed; `ReadHeliParams` from the real layout, objective kind from the top-level
+block holding the matching Level_number - CHOSEN 1-based). Viewer `--activity _a_ha_*` +
+`--heli-test-objective-every S` (test aid). Smoke: _a_ha_nw_02 -> SUCCEEDED, +$4,000. 6.5's own
+OPEN stays: no per-type reader located, so how objectives are counted in-game is data-only.
+Genki (6.9, `feature/activity-genki`): `include/sr3activity/genki.h` / `src/activity_genki.cpp`
+(`GenkiRun`: exit gate Required_cash before Time_limit, kill cash Base + listed bonuses (additive,
+CHOSEN), targets, trap evades, timer, death; `ReadGenkiGlobals` from the real
+`running_man_globals.xtbl` in `Running Man.str2_pc` (layout `Running_man_globals/Scoring/...`)).
+Viewer `--activity _a_rm_*` + `--genki-test-kill-every S` (test aid); the viewer package reader is
+now `ReadPackagedFile(package, file)`. Smoke: _a_rm_dt_01 -> SUCCEEDED, unlocks Activity_Unlock_RM
++ Homie_Pierce. Unethical cash deduction is not floored (6.9 gives none).
+Spec-sync question 7 (Team A): the Genki combo rule - what counts as a consecutive score, when the
+Max_combo_ticks budget refills and how Base_decay_rate / Decay_rate_table apply, what the
+Multiplier_table factor multiplies (kill cash? all cash?), and what Event_Multiplier 3 scales. The
+tables are read (`GenkiComboFactor`) but not applied until then.
+ANSWERED by spec 6.9.1 (main 06118ca) and implemented on `feature/activity-genki-combo`:
+`GenkiCombo` (kept rows, Add/Refill x4/Decay with the two truncations, one level step per add),
+kills paid trunc(x M) at the old M then refill; pickups/button/trap evades trunc(cash x M), Add(0,
+cash, 0) only while live; negative pickup ends the combo; run total floored at 0 (replaces the
+old unfloored deduction and the additive-bonus CHOSEN). Spec vectors V1-V7 are unit tests. Still
+not applied: Event_Multiplier, the beep, Intensity (6.9.1 leaves them presentation/untraced).
+Trafficking (6.3, `feature/activity-trafficking`): `include/sr3activity/trafficking.h` /
+`src/activity_trafficking.cpp` (`TraffickingRun`: Deal_Use_Count deals then Ending_Nav, per-deal
+complication rolls capped at Max_complications, fails dealer/player dead or car destroyed;
+`ReadTraffickingParams` from the real layout). CHOSEN: deals taken in Deals order; at most one
+complication per deal (first hit). Viewer `--activity _a_dt_*` + `--trafficking-test-deal-every S`
+(test aid). Smoke: _a_dt_dt_01 -> SUCCEEDED, unlock Activity_Unlock_DT, +$2,000.
+Escort (6.8, `feature/activity-escort`): `include/sr3activity/escort.h` / `src/activity_escort.cpp`
+(`EscortRun` base/Tiger/Genki: filming test, footage drain + warning, satisfaction from driving time
+when unhindered, drop-off, fail order client dead / car destroyed / 10 s abandon / Genki 30 m /
+footage (not Tiger) / death; Tiger slap penalty; `ReadEscortParams` from the real Level layout).
+Viewer `--activity _a_es_*` + `--escort-test-drive` (test aid; the player's own vehicle stands in
+for the client's car; the abandon countdown starts after the first entry - CHOSEN). Smoke:
+_a_es_ne_01 -> SUCCEEDED, unlocks Activity_Unlock_ES + Homie_Zimos (real Reward2), +$2,000.
+OPEN: the co-op wrong-move penalty's direction ("subtracts" from a counter that counts down);
+Slap_Rage_Value's unit; the later drop-off phases (5-0x12) and phase-2 promotion are folded into
+`arriveAtDropoff()`.
+
+### 8.1 Start points, HUD bars, end-to-end harness - `feature/activity-e2e`
+
+Every activity instance ships its own zone, `<instance>.str2_pc` (`sr3_city~f<instance>`.czn_pc`),
+next to `<instance>_modal.str2_pc`. Its placed objects are real: `local_start`/`remote_start`
+(= the row's `Warp_Location`/`Second_Warp_Location`), Snatch's pickup navpoints, hostage/pimp/thug
+script_npcs and `SN_Ho_Dropoff`, Fraud's `_A_IF_DT_01_Start` and bonus-spot navpoints, etc.
+`--activity-list-objects` prints them.
+
+- Library: `ActivityInstance` gains the four warp names; `ActivityPos`/`Distance`;
+  `AtActivityStart` (CHOSEN start point = the Warp_Location navpoint within 3 m - the in-world
+  trigger is untraced, section 1, and the shipped rows have Start_Location Disabled);
+  `ReadSnatchLayout` (drop-off navpoint, Vehicle_Name, Recruit_Notification_Dist, pickups with
+  their Location_Navpoints and Standard_Pickup/Ho_Rescue options); `SnatchHostages` (CHOSEN join
+  rule: a waiting hostage within Recruit_Notification_Dist follows; at the drop-off radius of 6.4
+  all followers are delivered). `include/sr3activity/harness.h`: `StepToward` and
+  `FraudStrikeHarness` (one scripted car strike per ragdoll episode: 1500 kg at 15 m/s, 1.5 s of
+  slowing ground contacts, airtime 1.5 s, thrown 12 m) - test aids, not game behaviour.
+- Fix: `FraudParamsFromTables` now honours `Cash_Instead` as a flag element. The shipped
+  fraud_globals.xtbl marks Airtime, Linear_Dist and Windshield with an empty `<Cash_Instead/>`
+  (exactly the three 6.2 lists as cash); Team B's `sr3tables_diversions` reads it with
+  `ReadBoolAlways` (text) and gets false, which made e.g. a 12 m throw a x260 multiplier (one
+  strike banked $1.1 M). Proposal for Team B (their file, src/tables_diversions.cpp:640): treat
+  an empty Cash_Instead element as true.
+- Viewer: `--activity X` now ARMS X at its start point; walking in (edge-triggered) starts it.
+  `--activities` arms every shipped instance found in the archives (`*_modal.str2_pc` of the 8
+  types). The HUD label shows the nearest start point (<= 250 m) while idle; while running, the
+  label plus two CHOSEN bars under it (progress gold, time left blue - no activity meter is
+  specified in spec-hud-runtime.md). Snatch uses the real hostages and drop-off; each pickup's
+  first option at its first Location_Navpoint (CHOSEN). An instance without a resolvable start
+  point still starts where the player stands (old behaviour).
+- `--auto-activity` (harness, all CHOSEN): teleports 8 m from the start point, walks in at 4 m/s,
+  then Snatch: straight-line travel at 20 m/s to the nearest waiting hostage, then the drop-off
+  once enough follow; Fraud: FraudStrikeHarness strikes. The run ends 15 frames after the result.
+  The older per-type test aids (`--snatch-test-deliver-every`, `--heli-test-objective-every`, ...)
+  still work once a run is started; for the other six types use them with `--auto-activity`
+  (it reaches the start point, then the aid drives the run).
+- ctest `real_activity_e2e_test` (tests/real_activity_e2e_test.cpp, GPU lock, skips without the
+  cache): _a_sn_ne_01 (3 + 2 hostages joined, 5 delivered, SUCCEEDED, Activity_Unlock_SN,
+  +$2,000, respect 200) and _a_if_dt_01 (25 strikes x $3,252 = $81,306 of $80,000 at ~113 s of
+  210, SUCCEEDED, Activity_Unlock_IF, +$2,000) - ~157 s together. Peak viewer memory 3.45 GB
+  working set / 540 MB private.
+- `feature/activity-e2e-all`: `--auto-activity` now also turns on the per-type test aid at a
+  CHOSEN default (Mayhem/Tank kills 0.25 s, stopped once the goal is met so the combo closes;
+  Escort test drive; Trafficking deal 5 s; Genki kill 1 s; Heli objective 5 s). Real-data runs,
+  all SUCCEEDED with the reward: _a_mh_nw_01 ($93,241/$90,000, 411 s wall), _a_tm_dt_01
+  ($125,255/$125,000), _a_es_ne_01, _a_dt_dt_01, _a_rm_dt_01 (needs sr3_city_missions.vpp_pc for
+  running_man_globals), _a_ha_nw_02. _a_es_ne_01, _a_tm_dt_01 and _a_ha_nw_02 have no
+  Warp_Location navpoint in their zone, so they start where the player stands. Not added to
+  ctest (about 15 min together); Snatch and Fraud stay the ctest pair.
+- `feature/activity-trafficking-real`: Trafficking uses its real navpoints - the current deal's
+  Deal_Nav, then Ending_Nav, resolved in the instance zone; arriving within 5 m (CHOSEN, 6.3 gives
+  no radius) completes the deal / the run. The autopilot drives to them; the timed test aid is
+  used only when the navpoints are missing. _a_dt_dt_01: deal 003, deal01, end -> SUCCEEDED,
+  +$2,000. Mayhem, Escort, Genki and Heli still need kill/vehicle/objective events the viewer
+  does not have (NPC combat is Team B's lane), so they keep their test aids.
+- Next: autopilot drivers for the other six types (Mayhem kills, Escort drive, Trafficking deals,
+  Genki, Heli) need the same kind of real objects (their zones are loaded already); the vehicle
+  ("load them, drive to the drop-off") needs a scripted seat + drive of the player car - today the
+  harness carries hostages on foot.
+
+## 9. Collectibles and challenges - `feature/collectibles-challenges` (library `sr3collect`)
+
+Source: `spec-tables-progression.md` "Free-roam collectibles, challenges and stat tracking" C.1-C.6
+(and section 9). Orchestrator order 2026-10-19: (1) this, (2) Rim Jobs, (3) pause menu/options/rebinding.
+
+| File | What |
+|---|---|
+| `include/sr3collect/collectibles.h`, `src/collect_collectibles.cpp` | `CollectibleDefsFromTable` (Team B's `ParseCollectiblesTable` rows -> 4 group records, thresholds > 0, max 6), `CollectibleRegistry` (find-or-append, 20 cap, collect routine with the exact-match threshold, screen type 1/2, title, save entry 1 records + restore), `EvaluateCollectionAchievements` (C.5) |
+| `include/sr3collect/challenges.h`, `src/collect_challenges.cpp` | `ReadChallenges` (real layout: Reward/Respect+Cash, HUD_Percent/HUD_Linear, Unlock_Requirement, Trigger_Kill/Destroy (+Vehicle_List)/Stat/Special; display unit = Trigger_Stat/Units else Units), `ChallengeDisplayValue`, `ChallengeTracker` (mission unlock, progress routine with clamp and HUD-step notices, stat/kill/destroy/special dispatch with "Any" and "Any Hostile But Police") |
+| `tests/synthetic_collect_test.cpp` (126 checks), `tests/real_collect_tables_test.cpp` (37 checks, shipped tables; vectors 2, 5, 8-12, totals 21,001 respect / $68,001) | |
+| `tools/sr3_viewer/viewer_playtest_collect.cpp` | with --hud: loads both real tables; vehicle distance -> stat "distance by vehicle"; hud_challenge banner text + collection screen text at (900,140), 3 s (CHOSEN); payment when they end (respect x multiplier via AwardRespect incl. overflow cash, cash with the 0..2e9 cap); `--collectible-test-pickup-every S`, `--challenges-unlock-all` (test aids) |
+
+CHOSEN: rows without Unlock_Requirement start unlocked (none in the shipped table - all 41 have one);
+amount <= 0 is the "below epsilon" ignore; the 80 world placements are OPEN in the spec, so the viewer
+registers 20 stand-in handles per group only under the test aid; Photo Op uses the same collect path.
+Smoke: 16 test pickups (screen types 1 and 2) each paid $1,000 at screen end. The driving feed was not
+seen live: --script-vehicle never seats the player at the default spawn (car 25 m away); the stat path
+is unit-tested. Not wired: autosave after payment, save entry 26 (challenge progress; no Team B parser),
+entry 1 restore from --load-save, kill/destroy/special events (no NPC combat in the viewer yet),
+the other 19 Trigger_Stat stats (the viewer tracks none of them), Collectible_Finder map filter.
+
+## 10. FIRST PLAYABLE front end - `feature/frontend-menus` (libraries `sr3frontend`, `sr3game_frontend_teamc`)
+
+Orchestrator 2026-10-19 (top priority, replaces collectibles follow-ups / Rim Jobs / options for now): render
+and navigate the front-end menus for sr3.exe. Contract: Team B's `include/sr3game/frontend.h` on
+`feature/first-playable` (3fb7423, WIP); this branch CONTAINS it (merged) and builds it.
+
+| File | What |
+|---|---|
+| `include/sr3frontend/menu_model.h`, `src/frontend_menu_model.cpp` | `MainMenuModel` (Continue / New Game / Load Game / Quit Game; Continue = most recent VALID save, else the MENU_TITLE_NOTICE / MAIN_MENU_CONTINUE_UNAVAILABLE notice (spec Sec3); load list with 8-row scrolling, unreadable saves refused; quit confirm defaulting to No), `PauseMenuModel` (Resume / Save Game / Quit to Main Menu / Quit to Desktop, both quits confirmed; Back = Resume), `DefaultText` (English for the keys) |
+| `include/sr3frontend/gamepad.h`, `src/frontend_gamepad.cpp` | XInput pad 0-3 -> edge-triggered menu input (D-pad / left stick with 0.5/0.3 hysteresis, A accept, B back, Start), merged with the host keyboard input |
+| `src/frontend_menus.cpp` | the frontend.h functions over the models, drawn through FrontendCanvas (title band, purple highlight bar, panels, confirm boxes, save rows with date / play time / cash / level); Start closes the pause menu; logs `frontend : ...` incl. the stand-in's `main menu result = ...` line |
+| `tests/synthetic_frontend_test.cpp` | 41 checks (Continue rule, load list/scroll, confirms, pause actions, pad edges) |
+
+CMake: `sr3` links `sr3game_frontend_teamc` instead of `sr3game_frontend_default` (kept, unused).
+CHOSEN: entry lists/order/wording, confirms, layout/colours, gamepad mapping, English text for the keys
+(no localisation hook in the contract - proposal for Team B: add `std::function<std::string(const
+std::string&)> localize` to FrontendContext, then the menus show the real strings). The retail menus are
+Lua + vint_doc screens (pause opens natively: CBA_GAC_PAUSE_MENU -> "dialog_pause_show", Sec7); they are not
+run - the native menus follow the spec's structure. No frontend Lua stub needed real behaviour for this.
+
+**Aligned to spec-frontend-flow.md (main 188370f) on `feature/frontend-flow-spec`:** PC auto-accepts press
+start (Sec3.2) -> top list Continue (only with a readable save, the newest) / Campaign / Quit Game; Esc on the
+top list = PLT_QUIT_GAME / PLT_QUIT_GAME_WARNING confirm (Sec8.2); Campaign = New Game (MAINMENU_NEW) / Load
+Game (SAVELOAD_LOAD_GAME); New Game -> difficulty (DLT_CASUAL/NORMAL/HARDCORE, cursor on Normal) -> NewGame;
+load list (Sec5.1): readable newest first, unreadable last, empty -> SAVELOAD_NOTHING_TO_LOAD row, main-menu
+load without confirmation (Sec5.2), unreadable -> SAVELOAD_ERROR / SAVELOAD_FILE_NOT_LOADABLE; pause
+(ui-controls Sec18.1): header SYSTEM_PAUSED, Save Game / Quit (PAUSE_MENU_QUIT_TITLE / QUIT_GAME_TEXT_FULL ->
+main menu) / Quit to Desktop (CHOSEN extra), Back resumes (no Resume entry). Not yet (need host/contract
+support - proposals for Team B): MainMenuResult difficulty field (chosen difficulty is only logged);
+PauseMenuAction LoadSave(path) for pause Load Game; a save target path for the SAVE-mode list (New save row +
+overwrite confirm, Sec7.2/7.3); an autosave flag in SaveFileInfo (autosave-first order, Sec5.1); Options
+(orchestrator item 3); display-calibration screen (skipped). 42 model checks.
+
+**Options (`feature/frontend-options`, spec-tables-ui-controls Sec18.2):** `include/sr3frontend/options.h` /
+`src/frontend_options.cpp`: Options entry on the main top list and the pause list -> list Mouse / Gameplay / Display
+/ Audio (vector 4); pages edit the REAL profile options struct (sr3save::ProfileOptions, spec-save-format 7.5): mouse
+invert Y/X (+0x4C bits 1/2), sensitivity (+0x50/+0x54), vehicle camera snap (+0x58); difficulty (applied when the
+Gameplay page is left, values > 2 ignored, Sec18.4), airplane controls (+0x60 bit1), subtitles (+0x20), radio
+(+0x44), minimap view (+0x21), pause on focus loss (+0x4C bit0); brightness (+0x24), gameplay vsync (+0x22); SFX
+(channels 3-5 together), music (1), voice (2), 0-100 step 10; Restore Defaults per page (not Display), confirmed.
+Leaving a page commits: the struct is written into `<saveDir>/sr3def_profile` (patched at 0x2000/0x2004 if the file
+exists, else a new 0x4248-byte image with profile-valid 0 so default bindings stay). Defaults = Sec18.2 shipped
+values. CHOSEN: labels, mouse-sensitivity UI scale (0.24 = 50), brightness UI 0..100 = 0..2, airplane bit1 = Normal.
+NOT applied to the game yet - proposal for Team B: the host reads `sr3frontend::LoadOptions(saveDir)` (or a
+FrontendContext hook) and applies sensitivity / invert / volumes / minimap / difficulty. Not built: display.ini
+items, Controls (pad) page, Remap (rebinding, next step), the profile key-binding tables. 67 frontend checks.
+
+**Rebinding (`feature/frontend-rebinding`, spec-tables-ui-controls Sec18.3):** `include/sr3frontend/bindings.h` /
+`src/frontend_bindings.cpp`: `BindingModel::FromTable` over Team B's ParseControlBindingSetsTable (General, On Foot,
+Car, Helicopter, Plane, Tank; Camera hidden; Debug_Only / Non_Release_Final rows skipped; an axis = two rows +/-;
+114 rows from the shipped table), `bind()` with the conflict rule (same set, every set for the common General set;
+losers cleared to UNBOUND and listed; allowed-sharing pairs skipped), input check (key scan code 1..0xFF with a name,
+mouse 0..6), `resetAll`. Options -> Mouse -> Remap Controls: categories (+ confirmed Restore Defaults = the retail X),
+rows with primary/secondary columns, "press any key" capture by Win32 polling in frontend_menus.cpp (scan codes via
+MapVirtualKey; Esc cancels; mouse wheel not capturable this way). Tests: real_bindings_test (shipped table, vectors
+7/8/9) + synthetic remap flow (91 frontend checks). CHOSEN: a cell holds one input (key XOR mouse); allowed-sharing
+pair lists empty (contents not dumped - Team A question); key names past the spec's list = standard set-1 scan codes.
+INTERIM: the binding table is read from %CRREISH_GAME_CACHE_DIR%/misc_tables.vpp_pc (else the build-time cache) -
+proposal for Team B: a FrontendContext table-reader hook. Not done: writing the bindings to the profile tables A/B
+(spec-save-format 7.6), the game using them (Team B input layer), gamepad presets.
+
+Changes in Team B files (small, needed for the scripted flow; please keep or replace):
+- `tools/sr3_game/main.cpp`: ScriptedMenuInput = Down then Accept (New Game is 2nd); ScriptedPauseInput adds
+  Left + Accept for the quit confirm; the scripted run passes `--frames roamFrames+200` because `--no-input`
+  alone caps the playtest at 300 frames - the very frame the script opens the pause menu (the session ended
+  before the pause, with any front end).
+- `tools/sr3_viewer/viewer_playtest_frame_player.cpp`: `bridge.stepFrame` is skipped when `animFrame.dt == 0`.
+  A zero-dt frame (pause open; also a live >0.25 s hitch, which stepFrameBegin clamps to 0) crashed with
+  0xC0000409 inside stepFrame (bisected with traces: last good point before the call, nothing after). The
+  root cause inside the movement/collision step is NOT located - Team B should look (it predates the menus).
+
+Result: `sr3.exe --script-menu=new --frames 300 --headless`: main menu -> New Game -> free roam -> pause ->
+Save (sr3save_01 written) -> Quit to Desktop (confirmed) -> exit 0; captures main_menu.png / pause OK.
+Not done: Options / control rebinding screens (orchestrator item 3, later), real vint_doc rendering of the
+retail screens, gamepad Start to OPEN the pause menu (host opens on Esc only - proposal: host ORs pad Start).
+
+## 11. "Looks like the game" track (orchestrator 2026-10-19: ground, sky, sun/TOD, real HUD art)
+
+- Ground (`feature/ground-render`): the playtest drew only the FIRST layout-0/2 Mesh sub-block of a tile's zone
+  (`tryRenderZoneEntry`); sr3_city~s0915 has 143 blocks, so 26 triangles drew and the sky clear colour showed under
+  the buildings. New opt-in `allBlocks` on `loadCityGroundTile` (viewer_city_ground.cpp / viewer_city_support.h):
+  every block's first layout-0/2 channel draws; texture ranks are assigned over the union of their material ids
+  (Team B's existing CHOSEN rank mapping, so materials can be wrong - e.g. paving everywhere). Only the playtest
+  (sr3.exe) passes it; city / walk / drive commands and every golden scene are byte-identical. Spawn tile: 45,692
+  triangles, 226 ranges. Collision unchanged (0x2237 path). Not done: layout-4 channels, correct material mapping
+  (needs the zone material table -> diffuse map rule; Team A question), more than the 2x2 streamed tiles.
+- Sky (`feature/sky-gradient`, contains ground-render): `tools/sr3_viewer/viewer_playtest_sky.cpp`, a screen-space
+  gradient drawn after the clear (one hook line in viewer_playtest_frame_render.cpp, HUD runs only - the quad
+  pipeline exists only with --hud), coloured from the real District_Skybox colours (West1-4, East1-4, West_Zenith;
+  spec-tables-environment 3.3) blended with the lighting's own 2x2 segment x stage corner blend. CHOSEN: bands at
+  0/12/30/55 deg + zenith 90, West = -X / East = +X, joint scale-down when a channel > 1. Not done: the real skybox
+  meshes (skybox.vpp_pc rfg_skybox / skybox_clouds .csmesh_pc + cloud peg, sun/moon bitmaps).
+- Exposure (`feature/scene-exposure`, contains sky-gradient): `applySceneExposure` (viewer_playtest_sky.cpp, hooked
+  after ComputeTodLightingBlended in the render step, HUD runs only) replaces the per-colour normalisation (ambient
+  and sun each to 1.0 -> washed out) with ONE factor on the real blended Ambient_Color and TOD_Light_Color (colour x
+  intensity): brightest channels sum to 1.25, never scaled up (night stays dim), ambient x2 (CHOSEN lifts for the
+  unmodelled HDR eye adaptation / indirect light). Spawn: raw ambient 0.89/0.87/1.25, sun 11.0/6.9/6.1 -> k 0.10.
+  Not done: the real tonemap / bloom (spec 3.3 floats listed, formula OPEN), sun direction (spec negative; CHOSEN arc).
+- Spec sync d1f8f7a (`feature/visual-spec-sync`, contains scene-exposure + main): spec-looks-like-the-game.md.
+  * Ground per spec-zone-data-format 13.5.2 recipe: every layout-0/2 channel any draw range uses, near-origin
+    local-space blocks skipped (spec CHOSEN +-50 m rule; incl. the old first block #0 template). Spawn: 38,856 tris.
+  * Sun direction per spec-tables-environment 19.2 (differential D-23): new lib `sr3sky` (`include/sr3sky/sun.h`,
+    `TodLightDirection`, `SunTowardDirection`; 19.2 + D-23 vectors pass) drives the lighting AND the shadow map
+    (2 lines in viewer_playtest_frame_render.cpp, replacing ComputeChosenSunDirection there).
+  * Base TOD curves per 19.1: `include/sr3sky/tod_curves.h` (`TodBaseCurves` parses default_district.xtbl, 48-slot
+    resample with the 47-span wrap quirk, per-frame slot blend, rgb x intensity); tests: synthetic (resample/read
+    vectors) + real_tod_curves_test (12:00/21:00 table values). The playtest uses them for a weather corner with
+    no weather_time_of_day rows (Clear Skies), else the override cells as before; corners mixed by the scheduler.
+    Clear noon is now a blue sky with warm light (the old path fell back to Overcast cells).
+  * Not yet from this sync: the 19.4 sky dome/cloud/mountain shading + fog, 19.3 sun/moon sprites, back-ambient,
+    HUD art (H.7) - next items.
+- HUD art started (`feature/hud-art`): viewer_playtest_hudart.cpp loads a named sheet sub-image (bitmap_sheets.xtbl
+  -> <sheet>.xtbl rect via docOf, page <sheet>.tga via findAndUploadTexture) and the health bar fill now draws the real
+  ui_hud_meter_fill (ui_bms_01 (311,1,290x12), page 768x1024 - matches H.7 vector). 1 line in frame_render.cpp.
+  Next: more ui_hud_* elements (respect meter, weapon icon, notoriety), then real hud.vint_doc layout.
+- (old plan) item 4, HUD art, spec-hud-runtime H.7: runVintDoc (viewer_vintdoc.cpp, Team B) already loads bitmap_sheets +
+  <sheet>.xtbl sub-images and the interface-backend peg, but it is one 1,000-line function (no reusable class). Plan:
+  factor a small Team C sheet loader (sheet name -> SRV, sub-image rect) in a new viewer file, then draw the real
+  ui_hud_* bitmaps (health ring, respect meter fill, weapon icon) with VintQuadPipeline::quad(srv, pos, uv) in
+  drawActivityHud-style hooks, keeping the current labels. Vectors: ui_hud_meter_fill -> ui_bms_01 (311,1,290,12).
+
 ## 6. PLAN (not started): wiring sr3hud / sr3saveflow / sr3progression into the viewer
 
 Start only after Team B's refactor step 3 (engine_state.h split, lua_host_run split) is on main;
@@ -271,6 +554,99 @@ Steps:
   EngineState::restoreRespectFromSave (8 lines in Team B's engine_state_progression.h). A.4-style
   smoke: loads at Crib_SaintsHQ, HUD LEVEL 5 850/2575 and $5,000; resave changes only hash, clock,
   play time. Build 0, full ctest 221/221 incl. golden. Queued.
+- `feature/activity-fraud` (section 8): sr3activity + viewer --activity; build 0, full ctest
+  228/228 incl. golden; queued.
+- `feature/activity-snatch` (contains activity-fraud): Snatch library + viewer; build 0, full
+  ctest 228/228 incl. golden; queued.
+- `feature/activity-mayhem` (contains activity-snatch and activity-fraud): Mayhem / Tank Mayhem
+  library + viewer; build 0, full ctest 228/228 incl. golden; queued.
+- `feature/activity-escort` (contains activity-mayhem and below): Escort library + viewer;
+  build 0, full ctest 228/228 incl. golden; queued.
+- `feature/activity-trafficking` (contains activity-escort and below): Trafficking library +
+  viewer; build 0, full ctest 228/228 incl. golden; queued.
+- `feature/activity-genki` (contains activity-trafficking and below): Genki library + viewer;
+  build 0, full ctest 228/228 incl. golden; queued.
+- `feature/activity-heli` (contains activity-genki and below): Heli Assault library + viewer;
+  build 0, full ctest 228/228 incl. golden; queued.
+- `feature/activity-e2e` (contains activity-heli and below): section 8.1 - start points,
+  HUD bars, --activities/--auto-activity, Cash_Instead fix, real_activity_e2e_test; build 0,
+  full ctest 229/229 incl. golden and the new e2e test; queued.
+- `feature/activity-genki-combo` (contains activity-e2e + main 06118ca): Genki combo per 6.9.1;
+  build 0, full ctest 237/237 incl. golden; queued.
+- `feature/activity-e2e-all` (contains activity-genki-combo): auto test aids for the other six
+  types, all eight succeed on real data; build 0, full ctest 237/237 incl. golden; queued.
+- `feature/activity-trafficking-real` (contains activity-e2e-all): Trafficking on real deal
+  navpoints; build 0, full ctest 237/237 incl. golden; queued.
+- `fix/activity-cash-cap` (contains activity-trafficking-real + main): activity cash grant clamps the
+  wallet to 0..2,000,000,000 cents (review RP-2 cash cap). Review 2026-10-19: AE-1..4, GC-1..5 all
+  CORRECT/labelled. Build 0, full ctest 237/237; queued.
+- `fix/activity-respect-overflow` (contains fix/activity-cash-cap + main 545ff46): review CC-2 - the
+  activity grant also pays AwardResult::overflowCashRaw (respect past the last level) into the wallet,
+  each add saturating 0..2e9 cents; the logged reward is the wallet's real gain. The engine-side
+  overflow drop (src/engine_state_progression.cpp:586) is Team B's file. Build 0, full ctest 240/240; queued.
+- `feature/collectibles-challenges` (contains fix/activity-respect-overflow + main): section 9;
+  build 0, full ctest 245/245 incl. golden; queued.
+- `feature/frontend-menus` (contains feature/first-playable 3fb7423 + feature/collectibles-challenges):
+  section 10; build 0, full ctest 247/247 incl. golden + real_first_playable_smoke_test; queued.
+- `fix/differential-teamc` (contains feature/frontend-menus + main 188370f): Team D differential vectors for
+  sr3progression as ctest `differential_progression_test` (reads spec-differential-vectors-progression.md V1-V5 and
+  -cash.md at run time: 1,159 vectors, 0 mismatches). Fixes: D-1 RoundProductF32 (single-precision product, halves
+  away, INT32_MIN out of range) in ScaleByMultiplier / KillRespect / ActivityCompletionAwards (unsigned Props_Award);
+  D-2 diversion 0.001 threshold + floored cash; D-3 toast respect OR cash; D-4 32-bit sums in AwardRespect/level-up;
+  D-22 AddCashToWallet (cash multiplier on positive local grants, wallet clamped then 32-bit add, +-2e9, floor 0 -
+  the clamp-before-add is inferred from the vectors) used by the activity and collect payments (multiplier 1.0: no
+  Cash_Bonus state in the engine yet). Proposal for Team B: route sr3player::AddCashSaturating through
+  AddCashToWallet with a real cash multiplier. V6 (container hash) is Team B's. Build 0, full ctest 248/248; queued.
+- `feature/frontend-flow-spec` (contains fix/differential-teamc): menus aligned to spec-frontend-flow.md
+  (section 10); host scripted input updated; build 0, full ctest 248/248 incl. golden + first-playable smoke; queued.
+- `feature/frontend-options` (contains feature/frontend-flow-spec): options pages + profile persistence
+  (section 10); host pause script gets one more Down; build 0, full ctest 248/248 incl. golden + first-playable smoke; queued.
+- `feature/frontend-rebinding` (contains feature/frontend-options): PC rebinding model + Remap screens
+  (section 10); build 0, full ctest 249/249 incl. golden + first-playable smoke; queued.
+- `feature/ground-render` (from main 97bad5c): playtest/sr3.exe draws every ground Mesh block (section 11);
+  build 0, full ctest 253/253 incl. golden (unchanged); queued.
+- `feature/sky-gradient` (contains feature/ground-render): TOD sky gradient (section 11); build 0, full ctest
+  253/253 incl. golden; queued.
+- `feature/scene-exposure` (contains feature/sky-gradient): joint scene exposure (section 11); build 0, full
+  ctest 253/253 incl. golden; queued.
+- `feature/visual-spec-sync` (contains feature/scene-exposure + main d1f8f7a): ground recipe, D-23 sun, base TOD
+  curves (section 11); build 0, full ctest 255/255 incl. golden; queued.
+- `feature/hud-art` (contains feature/visual-spec-sync): real ui_hud_meter_fill sheet art on the health bar;
+  build 0, full ctest 255/255 incl. golden; queued.
+- `fix/review-lg4` (contains feature/hud-art): review LG-4, sky east/west from the spec sunrise direction,
+  joint scale-down labelled CHOSEN; queued. LG-6 was already fixed in 14846cd.
+- `fix/review-lg8` (contains fix/review-lg4): review LG-8, HUD art cache moved from a static map keyed by the
+  session pointer into PlaytestSession (hudArtMeterFill/hudArtTried); build 0, full ctest 255/255; queued.
+- `feature/d24-tod-merge` (contains fix/review-lg8 + main e902321): D-24 / 19.1 "Live wiring" - every sky,
+  ambient and sun value = default_district base curve at the hour, current segment's from/to weather cells
+  merged per field (absent field keeps the base; other segment unused); replaces the old corner blend and
+  closes LG-3. The merge with main resolved the hudart conflict with Team B's 987ea9e (sessionId-keyed static
+  map) to the session-owned cache. Script-forced weather (merge off) is not modelled in the playtest.
+  Build 0, full ctest 257/257; queued.
+- Review e03e9db: TA-1 LG-8 FIXED, TA-3 D-24 CORRECT; all of hud-art, lg4, lg8, d24-tod-merge are on main.
+  TA-3's unverified points: both cells come from one segment (br.low, the current one) in ComputeSceneColours;
+  the debug override record and the script-weather flag are not modelled (no source of either in the playtest).
+- `feature/hud-art-2`: police notoriety icons (ui_hud_not_police, ui_bms_01 (357,878,52x58)) at the H.2
+  offsets around the minimap centre, scale 0.5, floor(level) lit; tweens not played, white, centred (CHOSEN).
+  HUD art cache is now per image name on the session (hudArtImages). Seen with --debug-notoriety=3 (3 badges).
+  One hook line in viewer_playtest_frame_render.cpp after the minimap. Build 0, full ctest 258/258 (6 long
+  playtest tests re-run separately after the background limit killed the first run); queued.
+- `feature/hud-art-2` (cont.): drawHudBitmapCircle = vint bitmap_circle (spec-vint-render 13.2; wedges as
+  degenerate strip quads, count clamped 1..256) and the respect meter ring: ui_hud_respect_fill
+  (ui_bms_01 (639,51,70x70)) at (1135,87) ref, end = 2.65 - 5.25 x RespectPct. CHOSEN: start 2.65, image size,
+  white; respect_meter_bg and the level text not drawn. Checked with a throwaway pct 0.4 build (arc visible).
+  Build 0, full ctest 258/258; queued.
+- Weapon icon BLOCKED on spec: H.2 names wpn_bmp_name as the weapon definition's "+0x19C record" but no
+  weapons.xtbl element name for it (spec-tables-weapons-combat has none) - spec-sync question for Team A.
+  The health ring (health_bar bitmap_circle, ui_hud_wpn_health, around the weapon icon) can use
+  drawHudBitmapCircle once the weapon block layout (base_weapons offset) is decided.
+- `fix/levelup-vectors` (contains feature/hud-art-2): spec sync 8a10f2b, tables-progression 5.4 note (Team D
+  FINAL). ApplyLevelUp already paid record L and applied record L+1 with the cap at count-1; added the
+  vectors (2115 -> 1/0 + "u1", 2114, 100+2015, 5115 -> two ups, negative floors) and the in-loop
+  "needed <= 1 blocks levelling" guard (was only checked before the loop). Build 0, full ctest 258/258; queued.
+  The free-roam difficulty answer (set A row `difficulty`, default 1) is Team B's (host/options apply).
+- Next (section 11): the weapon block (health ring + icon) and the hud.vint_doc
+  layout; later 19.4 sky dome/fog (LG-5), 19.3 sun/moon sprites, the LG-7 98/45 count log.
 - Remaining (proposal for Team B, their file): point the save bridge's autosave write
   (src/lua_save_game_bridge.cpp writeAutosaveSnapshot) at PatchFreeRoamSave over the loaded image
   so 0x4A5C and the crib block survive Lua autosaves; a pause-menu Save entry (PauseMenuSave gate).

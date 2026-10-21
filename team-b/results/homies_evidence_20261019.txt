@@ -1,0 +1,127 @@
+=== runA ===
+homie-trace: roster loaded from homies.xtbl: 24 rows (base only), all status 1 available [CHOSEN: per-row unlock flags not modelled]
+homie-trace: frame 30 t=1023ms DIAL 'pierce' status=1 at day 0 12:01:02
+homie-trace: frame 30 t=1023ms RINGING 'pierce' (ring timer 1.0 s)
+homie-trace: frame 61 t=2046ms CONNECTED 'pierce' (talk 2000 ms, CHOSEN)
+homie-trace: frame 122 hang-up: follower cap 1, current 0
+homie-trace: frame 122 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 122 t=4059ms SUMMON 'pierce' status 1 -> 2: vehicle car_2dr_luxury05 (model car_2dr_luxury05_0) crew=1
+homie-trace: frame 122 member homie_pierce_1 'npc_Pierce' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 445 t=14718ms ARRIVED 'pierce' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: follower combat AI loop ON (Combatant kind, fire on, LOS real prop collision)
+homie-trace: frame 700 t=23133ms player entered a vehicle: homie_pierce_1 (6.0 m) follows to car, seat 0 (action 37, closest first)
+homie-trace: frame 716 t=23661ms homie_pierce_1 BOARDED the player's car, seat 0
+homie-trace: frame 940 t=31053ms player left the vehicle: homie_pierce_1 gets out (follower_remain_in_car not set)
+homie-trace: frame 980 t=32373ms (evidence harness) police track set to level 2
+homie-trace: frame 1306 t=43131ms followers acquire target: police unit 6 at 8.0 m from the player
+homie-trace: frame 1700 t=56133ms HOMIES_DISMISSED homie_pierce_1 (dismiss command (CBA_GAC_RECRUIT_DISMISS): one follower removed): record pierce -> status 6 cooldown until day 1 12:56:42
+homie-trace: SUMMARY calls=1 busy=0 summons=1 spawn_fails=0 arrivals=1 max_followers=1 followers_now=0 dropped_for_call=0 dismissed=1 abandoned=0 angry_left=0 boarded=1 exited=1 teleports=0 squad_waits=0 shots=33 hits=22 kills=0 downed=0 revived=0 deaths=0 hospital_bills=$0.00
+rc=0
+=== runB1 ===
+homie-trace: roster loaded from homies.xtbl: 24 rows (base only), all status 1 available [CHOSEN: per-row unlock flags not modelled]
+homie-trace: frame 30 t=1023ms DIAL 'pierce' status=1 at day 0 12:01:02
+homie-trace: frame 30 t=1023ms RINGING 'pierce' (ring timer 1.0 s)
+homie-trace: frame 61 t=2046ms CONNECTED 'pierce' (talk 2000 ms, CHOSEN)
+homie-trace: frame 122 hang-up: follower cap 3, current 0
+homie-trace: frame 122 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 122 t=4059ms SUMMON 'pierce' status 1 -> 2: vehicle car_2dr_luxury05 (model car_2dr_luxury05_0) crew=1
+homie-trace: frame 122 member homie_pierce_1 'npc_Pierce' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 445 t=14718ms ARRIVED 'pierce' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: follower combat AI loop ON (Combatant kind, fire on, LOS real prop collision)
+homie-trace: frame 480 t=15873ms DIAL 'shaundi' status=1 at day 0 12:16:02
+homie-trace: frame 480 t=15873ms RINGING 'shaundi' (ring timer 1.0 s)
+homie-trace: frame 511 t=16896ms CONNECTED 'shaundi' (talk 2000 ms, CHOSEN)
+homie-trace: frame 572 hang-up: follower cap 3, current 1
+homie-trace: frame 572 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 572 t=18909ms SUMMON 'shaundi' status 1 -> 2: vehicle car_2dr_sports09 (model car_2dr_sports09_0) crew=1
+homie-trace: frame 572 member homie_shaundi_2 'npc_Shaundi' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 800 t=26433ms (evidence harness) police track set to level 2
+homie-trace: frame 895 t=29568ms ARRIVED 'shaundi' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: frame 1177 t=38874ms followers acquire target: police unit 6 at 8.0 m from the player
+homie-trace: frame 1406 t=46431ms FOLLOWER KILL police unit 6 (shooter handle 200001, 25 hits taken)
+homie-trace: frame 1407 t=46464ms followers acquire target: police unit 5 at 8.0 m from the player
+homie-trace: frame 1632 t=53889ms FOLLOWER KILL police unit 5 (shooter handle 200001, 50 hits taken)
+homie-trace: frame 1685 t=55638ms HOMIES_DISMISSED homie_pierce_1 (dismissed from outside (player death / script party_dismiss_all)): record pierce -> status 6 cooldown until day 1 12:56:12
+homie-trace: frame 1685 t=55638ms HOMIES_DISMISSED homie_shaundi_2 (dismissed from outside (player death / script party_dismiss_all)): record shaundi -> status 6 cooldown until day 1 12:56:12
+homie-trace: frame 1800 party_dismiss_all: 0 followers dismissed
+homie-trace: SUMMARY calls=2 busy=0 summons=2 spawn_fails=0 arrivals=2 max_followers=2 followers_now=0 dropped_for_call=0 dismissed=2 abandoned=0 angry_left=0 boarded=0 exited=0 teleports=0 squad_waits=17 shots=75 hits=50 kills=2 downed=0 revived=0 deaths=0 hospital_bills=$0.00
+rc=0
+=== runB2 ===
+homie-trace: roster loaded from homies.xtbl: 24 rows (base only), all status 1 available [CHOSEN: per-row unlock flags not modelled]
+homie-trace: frame 30 t=1023ms DIAL 'pierce' status=1 at day 0 12:01:02
+homie-trace: frame 30 t=1023ms RINGING 'pierce' (ring timer 1.0 s)
+homie-trace: frame 61 t=2046ms CONNECTED 'pierce' (talk 2000 ms, CHOSEN)
+homie-trace: frame 122 hang-up: follower cap 3, current 0
+homie-trace: frame 122 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 122 t=4059ms SUMMON 'pierce' status 1 -> 2: vehicle car_2dr_luxury05 (model car_2dr_luxury05_0) crew=1
+homie-trace: frame 122 member homie_pierce_1 'npc_Pierce' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 445 t=14718ms ARRIVED 'pierce' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: follower combat AI loop ON (Combatant kind, fire on, LOS real prop collision)
+homie-trace: frame 480 t=15873ms DIAL 'shaundi' status=1 at day 0 12:16:02
+homie-trace: frame 480 t=15873ms RINGING 'shaundi' (ring timer 1.0 s)
+homie-trace: frame 511 t=16896ms CONNECTED 'shaundi' (talk 2000 ms, CHOSEN)
+homie-trace: frame 572 hang-up: follower cap 3, current 1
+homie-trace: frame 572 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 572 t=18909ms SUMMON 'shaundi' status 1 -> 2: vehicle car_2dr_sports09 (model car_2dr_sports09_0) crew=1
+homie-trace: frame 572 member homie_shaundi_2 'npc_Shaundi' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 895 t=29568ms ARRIVED 'shaundi' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: frame 1000 t=33033ms friendly fire: player hit homie_pierce_1 for 60 -> meter sum 60 (below 150)
+homie-trace: frame 1030 t=34023ms friendly fire: player hit homie_pierce_1 for 60 -> meter sum 120 (below 150)
+homie-trace: frame 1060 t=35013ms friendly fire: player hit homie_pierce_1 for 60 -> meter sum 180 (HOSTILE)
+homie-trace: frame 1060 t=35013ms HOMIES_ANGRY_LEFT homie_pierce_1 ("has left you!" friendly fire sum >= 150 within the 6 s window): record pierce -> status 6 cooldown until day 1 12:35:22
+homie-trace: frame 1200 t=39633ms HOMIES_FALLEN "homie_shaundi_2 is down!" (debug --homie-injure-at): downed type 0 until t=69633ms (30000 ms x 1.0), status 4 -> 5
+homie-trace: frame 2110 t=69663ms HOMIES_KILLED "homie_shaundi_2 has been killed!" (downed type 0 expired); Hospital bill for homie_shaundi_2 cost $247.19 (24719 cents charged, player cash $1000.00 -> $752.81)
+homie-trace: frame 2110 t=69663ms homie dead homie_shaundi_2 (bled out): record shaundi -> status 6 cooldown until day 1 13:10:22
+homie-trace: SUMMARY calls=2 busy=0 summons=2 spawn_fails=0 arrivals=2 max_followers=2 followers_now=0 dropped_for_call=0 dismissed=0 abandoned=0 angry_left=1 boarded=0 exited=0 teleports=0 squad_waits=4 shots=0 hits=0 kills=0 downed=1 revived=0 deaths=1 hospital_bills=$247.19
+rc=0
+=== runC ===
+homie-trace: roster loaded from homies.xtbl: 24 rows (base only), all status 1 available [CHOSEN: per-row unlock flags not modelled]
+homie-trace: frame 30 t=1023ms DIAL 'pierce' status=1 at day 0 12:37:12
+homie-trace: frame 30 t=1023ms RINGING 'pierce' (ring timer 1.0 s)
+homie-trace: frame 61 t=2046ms CONNECTED 'pierce' (talk 2000 ms, CHOSEN)
+homie-trace: frame 122 hang-up: follower cap 1, current 0
+homie-trace: frame 122 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 122 t=4059ms SUMMON 'pierce' status 1 -> 2: vehicle car_2dr_luxury05 (model car_2dr_luxury05_0) crew=1
+homie-trace: frame 122 member homie_pierce_1 'npc_Pierce' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 445 t=14718ms ARRIVED 'pierce' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: follower combat AI loop ON (Combatant kind, fire on, LOS real prop collision)
+homie-trace: frame 600 t=19833ms DIAL 'shaundi' status=1 at day 1 00:01:12
+homie-trace: frame 600 t=19833ms RINGING 'shaundi' (ring timer 1.0 s)
+homie-trace: frame 631 t=20856ms CONNECTED 'shaundi' (talk 2000 ms, CHOSEN)
+homie-trace: frame 692 hang-up: follower cap 1, current 1
+homie-trace: frame 692 party full: dropping homie_pierce_1 (score 21.49, lowest below 100; Sec24.4 force=0)
+homie-trace: frame 692 t=22869ms HOMIES_DISMISSED homie_pierce_1 (dropped to make room for a call): record pierce -> status 6 cooldown until day 2 01:51:36
+homie-trace: frame 692 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 692 t=22869ms SUMMON 'shaundi' status 1 -> 2: vehicle car_2dr_sports09 (model car_2dr_sports09_0) crew=1
+homie-trace: frame 692 member homie_shaundi_2 'npc_Shaundi' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 1015 t=33528ms ARRIVED 'shaundi' dist=10.3 m speed=1.9: crew leaves the car, request ends (state 5)
+homie-trace: frame 1150 t=37983ms DIAL 'pierce' status=6 at day 1 11:01:12
+homie-trace: frame 1150 t=37983ms BUSY 'pierce': cooldown (status 6) (UI_Cell_Line_Busy, callback -1)
+homie-trace: frame 2150 t=70983ms DIAL 'pierce' status=1 at day 2 07:01:12
+homie-trace: frame 2150 t=70983ms RINGING 'pierce' (ring timer 1.0 s)
+homie-trace: frame 2181 t=72006ms CONNECTED 'pierce' (talk 2000 ms, CHOSEN)
+homie-trace: frame 2242 hang-up: follower cap 1, current 1
+homie-trace: frame 2242 party full: dropping homie_shaundi_2 (score 21.49, lowest below 100; Sec24.4 force=0)
+homie-trace: frame 2242 t=74019ms HOMIES_DISMISSED homie_shaundi_2 (dropped to make room for a call): record shaundi -> status 6 cooldown until day 3 08:51:36
+homie-trace: frame 2242 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-758.5,16.1,-686.8), 201.8 m from the player
+homie-trace: frame 2242 t=74019ms SUMMON 'pierce' status 1 -> 2: vehicle car_2dr_luxury05 (model car_2dr_luxury05_0) crew=1
+homie-trace: frame 2242 member homie_pierce_3 'npc_Pierce' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: SUMMARY calls=4 busy=1 summons=3 spawn_fails=0 arrivals=2 max_followers=1 followers_now=1 dropped_for_call=2 dismissed=0 abandoned=0 angry_left=0 boarded=0 exited=0 teleports=0 squad_waits=0 shots=0 hits=0 kills=0 downed=0 revived=0 deaths=0 hospital_bills=$0.00
+rc=0
+=== runD ===
+homie-trace: roster loaded from homies.xtbl: 24 rows (base only), all status 1 available [CHOSEN: per-row unlock flags not modelled]
+homie-trace: frame 30 t=1023ms DIAL 'pierce' status=1 at day 0 12:01:02
+homie-trace: frame 30 t=1023ms RINGING 'pierce' (ring timer 1.0 s)
+homie-trace: frame 61 t=2046ms CONNECTED 'pierce' (talk 2000 ms, CHOSEN)
+homie-trace: frame 122 hang-up: follower cap 1, current 0
+homie-trace: frame 122 spawn point: candidate 1/12 accepted (dir 0, 200 m) snapped to (-1092.9,38.1,-484.1), 191.8 m from the player
+homie-trace: frame 122 t=4059ms SUMMON 'pierce' status 1 -> 2: vehicle car_2dr_luxury05 (model car_2dr_luxury05_0) crew=1
+homie-trace: frame 122 member homie_pierce_1 'npc_Pierce' JOINED the party at spawn (driving up) (record status 3), model real
+homie-trace: frame 433 t=14322ms ARRIVED 'pierce' dist=10.3 m speed=2.0: crew leaves the car, request ends (state 5)
+homie-trace: follower combat AI loop ON (Combatant kind, fire on, LOS real prop collision)
+homie-trace: frame 600 t=19833ms homie_pierce_1 out of range (74.5 m > 55.0 m): abandon timer 20000 ms and marker started
+homie-trace: frame 600 PLAYER_ABANDON_FOLLOWER "You are about to abandon 1 of your followers."
+homie-trace: frame 601 player entered a vehicle: homie_pierce_1 is 73.8 m away (> 30 m): stays on foot
+homie-trace: frame 629 t=20790ms homie_pierce_1 back in range: abandon timer and marker cancelled
+homie-trace: SUMMARY calls=1 busy=0 summons=1 spawn_fails=0 arrivals=1 max_followers=1 followers_now=1 dropped_for_call=0 dismissed=0 abandoned=0 angry_left=0 boarded=0 exited=0 teleports=0 squad_waits=0 shots=0 hits=0 kills=0 downed=0 revived=0 deaths=0 hospital_bills=$0.00
+rc=0

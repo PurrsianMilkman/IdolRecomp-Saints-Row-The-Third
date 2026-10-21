@@ -5,18 +5,11 @@
 // pure session object, plus the CHOSEN crime records the free-roam playtest
 // reports (T5, 2026-10-18).
 //
-// WHY A NEW CLASS AND NOT NotorietyDriver (notoriety.h): the driver's
-// AddPointsRaw()/DecayTick() were written before Sec19.8's two corrections
-// and use CHOSEN stand-ins that the FINAL recipe contradicts: it treats the
-// xtbl NotorietyLevelLimit as a cumulative threshold (span = limit[L+1] -
-// limit[L]) where Sec19.8 says limit(set, L) is the number of points banked
-// INSIDE level L-1 to reach L; it decays by an integer table value per
-// first-decay interval where Sec19.8 decays by DecayRate x saveMult every
-// 1000 ms x difficulty; and it has no pending-crime queue, no Check_Detection
-// award reduction (G3), no 25 % level-entry floor (G4) and no per-crime
-// decay-timer re-arm (G5). Those tests pin the old behaviour, so the driver
-// is left untouched; this class reuses its tables (LevelTableForTrack) and
-// CrimeActivity records and adds the FINAL rules next to it.
+// NOTE: this replaced the former NotorietyDriver (removed 2026-10-18), whose
+// AddPointsRaw()/DecayTick() used CHOSEN stand-ins that the FINAL recipe
+// contradicts (cumulative-threshold spans, integer decay, no pending queue /
+// G3 / G4 / G5). This class reuses the shared tables (LevelTableForTrack) and
+// CrimeActivity records in notoriety.h and adds the FINAL rules.
 //
 // IMPLEMENTED (Sec19.8, FINAL/CONFIRMED): G1 enqueue ring (40 entries, the
 // 5 same-key dedupe activities, activity 20's pending cap of 5, full-ring
@@ -171,6 +164,9 @@ public:
         if (nl != old) Notify(t, old, nl, nowMs);
     }
 
+    // spec-player-runtime.md Sec18.6: a respawn clears the 40-entry alert ring (0x006097a0) before resetting the tracks.
+    void ClearPending() { pending_.clear(); }
+
     // +0x18 bit 0, "hold at level >= 1 this frame" (AI engaging the player).
     void SetHoldFlag(NotorietyTrack t) { rec(t).hold = true; }
 
@@ -247,23 +243,36 @@ private:
         const NotorietyTrack t = p.track;
         Record& r = rec(t);
         const CrimeActivitySubBlock& blk = (t == NotorietyTrack::kPolice) ? p.activity.police : p.activity.gang;
-        // G5: the crime re-arms the first-decay timer before the award.
-        r.decayT.arm(nowMs, FirstDecayDelay(t, r.level));
         const int32_t P = blk.points * (p.bonusX3 ? 3 : 1);
-        if (P <= 0) return;                // G3: skipped when Points <= 0 (CHOSEN reading 2)
-        if (gainSuppressed) return;        // G3: gain-suppress byte, positive delta
+        // G5: the crime re-arms the first-decay timer before the award. D-21 rule 1: a report with Points <= 0 only skips this
+        // re-arm; the points still go through the award.
+        if (P > 0) r.decayT.arm(nowMs, FirstDecayDelay(t, r.level));
+        if (gainSuppressed && P > 0) return;  // G3: gain-suppress byte, positive delta
+        const int32_t old = r.level;
+        if (P < 0) {
+            // D-21 rule 1: negative points are applied as they are (no Min_Level lift, no witness test; above the
+            // Max_Level / max bound the report has no effect, as for positive points) and roll the level down exactly like
+            // decay, with the same floor rule.
+            if (r.level > maxBound[static_cast<size_t>(t)] || r.level > blk.maxLevel) return;
+            const int32_t mn = minBound[static_cast<size_t>(t)];
+            RollDown(r, t, -static_cast<double>(P), mn);
+            if (r.level != old) Notify(t, old, r.level, nowMs);
+            return;
+        }
         const bool D = p.witnessed || !blk.checkDetection;
         int32_t A;
-        if (r.level >= maxBound[static_cast<size_t>(t)] || r.level >= blk.maxLevel) {
+        if (P > 0 && (r.level >= maxBound[static_cast<size_t>(t)] || r.level >= blk.maxLevel)) {
             A = 0;
         } else if (r.level < blk.minLevel) {
+            // D-21 rule 2: a zero-point report still runs the award (witnessed: lifted to Min_Level; unwitnessed: minimum award 1).
             A = D ? std::max(P, PointsTo(t, blk.minLevel)) : std::max(1, P / 4);
         } else {
             A = D ? P : std::max(1, P / 4);
         }
+        if (P == 0 && r.level >= blk.maxLevel) A = 0;
         A = std::min(A, PointsTo(t, blk.maxLevel));
         // G4 roll-up.
-        const int32_t old = r.level;
+        if (P <= 0 && A > 0) r.decayT.arm(nowMs, FirstDecayDelay(t, r.level));  // a zero-point report that awards points arms the timer
         r.fraction += A;
         while (r.level < kNotorietyMaxLevel &&
                static_cast<int32_t>(r.fraction) >= Limit(t, r.level + 1)) {
@@ -278,8 +287,23 @@ private:
         if (r.level >= kNotorietyMaxLevel) r.fraction = 0.0;
         if (r.level != old) {
             Notify(t, old, r.level, nowMs);
-            if (r.level < kNotorietyMaxLevel)  // CHOSEN reading 1: only on a level change
-                r.fraction = std::max(r.fraction, kLevelEntryFloorFraction * Limit(t, r.level + 1));
+            if (r.level < kNotorietyMaxLevel) {  // D-21 rule 4: only on a level change; the floor uses the fractional part too
+                const double frac = r.fraction - std::trunc(r.fraction);
+                r.fraction = std::max(r.fraction, kLevelEntryFloorFraction * (Limit(t, r.level + 1) + frac));
+            }
+        }
+    }
+
+    // D-21 rule 3: while the fraction is negative add limit(level) and drop one level; only a drop BELOW the floor sets the level to
+    // the floor with fraction 0. Landing exactly on the floor keeps the positive remainder (decay continues at the floor level's
+    // rate until the fraction reaches 0).
+    void RollDown(Record& r, NotorietyTrack t, double amount, int32_t floorL) {
+        r.fraction -= amount;
+        while (r.fraction < 0.0) {
+            if (r.level <= 0) { r.level = std::max(0, floorL); r.fraction = 0.0; break; }
+            r.fraction += Limit(t, r.level);
+            --r.level;
+            if (r.level < floorL) { r.level = floorL; r.fraction = 0.0; break; }
         }
     }
 
@@ -289,12 +313,7 @@ private:
         const int32_t old = r.level;
         const int32_t mn = minBound[static_cast<size_t>(t)];
         const int32_t floorL = (mn < 1 && r.hold) ? 1 : mn;
-        r.fraction -= DecayRate(t, r.level) * saveMult[static_cast<size_t>(t)];
-        while (r.fraction < 0.0 && r.level > floorL) {
-            r.fraction += Limit(t, r.level);
-            --r.level;
-        }
-        if (r.level <= floorL && (r.fraction < 0.0 || r.level < old)) r.fraction = 0.0;  // CHOSEN reading 3
+        RollDown(r, t, DecayRate(t, r.level) * saveMult[static_cast<size_t>(t)], floorL);
         if (r.level <= mn && r.fraction <= 0.0) {
             r.decayT.disarm();  // decay finished
         } else {

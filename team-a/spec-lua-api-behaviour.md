@@ -3949,6 +3949,8 @@ Every function below opens with the same shared `lua_CFunction` prologue this do
 
 **Side effects/subsystem:** removes the active waypoint, via a local call, a network-replicated call, or both depending on the mode value. Subsystem: waypoint/HUD-navigation state, network-replicated on the `0x40`-opcode path. **[CONFIRMED — disassembly for the mode-value branch structure and the record-and-replicate opcode; OPEN — the exact real-world distinction between the two removal paths, and `0x007d6dc0`'s own internal behaviour.]**
 
+**[2026-10-19 RESOLVED (`spec-ai-runtime.md` §23.2): `0x007d6dc0` is called as (kind 1, flags, slot 0). It clears the route only when the active kind is 1 (mission or tracked object). A player's pause-map pin (kind 0) survives `waypoint_remove`.]**
+
 ### 6.18 `notoriety_set_can_decay` (`0x00a55110`)
 
 **Arguments:** 1 mandatory boolean, no nil-gate. **Unlike every other `notoriety_set_*` function in this cluster, this one takes NO track-name argument at all — it is a single GLOBAL flag, not a per-track setting.**
@@ -7712,6 +7714,8 @@ shape and staging/dialog-raise chain; OPEN — the real target of the `0x007c206
 meaning of the boolean argument (candidates: keyboard-vs-gamepad, or primary-vs-secondary binding
 slot), and where the staged globals are actually consumed to perform the real rebind.]**
 
+**[Correction 2026-10-19, FINAL from the shipped Lua caller:** arg 1 is the remap *category* (1-based), arg 2 is the *row within the category* (not a key code), arg 3 is the secondary-column flag. The staged globals are read by 0x007cda30, which commits the binding with steal-on-conflict semantics. See spec-tables-ui-controls.md §18.3.]
+
 ### 11.13 Cross-function observations and open items carried forward
 
 **[Triage 2026-10-13, Team A OPEN sweep: every sub-question below concerns internal data shapes or unnamed gates inside natives whose Lua-visible behaviour is already specified. All LOW, deferred; none changes port behaviour.]**
@@ -8034,6 +8038,8 @@ Both addresses sit inside the already-known push-family address range (`0x00dfe3
 **Body:** arg 1 is tried, in order, against the vehicle resolver (`0x0062a190`), the plain character resolver (`0x005e4dd0`), and the ~~unidentified 4th-kind~~ named-placed-object (door/mesh-mover, §9.21/§14.6) resolver (`0x006434a0` — `spec-lua-api-behaviour.md` §3's front matter) — each gated by the shared liveness check AND a further per-kind capability check at vtable offset `+0x68`. If NONE of the three qualify, arg 1 is instead tried against the trigger/generic-object resolver (`0x005e4e30`, §1.1) or, failing that, `0x005982e0` (§12.10's own resolver family), and on success a direct dispatch (`0x007dd420`) runs with the resolved position pair plus arg 2, yielding `0.0`. If one of the first three DOES qualify, its own vtable method at `+0x70` supplies a further context object, whose position pair (plus a literal `1`, arg 2, and a trailing `0`) is handed to `0x007d70e0`, and that call's own integer return value is reinterpreted directly as the double-precision return.
 
 **Side effects/subsystem:** adds/sets a waypoint pointing at a resolved target, tried across several object kinds in a fixed priority order, with NO record-and-replicate block anywhere in this function's own body — **a confirmed, genuine asymmetry against its documented counterpart `waypoint_remove` (§6.17), which IS network-replicated (opcode `0x40`) on certain mode-value bits.** Subsystem: waypoint/HUD-navigation state. **[CONFIRMED — disassembly for the full resolver-priority chain and the confirmed absence of replication; OPEN — the real-world meaning of the numeric return value, and `0x007dd420`/`0x007d70e0`'s own internal behaviour.]**
+
+**[2026-10-19 RESOLVED (`spec-ai-runtime.md` §23.2): both paths set a kind-1 (mission) GPS target. The object path (`0x007d70e0`) tracks the object, and the GPS goal follows it. The position path (`0x007dd420`) sends net message `0x0c` (HIGH) when mode bit 2 is set and applies locally when bit 1 is set. There is no priority over a player pin: the last request wins. A mission target replaced by a pin is restored when the pin is cleared.]**
 
 ### 12.25 `get_current_hit_points` (`0x00a4bb00`) — 20 calls
 
@@ -11463,6 +11469,8 @@ previous/requested-mode fields. Full detail: `scratchpad/ai_state_byte_0x501_202
 **Side effects/subsystem:** teleports a resolved character to a resolved target object's position plus a local offset and heading, with two selectable dispatch shapes (~~a fast per-type path~~ **the PLAYER path, CORRECTED 2026-10-02 by the `teleport_coop` investigation — class-row `+0xa` bit `0x2` is the player class, HIGH CONFIDENCE, not a generic "per-type" split; see `teleport`'s own §4.3, which allocates the identical kind-4 scripted request this path also uses**, 0x009e2220, opcode 0x41 network-replicated; and the richer general character-teleport path, 0x00996b50, ALSO opcode 0x41) — the general path additionally handles vehicle-exit, shield-partner ejection, and camera-facing snap. Subsystem: teleportation. **[CONFIRMED — disassembly for the resolve chain, the singleton-object finding, the radians-to-degrees conversion, and the dual-dispatch structure; OPEN — 0x00da1b00/0x00da5aa0/0x004e39b0/0x00861aa0's own internal bodies.]**
 
 ### 22.5 `teleport_player_vehicles` (0x00a61170)
+
+[2026-10-19 Team B R3: FINAL/HIGH — **vehicle_mark_as_players.** The native (`0x00a629e0`) sets the player's last-vehicle handle `+0x2880/+0x2884`, which this function reads. It runs on the machine that owns the player (otherwise it is forwarded by network record); only the extra streaming hold is host-only. Full rules: `spec-ai-runtime.md` §20.6.14(b), note of this date.]
 
 **Arguments:** 2 mandatory strings (a reference vehicle A; a reference vehicle B), both resolved via the 5th per-kind resolver 0x005982e0 — **raw-disassembly-confirmed, BOTH call sites, to be called as a method on the SAME fixed singleton 0x02442750** item 22.4 also confirms for 0x00734e90 — a further, independent sighting extending the shared-registry hypothesis with a repeat confirmation of 0x005982e0 itself (previously only inferred by role for this address, e.g. §12.10). Both liveness-gated (0x00853b10).
 

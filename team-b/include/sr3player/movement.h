@@ -137,6 +137,7 @@ struct EngineTimer {
 namespace stance {
 // +0x1d94
 inline constexpr uint8_t kSprint = 0x10;        // sprint requested and granted
+inline constexpr uint8_t kBusted = 0x02;        // busted flag (spec-player-runtime 18.6 R3 note step 16; set by the bust commit)
 inline constexpr uint8_t kWalk = 0x20;          // walk (KB/M: s = 0.3)
 inline constexpr uint8_t kBurst = 0x40;         // sprint-from-standstill burst pending
 inline constexpr uint8_t kMoveWhileLocked = 0x80; // move attempted while animation-locked

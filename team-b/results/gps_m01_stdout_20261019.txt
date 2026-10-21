@@ -1,0 +1,517 @@
+=== playtest v0: interactive player<->animation<->camera<->collision demo ===
+CONTROLS : W/A/S/D move (real moveSlot/composeVelocity, camera-relative via REAL
+           CameraSystem::movementRows()); hold Left Shift to sprint; mouse look
+           (real CameraSystem rotate()/elevate()->cameraHook->preUpdate->yawStep/
+           pitchStep seam); walk up to the parked car and press E to enter/exit it
+           (W/S throttle/brake, A/D steer while driving - unless --no-vehicle);
+           T skips the TOD clock forward 3 game hour(s) per press (CHOSEN manual
+           fast-forward, v0.3 polish task - a full in-game day now takes 24 REAL
+           minutes, too slow to just wait out during a play session); press B to
+           force-arm/disarm the police roadblock spawn (debug gate; roadblocks also
+           spawn from the police notoriety level); Space jumps, C crouches (held),
+           left mouse fires, R reloads, 1-9/Q/Tab pick a weapon; F10 quits (Esc
+           opens the pause menu).
+NOT WIRED: gamepad/XInput (spec-tables-ui-controls.md documents the
+           real gamepad binding layer; not wired here - keyboard+mouse only, said
+           honestly rather than faking a controller path) and the distant/LOD
+           ambient human tier (no spec-confirmed pass wiring it into playtest yet;
+           the NEAR-FIELD ambient pedestrian tier IS wired, always on, and jump/
+           crouch ARE wired) - see this command's own doc comment above
+           runPlaytest() for the full breakdown. Vehicle entry/driving IS wired (ON
+           by default, --no-vehicle opts out), WITH real world collision (spec-
+           physics-runtime.md Sec10a, vehicle-world-collision follow-up task -
+           superseding this line's own former "no world collision" wording) - see
+           that same doc comment's own honest scope note (a CHOSEN simple chase
+           camera, one PLAYER vehicle only, no vehicle-vs-vehicle collision/damage).
+           Near-field AMBIENT VEHICLE TRAFFIC IS wired (ALWAYS on, no flag) and the
+           POLICE ROADBLOCK spawn IS wired (debug key 'B', OFF by default) - see
+           this command's own doc comment's 2026-10-09 update for the full CHOSEN
+           breakdown of both. The health/ammo/money/notoriety HUD overlay IS wired
+           (--hud, opt-in, off unless passed) - see that flag's own honest caveat in
+           this command's doc comment. The top-right corner minimap (v0.3 polish
+           task) is now part of that SAME --hud overlay - real live player/vehicle
+           position and heading feed updateMinimapLiveTransform(), flat per-tile
+           fallback colour only (no real minimap_CCRR texture lookup wired into this
+           command).
+character: brad, 68 bones (channel 0, group 0)
+weather  : weather_time_of_day.xtbl - 4 segment(s) loaded
+spawn    : spawn_info_categories.xtbl - 31 categories
+weather  : stage 'Clear Skies' chance=0.435 avgDuration=360.0s variance=0.50 pedDensity=1.00 next=[Overcast]
+weather  : stage 'Light Rain' chance=0.036 avgDuration=90.0s variance=0.10 pedDensity=0.50 next=[Heavy Rain,Post-Storm]
+weather  : stage 'Overcast' chance=0.145 avgDuration=60.0s variance=0.50 pedDensity=1.00 next=[Light Rain,Clear Skies,Heavy Rain]
+weather  : stage 'Heavy Rain' chance=0.022 avgDuration=90.0s variance=0.10 pedDensity=0.10 next=[Post-Storm]
+weather  : stage 'Post-Storm' chance=0.362 avgDuration=75.0s variance=0.00 pedDensity=0.75 next=[Clear Skies]
+weather-trace: start stage=Clear Skies seed=0x5EED timeScale=1.00 pedDensity=1.00 light=Overcast
+weapon   : inventory slot 1 = 'Pistol-Gang' (Weapon_Class=0 Inv_Slot=2 clip=8 reserve=24/cap 250 refire=600 ms)
+weapon   : inventory slot 2 = 'SMG-Gang' (Weapon_Class=1 Inv_Slot=3 clip=40 reserve=120/cap 1000 refire=100 ms)
+weapon   : inventory slot 3 = 'Shotgun-Bling' (Weapon_Class=3 Inv_Slot=4 clip=6 reserve=18/cap 100 refire=900 ms)
+weapon   : keys (CHOSEN): R reload, 1-8 select Inv_Slot k-1 (key 1 = fists), 9 last, Q CCW, Tab CW (Sec5.4.3)
+weapon   : Brad equipped with real weapons.xtbl row 'Pistol-Gang' (Weapon_Class=0, 82 total rows parsed) - LMB fires it on foot
+npc-ai   : tables loaded - 17 goal rows (17 non-empty lists), 44 behaviours, 67 combat_actions rows; civilian flee_health_pct=50
+footstep : real left-foot/right-foot trigger frames for 'plym_ps_wlk' FOUND (1/1) - driving real footstep timing
+footstep : real anim_files.xtbl row for event='FOOTSTEP' MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (CHOSEN per purrsian-52) FOUND - clip='crsr_extb_jmoff_ridr.animx' frame=55. HONEST GAP: resolving this event+switch identity to a
+         specific Wwise media id requires walking Event(kind4)->Action(kind3)->
+         SwitchContainer, and NO switch-container HIRC layout is reverse-engineered
+         anywhere in this project (spec-audio-runtime.md Sec9.6/9.7/9.8 document
+         Event->Action->plain-Sound only) - guessing that binary layout here would be
+         exactly the kind of invented engine behaviour this project's no-invented-
+         fixes rule forbids. The demo therefore still plays the same real, proven-
+         decodable SFX clip findFirstPlayableSfxClip() resolves below, now correctly
+         labelled as a stand-in for a KNOWN real identity rather than an arbitrary pick.
+graphs   : 249 loaded from node_graph_files.xtbl
+graph    : 'player state machine' found (index 144 of 249 loaded)
+anim     : real locomotion clips from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/preload_anim.vpp_pc: run=loaded jog=loaded wlk=loaded
+footstep : walk clip durationTotal()=39 (30Hz units) - left-foot frames=[30,] right-foot frames=[11,]
+seatpose : vi_ride.xtbl 69 set(s); vehicle_interaction_info.xtbl demo row ('truck_2dr_classic01') found
+seatpose : real driver ride clip 'auto_ridel.anim_pc' loaded
+[hoods] 33 Hood volumes (hood_bsp_tree + hood_spawn_category) from sr3_city~fawld.czn_pc
+[roadgraph] sr3_city_0.vpp_pc :: sr3_city~fawld.czn_pc: 11455 lanes (segments), 10141 road nodes, 6216 shape points, 7659 sidewalk nodes, 8703 sidewalk edges; indexed into 135 road tiles / 104 sidewalk tiles; 137 ms (czn 2586376 bytes)
+spawn    : 33 hood volumes x 31 spawn categories -> hood category lookup ACTIVE
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+audio    : disabled (--headless)
+radio    : 915 content entries, 153 song records, 12 stations; media indexed (931 records)
+radio    : station 3 LOGO_GENX        queue=512 first=GENX_SWEEPER_01 -> media resolved
+radio    : station 4 LOGO_KRHYME      queue=512 first=KRHYME_YONKERS_FRONT_SELL -> media resolved
+radio    : station 5 LOGO_K12         queue=512 first=K12_KEVIN_AND_CARRICK___WALLFLOWERS -> media resolved
+radio    : station 6 LOGO_KLASSIC     queue=512 first=KLASSIC_LISZT___HUNGARIAN_RHAPSODY -> media resolved
+radio    : station 7 LOGO_ADULT_SWIM  queue=512 first=SWIM_INTRO_CEREBRAL_BALLZY -> media resolved
+radio    : station 8 LOGO_KABRON      queue=512 first=KABRON_SULTATE_Y_TOMA_FRONT_SELL -> media resolved
+radio    : station 9 LOGO_KRUNCH      queue=512 first=KRUNCH_TUGBOAT___SLOW_REVOLUTION -> media resolved
+radio    : station 10 LOGO_MIX         queue=512 first=MIX_SOCIAL_DISTORTION___BALL_AND_CHAIN -> media resolved
+radio    : station 12                  queue=512 first=KRHYME_AMERIE_ONETHING -> unresolved: cue not found in switch container
+character: head matlib attach+bind: 1 diffuse-role TextureRef(s) replaced with the matlib's own resolved name (CHOSEN role-suffix heuristic - see this block's own comment)
+character: body textured, head textured (real per-material diffuse textures)
+npc-ai   : mission NPC AI loop ON (fire on; hostility = team relation / attack_player_on_sight / enemy target; CHOSEN stand-ins listed in sr3airuntime/npc_ai_runtime.h)
+respect  : respect_levels.xtbl 50 levels, cap 238875
+weapons  : continuous_explosions.xtbl - 1 row name(s) installed
+  [loc] 10/11 US .le_strings tables loaded from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/misc.vpp_pc (10201 records total) -> objective-text keys resolved through them, raw key string on a miss (spec-localization-format.md Sec6.1/Sec7 item 2)
+hud      : enabled (--hud) - real health/ammo/money/notoriety + objective-text overlay via sr3luahost::Host (spec-hud-runtime.md §2-6.5); max hp=100. Objective slots 0/1 are set via the real objective_text native at frame 2, slot 1 cleared via objective_text_clear at frame 150 (scripted stand-in, no real mission content wired into this command). HONEST CAVEAT: v0 has no
+           combat/economy/notoriety gameplay wired, so those 4 values will not
+           actually change during play (see this function's own doc comment)
+mission  : resolved --mission=m01 -> entry 'm01.lua' (container 'm01_modal', mission_package_tsv=tools/mission_package_per_container.tsv)
+mission  : vehicle class table: files=123 types_resolved=122
+mission  : real zone-object load for in-world triggers: archives_read=8/8 czn_files_found=2971 objects_sections=861 named_objects_resolved=16894
+mission  : real zscene/cutscene table load: installed from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache\cutscene_tables.vpp_pc entries=109 kind0(Designer)=19 kind1(Zscene)=31 kind2(Story)=59 kindOpen=0
+mission  : preloaded system_lib.lua -> gameplay state: luaL_loadbuffer=OK, lua_pcall=OK
+mission  : preloaded game_lib.lua -> gameplay state: luaL_loadbuffer=OK, lua_pcall=OK
+mission  : dynamic-globals bootstrap (_GetAnyGlobalSilent also finds raw globals) -> OK
+mission  : m01_start() called, suspended (waiting at [string "game_lib.lua"]:1409 (in fade_out_block)) - driving one scheduler pass per rendered frame from here (real --mission-timeout=60.0s wall-clock safety cutoff, 5000000-instruction watchdog per resume)
+npc-ai   : near-field ped AI loop ON (civilians: flee/cower when the player fires nearby; CHOSEN stand-ins in sr3airuntime/npc_ai_runtime.h)
+[stream] frame 0 focus (-1280.0, -560.0): wanted = {0915h0,0915h1,0915h2,0915h3}
+[placement] tile 0915: 992 records, 992 bound
+[tex] building TextureSearchCache for sr3_city_0.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_0.vpp_pc built: 21825 texture records indexed in 16.1 s
+[tex] building TextureSearchCache for sr3_city_1.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_1.vpp_pc built: 36851 texture records indexed in 20.3 s
+[tex] building TextureSearchCache for sr3_city_missions.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_missions.vpp_pc built: 0 texture records indexed in 0.0 s
+[tex] building TextureSearchCache for misc.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for misc.vpp_pc built: 119 texture records indexed in 0.0 s
+[tex] building TextureSearchCache for dlc1.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc1.vpp_pc built: 966 texture records indexed in 0.9 s
+[placement] 0915h0: 178 instances placed (0 mesh entries had no record/instance in this cell)
+[stream] frame 0 LOAD  0915h0   (sr3_city_0.vpp_pc, col 9 row 15 N 0) centre (-1360.0, -490.0): 178/59 props uploaded, 0 failed, textures 359/359, 39294 ms
+[tex] building TextureSearchCache for dlc2.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc2.vpp_pc built: 2014 texture records indexed in 1.4 s
+[tex] building TextureSearchCache for dlc3.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc3.vpp_pc built: 604 texture records indexed in 0.4 s
+[tex] building TextureSearchCache for interface.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for interface.vpp_pc built: 1249 texture records indexed in 0.1 s
+[placement] 0915h1: 253 instances placed (0 mesh entries had no record/instance in this cell)
+[stream] frame 0 LOAD  0915h1   (sr3_city_0.vpp_pc, col 9 row 15 N 1) centre (-1200.0, -490.0): 253/46 props uploaded, 0 failed, textures 171/172, 2146 ms
+[placement] 0915h2: 166 instances placed (0 mesh entries had no record/instance in this cell)
+[stream] frame 0 LOAD  0915h2   (sr3_city_0.vpp_pc, col 9 row 15 N 2) centre (-1360.0, -630.0): 166/26 props uploaded, 0 failed, textures 185/185, 282 ms
+[placement] 0915h3: 405 instances placed (0 mesh entries had no record/instance in this cell)
+[stream] frame 0 LOAD  0915h3   (sr3_city_0.vpp_pc, col 9 row 15 N 3) centre (-1200.0, -630.0): 405/63 props uploaded, 0 failed, textures 240/241, 570 ms
+[ground] frame 0 LOAD  tile 0915: sr3_city~s0915.czn_pc, 3 range(s), 26 triangles (collision tris=6513 bounds x[-1461.6,-1094.5] z[-722.7,-380.0])
+[ground] frame 0 COLLISION tile 0915: sr3_city~s0915.czn_pc n1=9421 strip-standin tris=6513 bounds x[-1461.6,-1094.5] y[4.0,42.6] z[-722.7,-380.0]
+ground-y : walkable collision ground at spawn (-1280.0 -560.0) = 32.676 m [node Y + 2 m start (CHOSEN, spec item 4)]
+ground-y : RENDER-mesh bounds (diagnostic, not collision) [0.00, 0.00] across 1 loaded tile(s) - spawn/collision groundY = 32.68 (NO ground tile resolved - using 0.0)
+heightmap: NO real Heightmap (0x2244) record resolved at spawn (-1280.0 -560.0) - staying on the flat-plane fallback (32.68m)
+groundmesh: real 0x2237 collision-mesh sample at spawn (-1280.0 -560.0) = 32.68m [node Y + 2 m start (CHOSEN, spec item 4)] (the walkable ground; 0x2244 is not consulted)
+camera   : camera_free.xtbl seeded (40 scalars, 61 submode row(s) applied)
+camera   : real follow camera active; committed eye after reset (-1280.00 34.38 -564.25), fov 60.00 deg
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+vehicle  : D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/dlc1.vpp_pc :: car_4dr_genki_0.ccar_pc parked at (-1280.0 32.7 -554.0) - walk within 3.0m and press E to enter
+ambient-models: 31 categories, 61 groups, 382 character rows, 372 vehicle models in archive, 542 character containers
+traffic  : near-field ambient vehicle population ALWAYS ON (cap 48, spec-ai-runtime.md Sec17.4c)
+traffic  : lane graph = REAL road graph (11455 lanes, on-disk successor links)
+signals  : 346 junctions, 1207 lights, 678 phases initialised (Sec20.6.13(e))
+peds     : near-field ambient pedestrian population ALWAYS ON (cap 48, spec-ai-runtime.md Sec20)
+roadblock: police roadblock spawn OFF by default (8 slots: 4 ped + 4 vehicle [1 Spike_strip + 3 generic]) - press B to arm (spec-ai-runtime.md Sec19.7; debug gate, not tied to notoriety)
+vehicle  : no --vehicle-interaction-name given - occupant hide stays at its real-data default (shown; correct for the ordinary default vehicle, spec-render-pipeline.md Sec23.14)
+spawn    : (-1280.0 32.7 -560.0)
+auto-objective: route table 'tools/mission_routes.tsv' for 'm01': loaded (5 trigger steps, 1 hazards, 4 named vehicles)
+weather-trace: state frame=0 weather_t=0.0s tod=12:00 stage=Clear Skies other=Clear Skies blend=0.000 elapsed=100.7/520.0s light=Overcast/Overcast pedDensity=1.00
+[traffic] frame 0 near-field live=1/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1380.00,-643.06) heading=90.1deg seg=4697 valid=1
+[peds] frame 0 near-field ambient peds live=1/48
+[population] frame 0 vehicles live=1 (spawn passes 1, distance-despawned 0) peds live=1 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 0 vehicle gathers=1 candidates=5 (avg 5.0) lane-spawns=1; ped gathers=1 edges=49 (avg 49.0)
+[idle-trace] frame 0 ped id=1 pos=(-1302.60,31.41,-521.02) idleSubState=33
+mission  : live position bridge active for '#PLAYER1#' (isLiveObject=1, pos=-1280.00 32.68 -560.00) - written every frame before the scheduler pass
+auto-skip: --auto-skip-cutscenes set the real skip_all_cutscenes option [CHOSEN harness option value; engine skip branches unchanged]
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[objective] slot 0/1 set via objective_text (frame 2)
+mission  : in-world trigger 'Kill_trigger' geometry registered - REAL position (2242.06 168.14 2698.54) and REAL shape 'bounding box' (enum 0) from zone data
+[vehicle] in range (2.7m) - press E to enter
+[vehicle] out of range(null)
+[traffic] frame 30 near-field live=3/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.90,-433.21) heading=-90.0deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.64) heading=90.0deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.98,-482.25) heading=-89.8deg seg=4759 valid=1
+[peds] frame 30 near-field ambient peds live=4/48
+[population] frame 30 vehicles live=3 (spawn passes 4, distance-despawned 1) peds live=4 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 30 vehicle gathers=4 candidates=15 (avg 3.8) lane-spawns=4; ped gathers=4 edges=206 (avg 51.5)
+[idle-trace] frame 30 ped id=1 pos=(-1302.73,31.41,-522.47) idleSubState=34
+[idle-trace] frame 30 ped id=2 pos=(-1338.15,25.92,-543.49) idleSubState=34
+[idle-trace] frame 30 ped id=3 pos=(-1315.09,27.90,-551.13) idleSubState=34
+[idle-trace] frame 30 ped id=4 pos=(-1269.83,32.15,-585.21) idleSubState=34
+[traffic] frame 60 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.90,-435.90) heading=-90.0deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.52) heading=89.9deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.96,-483.83) heading=-89.0deg seg=4759 valid=1
+  [lane] id=5 pos=(-1379.97,-470.57) heading=90.2deg seg=4248 valid=1
+  [lane] id=6 pos=(-1266.86,-422.43) heading=-83.7deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.97,-474.39) heading=-89.8deg seg=4759 valid=1
+[peds] frame 60 near-field ambient peds live=8/48
+[population] frame 60 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=8 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 60 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=8 edges=433 (avg 54.1)
+[idle-trace] frame 60 ped id=1 pos=(-1302.86,31.41,-523.97) idleSubState=34
+[idle-trace] frame 60 ped id=2 pos=(-1339.85,25.92,-542.76) idleSubState=34
+[idle-trace] frame 60 ped id=3 pos=(-1314.41,27.90,-549.41) idleSubState=34
+[idle-trace] frame 60 ped id=4 pos=(-1271.24,32.15,-584.69) idleSubState=34
+[idle-trace] frame 60 ped id=5 pos=(-1277.61,36.15,-488.37) idleSubState=34
+[idle-trace] frame 60 ped id=6 pos=(-1271.76,32.15,-590.91) idleSubState=34
+[idle-trace] frame 60 ped id=7 pos=(-1270.78,36.15,-495.03) idleSubState=34
+[idle-trace] frame 60 ped id=8 pos=(-1256.65,36.15,-495.01) idleSubState=34
+auto-combat: teleported player to (2223.6, 176.1, 2688.3), 25 m standoff from target 'lobby_guard 002' [CHOSEN test-harness stand-in for walking there]
+[stream] frame 69 focus (2223.6, 2688.3): wanted = {}
+[stream] frame 69 EVICT 0915h0   (col 9 row 15 N 0) - 178 props released
+[stream] frame 69 EVICT 0915h1   (col 9 row 15 N 1) - 253 props released
+[stream] frame 69 EVICT 0915h2   (col 9 row 15 N 2) - 166 props released
+[stream] frame 69 EVICT 0915h3   (col 9 row 15 N 3) - 405 props released
+[ground] frame 69 EVICT tile 0915
+[npc-ai] npc=lobby_guard 002 team=Police is hostile to the player (ai_add_enemy_target)
+[npc-ai] npc=lobby_guard 001 team=Police is hostile to the player (ai_add_enemy_target)
+[npc-ai] npc=Teller 002 team=None is hostile to the player (ai_add_enemy_target)
+[npc-ai] npc=Teller 001 team=None is hostile to the player (ai_add_enemy_target)
+[npc-ai] npc=Teller 003 team=None is hostile to the player (ai_add_enemy_target)
+[npc-ai] npc=Teller 004 team=None is hostile to the player (ai_add_enemy_target)
+auto-objective: stalled 80 frames waiting on trigger 'Kill_trigger' - teleported player INTO its volume at (2242.06, 170.35, 2698.54) [CHOSEN test-harness stand-in, not real navigation - see --auto-objective's own doc comment]
+[npc-ai] t=2833ms npc=lobby_guard 002 mode 0->8 action=8 goal=7 dist=8.8
+[npc-ai] t=2833ms npc=lobby_guard 001 mode 0->8 action=8 goal=7 dist=10.1
+[npc-ai] t=2833ms npc=Teller 002 mode 0->8 action=8 goal=7 dist=14.7
+[npc-ai] t=2833ms npc=Teller 001 mode 0->8 action=8 goal=7 dist=15.2
+[npc-ai] t=2833ms npc=Teller 003 mode 0->8 action=8 goal=7 dist=14.4
+[npc-ai] t=2833ms npc=Teller 004 mode 0->8 action=8 goal=7 dist=14.6
+mission  : in-world trigger 'Kill_trigger' ENTER transition - spawned coroutine for 'm01_kill_trigger_cb', resumed by this frame's own scheduler pass below
+[npc-ai] t=2867ms npc=lobby_guard 002 mode 8->12 action=0 goal=11 dist=8.8
+[npc-ai] t=2867ms npc=lobby_guard 001 mode 8->12 action=0 goal=11 dist=10.1
+[npc-ai] t=2867ms npc=Teller 002 mode 8->12 action=0 goal=11 dist=14.7
+[npc-ai] t=2867ms npc=Teller 001 mode 8->12 action=0 goal=11 dist=15.2
+[npc-ai] t=2867ms npc=Teller 003 mode 8->12 action=0 goal=11 dist=14.4
+[npc-ai] t=2867ms npc=Teller 004 mode 8->12 action=0 goal=11 dist=14.6
+[traffic] frame 90 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 90 near-field ambient peds live=0/48
+[population] frame 90 vehicles live=0 (spawn passes 10, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 90 vehicle gathers=10 candidates=24 (avg 2.4) lane-spawns=7; ped gathers=12 edges=488 (avg 40.7)
+[npc-ai] t=3833ms npc=lobby_guard 002 mode 12->0 action=69 goal=16 dist=8.8
+[npc-ai] t=3833ms npc=Teller 002 mode 12->0 action=69 goal=16 dist=14.7
+[npc-ai] t=3833ms npc=Teller 001 mode 12->0 action=69 goal=16 dist=15.2
+[npc-ai] t=3833ms npc=Teller 003 mode 12->0 action=69 goal=16 dist=14.4
+[npc-ai] t=3833ms npc=Teller 004 mode 12->0 action=69 goal=16 dist=14.6
+[traffic] frame 120 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 120 near-field ambient peds live=0/48
+[population] frame 120 vehicles live=0 (spawn passes 14, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 120 vehicle gathers=14 candidates=24 (avg 1.7) lane-spawns=7; ped gathers=16 edges=488 (avg 30.5)
+[objective] slot 1 cleared via objective_text_clear (frame 150)
+[traffic] frame 150 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 150 near-field ambient peds live=0/48
+[population] frame 150 vehicles live=0 (spawn passes 17, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 150 vehicle gathers=17 candidates=24 (avg 1.4) lane-spawns=7; ped gathers=19 edges=488 (avg 25.7)
+[npc-ai] t=5933ms npc=lobby_guard 001 mode 12->0 action=69 goal=16 dist=20.0
+[traffic] frame 180 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 180 near-field ambient peds live=0/48
+[population] frame 180 vehicles live=0 (spawn passes 21, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 180 vehicle gathers=21 candidates=24 (avg 1.1) lane-spawns=7; ped gathers=23 edges=488 (avg 21.2)
+mission  : in-world trigger 'Horse_trigger' geometry registered - REAL position (2250.28 176.01 2710.61) and REAL shape 'bounding box' (enum 0) from zone data
+[traffic] frame 210 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 210 near-field ambient peds live=0/48
+[population] frame 210 vehicles live=0 (spawn passes 25, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 210 vehicle gathers=25 candidates=24 (avg 1.0) lane-spawns=7; ped gathers=27 edges=488 (avg 18.1)
+[traffic] frame 240 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 240 near-field ambient peds live=0/48
+[population] frame 240 vehicles live=0 (spawn passes 29, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 240 vehicle gathers=29 candidates=24 (avg 0.8) lane-spawns=7; ped gathers=31 edges=488 (avg 15.7)
+[traffic] frame 270 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 270 near-field ambient peds live=0/48
+[population] frame 270 vehicles live=0 (spawn passes 32, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 270 vehicle gathers=32 candidates=24 (avg 0.8) lane-spawns=7; ped gathers=34 edges=488 (avg 14.4)
+auto-objective: stalled 80 frames waiting on trigger 'Horse_trigger' - teleported player INTO its volume at (2250.28, 181.63, 2710.61) [CHOSEN test-harness stand-in, not real navigation - see --auto-objective's own doc comment]
+mission  : in-world trigger 'Kill_trigger' EXIT transition, but no on_trigger_exit callback is registered - nothing to dispatch
+mission  : in-world trigger 'Horse_trigger' ENTER transition - spawned coroutine for 'm01_trigger_horse_cb', resumed by this frame's own scheduler pass below
+[traffic] frame 300 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 300 near-field ambient peds live=0/48
+[population] frame 300 vehicles live=0 (spawn passes 36, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 300 vehicle gathers=36 candidates=24 (avg 0.7) lane-spawns=7; ped gathers=38 edges=488 (avg 12.8)
+[traffic] frame 330 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 330 near-field ambient peds live=0/48
+[population] frame 330 vehicles live=0 (spawn passes 40, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 330 vehicle gathers=40 candidates=24 (avg 0.6) lane-spawns=7; ped gathers=42 edges=488 (avg 11.6)
+[traffic] frame 360 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 360 near-field ambient peds live=0/48
+[population] frame 360 vehicles live=0 (spawn passes 44, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 360 vehicle gathers=44 candidates=24 (avg 0.5) lane-spawns=7; ped gathers=46 edges=488 (avg 10.6)
+[traffic] frame 390 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 390 near-field ambient peds live=0/48
+[population] frame 390 vehicles live=0 (spawn passes 47, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 390 vehicle gathers=47 candidates=24 (avg 0.5) lane-spawns=7; ped gathers=49 edges=488 (avg 10.0)
+[traffic] frame 420 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 420 near-field ambient peds live=0/48
+[population] frame 420 vehicles live=0 (spawn passes 51, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 420 vehicle gathers=51 candidates=24 (avg 0.5) lane-spawns=7; ped gathers=53 edges=488 (avg 9.2)
+auto-combat: player weapon 'Pistol-Gang' (real weapons.xtbl row), damage per hit 300.0 (CHOSEN: Damage_Max NPC value when authored), infinite ammo [CHOSEN]
+auto-combat: shot #1 at 'Teller 002' reached=1 hit=1 hitTarget='Teller 002' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+[traffic] frame 450 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 450 near-field ambient peds live=0/48
+[population] frame 450 vehicles live=0 (spawn passes 55, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 450 vehicle gathers=55 candidates=24 (avg 0.4) lane-spawns=7; ped gathers=57 edges=488 (avg 8.6)
+[traffic] frame 480 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 480 near-field ambient peds live=0/48
+[population] frame 480 vehicles live=0 (spawn passes 59, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 480 vehicle gathers=59 candidates=24 (avg 0.4) lane-spawns=7; ped gathers=61 edges=488 (avg 8.0)
+[traffic] frame 510 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 510 near-field ambient peds live=0/48
+[population] frame 510 vehicles live=0 (spawn passes 62, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 510 vehicle gathers=62 candidates=24 (avg 0.4) lane-spawns=7; ped gathers=64 edges=488 (avg 7.6)
+auto-combat: teleported player to (2268.6, 176.1, 2711.6), 25 m standoff from target 'Teller 003' [CHOSEN test-harness stand-in for walking there]
+mission  : in-world trigger 'Kill_trigger' ENTER transition - spawned coroutine for 'm01_kill_trigger_cb', resumed by this frame's own scheduler pass below
+mission  : in-world trigger 'Kill_trigger' EXIT transition, but no on_trigger_exit callback is registered - nothing to dispatch
+[traffic] frame 540 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 540 near-field ambient peds live=0/48
+[population] frame 540 vehicles live=0 (spawn passes 66, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 540 vehicle gathers=66 candidates=24 (avg 0.4) lane-spawns=7; ped gathers=68 edges=488 (avg 7.2)
+[traffic] frame 570 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 570 near-field ambient peds live=0/48
+[population] frame 570 vehicles live=0 (spawn passes 70, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 570 vehicle gathers=70 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=72 edges=488 (avg 6.8)
+weather-trace: state frame=600 weather_t=20.0s tod=12:20 stage=Clear Skies other=Clear Skies blend=0.000 elapsed=120.7/520.0s light=Overcast/Overcast pedDensity=1.00
+[traffic] frame 600 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 600 near-field ambient peds live=0/48
+[population] frame 600 vehicles live=0 (spawn passes 74, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 600 vehicle gathers=74 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=76 edges=488 (avg 6.4)
+[traffic] frame 630 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 630 near-field ambient peds live=0/48
+[population] frame 630 vehicles live=0 (spawn passes 77, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 630 vehicle gathers=77 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=79 edges=488 (avg 6.2)
+[traffic] frame 660 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 660 near-field ambient peds live=0/48
+[population] frame 660 vehicles live=0 (spawn passes 81, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 660 vehicle gathers=81 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=83 edges=488 (avg 5.9)
+auto-combat: shot #2 at 'Teller 003' reached=1 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+auto-combat: shot #2 at 'Teller 003' reached=0 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+[traffic] frame 690 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 690 near-field ambient peds live=0/48
+[population] frame 690 vehicles live=0 (spawn passes 85, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 690 vehicle gathers=85 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=87 edges=488 (avg 5.6)
+auto-combat: shot #2 at 'Teller 003' reached=0 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+auto-combat: shot #3 at 'Teller 003' reached=1 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+[traffic] frame 720 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 720 near-field ambient peds live=0/48
+[population] frame 720 vehicles live=0 (spawn passes 89, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 720 vehicle gathers=89 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=91 edges=488 (avg 5.4)
+auto-combat: shot #3 at 'Teller 003' reached=0 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+auto-combat: shot #3 at 'Teller 003' reached=0 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+[traffic] frame 750 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 750 near-field ambient peds live=0/48
+[population] frame 750 vehicles live=0 (spawn passes 92, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 750 vehicle gathers=92 candidates=24 (avg 0.3) lane-spawns=7; ped gathers=94 edges=488 (avg 5.2)
+[traffic] frame 780 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 780 near-field ambient peds live=0/48
+[population] frame 780 vehicles live=0 (spawn passes 96, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 780 vehicle gathers=96 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=98 edges=488 (avg 5.0)
+[traffic] frame 810 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 810 near-field ambient peds live=0/48
+[population] frame 810 vehicles live=0 (spawn passes 100, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 810 vehicle gathers=100 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=102 edges=488 (avg 4.8)
+[traffic] frame 840 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 840 near-field ambient peds live=0/48
+[population] frame 840 vehicles live=0 (spawn passes 104, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 840 vehicle gathers=104 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=106 edges=488 (avg 4.6)
+[traffic] frame 870 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 870 near-field ambient peds live=0/48
+[population] frame 870 vehicles live=0 (spawn passes 107, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 870 vehicle gathers=107 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=109 edges=488 (avg 4.5)
+[traffic] frame 900 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 900 near-field ambient peds live=0/48
+[population] frame 900 vehicles live=0 (spawn passes 111, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 900 vehicle gathers=111 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=113 edges=488 (avg 4.3)
+[traffic] frame 930 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 930 near-field ambient peds live=0/48
+[population] frame 930 vehicles live=0 (spawn passes 115, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 930 vehicle gathers=115 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=117 edges=488 (avg 4.2)
+[traffic] frame 960 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 960 near-field ambient peds live=0/48
+[population] frame 960 vehicles live=0 (spawn passes 119, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 960 vehicle gathers=119 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=121 edges=488 (avg 4.0)
+[traffic] frame 990 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 990 near-field ambient peds live=0/48
+[population] frame 990 vehicles live=0 (spawn passes 122, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 990 vehicle gathers=122 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=124 edges=488 (avg 3.9)
+[traffic] frame 1020 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1020 near-field ambient peds live=0/48
+[population] frame 1020 vehicles live=0 (spawn passes 126, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1020 vehicle gathers=126 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=128 edges=488 (avg 3.8)
+[traffic] frame 1050 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1050 near-field ambient peds live=0/48
+[population] frame 1050 vehicles live=0 (spawn passes 130, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1050 vehicle gathers=130 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=132 edges=488 (avg 3.7)
+[traffic] frame 1080 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1080 near-field ambient peds live=0/48
+[population] frame 1080 vehicles live=0 (spawn passes 134, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1080 vehicle gathers=134 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=136 edges=488 (avg 3.6)
+[traffic] frame 1110 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1110 near-field ambient peds live=0/48
+[population] frame 1110 vehicles live=0 (spawn passes 137, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1110 vehicle gathers=137 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=139 edges=488 (avg 3.5)
+[traffic] frame 1140 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1140 near-field ambient peds live=0/48
+[population] frame 1140 vehicles live=0 (spawn passes 141, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1140 vehicle gathers=141 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=143 edges=488 (avg 3.4)
+[traffic] frame 1170 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1170 near-field ambient peds live=0/48
+[population] frame 1170 vehicles live=0 (spawn passes 145, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1170 vehicle gathers=145 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=147 edges=488 (avg 3.3)
+weather-trace: state frame=1200 weather_t=40.0s tod=12:40 stage=Clear Skies other=Clear Skies blend=0.000 elapsed=140.7/520.0s light=Overcast/Overcast pedDensity=1.00
+[traffic] frame 1200 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1200 near-field ambient peds live=0/48
+[population] frame 1200 vehicles live=0 (spawn passes 149, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1200 vehicle gathers=149 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=151 edges=488 (avg 3.2)
+[traffic] frame 1230 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1230 near-field ambient peds live=0/48
+[population] frame 1230 vehicles live=0 (spawn passes 152, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1230 vehicle gathers=152 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=154 edges=488 (avg 3.2)
+[traffic] frame 1260 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1260 near-field ambient peds live=0/48
+[population] frame 1260 vehicles live=0 (spawn passes 156, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1260 vehicle gathers=156 candidates=24 (avg 0.2) lane-spawns=7; ped gathers=158 edges=488 (avg 3.1)
+[traffic] frame 1290 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1290 near-field ambient peds live=0/48
+[population] frame 1290 vehicles live=0 (spawn passes 160, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1290 vehicle gathers=160 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=162 edges=488 (avg 3.0)
+[traffic] frame 1320 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1320 near-field ambient peds live=0/48
+[population] frame 1320 vehicles live=0 (spawn passes 164, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1320 vehicle gathers=164 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=166 edges=488 (avg 2.9)
+[traffic] frame 1350 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1350 near-field ambient peds live=0/48
+[population] frame 1350 vehicles live=0 (spawn passes 167, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1350 vehicle gathers=167 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=169 edges=488 (avg 2.9)
+[traffic] frame 1380 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1380 near-field ambient peds live=0/48
+[population] frame 1380 vehicles live=0 (spawn passes 171, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1380 vehicle gathers=171 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=173 edges=488 (avg 2.8)
+[traffic] frame 1410 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1410 near-field ambient peds live=0/48
+[population] frame 1410 vehicles live=0 (spawn passes 175, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1410 vehicle gathers=175 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=177 edges=488 (avg 2.8)
+[traffic] frame 1440 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1440 near-field ambient peds live=0/48
+[population] frame 1440 vehicles live=0 (spawn passes 179, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1440 vehicle gathers=179 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=181 edges=488 (avg 2.7)
+[traffic] frame 1470 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1470 near-field ambient peds live=0/48
+[population] frame 1470 vehicles live=0 (spawn passes 182, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1470 vehicle gathers=182 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=184 edges=488 (avg 2.7)
+[traffic] frame 1500 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1500 near-field ambient peds live=0/48
+[population] frame 1500 vehicles live=0 (spawn passes 186, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1500 vehicle gathers=186 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=188 edges=488 (avg 2.6)
+auto-combat: shot #25 at 'Teller 003' reached=1 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+auto-combat: shot #25 at 'Teller 003' reached=0 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+auto-combat: shot #25 at 'Teller 003' reached=0 hit=0 hitTarget='' (sink: applied=1 dmg=300 killsByHit=1 refused=0)
+[traffic] frame 1530 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1530 near-field ambient peds live=0/48
+[population] frame 1530 vehicles live=0 (spawn passes 190, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1530 vehicle gathers=190 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=192 edges=488 (avg 2.5)
+[traffic] frame 1560 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1560 near-field ambient peds live=0/48
+[population] frame 1560 vehicles live=0 (spawn passes 194, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1560 vehicle gathers=194 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=196 edges=488 (avg 2.5)
+[traffic] frame 1590 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1590 near-field ambient peds live=0/48
+[population] frame 1590 vehicles live=0 (spawn passes 197, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1590 vehicle gathers=197 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=199 edges=488 (avg 2.5)
+[traffic] frame 1620 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1620 near-field ambient peds live=0/48
+[population] frame 1620 vehicles live=0 (spawn passes 201, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1620 vehicle gathers=201 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=203 edges=488 (avg 2.4)
+[traffic] frame 1650 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1650 near-field ambient peds live=0/48
+[population] frame 1650 vehicles live=0 (spawn passes 205, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1650 vehicle gathers=205 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=207 edges=488 (avg 2.4)
+[traffic] frame 1680 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1680 near-field ambient peds live=0/48
+[population] frame 1680 vehicles live=0 (spawn passes 209, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1680 vehicle gathers=209 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=211 edges=488 (avg 2.3)
+[traffic] frame 1710 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1710 near-field ambient peds live=0/48
+[population] frame 1710 vehicles live=0 (spawn passes 212, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1710 vehicle gathers=212 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=214 edges=488 (avg 2.3)
+[traffic] frame 1740 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1740 near-field ambient peds live=0/48
+[population] frame 1740 vehicles live=0 (spawn passes 216, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1740 vehicle gathers=216 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=218 edges=488 (avg 2.2)
+[traffic] frame 1770 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1770 near-field ambient peds live=0/48
+[population] frame 1770 vehicles live=0 (spawn passes 220, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1770 vehicle gathers=220 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=222 edges=488 (avg 2.2)
+weather-trace: state frame=1800 weather_t=60.0s tod=13:00 stage=Clear Skies other=Clear Skies blend=0.000 elapsed=160.7/520.0s light=Overcast/Overcast pedDensity=1.00
+[traffic] frame 1800 near-field live=0/48; roadblock armed=0 filled=0/8
+[peds] frame 1800 near-field ambient peds live=0/48
+[population] frame 1800 vehicles live=0 (spawn passes 224, distance-despawned 7) peds live=0 (distance-despawned 9) tod_idx=2 hood=(none) category=Default Spawn graph=REAL road/sidewalk
+[roadgraph] frame 1800 vehicle gathers=224 candidates=24 (avg 0.1) lane-spawns=7; ped gathers=226 edges=488 (avg 2.2)
+mission  : --mission=m01 stopped - wall-clock timeout (60.0s) exceeded while still suspended; this frame's own rendering/input loop is UNAFFECTED (see this function's own doc comment)
+actor-placement-trace: actors=0 y_differs_from_player_ground=0 mean_abs_dy=0.000 median_abs_dy=0.000 max_abs_dy=0.000 sample_vs_node_gt1m=0 max_sample_vs_node=0.000 heading_nonzero=0 ground_samples=117 frames=1830
+traffic-overtake-gate-trace: frames=1830 live_near_field_vehicles=0 overtake_gate_fire_count=1 net_displacement_range=[-1.00,-1.00]
+traffic-signals-trace: switches=0 amber_onsets=0 car_signal_stops=0 car_signal_releases=0 car_stopline_stops=0 car_stopline_releases=0 car_frames_on_controlled_lane=0 car_frames_on_red_or_amber_lane=0
+traffic-review-trace: lane_requeries=7 obstacle_probe_runs=48 obstacle_probe_reuses=224 yield_brake_frames=0 yield_stops=0 yield_runs=41 yield_conflicts_found=0
+ped-crossings-trace: waits=0 crosses=1 crosses_after_wait=0 crosses_unsignalled=0
+ped-navigator-trace: path_searches=9 search_fails=0 route_nodes_reached=4 arrivals=0 event8_posted=0
+ambient-models-trace: ready=1 distinct_vehicle_models=8 (cap 8) distinct_ped_characters=16 (cap 16) load_ms_total=338.7 cache_hits=16 cache_misses=24 vehicle_assignments=7 ped_assignments=9 vehicle_load_failures=0 ped_load_failures=0 streamed_sets_built=2 peak_working_set_bytes=3941896192
+ambient-models-trace: vehicle_use: bike_rocket02_0=1 car_2dr_luxury04_0=1 car_2dr_standard03_0=1 car_2dr_standard06_0=1 car_4dr_compact01_0=1 car_4dr_standard03_0=1 wagon_4dr_sprt01_0=1
+ambient-models-trace: ped_use: alfred=2 amanda=1 brianne=1 hoissy=1 joey=1 lucille=1 selma=1 selma2=1
+ambient-ped-anim-trace: clips_ready=1 draws_animated=315 draws_still_frame0=18 draws_stale=27 pose_updates=324 pose_cache_skips=9 pose_ms_total=38.6 pose_ms_per_update=0.119 peds_without_clip=0 (max 24 updates/frame, radius 80 m)
+ambient-ped-anim-trace: retarget by bone name: ped_bs_walk.anim_pc: hoissy(66) -> alfred(68) by name, 66/66 bones matched
+ambient-ped-anim-trace: retarget by bone name: ped_bs_walk.anim_pc: hoissy(66) -> amanda(68) by name, 66/66 bones matched
+ambient-ped-anim-trace: retarget by bone name: ped_bs_walk.anim_pc: hoissy(66) -> selma2(68) by name, 66/66 bones matched
+ambient-ped-anim-trace: retarget by bone name: ped_bs_walk_d.anim_pc: hoissy(66) -> amanda(68) by name, 66/66 bones matched
+ambient-ped-anim-trace: retarget by bone name: ped_bs_walk_f.anim_pc: hoissy(66) -> alfred(68) by name, 66/66 bones matched
+jump-crouch-trace: jumps=0 landings=0 peak_above_takeoff=0.000 last_airtime_ms=0 air_frames=0 crouch_frames=0 crouch_max_ground_speed=0.00 stand_max_ground_speed=10.00 airborne_at_exit=0 jump_height_arg=1.00 final_y=32.339
+vehicle-collision-trace: ped_hits=0 (bumps=0 knockdowns=0) ped_deaths=0 car_car_contacts=0 car_parked_contacts=0 max_impact_speed=0.00 max_car_car_impact_speed=0.00 damage_player=0 damage_ambient=0 knocked_ambient_cars_now=0 knock_recoveries=0 max_player_speed_before_ped_hit=0.00 min_player_speed_after_ped_hit=0.00 crime_reports=0
+player-vitals-trace: inactive (mission mode: mission death path owns the player)
+mission  : --mission=m01 script thread 'm01_start' (id 1) still suspended at [string "game_lib.lua"]:3410 (in process_enemy_set) when this session ended
+mission  : --mission=m01 script thread 'm01_josh_is_dumbass_thread' (id 9) still suspended at [string "m01.lua"]:5463 when this session ended
+mission  : --mission=m01 script thread 'm01_gat_guard_convo_thread' (id 10) still suspended at [string "m01.lua"]:4174 when this session ended
+mission  : --mission=m01 script thread 'm01_get_robbed_line_thread' (id 8) still suspended at [string "system_lib.lua"]:114 (in delay) when this session ended
+npc-ai   : mission loop summary: ticks=1800 npc_ticks=259626 tracked=145 shots=0 hits=0 damage_to_player=0.0 no_player_position_ticks=0 open_tick_skips=0
+npc-ai   :   hostile_npc_ticks=8870 (live, AI-driven; dead/ignore_ai suppressed=1367) min_hostile_distance=4.9; npc ticks by team (0 Playas 1 Luchadores 2 Deckers 3 Morningstar 4 Neutral Gang 5 Police 6 STAG 7 Civilian 9 none): [0]=3600 [3]=38473 [5]=32759 [7]=2684 [9]=182110
+npc-ai   :   los_checks=6 los_blocked=0 cover_nodes=12956 cover_searches=6 cover_found=0 cover_no_node=6 cover_in_box=0 cover_shield_rays=0 downed_entered=0
+npc-ai   :   cover diagnostic: nearest pool node to a searching NPC = 3513.5 m (dy -176.1 m)
+npc-ai   :   OPEN action routine 15 ('melee stand back') refused 6 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 37 ('follow to car') refused 15168 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 38 ('follow other car') refused 15168 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 39 ('follow carjack') refused 15143 time(s) (not implemented in the port)
+auto-combat: summary: player_shots=34 player_hits=1 (damage-model applied=1, dmg=300, refused=0) npc_shots=0 npc_hits=0 damage_to_player=0.0 npc_mode_to_attack=6 npc_mode_to_cover=6 teleports=2 god_mode_heals=0 hostile_orders=6 kills_by_damage=1 kills_by_fallback=0
+npc-ai   : near-field ped loop summary: ped_ticks=360 tracked_now=0 flee_entries=0 cower_entries=0 open_tick_skips=0
+npc-ai   :   OPEN action routine 37 ('follow to car') refused 25 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 38 ('follow other car') refused 25 time(s) (not implemented in the port)
+frames   : 1830 presented (4 cell loads, 4 cell evictions, 0 cells/0 ground tiles resident); final player pos (2268.64 32.34 2711.58), locomotion state 0; near-field traffic live=0/48, roadblock armed=0 filled=0/8

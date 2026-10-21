@@ -610,7 +610,7 @@ int stub_shop_purchase_purchase_shop(lua_State* L) {
     // CONFIRMED real double-charge defect (Sec49.1): every side effect
     // below repeats on every resolved call; only `owned` just below is
     // guarded to a single call.
-    st->playerCash() -= sp.price; // "routed to owner if not locally owned" - not modeled further, no economy-routing layer in scope
+    st->debitPlayerCash(sp.price); // "routed to owner if not locally owned" - not modeled further, no economy-routing layer in scope
     ++sp.paymentRepeatCount;
     ++sp.triggerDisableRepeatCount;
     ++sp.ownedBroadcastRepeatCount;
@@ -766,7 +766,7 @@ int stub_store_stronghold_game_purchase_upgrade(lua_State* L) {
         logCall(L, upLog(L), "store_stronghold_game_purchase_upgrade:NULL_LOCAL_PLAYER_GUARD", upStateTag(L));
         return 0;
     }
-    st->playerCash() -= su.price; // CONFIRMED: charged unconditionally once a stronghold resolves, no affordability check
+    st->debitPlayerCash(su.price); // CONFIRMED: charged unconditionally once a stronghold resolves, no affordability check
     ++su.chargeCount;
     // CONFIRMED (Sec49.1, reconciled against Sec8.27/Sec26.28): the
     // level-up setter's own gate - a session exists AND this machine is

@@ -32,8 +32,8 @@ namespace sr3airuntime {
 // | 0x10000. Table 0x01308ad4 maps the six Spline_Type names (spawn_info_groups.xtbl, spec-tables-progression.md
 // Sec10.6) to flag bits {Highway Only 0x10, Boat 0x40000, Offroad 0x10000, Indoor 0x400000, Baggage 0x20000,
 // Taxi 0x200000}; any other text ("All Roads", "Surface Roads") stores -1 and adds no bit.
-// With nothing streamed (the viewer models no streamed-slot set yet: the Sec20.6.1(e) re-roll cadence is OPEN)
-// the mask is the 0x10400 fallback.
+// With nothing streamed (the viewer feeds the streamed slots' Spline_Types via viewer_playtest_support.cpp, RG-3;
+// the Sec20.6.1(e) re-roll cadence itself stays OPEN) the mask is the 0x10400 fallback.
 inline constexpr uint32_t kRoadSpawnIncludeMask = 0x400u | 0x10000u;
 inline uint32_t SplineTypeFlagBit(const std::string& name) {
     static const struct { const char* n; uint32_t bit; } kTable[6] = {

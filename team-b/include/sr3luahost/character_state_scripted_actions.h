@@ -143,6 +143,14 @@ struct CharacterStateScriptedActions {
     // humanShieldHostageName above).
     int64_t regenRestartDeadlineStamp = 0;
 
+    // spec-player-runtime.md Sec18.3 health regeneration (player victims only), EngineState::tickHealthRegen.
+    // healthRegenReadyAtSeconds models the wait timer +0x19c0 on the EngineState vitals clock (0 = expired);
+    // healthRegenExactHp is the fractional health (HP += rate/30 is below one point per step on easy damage);
+    // healthRegenCarrySeconds is the unspent part of the fixed 1/30 s step.
+    double healthRegenReadyAtSeconds = 0.0;
+    double healthRegenExactHp = -1.0;
+    double healthRegenCarrySeconds = 0.0;
+
     // character_clear_combat_move (Sec30.1): the word at +0x1358.
     // CONFIRMED sentinel 0xffff means "no combat move/state assigned"
     // (HYPOTHESIS real-world meaning, per spec's own text) - gates the

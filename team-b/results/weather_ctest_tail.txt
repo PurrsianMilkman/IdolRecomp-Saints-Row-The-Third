@@ -1,0 +1,18 @@
+229/230 Test #159: real_playtest_archive_scan_test ......................................   Passed  166.48 sec
+        Start 191: golden_scene_check
+230/230 Test #191: golden_scene_check ...................................................   Passed  142.26 sec
+
+100% tests passed out of 230
+
+Label Time Summary:
+fast         =  39.28 sec*proc (90 tests)
+golden       = 637.40 sec*proc (9 tests)
+real-data    =  32.80 sec*proc (16 tests)
+
+Total Test time (real) = 638.43 sec
+
+The following tests did not run:
+	 62 - real_road_graph_test (Skipped)
+	175 - real_bink_frame0_decode_test (Skipped)
+	176 - real_bink_test_vector_validation_test (Skipped)
+	177 - real_bink_idct_test (Skipped)

@@ -343,6 +343,16 @@ double EngineState::vintGetTimeIndex(bool hasExplicitNonZeroDoc, uint32_t explic
     return vintTimeIndexByDoc_.get(std::to_string(doc)); // OPEN propagates - see this function's own header doc comment on why "resolution failed" and "not yet known" collapse to the same refusal here
 }
 
+// Design notes moved verbatim from EngineState::registerVintDataItemForTesting's declaration in engine_state.h
+// (refactor step 3a):
+// --- vint_dataitem_get (Sec19.2) ----------------------------------------
+
+// Test/setup-only entry point (see VintDataItem's own doc comment).
+// Truncates `fields` to the real 32-slot cap (CONFIRMED) rather than
+// guessing what a longer list would mean. Returns the fresh handle
+// (starts at 1, incrementing - same unconfirmed-numeric-scheme stand-in
+// convention as registerVdoObjectForTesting, a SEPARATE counter since
+// Sec19.2 confirms this is a separate handle space).
 uint32_t EngineState::registerVintDataItemForTesting(std::vector<VintTaggedValue> fields) {
     if (fields.size() > 32) fields.resize(32); // CONFIRMED real cap - truncate rather than guess what more would mean
     uint32_t handle = nextVintDataItemHandle_++;
@@ -599,6 +609,14 @@ std::optional<EngineState::VintBox> EngineState::vintQueryBox(uint32_t handle) c
     return Walker{*this}.box(handle, 0);
 }
 
+// Design notes moved verbatim from EngineState::setVintScreenSize's declaration in engine_state.h
+// (refactor step 3a):
+// The screen_size setter (Sec7.3, shared body 0x00e27c70): clamps the
+// request to >= 1e-4 per axis, then scale := scale * requested /
+// current screen_size. HOST-SAFETY (coordinator-mandated, not engine
+// behaviour): the real body divides by a zero current size unguarded
+// (float division - a non-finite scale); this host writes nothing in
+// that case and counts it (VintPropertyStats::screenSizeDivZeroGuards).
 void EngineState::setVintScreenSize(uint32_t handle, double requestedW, double requestedH) {
     const VdoObject& obj = vdoObjects_.at(handle);
     if (vintTypeIsA(obj.typeName, "group") || vintTypeIsA(obj.typeName, "point")) {
@@ -637,6 +655,76 @@ std::optional<uint8_t> EngineState::vintTweenBorrowedCode(uint32_t tweenHandle) 
     return code;
 }
 
+// Design notes moved verbatim from EngineState::setVintProperty's declaration in engine_state.h
+// (refactor step 3a):
+// --- vint_set_property / vint_get_property (Sec20) ----------------------
+//
+// One per-(resolved VDO object, property-name-hash) store
+// (VintStoredProperty), written by vint_set_property, the document
+// loader and the element defaults, read by vint_get_property. Names are
+// hashed the real way (CONFIRMED, Sec9.2/Sec20.1: the engine's own
+// lower-cased string hash, sr3save::nameHash).
+//
+// TYPED objects (2026-10-03: VdoObject::typeName is one of the 13
+// registered types - every document-loaded object, and
+// registerTypedVdoObjectForTesting) go through the real per-type
+// property-descriptor tables (spec-lua-bindings.md Sec9.1/Sec9.2/Sec9.2a,
+// include/sr3luahost/vint_property_types.h - read that header for which
+// rows have a code in clean text and which are OPEN):
+//  * the name is looked up in the object's own type's table, then up the
+//    parent chain (CONFIRMED Sec9.1); no row anywhere -> set writes
+//    nothing, get pushes zero Lua values (CONFIRMED Sec20.1/Sec20.2);
+//  * a row with a known code: set parses the trailing Lua values by that
+//    code - exactly vintCodeArity(code) of them are consumed (extra
+//    trailing values are ignored: the switch builds ONE value record of
+//    the code's shape, Sec20.1), numbers for 1/2/3/6/7 (floats rounded to
+//    32-bit, the field width spec-vint-render.md Sec1 gives; 1/2 must be
+//    whole numbers, 2 non-negative), a string for 4/8/9/0xa/0xb, a
+//    boolean for 5; 0xd takes a whole number or an enumerator name
+//    resolved through Sec9.2a's tables. Lua values that do not fit the
+//    code (wrong count, wrong Lua type, a fractional integer) are an
+//    OpenStateError - the real switch's behaviour on such input is not
+//    specified, so this host refuses rather than coerce;
+//  * a row whose code is OPEN in clean text: CHOSEN pass-through - the
+//    Lua values are stored and echoed exactly as given (the
+//    pre-descriptor behaviour), never converted by a guessed type;
+//  * a 0xd name that the clean tables cannot resolve (an unknown name, or
+//    any name tween.algorithm lists only as "8 families x {in, out,
+//    in-out}"): stored raw (CHOSEN - mirrors the document loader's own
+//    string fallback on a lookup miss, vint-doc Sec5, HIGH CONFIDENCE);
+//  * TWEEN start_value/end_value (CONFIRMED Sec20.1, as CORRECTED
+//    2026-10-03): the gate is exact - object type tween, row code 0xe,
+//    name start_value/end_value case-insensitively. The values are then
+//    parsed with the code of the property the tween drives (the tween's
+//    own stored target_handle -> object, target_property -> that object's
+//    descriptor) and the write lands on the TWEEN's own property, never
+//    on the target. When this host cannot determine that code (no
+//    target_handle/target_property stored, target not a typed object, the
+//    target row's own code OPEN) the values are stored raw (CHOSEN);
+//  * code 8 (callback name): the name is stored; the vint_callback_lua
+//    pool claim/refcount Sec20.1 describes is NOT modelled (this host has
+//    no callback pool) - deferred;
+//  * spec-vint-render.md Sec7.3 setters: screen_nw, screen_se and
+//    unscaled_size are the universal fail-stub (no write); screen_size is
+//    a real setter (see setVintScreenSize below); group/point screen_size
+//    fail; text's own screen_size setter is OPEN (layout-ready bit).
+// get, for a typed object: screen_nw/screen_se/screen_size are computed
+// on every call (spec-vint-render.md Sec7, vintQueryBox below);
+// mouse_depth reads back depth while it holds the 0x7fffffff sentinel
+// (Sec1); codes 8 and 0xd refuse (OpenStateError: what 0x00e1a420
+// pushes for a callback slot or an enum is not specified, and no shipped
+// script reads one - measured); a row with no stored value refuses
+// (OpenStateError: no spec'd default - element-family objects are seeded
+// with spec-vint-render.md Sec8's defaults, so this is only subtype rows
+// and tween/animation); otherwise the stored values are pushed.
+//
+// UNTYPED objects (registerVdoObjectForTesting, cloneVdoObject - no type
+// name) and objects whose type name is none of the 13 keep the exact
+// pre-descriptor behaviour: any name is stored raw and echoed back,
+// never-set -> zero values (CHOSEN, the test-only path keeps working).
+//
+// `setVintProperty` silently does nothing if `handle` does not resolve
+// to a registered VdoObject (CONFIRMED, Sec20.1).
 void EngineState::setVintProperty(uint32_t handle, const std::string& propertyName, std::vector<VintTaggedValue> values) {
     auto objIt = vdoObjects_.find(handle);
     if (objIt == vdoObjects_.end()) {

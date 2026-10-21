@@ -394,7 +394,7 @@ void NpcAiRuntime::tickOne(NpcState& s, const NpcFacts& f, int64_t now, const Pl
         in.attackerAttitude = attitude;
         in.attackerIsPlayerClass = true;
         in.neverTurnOnPlayerFlag = f.neverTurnOnPlayer;
-        // CHOSEN: the provocation meter's feed and threshold (0x004fa180 / 0x004fa220) are not specified, so it is never at
+        // CHOSEN (AF-6/AI-17): the provocation meter's feed and threshold (0x004fa180 / 0x004fa220) are not specified, so it is never at
         // its threshold. It only matters at attitude 4+, where notice is skipped (list 8 instead); attitude < 4 passes the
         // notice gate without it.
         in.provocationAtThreshold = false;
@@ -551,6 +551,7 @@ void NpcAiRuntime::tickOne(NpcState& s, const NpcFacts& f, int64_t now, const Pl
     af.coverEvaluatorApproves = s.hasCover;
     af.coverShieldsFromTarget = !h.coverStayDownTimer.expired(now);  // popped out once the stay-down deadline passed
     af.coverObjectFlag8cBit1 = true;                                 // CHOSEN: every node allows a pop-out
+    // CHOSEN (AF-6/AI-17): the source of the 0x985cd0 flag is not specified; held true for every NPC. Question for Team A.
     af.flag985cd0 = true;
     af.pathfindSucceeded = true;  // no navmesh in this host: straight lines (CHOSEN)
     // No group leader / followed player (these NPCs are not followers): the leader position is the NPC itself, so the
@@ -608,6 +609,7 @@ void NpcAiRuntime::tickOne(NpcState& s, const NpcFacts& f, int64_t now, const Pl
         }
     };
     const auto fireTick = [&] {
+        // CHOSEN (AF-6/AI-17): the fire range "weapon range b + 5 m" is a stand-in margin, not a spec value.
         if (!cfg_.fireEnabled || !combatant || !pl.alive || !s.targetSet || dist > cfg_.weaponRangeB + 5.0 || !losNow()) return;
         const NpcFireModel& fm = cfg_.fire;
         if (s.burstLeft > 0) {

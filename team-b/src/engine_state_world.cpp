@@ -280,6 +280,7 @@ bool EngineState::sidewalkNodesDisabledValue(const std::string& name) const {
 void EngineState::recordWaypointRemove(int32_t mode) {
         ++waypointRemoveCount_;
         lastWaypointRemoveMode_ = mode;
+        waypointRequests_.push_back({std::string(), mode, true});
     }
 
 void EngineState::setDrawbridgeAreaDisabled(int32_t area1Based, bool disabled) {

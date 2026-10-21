@@ -1,0 +1,1891 @@
+=== playtest v0: interactive player<->animation<->camera<->collision demo ===
+CONTROLS : W/A/S/D move (real moveSlot/composeVelocity, camera-relative via REAL
+           CameraSystem::movementRows()); hold Left Shift to sprint; mouse look
+           (real CameraSystem rotate()/elevate()->cameraHook->preUpdate->yawStep/
+           pitchStep seam); walk up to the parked car and press E to enter/exit it
+           (W/S throttle/brake, A/D steer while driving - unless --no-vehicle);
+           T skips the TOD clock forward 3 game hour(s) per press (CHOSEN manual
+           fast-forward, v0.3 polish task - a full in-game day now takes 24 REAL
+           minutes, too slow to just wait out during a play session); press R to
+           arm/disarm the police roadblock spawn (debug gate, OFF by default - see
+           this command's own doc comment's "THE HONEST NOTORIETY GATE" note); Esc
+           or close the window to quit.
+NOT IN V0: jump, crouch, gamepad/XInput (spec-tables-ui-controls.md documents the
+           real gamepad binding layer; not wired here - keyboard+mouse only, said
+           honestly rather than faking a controller path), ambient PEDESTRIAN
+           population (the distant/LOD human tier - no spec-confirmed pass wiring
+           it into playtest yet) - see this command's own doc comment above
+           runPlaytest() for the full breakdown. Vehicle entry/driving IS wired (ON
+           by default, --no-vehicle opts out), WITH real world collision (spec-
+           physics-runtime.md Sec10a, vehicle-world-collision follow-up task -
+           superseding this line's own former "no world collision" wording) - see
+           that same doc comment's own honest scope note (a CHOSEN simple chase
+           camera, one PLAYER vehicle only, no vehicle-vs-vehicle collision/damage).
+           Near-field AMBIENT VEHICLE TRAFFIC IS wired (ALWAYS on, no flag) and the
+           POLICE ROADBLOCK spawn IS wired (debug key 'R', OFF by default) - see
+           this command's own doc comment's 2026-10-09 update for the full CHOSEN
+           breakdown of both. The health/ammo/money/notoriety HUD overlay IS wired
+           (--hud, opt-in, off unless passed) - see that flag's own honest caveat in
+           this command's doc comment. The top-right corner minimap (v0.3 polish
+           task) is now part of that SAME --hud overlay - real live player/vehicle
+           position and heading feed updateMinimapLiveTransform(), flat per-tile
+           fallback colour only (no real minimap_CCRR texture lookup wired into this
+           command).
+character: brad, 68 bones (channel 0, group 0)
+weather  : weather_time_of_day.xtbl - 4 segment(s) loaded; TOD lighting stage (CHOSEN) = 'Light Rain'
+spawn    : spawn_info_categories.xtbl - 31 categories
+weather  : weather.xtbl PedDensity for stage 'Clear Skies' = 1.00
+weapon   : Brad equipped with real weapons.xtbl row 'Pistol-Gang' (Weapon_Class=0, 82 total rows parsed) - LMB fires it on foot
+npc-ai   : tables loaded - 17 goal rows (17 non-empty lists), 44 behaviours, 67 combat_actions rows; civilian flee_health_pct=50
+footstep : real left-foot/right-foot trigger frames for 'plym_ps_wlk' FOUND (1/1) - driving real footstep timing
+footstep : real anim_files.xtbl row for event='FOOTSTEP' MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (CHOSEN per purrsian-52) FOUND - clip='crsr_extb_jmoff_ridr.animx' frame=55. HONEST GAP: resolving this event+switch identity to a
+         specific Wwise media id requires walking Event(kind4)->Action(kind3)->
+         SwitchContainer, and NO switch-container HIRC layout is reverse-engineered
+         anywhere in this project (spec-audio-runtime.md Sec9.6/9.7/9.8 document
+         Event->Action->plain-Sound only) - guessing that binary layout here would be
+         exactly the kind of invented engine behaviour this project's no-invented-
+         fixes rule forbids. The demo therefore still plays the same real, proven-
+         decodable SFX clip findFirstPlayableSfxClip() resolves below, now correctly
+         labelled as a stand-in for a KNOWN real identity rather than an arbitrary pick.
+graphs   : 249 loaded from node_graph_files.xtbl
+graph    : 'player state machine' found (index 144 of 249 loaded)
+anim     : real locomotion clips from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/preload_anim.vpp_pc: run=loaded jog=loaded wlk=loaded
+footstep : walk clip durationTotal()=39 (30Hz units) - left-foot frames=[30,] right-foot frames=[11,]
+seatpose : vi_ride.xtbl 69 set(s); vehicle_interaction_info.xtbl demo row ('truck_2dr_classic01') found
+seatpose : real driver ride clip 'auto_ridel.anim_pc' loaded
+[hoods] 33 Hood volumes (hood_bsp_tree + hood_spawn_category) from sr3_city~fawld.czn_pc
+[roadgraph] sr3_city_0.vpp_pc :: sr3_city~fawld.czn_pc: 11455 lanes (segments), 10141 road nodes, 6216 shape points, 7659 sidewalk nodes, 8703 sidewalk edges; indexed into 135 road tiles / 104 sidewalk tiles; 143 ms (czn 2586376 bytes)
+spawn    : 33 hood volumes x 31 spawn categories -> hood category lookup ACTIVE
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+audio    : disabled (--headless)
+radio    : 915 content entries, 153 song records, 12 stations; media indexed (931 records)
+radio    : station 3 LOGO_GENX        queue=512 first=GENX_SWEEPER_01 -> media resolved
+radio    : station 4 LOGO_KRHYME      queue=512 first=KRHYME_YONKERS_FRONT_SELL -> media resolved
+radio    : station 5 LOGO_K12         queue=512 first=K12_KEVIN_AND_CARRICK___WALLFLOWERS -> media resolved
+radio    : station 6 LOGO_KLASSIC     queue=512 first=KLASSIC_LISZT___HUNGARIAN_RHAPSODY -> media resolved
+radio    : station 7 LOGO_ADULT_SWIM  queue=512 first=SWIM_INTRO_CEREBRAL_BALLZY -> media resolved
+radio    : station 8 LOGO_KABRON      queue=512 first=KABRON_SULTATE_Y_TOMA_FRONT_SELL -> media resolved
+radio    : station 9 LOGO_KRUNCH      queue=512 first=KRUNCH_TUGBOAT___SLOW_REVOLUTION -> media resolved
+radio    : station 10 LOGO_MIX         queue=512 first=MIX_SOCIAL_DISTORTION___BALL_AND_CHAIN -> media resolved
+radio    : station 12                  queue=512 first=KRHYME_AMERIE_ONETHING -> unresolved: cue not found in switch container
+character: head matlib attach+bind: 1 diffuse-role TextureRef(s) replaced with the matlib's own resolved name (CHOSEN role-suffix heuristic - see this block's own comment)
+character: body textured, head textured (real per-material diffuse textures)
+npc-ai   : near-field ped AI loop ON (civilians: flee/cower when the player fires nearby; CHOSEN stand-ins in sr3airuntime/npc_ai_runtime.h)
+[stream] frame 0 focus (-1280.0, -560.0): wanted = {0915h0,0915h1,0915h2,0915h3}
+[tex] building TextureSearchCache for sr3_city_0.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_0.vpp_pc built: 21825 texture records indexed in 17.1 s
+[tex] building TextureSearchCache for sr3_city_1.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_1.vpp_pc built: 36851 texture records indexed in 23.2 s
+[tex] building TextureSearchCache for sr3_city_missions.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_missions.vpp_pc built: 0 texture records indexed in 0.0 s
+[tex] building TextureSearchCache for misc.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for misc.vpp_pc built: 119 texture records indexed in 0.0 s
+[tex] building TextureSearchCache for dlc1.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc1.vpp_pc built: 966 texture records indexed in 0.9 s
+[stream] frame 0 LOAD  0915h0   (sr3_city_0.vpp_pc, col 9 row 15 N 0) centre (-1360.0, -490.0): 59/59 props uploaded, 0 failed, textures 359/359, 43499 ms
+[tex] building TextureSearchCache for dlc2.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc2.vpp_pc built: 2014 texture records indexed in 1.5 s
+[tex] building TextureSearchCache for dlc3.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for dlc3.vpp_pc built: 604 texture records indexed in 0.4 s
+[tex] building TextureSearchCache for interface.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for interface.vpp_pc built: 1249 texture records indexed in 0.1 s
+[stream] frame 0 LOAD  0915h1   (sr3_city_0.vpp_pc, col 9 row 15 N 1) centre (-1200.0, -490.0): 46/46 props uploaded, 0 failed, textures 171/172, 2345 ms
+[stream] frame 0 LOAD  0915h2   (sr3_city_0.vpp_pc, col 9 row 15 N 2) centre (-1360.0, -630.0): 26/26 props uploaded, 0 failed, textures 185/185, 268 ms
+[stream] frame 0 LOAD  0915h3   (sr3_city_0.vpp_pc, col 9 row 15 N 3) centre (-1200.0, -630.0): 63/63 props uploaded, 0 failed, textures 240/241, 542 ms
+[ground] frame 0 LOAD  tile 0915: sr3_city~s0915.czn_pc, 3 range(s), 26 triangles (collision tris=26 bounds x[-22.3,22.3] z[-10.4,13.0])
+ground-y : measured real ground bounds [0.00, 0.00] across 1 loaded tile(s) - spawn/collision groundY = 32.15 (NO ground tile resolved - using 0.0)
+heightmap: NO real Heightmap (0x2244) record resolved at spawn (-1280.0 -560.0) - staying on the flat-plane fallback (32.15m)
+groundmesh: NO real 0x2237 collision-mesh triangle resolved at spawn (-1280.0 -560.0) - falling back to the heightmap/flat-plane chain above
+camera   : camera_free.xtbl seeded (40 scalars, 61 submode row(s) applied)
+camera   : real follow camera active; committed eye after reset (-1280.00 33.85 -564.25), fov 60.00 deg
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+vehicle  : D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/dlc1.vpp_pc :: car_4dr_genki_0.ccar_pc parked at (-1280.0 32.2 -554.0) - walk within 3.0m and press E to enter
+ambient-models: 31 categories, 61 groups, 382 character rows, 372 vehicle models in archive, 542 character containers
+traffic  : near-field ambient vehicle population ALWAYS ON (cap 48, spec-ai-runtime.md Sec17.4c)
+traffic  : lane graph = REAL road graph (11455 lanes, on-disk successor links)
+signals  : 346 junctions, 1207 lights, 678 phases initialised (Sec20.6.13(e))
+peds     : near-field ambient pedestrian population ALWAYS ON (cap 48, spec-ai-runtime.md Sec20)
+roadblock: police roadblock spawn OFF by default (8 slots: 4 ped + 4 vehicle [1 Spike_strip + 3 generic]) - press R to arm (spec-ai-runtime.md Sec19.7; debug gate, not tied to notoriety)
+vehicle  : no --vehicle-interaction-name given - occupant hide stays at its real-data default (shown; correct for the ordinary default vehicle, spec-render-pipeline.md Sec23.14)
+spawn    : (-1280.0 32.2 -560.0)
+vitals   : free-roam player vitals ON (max health 100 from engine drawOrGetMaxHitPoints('player'); respawn delay 4000 ms from gameplay_constants.xtbl Death_and_busted.respawn_delay_ms)
+[traffic] frame 0 near-field live=1/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1380.00,-643.06) heading=90.1deg seg=4697 valid=1
+[peds] frame 0 near-field ambient peds live=1/48
+[population] frame 0 vehicles live=1 (spawn passes 1, distance-despawned 0) peds live=1 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 0 vehicle gathers=1 candidates=5 (avg 5.0) lane-spawns=1; ped gathers=1 edges=49 (avg 49.0)
+[idle-trace] frame 0 ped id=1 pos=(-1302.60,31.41,-521.02) idleSubState=33
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[vehicle] in range (2.7m) - press E to enter
+[vehicle] out of range(null)
+[traffic] frame 30 near-field live=3/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.90,-433.21) heading=-90.0deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.64) heading=90.0deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.98,-482.25) heading=-89.8deg seg=4759 valid=1
+[peds] frame 30 near-field ambient peds live=4/48
+[population] frame 30 vehicles live=3 (spawn passes 4, distance-despawned 1) peds live=4 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 30 vehicle gathers=4 candidates=15 (avg 3.8) lane-spawns=4; ped gathers=4 edges=206 (avg 51.5)
+[idle-trace] frame 30 ped id=1 pos=(-1302.73,31.41,-522.47) idleSubState=34
+[idle-trace] frame 30 ped id=2 pos=(-1338.15,25.92,-543.49) idleSubState=34
+[idle-trace] frame 30 ped id=3 pos=(-1315.09,27.90,-551.13) idleSubState=34
+[idle-trace] frame 30 ped id=4 pos=(-1269.83,32.15,-585.21) idleSubState=34
+[traffic] frame 60 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.90,-435.90) heading=-90.0deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.52) heading=89.9deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.96,-483.83) heading=-89.0deg seg=4759 valid=1
+  [lane] id=5 pos=(-1379.97,-470.57) heading=90.2deg seg=4248 valid=1
+  [lane] id=6 pos=(-1266.86,-422.43) heading=-83.7deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.97,-474.39) heading=-89.8deg seg=4759 valid=1
+[peds] frame 60 near-field ambient peds live=8/48
+[population] frame 60 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=8 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 60 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=8 edges=433 (avg 54.1)
+[idle-trace] frame 60 ped id=1 pos=(-1302.86,31.41,-523.97) idleSubState=34
+[idle-trace] frame 60 ped id=2 pos=(-1339.85,25.92,-542.76) idleSubState=34
+[idle-trace] frame 60 ped id=3 pos=(-1314.41,27.90,-549.41) idleSubState=34
+[idle-trace] frame 60 ped id=4 pos=(-1271.24,32.15,-584.69) idleSubState=34
+[idle-trace] frame 60 ped id=5 pos=(-1277.61,36.15,-488.37) idleSubState=34
+[idle-trace] frame 60 ped id=6 pos=(-1271.76,32.15,-590.91) idleSubState=34
+[idle-trace] frame 60 ped id=7 pos=(-1270.78,36.15,-495.03) idleSubState=34
+[idle-trace] frame 60 ped id=8 pos=(-1256.65,36.15,-495.01) idleSubState=34
+[traffic] frame 90 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.89,-440.70) heading=-90.0deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-476.52) heading=89.6deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.87,-487.50) heading=-88.3deg seg=4759 valid=1
+  [lane] id=5 pos=(-1379.99,-467.45) heading=90.5deg seg=4248 valid=1
+  [lane] id=6 pos=(-1266.41,-424.95) heading=-77.4deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.95,-476.39) heading=-89.2deg seg=4759 valid=1
+[peds] frame 90 near-field ambient peds live=12/48
+[population] frame 90 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=12 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 90 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=12 edges=668 (avg 55.7)
+[idle-trace] frame 90 ped id=1 pos=(-1303.16,31.41,-525.44) idleSubState=34
+[idle-trace] frame 90 ped id=2 pos=(-1341.53,25.92,-541.99) idleSubState=34
+[idle-trace] frame 90 ped id=3 pos=(-1313.37,27.90,-547.88) idleSubState=34
+[idle-trace] frame 90 ped id=4 pos=(-1271.62,32.15,-583.45) idleSubState=34
+[idle-trace] frame 90 ped id=5 pos=(-1277.64,36.15,-487.29) idleSubState=34
+[idle-trace] frame 90 ped id=6 pos=(-1271.81,32.15,-589.40) idleSubState=34
+[idle-trace] frame 90 ped id=7 pos=(-1271.65,36.15,-494.59) idleSubState=34
+[idle-trace] frame 90 ped id=8 pos=(-1258.67,36.15,-495.03) idleSubState=34
+[idle-trace] frame 90 ped id=9 pos=(-1264.80,32.15,-585.33) idleSubState=34
+[idle-trace] frame 90 ped id=10 pos=(-1251.96,32.15,-590.23) idleSubState=34
+[idle-trace] frame 90 ped id=11 pos=(-1250.72,36.15,-481.17) idleSubState=34
+[idle-trace] frame 90 ped id=12 pos=(-1301.93,31.37,-521.64) idleSubState=34
+[traffic] frame 120 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.88,-447.77) heading=-89.9deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.97,-475.64) heading=89.4deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.65,-493.31) heading=-87.4deg seg=4759 valid=1
+  [lane] id=5 pos=(-1380.05,-462.23) heading=90.8deg seg=4248 valid=1
+  [lane] id=6 pos=(-1265.14,-429.42) heading=-71.4deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.88,-480.48) heading=-88.7deg seg=4759 valid=1
+[peds] frame 120 near-field ambient peds live=16/48
+[population] frame 120 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=16 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 120 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=16 edges=899 (avg 56.2)
+[idle-trace] frame 120 ped id=1 pos=(-1303.62,31.41,-526.87) idleSubState=34
+[idle-trace] frame 120 ped id=2 pos=(-1343.19,25.92,-541.18) idleSubState=34
+[idle-trace] frame 120 ped id=3 pos=(-1312.32,27.90,-546.36) idleSubState=34
+[idle-trace] frame 120 ped id=4 pos=(-1271.63,32.15,-581.94) idleSubState=34
+[idle-trace] frame 120 ped id=5 pos=(-1277.66,36.15,-486.21) idleSubState=34
+[idle-trace] frame 120 ped id=6 pos=(-1271.87,32.15,-587.90) idleSubState=34
+[idle-trace] frame 120 ped id=7 pos=(-1271.74,36.15,-493.20) idleSubState=34
+[idle-trace] frame 120 ped id=8 pos=(-1260.69,36.15,-495.05) idleSubState=34
+[idle-trace] frame 120 ped id=9 pos=(-1266.30,32.15,-585.14) idleSubState=34
+[idle-trace] frame 120 ped id=10 pos=(-1250.89,32.15,-590.28) idleSubState=34
+[idle-trace] frame 120 ped id=11 pos=(-1250.57,36.15,-482.66) idleSubState=34
+[idle-trace] frame 120 ped id=12 pos=(-1302.51,31.37,-523.58) idleSubState=34
+[idle-trace] frame 120 ped id=13 pos=(-1313.84,33.38,-499.99) idleSubState=34
+[idle-trace] frame 120 ped id=14 pos=(-1297.51,35.45,-479.41) idleSubState=34
+[idle-trace] frame 120 ped id=15 pos=(-1318.82,31.21,-519.27) idleSubState=34
+[idle-trace] frame 120 ped id=16 pos=(-1255.33,36.15,-490.88) idleSubState=33
+[traffic] frame 150 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1266.44,-457.08) heading=-84.8deg seg=4605 valid=1
+  [lane] id=3 pos=(-1379.93,-472.67) heading=89.1deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.43,-497.49) heading=-82.1deg seg=4553 valid=1
+  [lane] id=5 pos=(-1380.16,-456.38) heading=93.9deg seg=4248 valid=1
+  [lane] id=6 pos=(-1263.69,-433.15) heading=-62.7deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.70,-486.75) heading=-88.1deg seg=4759 valid=1
+[peds] frame 150 near-field ambient peds live=19/48
+[population] frame 150 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=19 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 150 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=19 edges=1064 (avg 56.0)
+[idle-trace] frame 150 ped id=1 pos=(-1304.08,31.41,-528.31) idleSubState=34
+[idle-trace] frame 150 ped id=2 pos=(-1344.67,25.92,-540.08) idleSubState=34
+[idle-trace] frame 150 ped id=3 pos=(-1311.27,27.90,-544.83) idleSubState=34
+[idle-trace] frame 150 ped id=4 pos=(-1271.64,32.15,-580.44) idleSubState=34
+[idle-trace] frame 150 ped id=5 pos=(-1277.68,36.15,-485.13) idleSubState=34
+[idle-trace] frame 150 ped id=6 pos=(-1271.93,32.15,-586.39) idleSubState=34
+[idle-trace] frame 150 ped id=7 pos=(-1271.83,36.15,-491.82) idleSubState=34
+[idle-trace] frame 150 ped id=8 pos=(-1262.72,36.15,-495.08) idleSubState=34
+[idle-trace] frame 150 ped id=9 pos=(-1267.79,32.15,-584.95) idleSubState=34
+[idle-trace] frame 150 ped id=10 pos=(-1250.33,32.15,-590.85) idleSubState=34
+[idle-trace] frame 150 ped id=11 pos=(-1250.42,36.15,-484.16) idleSubState=34
+[idle-trace] frame 150 ped id=12 pos=(-1303.11,31.37,-525.51) idleSubState=34
+[idle-trace] frame 150 ped id=13 pos=(-1314.42,33.38,-502.17) idleSubState=34
+[idle-trace] frame 150 ped id=14 pos=(-1298.97,35.45,-480.55) idleSubState=34
+[idle-trace] frame 150 ped id=15 pos=(-1318.62,31.21,-520.33) idleSubState=34
+[idle-trace] frame 150 ped id=16 pos=(-1255.59,36.15,-493.04) idleSubState=34
+[idle-trace] frame 150 ped id=17 pos=(-1271.22,34.23,-536.65) idleSubState=34
+[idle-trace] frame 150 ped id=18 pos=(-1255.56,29.94,-428.58) idleSubState=34
+[idle-trace] frame 150 ped id=19 pos=(-1271.83,34.26,-537.03) idleSubState=34
+[traffic] frame 180 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1265.72,-462.99) heading=-72.9deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.83,-467.58) heading=88.6deg seg=4248 valid=1
+  [lane] id=4 pos=(-1385.06,-499.16) heading=-75.4deg seg=4553 valid=1
+  [lane] id=5 pos=(-1380.31,-455.57) heading=102.7deg seg=4248 valid=1
+  [lane] id=6 pos=(-1262.71,-434.72) heading=-54.8deg seg=4373 valid=1
+  [lane] id=7 pos=(-1385.59,-489.35) heading=-87.1deg seg=4553 valid=1
+[peds] frame 180 near-field ambient peds live=20/48
+[population] frame 180 vehicles live=6 (spawn passes 7, distance-despawned 1) peds live=20 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 180 vehicle gathers=7 candidates=24 (avg 3.4) lane-spawns=7; ped gathers=23 edges=1267 (avg 55.1)
+[idle-trace] frame 180 ped id=1 pos=(-1304.54,31.41,-529.74) idleSubState=34
+[idle-trace] frame 180 ped id=2 pos=(-1346.15,25.92,-538.97) idleSubState=34
+[idle-trace] frame 180 ped id=3 pos=(-1310.43,27.90,-543.19) idleSubState=34
+[idle-trace] frame 180 ped id=4 pos=(-1271.64,32.15,-578.93) idleSubState=34
+[idle-trace] frame 180 ped id=5 pos=(-1277.70,36.15,-484.05) idleSubState=34
+[idle-trace] frame 180 ped id=6 pos=(-1271.99,32.15,-584.89) idleSubState=34
+[idle-trace] frame 180 ped id=7 pos=(-1271.93,36.15,-490.44) idleSubState=34
+[idle-trace] frame 180 ped id=8 pos=(-1264.74,36.15,-495.10) idleSubState=34
+[idle-trace] frame 180 ped id=9 pos=(-1269.29,32.15,-584.76) idleSubState=34
+[idle-trace] frame 180 ped id=11 pos=(-1250.28,36.15,-485.66) idleSubState=34
+[idle-trace] frame 180 ped id=12 pos=(-1303.74,31.37,-527.43) idleSubState=34
+[idle-trace] frame 180 ped id=13 pos=(-1315.00,33.38,-504.36) idleSubState=34
+[idle-trace] frame 180 ped id=14 pos=(-1300.42,35.45,-481.70) idleSubState=34
+[idle-trace] frame 180 ped id=15 pos=(-1318.79,31.21,-521.37) idleSubState=34
+[idle-trace] frame 180 ped id=16 pos=(-1256.26,36.15,-494.85) idleSubState=34
+[idle-trace] frame 180 ped id=17 pos=(-1271.25,34.23,-534.80) idleSubState=34
+[idle-trace] frame 180 ped id=18 pos=(-1255.76,29.94,-427.21) idleSubState=34
+[idle-trace] frame 180 ped id=19 pos=(-1271.83,34.26,-535.00) idleSubState=34
+[idle-trace] frame 180 ped id=20 pos=(-1315.05,27.92,-549.47) idleSubState=34
+[idle-trace] frame 180 ped id=21 pos=(-1256.17,32.18,-584.37) idleSubState=34
+[traffic] frame 210 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1265.64,-463.12) heading=-60.8deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.69,-463.05) heading=87.7deg seg=4248 valid=1
+  [lane] id=5 pos=(-1381.12,-452.78) heading=108.4deg seg=4248 valid=1
+  [lane] id=6 pos=(-1261.71,-435.99) heading=-44.9deg seg=4376 valid=1
+  [lane] id=7 pos=(-1385.06,-493.44) heading=-79.6deg seg=4553 valid=1
+  [lane] id=8 pos=(-1266.88,-368.68) heading=-90.0deg seg=4453 valid=1
+[peds] frame 210 near-field ambient peds live=20/48
+[population] frame 210 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 4) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 210 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=27 edges=1457 (avg 54.0)
+[idle-trace] frame 210 ped id=1 pos=(-1305.01,31.41,-531.17) idleSubState=34
+[idle-trace] frame 210 ped id=2 pos=(-1347.63,25.92,-537.86) idleSubState=34
+[idle-trace] frame 210 ped id=3 pos=(-1309.58,27.90,-541.55) idleSubState=34
+[idle-trace] frame 210 ped id=4 pos=(-1271.65,32.15,-577.42) idleSubState=34
+[idle-trace] frame 210 ped id=5 pos=(-1277.73,36.15,-482.98) idleSubState=34
+[idle-trace] frame 210 ped id=7 pos=(-1272.58,36.15,-489.62) idleSubState=34
+[idle-trace] frame 210 ped id=8 pos=(-1266.76,36.15,-495.13) idleSubState=34
+[idle-trace] frame 210 ped id=11 pos=(-1250.13,36.15,-487.16) idleSubState=34
+[idle-trace] frame 210 ped id=12 pos=(-1304.37,31.37,-529.35) idleSubState=34
+[idle-trace] frame 210 ped id=13 pos=(-1315.58,33.38,-506.54) idleSubState=34
+[idle-trace] frame 210 ped id=14 pos=(-1301.88,35.45,-482.84) idleSubState=34
+[idle-trace] frame 210 ped id=15 pos=(-1319.10,31.21,-522.40) idleSubState=34
+[idle-trace] frame 210 ped id=16 pos=(-1258.52,36.15,-494.90) idleSubState=34
+[idle-trace] frame 210 ped id=17 pos=(-1271.29,34.23,-532.95) idleSubState=34
+[idle-trace] frame 210 ped id=18 pos=(-1255.90,29.94,-425.83) idleSubState=34
+[idle-trace] frame 210 ped id=19 pos=(-1271.84,34.26,-532.98) idleSubState=34
+[idle-trace] frame 210 ped id=20 pos=(-1313.68,27.92,-548.02) idleSubState=34
+[idle-trace] frame 210 ped id=22 pos=(-1257.28,33.21,-561.30) idleSubState=34
+[idle-trace] frame 210 ped id=23 pos=(-1271.81,33.80,-547.37) idleSubState=34
+[idle-trace] frame 210 ped id=24 pos=(-1256.76,36.04,-497.68) idleSubState=34
+signal   : t=7293 ms junction 125 (-1383,-424, 126 m from player) AMBER -> phase 0
+signal   : t=7425 ms junction 140 (-1264,-481, 19 m from player) AMBER -> phase 0
+[traffic] frame 240 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1264.62,-464.67) heading=-54.2deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.64,-461.86) heading=77.0deg seg=4248 valid=1
+  [lane] id=5 pos=(-1382.93,-448.11) heading=113.5deg seg=4248 valid=1
+  [lane] id=6 pos=(-1261.54,-436.11) heading=-33.2deg seg=4376 valid=1
+  [lane] id=7 pos=(-1383.61,-499.59) heading=-74.5deg seg=4553 valid=1
+  [lane] id=8 pos=(-1266.86,-369.98) heading=-88.6deg seg=4453 valid=1
+[peds] frame 240 near-field ambient peds live=20/48
+[population] frame 240 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 4) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 240 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=31 edges=1645 (avg 53.1)
+[idle-trace] frame 240 ped id=1 pos=(-1305.47,31.41,-532.61) idleSubState=34
+[idle-trace] frame 240 ped id=2 pos=(-1349.11,25.92,-536.76) idleSubState=34
+[idle-trace] frame 240 ped id=3 pos=(-1308.73,27.90,-539.90) idleSubState=34
+[idle-trace] frame 240 ped id=4 pos=(-1271.66,32.15,-575.92) idleSubState=34
+[idle-trace] frame 240 ped id=5 pos=(-1277.75,36.15,-481.90) idleSubState=34
+[idle-trace] frame 240 ped id=7 pos=(-1273.96,36.15,-489.53) idleSubState=34
+[idle-trace] frame 240 ped id=8 pos=(-1268.79,36.15,-495.15) idleSubState=34
+[idle-trace] frame 240 ped id=11 pos=(-1249.99,36.15,-488.66) idleSubState=34
+[idle-trace] frame 240 ped id=12 pos=(-1305.01,31.37,-531.27) idleSubState=34
+[idle-trace] frame 240 ped id=13 pos=(-1316.07,33.38,-508.74) idleSubState=34
+[idle-trace] frame 240 ped id=14 pos=(-1303.33,35.45,-483.98) idleSubState=34
+[idle-trace] frame 240 ped id=15 pos=(-1319.42,31.21,-523.44) idleSubState=34
+[idle-trace] frame 240 ped id=16 pos=(-1260.78,36.15,-494.95) idleSubState=34
+[idle-trace] frame 240 ped id=17 pos=(-1271.32,34.23,-531.10) idleSubState=34
+[idle-trace] frame 240 ped id=18 pos=(-1255.89,29.94,-424.44) idleSubState=34
+[idle-trace] frame 240 ped id=19 pos=(-1271.85,34.26,-530.96) idleSubState=34
+[idle-trace] frame 240 ped id=20 pos=(-1312.46,27.92,-546.40) idleSubState=34
+[idle-trace] frame 240 ped id=22 pos=(-1257.22,33.21,-562.38) idleSubState=34
+[idle-trace] frame 240 ped id=23 pos=(-1271.81,33.80,-546.29) idleSubState=34
+[idle-trace] frame 240 ped id=24 pos=(-1255.99,36.04,-495.56) idleSubState=34
+[traffic] frame 270 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1262.16,-467.76) heading=-49.6deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.64,-461.86) heading=39.4deg seg=4248 valid=1
+  [lane] id=5 pos=(-1385.83,-442.33) heading=125.0deg seg=4248 valid=1
+  [lane] id=6 pos=(-1259.79,-437.07) heading=-26.5deg seg=4376 valid=1
+  [lane] id=7 pos=(-1382.20,-504.21) heading=-68.0deg seg=4549 valid=1
+  [lane] id=8 pos=(-1266.73,-373.37) heading=-87.3deg seg=4453 valid=1
+[peds] frame 270 near-field ambient peds live=20/48
+[population] frame 270 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 4) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 270 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=34 edges=1783 (avg 52.4)
+[idle-trace] frame 270 ped id=1 pos=(-1305.93,31.41,-534.04) idleSubState=34
+[idle-trace] frame 270 ped id=2 pos=(-1350.52,25.92,-535.56) idleSubState=34
+[idle-trace] frame 270 ped id=3 pos=(-1307.89,27.90,-538.26) idleSubState=34
+[idle-trace] frame 270 ped id=4 pos=(-1271.66,32.15,-574.41) idleSubState=34
+[idle-trace] frame 270 ped id=5 pos=(-1277.77,36.15,-480.82) idleSubState=34
+[idle-trace] frame 270 ped id=7 pos=(-1275.34,36.15,-489.44) idleSubState=34
+[idle-trace] frame 270 ped id=8 pos=(-1270.81,36.15,-495.18) idleSubState=34
+[idle-trace] frame 270 ped id=11 pos=(-1251.27,36.15,-488.95) idleSubState=34
+[idle-trace] frame 270 ped id=12 pos=(-1305.64,31.37,-533.19) idleSubState=34
+[idle-trace] frame 270 ped id=13 pos=(-1316.49,33.38,-510.97) idleSubState=34
+[idle-trace] frame 270 ped id=14 pos=(-1304.64,35.45,-485.27) idleSubState=34
+[idle-trace] frame 270 ped id=15 pos=(-1319.73,31.21,-524.47) idleSubState=34
+[idle-trace] frame 270 ped id=16 pos=(-1263.04,36.15,-495.00) idleSubState=34
+[idle-trace] frame 270 ped id=17 pos=(-1271.36,34.23,-529.25) idleSubState=34
+[idle-trace] frame 270 ped id=18 pos=(-1255.89,29.94,-423.06) idleSubState=34
+[idle-trace] frame 270 ped id=19 pos=(-1271.86,34.26,-528.94) idleSubState=34
+[idle-trace] frame 270 ped id=20 pos=(-1311.26,27.92,-544.78) idleSubState=34
+[idle-trace] frame 270 ped id=22 pos=(-1257.15,33.21,-563.45) idleSubState=34
+[idle-trace] frame 270 ped id=23 pos=(-1271.82,33.80,-545.21) idleSubState=34
+[idle-trace] frame 270 ped id=24 pos=(-1258.25,36.04,-495.51) idleSubState=34
+[traffic] frame 300 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1258.02,-472.26) heading=-45.6deg seg=4615 valid=1
+  [lane] id=3 pos=(-1379.64,-461.86) heading=-39.6deg seg=4248 valid=1
+  [lane] id=5 pos=(-1385.83,-442.33) heading=154.2deg seg=4248 valid=1
+  [lane] id=6 pos=(-1256.04,-438.70) heading=-21.1deg seg=4376 valid=1
+  [lane] id=7 pos=(-1381.38,-505.88) heading=-61.5deg seg=4549 valid=1
+  [lane] id=8 pos=(-1266.40,-378.88) heading=-85.8deg seg=4453 valid=1
+[peds] frame 300 near-field ambient peds live=20/48
+[population] frame 300 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 4) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 300 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=38 edges=1967 (avg 51.8)
+[idle-trace] frame 300 ped id=1 pos=(-1306.50,31.41,-535.43) idleSubState=34
+[idle-trace] frame 300 ped id=2 pos=(-1351.88,25.92,-534.31) idleSubState=34
+[idle-trace] frame 300 ped id=3 pos=(-1307.04,27.90,-536.61) idleSubState=34
+[idle-trace] frame 300 ped id=4 pos=(-1271.67,32.15,-572.91) idleSubState=34
+[idle-trace] frame 300 ped id=5 pos=(-1277.79,36.15,-479.74) idleSubState=34
+[idle-trace] frame 300 ped id=7 pos=(-1276.73,36.15,-489.35) idleSubState=34
+[idle-trace] frame 300 ped id=8 pos=(-1271.70,36.15,-493.98) idleSubState=34
+[idle-trace] frame 300 ped id=11 pos=(-1252.77,36.15,-489.05) idleSubState=34
+[idle-trace] frame 300 ped id=12 pos=(-1306.33,31.37,-535.09) idleSubState=34
+[idle-trace] frame 300 ped id=13 pos=(-1316.92,33.38,-513.18) idleSubState=34
+[idle-trace] frame 300 ped id=14 pos=(-1305.78,35.45,-486.72) idleSubState=34
+[idle-trace] frame 300 ped id=15 pos=(-1320.04,31.21,-525.50) idleSubState=34
+[idle-trace] frame 300 ped id=16 pos=(-1265.30,36.15,-495.05) idleSubState=34
+[idle-trace] frame 300 ped id=17 pos=(-1271.39,34.23,-527.40) idleSubState=34
+[idle-trace] frame 300 ped id=18 pos=(-1255.88,29.94,-421.67) idleSubState=34
+[idle-trace] frame 300 ped id=19 pos=(-1271.87,34.26,-526.91) idleSubState=34
+[idle-trace] frame 300 ped id=20 pos=(-1310.33,27.92,-542.98) idleSubState=34
+[idle-trace] frame 300 ped id=22 pos=(-1257.08,33.21,-564.53) idleSubState=34
+[idle-trace] frame 300 ped id=23 pos=(-1271.82,33.80,-544.13) idleSubState=34
+[idle-trace] frame 300 ped id=24 pos=(-1260.51,36.04,-495.45) idleSubState=34
+signal   : t=10098 ms junction 125 (-1383,-424, 131 m from player) SWITCH -> phase 1
+signal   : t=10230 ms junction 140 (-1264,-481, 20 m from player) SWITCH -> phase 1
+[traffic] frame 330 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1255.80,-474.46) heading=-34.4deg seg=4663 valid=1
+  [lane] id=3 pos=(-1379.64,-461.86) heading=-119.8deg seg=4248 valid=1
+  [lane] id=5 pos=(-1386.03,-442.27) heading=166.0deg seg=4248 valid=1
+  [lane] id=6 pos=(-1250.07,-440.62) heading=-14.7deg seg=4376 valid=1
+  [lane] id=7 pos=(-1379.35,-509.27) heading=-57.3deg seg=4549 valid=1
+  [lane] id=8 pos=(-1265.98,-383.85) heading=-78.4deg seg=4494 valid=1
+[peds] frame 330 near-field ambient peds live=20/48
+[population] frame 330 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 4) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 330 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=42 edges=2151 (avg 51.2)
+[idle-trace] frame 330 ped id=1 pos=(-1307.17,31.41,-536.78) idleSubState=34
+[idle-trace] frame 330 ped id=2 pos=(-1353.22,25.92,-535.41) idleSubState=34
+[idle-trace] frame 330 ped id=3 pos=(-1306.27,27.90,-534.94) idleSubState=34
+[idle-trace] frame 330 ped id=4 pos=(-1271.68,32.15,-571.40) idleSubState=34
+[idle-trace] frame 330 ped id=5 pos=(-1277.82,36.15,-478.66) idleSubState=34
+[idle-trace] frame 330 ped id=7 pos=(-1277.53,36.15,-488.70) idleSubState=34
+[idle-trace] frame 330 ped id=8 pos=(-1271.83,36.15,-491.96) idleSubState=34
+[idle-trace] frame 330 ped id=11 pos=(-1254.28,36.15,-489.16) idleSubState=34
+[idle-trace] frame 330 ped id=12 pos=(-1307.24,31.37,-536.90) idleSubState=34
+[idle-trace] frame 330 ped id=13 pos=(-1317.36,33.38,-515.40) idleSubState=34
+[idle-trace] frame 330 ped id=14 pos=(-1306.92,35.45,-488.18) idleSubState=34
+[idle-trace] frame 330 ped id=15 pos=(-1320.36,31.21,-526.54) idleSubState=34
+[idle-trace] frame 330 ped id=16 pos=(-1267.56,36.15,-495.10) idleSubState=34
+[idle-trace] frame 330 ped id=17 pos=(-1271.43,34.23,-525.56) idleSubState=34
+[idle-trace] frame 330 ped id=18 pos=(-1255.88,29.94,-420.29) idleSubState=34
+[idle-trace] frame 330 ped id=19 pos=(-1271.88,34.26,-524.89) idleSubState=34
+[idle-trace] frame 330 ped id=20 pos=(-1309.41,27.92,-541.18) idleSubState=34
+[idle-trace] frame 330 ped id=22 pos=(-1257.02,33.21,-565.61) idleSubState=34
+[idle-trace] frame 330 ped id=23 pos=(-1271.83,33.80,-543.06) idleSubState=34
+[idle-trace] frame 330 ped id=24 pos=(-1262.77,36.04,-495.40) idleSubState=34
+[traffic] frame 360 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1255.12,-474.81) heading=-25.5deg seg=4663 valid=1
+  [lane] id=3 pos=(-1379.64,-461.86) heading=-184.5deg seg=4248 valid=1
+  [lane] id=5 pos=(-1388.00,-441.93) heading=172.6deg seg=4248 valid=1
+  [lane] id=6 pos=(-1247.56,-441.17) heading=-5.7deg seg=4509 valid=1
+  [lane] id=7 pos=(-1375.88,-514.30) heading=-54.0deg seg=4549 valid=1
+  [lane] id=8 pos=(-1265.87,-384.11) heading=-67.2deg seg=4494 valid=1
+[peds] frame 360 near-field ambient peds live=20/48
+[population] frame 360 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 4) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 360 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=46 edges=2335 (avg 50.8)
+[idle-trace] frame 360 ped id=1 pos=(-1307.85,31.41,-538.12) idleSubState=34
+[idle-trace] frame 360 ped id=2 pos=(-1354.56,25.92,-536.68) idleSubState=34
+[idle-trace] frame 360 ped id=3 pos=(-1305.68,27.90,-533.18) idleSubState=34
+[idle-trace] frame 360 ped id=4 pos=(-1271.68,32.15,-569.89) idleSubState=34
+[idle-trace] frame 360 ped id=5 pos=(-1277.84,36.15,-477.58) idleSubState=34
+[idle-trace] frame 360 ped id=7 pos=(-1277.56,36.15,-487.31) idleSubState=34
+[idle-trace] frame 360 ped id=8 pos=(-1271.96,36.15,-489.94) idleSubState=34
+[idle-trace] frame 360 ped id=11 pos=(-1255.50,36.15,-489.54) idleSubState=34
+[idle-trace] frame 360 ped id=12 pos=(-1308.14,31.37,-538.71) idleSubState=34
+[idle-trace] frame 360 ped id=13 pos=(-1317.80,33.38,-517.62) idleSubState=34
+[idle-trace] frame 360 ped id=14 pos=(-1308.06,35.45,-489.63) idleSubState=34
+[idle-trace] frame 360 ped id=15 pos=(-1320.67,31.21,-527.57) idleSubState=34
+[idle-trace] frame 360 ped id=16 pos=(-1269.82,36.15,-495.15) idleSubState=34
+[idle-trace] frame 360 ped id=17 pos=(-1271.46,34.23,-523.71) idleSubState=34
+[idle-trace] frame 360 ped id=18 pos=(-1255.87,29.94,-418.90) idleSubState=34
+[idle-trace] frame 360 ped id=19 pos=(-1271.89,34.26,-522.87) idleSubState=34
+[idle-trace] frame 360 ped id=20 pos=(-1308.48,27.92,-539.38) idleSubState=34
+[idle-trace] frame 360 ped id=22 pos=(-1256.95,33.21,-566.68) idleSubState=34
+[idle-trace] frame 360 ped id=23 pos=(-1271.83,33.80,-541.98) idleSubState=34
+[idle-trace] frame 360 ped id=24 pos=(-1265.03,36.04,-495.35) idleSubState=34
+[traffic] frame 390 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1252.50,-475.89) heading=-20.3deg seg=4663 valid=1
+  [lane] id=3 pos=(-1379.64,-461.86) heading=-206.7deg seg=4248 valid=1
+  [lane] id=5 pos=(-1392.08,-441.61) heading=177.7deg seg=4248 valid=1
+  [lane] id=6 pos=(-1245.08,-441.41) heading=-5.6deg seg=4509 valid=1
+  [lane] id=7 pos=(-1373.81,-517.05) heading=-47.3deg seg=4545 valid=1
+  [lane] id=8 pos=(-1264.91,-386.01) heading=-60.8deg seg=4494 valid=1
+[peds] frame 390 near-field ambient peds live=20/48
+[population] frame 390 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 5) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 390 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=49 edges=2473 (avg 50.5)
+[idle-trace] frame 390 ped id=1 pos=(-1308.52,31.41,-539.47) idleSubState=34
+[idle-trace] frame 390 ped id=3 pos=(-1305.09,27.90,-531.43) idleSubState=34
+[idle-trace] frame 390 ped id=4 pos=(-1271.69,32.15,-568.39) idleSubState=34
+[idle-trace] frame 390 ped id=5 pos=(-1277.86,36.15,-476.50) idleSubState=34
+[idle-trace] frame 390 ped id=7 pos=(-1277.60,36.15,-485.92) idleSubState=34
+[idle-trace] frame 390 ped id=8 pos=(-1273.73,36.15,-489.55) idleSubState=34
+[idle-trace] frame 390 ped id=11 pos=(-1255.59,36.15,-491.05) idleSubState=34
+[idle-trace] frame 390 ped id=12 pos=(-1309.05,31.37,-540.52) idleSubState=34
+[idle-trace] frame 390 ped id=13 pos=(-1318.24,33.38,-519.83) idleSubState=34
+[idle-trace] frame 390 ped id=14 pos=(-1309.21,35.45,-491.08) idleSubState=34
+[idle-trace] frame 390 ped id=15 pos=(-1320.98,31.21,-528.60) idleSubState=34
+[idle-trace] frame 390 ped id=16 pos=(-1271.64,36.15,-495.04) idleSubState=34
+[idle-trace] frame 390 ped id=17 pos=(-1271.50,34.23,-521.86) idleSubState=34
+[idle-trace] frame 390 ped id=18 pos=(-1255.87,29.94,-417.51) idleSubState=34
+[idle-trace] frame 390 ped id=19 pos=(-1271.89,34.26,-520.84) idleSubState=34
+[idle-trace] frame 390 ped id=20 pos=(-1307.55,27.92,-537.59) idleSubState=34
+[idle-trace] frame 390 ped id=22 pos=(-1256.88,33.21,-567.76) idleSubState=34
+[idle-trace] frame 390 ped id=23 pos=(-1271.83,33.80,-540.90) idleSubState=34
+[idle-trace] frame 390 ped id=24 pos=(-1267.28,36.04,-495.30) idleSubState=34
+[idle-trace] frame 390 ped id=25 pos=(-1192.55,37.96,-472.34) idleSubState=34
+[traffic] frame 420 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1247.81,-477.43) heading=-16.7deg seg=4663 valid=1
+  [lane] id=3 pos=(-1380.08,-461.55) heading=-216.5deg seg=4248 valid=1
+  [lane] id=5 pos=(-1398.35,-441.66) heading=183.0deg seg=4248 valid=1
+  [lane] id=6 pos=(-1240.52,-441.86) heading=-5.5deg seg=4509 valid=1
+  [lane] id=7 pos=(-1372.21,-518.57) heading=-41.3deg seg=4545 valid=1
+  [lane] id=8 pos=(-1262.67,-389.60) heading=-55.9deg seg=4494 valid=1
+[peds] frame 420 near-field ambient peds live=20/48
+[population] frame 420 vehicles live=6 (spawn passes 8, distance-despawned 2) peds live=20 (distance-despawned 5) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 420 vehicle gathers=8 candidates=32 (avg 4.0) lane-spawns=8; ped gathers=53 edges=2657 (avg 50.1)
+[idle-trace] frame 420 ped id=1 pos=(-1309.20,31.41,-540.81) idleSubState=34
+[idle-trace] frame 420 ped id=3 pos=(-1304.50,27.90,-529.68) idleSubState=34
+[idle-trace] frame 420 ped id=4 pos=(-1271.70,32.15,-566.88) idleSubState=34
+[idle-trace] frame 420 ped id=5 pos=(-1277.88,36.15,-475.42) idleSubState=34
+[idle-trace] frame 420 ped id=7 pos=(-1277.63,36.15,-484.54) idleSubState=34
+[idle-trace] frame 420 ped id=8 pos=(-1275.75,36.15,-489.42) idleSubState=34
+[idle-trace] frame 420 ped id=11 pos=(-1255.69,36.15,-492.55) idleSubState=34
+[idle-trace] frame 420 ped id=12 pos=(-1309.96,31.37,-542.33) idleSubState=34
+[idle-trace] frame 420 ped id=13 pos=(-1318.85,33.38,-522.01) idleSubState=34
+[idle-trace] frame 420 ped id=14 pos=(-1310.05,35.45,-492.73) idleSubState=34
+[idle-trace] frame 420 ped id=15 pos=(-1321.45,31.21,-529.57) idleSubState=34
+[idle-trace] frame 420 ped id=16 pos=(-1271.78,36.15,-492.78) idleSubState=34
+[idle-trace] frame 420 ped id=17 pos=(-1271.53,34.23,-520.01) idleSubState=34
+[idle-trace] frame 420 ped id=18 pos=(-1255.86,29.94,-416.13) idleSubState=34
+[idle-trace] frame 420 ped id=19 pos=(-1271.90,34.26,-518.82) idleSubState=34
+[idle-trace] frame 420 ped id=20 pos=(-1306.62,27.92,-535.79) idleSubState=34
+[idle-trace] frame 420 ped id=22 pos=(-1256.82,33.21,-568.84) idleSubState=34
+[idle-trace] frame 420 ped id=23 pos=(-1271.84,33.80,-539.82) idleSubState=34
+[idle-trace] frame 420 ped id=24 pos=(-1269.54,36.04,-495.25) idleSubState=34
+[idle-trace] frame 420 ped id=25 pos=(-1191.48,37.96,-472.48) idleSubState=34
+[traffic] frame 450 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1240.82,-479.31) heading=-13.4deg seg=4513 valid=1
+  [lane] id=3 pos=(-1382.03,-459.90) heading=-222.4deg seg=4248 valid=1
+  [lane] id=6 pos=(-1233.73,-442.50) heading=-5.3deg seg=4509 valid=1
+  [lane] id=7 pos=(-1368.86,-521.28) heading=-37.2deg seg=4545 valid=1
+  [lane] id=8 pos=(-1258.82,-394.74) heading=-50.8deg seg=4494 valid=1
+  [lane] id=9 pos=(-1380.03,-580.60) heading=90.0deg seg=4760 valid=1
+[peds] frame 450 near-field ambient peds live=20/48
+[population] frame 450 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 5) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 450 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=57 edges=2841 (avg 49.8)
+[idle-trace] frame 450 ped id=1 pos=(-1309.87,31.41,-542.16) idleSubState=34
+[idle-trace] frame 450 ped id=3 pos=(-1303.91,27.90,-527.93) idleSubState=34
+[idle-trace] frame 450 ped id=4 pos=(-1271.70,32.15,-565.38) idleSubState=34
+[idle-trace] frame 450 ped id=5 pos=(-1277.90,36.15,-474.35) idleSubState=34
+[idle-trace] frame 450 ped id=7 pos=(-1277.67,36.15,-483.15) idleSubState=34
+[idle-trace] frame 450 ped id=8 pos=(-1277.76,36.15,-489.32) idleSubState=34
+[idle-trace] frame 450 ped id=11 pos=(-1255.78,36.15,-494.05) idleSubState=34
+[idle-trace] frame 450 ped id=12 pos=(-1310.86,31.37,-544.13) idleSubState=34
+[idle-trace] frame 450 ped id=13 pos=(-1319.54,33.38,-524.16) idleSubState=34
+[idle-trace] frame 450 ped id=14 pos=(-1310.89,35.45,-494.38) idleSubState=34
+[idle-trace] frame 450 ped id=15 pos=(-1321.93,31.21,-530.54) idleSubState=34
+[idle-trace] frame 450 ped id=16 pos=(-1271.93,36.15,-490.52) idleSubState=34
+[idle-trace] frame 450 ped id=17 pos=(-1271.57,34.23,-518.16) idleSubState=34
+[idle-trace] frame 450 ped id=18 pos=(-1255.86,29.94,-414.74) idleSubState=34
+[idle-trace] frame 450 ped id=19 pos=(-1271.91,34.26,-516.80) idleSubState=34
+[idle-trace] frame 450 ped id=20 pos=(-1305.93,27.92,-533.89) idleSubState=34
+[idle-trace] frame 450 ped id=22 pos=(-1256.75,33.21,-569.92) idleSubState=34
+[idle-trace] frame 450 ped id=23 pos=(-1271.84,33.80,-538.74) idleSubState=34
+[idle-trace] frame 450 ped id=24 pos=(-1271.66,36.04,-495.05) idleSubState=34
+[idle-trace] frame 450 ped id=25 pos=(-1190.41,37.96,-472.63) idleSubState=34
+[traffic] frame 480 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1231.54,-480.87) heading=-6.4deg seg=4513 valid=1
+  [lane] id=3 pos=(-1385.32,-456.61) heading=-227.2deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.37,-442.80) heading=4.7deg seg=4661 valid=1
+  [lane] id=7 pos=(-1363.56,-525.05) heading=-34.0deg seg=4545 valid=1
+  [lane] id=8 pos=(-1257.44,-396.37) heading=-36.7deg seg=4495 valid=1
+  [lane] id=9 pos=(-1380.03,-579.31) heading=90.0deg seg=4760 valid=1
+[peds] frame 480 near-field ambient peds live=20/48
+[population] frame 480 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 5) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 480 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=61 edges=3025 (avg 49.6)
+[idle-trace] frame 480 ped id=1 pos=(-1310.55,31.41,-543.51) idleSubState=34
+[idle-trace] frame 480 ped id=3 pos=(-1303.32,27.90,-526.17) idleSubState=34
+[idle-trace] frame 480 ped id=4 pos=(-1271.71,32.15,-563.87) idleSubState=34
+[idle-trace] frame 480 ped id=5 pos=(-1278.17,36.15,-473.52) idleSubState=34
+[idle-trace] frame 480 ped id=7 pos=(-1277.71,36.15,-481.77) idleSubState=34
+[idle-trace] frame 480 ped id=8 pos=(-1279.76,36.15,-489.63) idleSubState=34
+[idle-trace] frame 480 ped id=11 pos=(-1255.83,36.15,-494.80) idleSubState=34
+[idle-trace] frame 480 ped id=12 pos=(-1312.01,31.37,-545.80) idleSubState=34
+[idle-trace] frame 480 ped id=13 pos=(-1320.23,33.38,-526.31) idleSubState=34
+[idle-trace] frame 480 ped id=14 pos=(-1311.73,35.45,-496.02) idleSubState=34
+[idle-trace] frame 480 ped id=15 pos=(-1322.40,31.21,-531.51) idleSubState=34
+[idle-trace] frame 480 ped id=16 pos=(-1273.34,36.15,-489.54) idleSubState=34
+[idle-trace] frame 480 ped id=17 pos=(-1271.60,34.23,-516.31) idleSubState=34
+[idle-trace] frame 480 ped id=18 pos=(-1255.95,29.94,-413.45) idleSubState=34
+[idle-trace] frame 480 ped id=19 pos=(-1271.92,34.26,-514.77) idleSubState=34
+[idle-trace] frame 480 ped id=20 pos=(-1305.28,27.92,-531.98) idleSubState=34
+[idle-trace] frame 480 ped id=22 pos=(-1256.68,33.21,-570.99) idleSubState=34
+[idle-trace] frame 480 ped id=23 pos=(-1271.85,33.80,-537.66) idleSubState=34
+[idle-trace] frame 480 ped id=24 pos=(-1271.80,36.04,-492.80) idleSubState=34
+[idle-trace] frame 480 ped id=25 pos=(-1189.34,37.96,-472.78) idleSubState=34
+[traffic] frame 510 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1226.26,-481.30) heading=6.6deg seg=4374 valid=1
+  [lane] id=3 pos=(-1389.77,-451.33) heading=-232.3deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.37,-442.80) heading=31.3deg seg=4661 valid=1
+  [lane] id=7 pos=(-1362.00,-526.09) heading=-22.2deg seg=4543 valid=1
+  [lane] id=8 pos=(-1256.84,-396.72) heading=-27.8deg seg=4495 valid=1
+  [lane] id=9 pos=(-1380.03,-575.91) heading=90.0deg seg=4760 valid=1
+[peds] frame 510 near-field ambient peds live=20/48
+[population] frame 510 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 5) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 510 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=64 edges=3163 (avg 49.4)
+[idle-trace] frame 510 ped id=1 pos=(-1311.31,31.41,-544.80) idleSubState=34
+[idle-trace] frame 510 ped id=3 pos=(-1302.86,27.90,-524.39) idleSubState=34
+[idle-trace] frame 510 ped id=4 pos=(-1271.72,32.15,-562.36) idleSubState=34
+[idle-trace] frame 510 ped id=5 pos=(-1279.25,36.15,-473.54) idleSubState=34
+[idle-trace] frame 510 ped id=7 pos=(-1277.74,36.15,-480.38) idleSubState=34
+[idle-trace] frame 510 ped id=8 pos=(-1281.76,36.15,-489.93) idleSubState=34
+[idle-trace] frame 510 ped id=11 pos=(-1255.83,36.15,-494.80) idleSubState=34
+[idle-trace] frame 510 ped id=12 pos=(-1313.17,31.37,-547.45) idleSubState=34
+[idle-trace] frame 510 ped id=13 pos=(-1320.93,33.38,-528.46) idleSubState=34
+[idle-trace] frame 510 ped id=14 pos=(-1312.56,35.45,-497.67) idleSubState=34
+[idle-trace] frame 510 ped id=15 pos=(-1322.88,31.21,-532.48) idleSubState=34
+[idle-trace] frame 510 ped id=16 pos=(-1275.59,36.15,-489.41) idleSubState=34
+[idle-trace] frame 510 ped id=17 pos=(-1271.64,34.23,-514.46) idleSubState=34
+[idle-trace] frame 510 ped id=18 pos=(-1257.33,29.94,-413.41) idleSubState=34
+[idle-trace] frame 510 ped id=19 pos=(-1271.93,34.26,-512.75) idleSubState=34
+[idle-trace] frame 510 ped id=20 pos=(-1304.63,27.92,-530.06) idleSubState=34
+[idle-trace] frame 510 ped id=22 pos=(-1256.62,33.21,-572.07) idleSubState=34
+[idle-trace] frame 510 ped id=23 pos=(-1271.85,33.80,-536.58) idleSubState=34
+[idle-trace] frame 510 ped id=24 pos=(-1271.93,36.04,-490.54) idleSubState=34
+[idle-trace] frame 510 ped id=25 pos=(-1188.27,37.96,-472.92) idleSubState=34
+signal   : t=17127 ms junction 125 (-1383,-424, 131 m from player) AMBER -> phase 1
+signal   : t=17259 ms junction 140 (-1264,-481, 20 m from player) AMBER -> phase 1
+[traffic] frame 540 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1226.06,-481.24) heading=18.4deg seg=4374 valid=1
+  [lane] id=3 pos=(-1390.10,-450.89) heading=-266.4deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.37,-442.80) heading=102.0deg seg=4661 valid=1
+  [lane] id=7 pos=(-1360.96,-526.39) heading=-14.2deg seg=4543 valid=1
+  [lane] id=8 pos=(-1254.32,-397.86) heading=-22.3deg seg=4495 valid=1
+  [lane] id=9 pos=(-1380.03,-570.40) heading=90.0deg seg=4760 valid=1
+[peds] frame 540 near-field ambient peds live=20/48
+[population] frame 540 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 540 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=68 edges=3347 (avg 49.2)
+[idle-trace] frame 540 ped id=1 pos=(-1312.18,31.41,-546.03) idleSubState=34
+[idle-trace] frame 540 ped id=3 pos=(-1302.48,27.90,-522.58) idleSubState=34
+[idle-trace] frame 540 ped id=4 pos=(-1271.72,32.15,-560.86) idleSubState=34
+[idle-trace] frame 540 ped id=5 pos=(-1280.33,36.15,-473.55) idleSubState=34
+[idle-trace] frame 540 ped id=7 pos=(-1277.78,36.15,-479.00) idleSubState=34
+[idle-trace] frame 540 ped id=8 pos=(-1283.75,36.15,-490.29) idleSubState=34
+[idle-trace] frame 540 ped id=11 pos=(-1255.83,36.15,-494.80) idleSubState=34
+[idle-trace] frame 540 ped id=12 pos=(-1314.40,31.37,-549.06) idleSubState=34
+[idle-trace] frame 540 ped id=13 pos=(-1321.90,33.38,-530.50) idleSubState=34
+[idle-trace] frame 540 ped id=14 pos=(-1313.33,35.45,-499.35) idleSubState=34
+[idle-trace] frame 540 ped id=15 pos=(-1323.36,31.21,-533.44) idleSubState=34
+[idle-trace] frame 540 ped id=16 pos=(-1277.85,36.15,-489.34) idleSubState=34
+[idle-trace] frame 540 ped id=17 pos=(-1271.67,34.23,-512.61) idleSubState=34
+[idle-trace] frame 540 ped id=18 pos=(-1258.72,29.94,-413.38) idleSubState=34
+[idle-trace] frame 540 ped id=19 pos=(-1271.94,34.26,-510.73) idleSubState=34
+[idle-trace] frame 540 ped id=20 pos=(-1303.99,27.92,-528.14) idleSubState=34
+[idle-trace] frame 540 ped id=22 pos=(-1256.55,33.21,-573.15) idleSubState=34
+[idle-trace] frame 540 ped id=23 pos=(-1271.85,33.80,-535.50) idleSubState=34
+[idle-trace] frame 540 ped id=24 pos=(-1273.34,36.04,-489.55) idleSubState=34
+[idle-trace] frame 540 ped id=26 pos=(-1270.85,32.53,-576.78) idleSubState=34
+[traffic] frame 570 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1224.22,-480.48) heading=24.8deg seg=4374 valid=1
+  [lane] id=3 pos=(-1390.10,-450.89) heading=-344.4deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.37,-442.80) heading=182.2deg seg=4661 valid=1
+  [lane] id=7 pos=(-1357.84,-527.01) heading=-9.3deg seg=4543 valid=1
+  [lane] id=8 pos=(-1249.74,-399.52) heading=-18.1deg seg=4495 valid=1
+  [lane] id=9 pos=(-1380.03,-565.41) heading=94.3deg seg=4761 valid=1
+[peds] frame 570 near-field ambient peds live=20/48
+[population] frame 570 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 570 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=72 edges=3531 (avg 49.0)
+[idle-trace] frame 570 ped id=1 pos=(-1313.04,31.41,-547.26) idleSubState=34
+[idle-trace] frame 570 ped id=3 pos=(-1302.11,27.90,-520.77) idleSubState=34
+[idle-trace] frame 570 ped id=4 pos=(-1271.73,32.15,-559.35) idleSubState=34
+[idle-trace] frame 570 ped id=5 pos=(-1281.41,36.15,-473.57) idleSubState=34
+[idle-trace] frame 570 ped id=7 pos=(-1277.81,36.15,-477.61) idleSubState=34
+[idle-trace] frame 570 ped id=8 pos=(-1285.58,36.15,-491.14) idleSubState=34
+[idle-trace] frame 570 ped id=11 pos=(-1255.83,36.15,-494.80) idleSubState=34
+[idle-trace] frame 570 ped id=12 pos=(-1315.78,31.37,-550.54) idleSubState=34
+[idle-trace] frame 570 ped id=13 pos=(-1322.90,33.38,-532.53) idleSubState=34
+[idle-trace] frame 570 ped id=14 pos=(-1313.87,35.45,-501.12) idleSubState=34
+[idle-trace] frame 570 ped id=15 pos=(-1323.83,31.21,-534.41) idleSubState=34
+[idle-trace] frame 570 ped id=16 pos=(-1280.08,36.15,-489.68) idleSubState=34
+[idle-trace] frame 570 ped id=17 pos=(-1271.71,34.23,-510.77) idleSubState=34
+[idle-trace] frame 570 ped id=18 pos=(-1260.11,29.94,-413.34) idleSubState=34
+[idle-trace] frame 570 ped id=19 pos=(-1271.95,34.26,-508.71) idleSubState=34
+[idle-trace] frame 570 ped id=20 pos=(-1303.34,27.92,-526.23) idleSubState=34
+[idle-trace] frame 570 ped id=22 pos=(-1256.49,33.21,-574.22) idleSubState=34
+[idle-trace] frame 570 ped id=23 pos=(-1271.86,33.80,-534.42) idleSubState=34
+[idle-trace] frame 570 ped id=24 pos=(-1275.59,36.04,-489.41) idleSubState=34
+[idle-trace] frame 570 ped id=26 pos=(-1271.19,32.53,-579.01) idleSubState=34
+[traffic] frame 600 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1220.58,-478.60) heading=29.0deg seg=4374 valid=1
+  [lane] id=3 pos=(-1390.10,-450.89) heading=-424.6deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.37,-442.80) heading=258.2deg seg=4661 valid=1
+  [lane] id=7 pos=(-1352.58,-527.68) heading=-5.6deg seg=4543 valid=1
+  [lane] id=8 pos=(-1242.87,-401.48) heading=-14.1deg seg=4496 valid=1
+  [lane] id=9 pos=(-1380.03,-565.41) heading=117.5deg seg=4761 valid=1
+[peds] frame 600 near-field ambient peds live=20/48
+[population] frame 600 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 600 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=76 edges=3715 (avg 48.9)
+[idle-trace] frame 600 ped id=1 pos=(-1313.91,31.41,-548.50) idleSubState=34
+[idle-trace] frame 600 ped id=3 pos=(-1301.73,27.90,-518.96) idleSubState=34
+[idle-trace] frame 600 ped id=4 pos=(-1271.73,32.15,-557.85) idleSubState=34
+[idle-trace] frame 600 ped id=5 pos=(-1282.49,36.15,-473.59) idleSubState=34
+[idle-trace] frame 600 ped id=7 pos=(-1277.85,36.15,-476.23) idleSubState=34
+[idle-trace] frame 600 ped id=8 pos=(-1287.42,36.15,-491.99) idleSubState=34
+[idle-trace] frame 600 ped id=11 pos=(-1255.83,36.15,-494.80) idleSubState=34
+[idle-trace] frame 600 ped id=12 pos=(-1317.16,31.37,-552.02) idleSubState=34
+[idle-trace] frame 600 ped id=13 pos=(-1323.90,33.38,-534.55) idleSubState=34
+[idle-trace] frame 600 ped id=14 pos=(-1314.41,35.45,-502.89) idleSubState=34
+[idle-trace] frame 600 ped id=15 pos=(-1324.31,31.21,-535.38) idleSubState=34
+[idle-trace] frame 600 ped id=16 pos=(-1282.31,36.15,-490.02) idleSubState=34
+[idle-trace] frame 600 ped id=17 pos=(-1271.74,34.23,-508.92) idleSubState=34
+[idle-trace] frame 600 ped id=18 pos=(-1261.49,29.94,-413.31) idleSubState=34
+[idle-trace] frame 600 ped id=19 pos=(-1271.96,34.26,-506.68) idleSubState=34
+[idle-trace] frame 600 ped id=20 pos=(-1302.83,27.92,-524.27) idleSubState=34
+[idle-trace] frame 600 ped id=22 pos=(-1256.42,33.21,-575.30) idleSubState=34
+[idle-trace] frame 600 ped id=23 pos=(-1271.86,33.80,-533.34) idleSubState=34
+[idle-trace] frame 600 ped id=24 pos=(-1277.85,36.04,-489.34) idleSubState=34
+[idle-trace] frame 600 ped id=26 pos=(-1271.53,32.53,-581.25) idleSubState=34
+signal   : t=20493 ms junction 125 (-1383,-424, 131 m from player) SWITCH -> phase 0
+signal   : t=20625 ms junction 140 (-1264,-481, 20 m from player) SWITCH -> phase 0
+[traffic] frame 630 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1215.19,-475.38) heading=32.3deg seg=4374 valid=1
+  [lane] id=3 pos=(-1390.10,-450.89) heading=-491.8deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.37,-442.80) heading=289.2deg seg=4661 valid=1
+  [lane] id=7 pos=(-1346.96,-528.10) heading=-0.0deg seg=4540 valid=1
+  [lane] id=8 pos=(-1233.69,-403.40) heading=-9.8deg seg=4496 valid=1
+  [lane] id=9 pos=(-1380.03,-565.41) heading=182.8deg seg=4761 valid=1
+[peds] frame 630 near-field ambient peds live=20/48
+[population] frame 630 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 630 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=79 edges=3853 (avg 48.8)
+[idle-trace] frame 630 ped id=1 pos=(-1314.92,31.41,-549.61) idleSubState=34
+[idle-trace] frame 630 ped id=3 pos=(-1301.35,27.90,-517.15) idleSubState=34
+[idle-trace] frame 630 ped id=4 pos=(-1271.74,32.15,-556.34) idleSubState=34
+[idle-trace] frame 630 ped id=5 pos=(-1283.56,36.15,-473.68) idleSubState=34
+[idle-trace] frame 630 ped id=7 pos=(-1277.89,36.15,-474.84) idleSubState=34
+[idle-trace] frame 630 ped id=8 pos=(-1289.16,36.15,-492.99) idleSubState=34
+[idle-trace] frame 630 ped id=11 pos=(-1256.18,36.15,-494.81) idleSubState=34
+[idle-trace] frame 630 ped id=12 pos=(-1318.66,31.37,-553.36) idleSubState=34
+[idle-trace] frame 630 ped id=13 pos=(-1325.09,33.38,-536.46) idleSubState=34
+[idle-trace] frame 630 ped id=14 pos=(-1314.95,35.45,-504.66) idleSubState=34
+[idle-trace] frame 630 ped id=15 pos=(-1324.93,31.21,-536.26) idleSubState=34
+[idle-trace] frame 630 ped id=16 pos=(-1284.47,36.15,-490.62) idleSubState=34
+[idle-trace] frame 630 ped id=17 pos=(-1271.78,34.23,-507.07) idleSubState=34
+[idle-trace] frame 630 ped id=18 pos=(-1262.88,29.94,-413.27) idleSubState=34
+[idle-trace] frame 630 ped id=19 pos=(-1271.96,34.26,-504.66) idleSubState=34
+[idle-trace] frame 630 ped id=20 pos=(-1302.42,27.92,-522.29) idleSubState=34
+[idle-trace] frame 630 ped id=22 pos=(-1256.35,33.21,-576.38) idleSubState=34
+[idle-trace] frame 630 ped id=23 pos=(-1271.87,33.80,-532.27) idleSubState=34
+[idle-trace] frame 630 ped id=24 pos=(-1280.08,36.04,-489.68) idleSubState=34
+[idle-trace] frame 630 ped id=26 pos=(-1271.87,32.53,-583.48) idleSubState=34
+[traffic] frame 660 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1212.98,-473.95) heading=74.7deg seg=4463 valid=1
+  [lane] id=3 pos=(-1390.10,-450.89) heading=-515.4deg seg=4248 valid=1
+  [lane] id=6 pos=(-1229.29,-442.93) heading=301.4deg seg=4661 valid=1
+  [lane] id=7 pos=(-1346.21,-528.01) heading=8.9deg seg=4540 valid=1
+  [lane] id=8 pos=(-1223.84,-404.78) heading=-7.1deg seg=4502 valid=1
+  [lane] id=9 pos=(-1380.03,-565.41) heading=263.0deg seg=4761 valid=1
+[peds] frame 660 near-field ambient peds live=20/48
+[population] frame 660 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 660 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=83 edges=4037 (avg 48.6)
+[idle-trace] frame 660 ped id=1 pos=(-1315.94,31.41,-550.72) idleSubState=34
+[idle-trace] frame 660 ped id=3 pos=(-1300.99,27.90,-515.40) idleSubState=13
+[idle-trace] frame 660 ped id=4 pos=(-1271.75,32.15,-554.83) idleSubState=34
+[idle-trace] frame 660 ped id=5 pos=(-1284.61,36.15,-473.92) idleSubState=34
+[idle-trace] frame 660 ped id=7 pos=(-1277.97,36.15,-473.50) idleSubState=34
+[idle-trace] frame 660 ped id=8 pos=(-1290.73,36.15,-494.26) idleSubState=34
+[idle-trace] frame 660 ped id=11 pos=(-1257.69,36.15,-494.85) idleSubState=34
+[idle-trace] frame 660 ped id=12 pos=(-1320.27,31.37,-554.58) idleSubState=34
+[idle-trace] frame 660 ped id=13 pos=(-1326.49,33.38,-538.23) idleSubState=34
+[idle-trace] frame 660 ped id=14 pos=(-1315.49,35.45,-506.42) idleSubState=34
+[idle-trace] frame 660 ped id=15 pos=(-1325.60,31.21,-537.10) idleSubState=34
+[idle-trace] frame 660 ped id=16 pos=(-1286.52,36.15,-491.57) idleSubState=34
+[idle-trace] frame 660 ped id=17 pos=(-1271.81,34.23,-505.22) idleSubState=34
+[idle-trace] frame 660 ped id=18 pos=(-1264.26,29.94,-413.24) idleSubState=34
+[idle-trace] frame 660 ped id=19 pos=(-1271.97,34.26,-502.64) idleSubState=34
+[idle-trace] frame 660 ped id=20 pos=(-1302.01,27.92,-520.31) idleSubState=34
+[idle-trace] frame 660 ped id=22 pos=(-1256.29,33.21,-577.45) idleSubState=34
+[idle-trace] frame 660 ped id=23 pos=(-1271.87,33.80,-531.19) idleSubState=34
+[idle-trace] frame 660 ped id=24 pos=(-1282.31,36.04,-490.02) idleSubState=34
+[idle-trace] frame 660 ped id=26 pos=(-1270.21,32.53,-584.05) idleSubState=34
+[traffic] frame 690 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1212.98,-473.95) heading=98.8deg seg=4463 valid=1
+  [lane] id=3 pos=(-1390.53,-451.01) heading=-525.6deg seg=4248 valid=1
+  [lane] id=6 pos=(-1228.21,-444.44) heading=307.9deg seg=4661 valid=1
+  [lane] id=7 pos=(-1343.44,-527.41) heading=14.3deg seg=4540 valid=1
+  [lane] id=8 pos=(-1213.92,-405.94) heading=-6.2deg seg=4502 valid=1
+  [lane] id=9 pos=(-1380.03,-565.41) heading=341.9deg seg=4761 valid=1
+[peds] frame 690 near-field ambient peds live=20/48
+[population] frame 690 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 690 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=87 edges=4221 (avg 48.5)
+[idle-trace] frame 690 ped id=1 pos=(-1316.97,31.41,-551.82) idleSubState=34
+[idle-trace] frame 690 ped id=3 pos=(-1300.69,27.90,-513.76) idleSubState=34
+[idle-trace] frame 690 ped id=4 pos=(-1271.75,32.15,-553.33) idleSubState=34
+[idle-trace] frame 690 ped id=5 pos=(-1285.66,36.15,-474.16) idleSubState=34
+[idle-trace] frame 690 ped id=7 pos=(-1279.35,36.15,-473.53) idleSubState=34
+[idle-trace] frame 690 ped id=8 pos=(-1292.31,36.15,-495.54) idleSubState=34
+[idle-trace] frame 690 ped id=11 pos=(-1259.19,36.15,-494.88) idleSubState=34
+[idle-trace] frame 690 ped id=12 pos=(-1321.88,31.37,-555.81) idleSubState=34
+[idle-trace] frame 690 ped id=13 pos=(-1327.90,33.38,-540.00) idleSubState=34
+[idle-trace] frame 690 ped id=14 pos=(-1315.91,35.45,-507.97) idleSubState=34
+[idle-trace] frame 690 ped id=15 pos=(-1326.27,31.21,-537.95) idleSubState=34
+[idle-trace] frame 690 ped id=16 pos=(-1288.57,36.15,-492.52) idleSubState=34
+[idle-trace] frame 690 ped id=17 pos=(-1271.85,34.23,-503.37) idleSubState=34
+[idle-trace] frame 690 ped id=18 pos=(-1265.65,29.94,-413.21) idleSubState=34
+[idle-trace] frame 690 ped id=19 pos=(-1271.98,34.26,-500.61) idleSubState=34
+[idle-trace] frame 690 ped id=20 pos=(-1301.60,27.92,-518.33) idleSubState=34
+[idle-trace] frame 690 ped id=22 pos=(-1256.22,33.21,-578.53) idleSubState=34
+[idle-trace] frame 690 ped id=23 pos=(-1271.87,33.80,-530.11) idleSubState=34
+[idle-trace] frame 690 ped id=24 pos=(-1284.47,36.04,-490.62) idleSubState=34
+[idle-trace] frame 690 ped id=26 pos=(-1267.95,32.53,-584.10) idleSubState=34
+[traffic] frame 720 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1213.10,-473.57) heading=109.1deg seg=4463 valid=1
+  [lane] id=3 pos=(-1392.90,-451.45) heading=-531.9deg seg=4248 valid=1
+  [lane] id=6 pos=(-1225.65,-447.45) heading=312.2deg seg=4661 valid=1
+  [lane] id=7 pos=(-1338.70,-526.00) heading=18.2deg seg=4540 valid=1
+  [lane] id=8 pos=(-1203.95,-406.67) heading=-1.3deg seg=4506 valid=1
+  [lane] id=9 pos=(-1380.03,-565.41) heading=378.3deg seg=4761 valid=1
+[peds] frame 720 near-field ambient peds live=20/48
+[population] frame 720 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 720 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=91 edges=4405 (avg 48.4)
+[idle-trace] frame 720 ped id=1 pos=(-1318.04,31.41,-552.87) idleSubState=34
+[idle-trace] frame 720 ped id=3 pos=(-1300.37,27.90,-511.94) idleSubState=34
+[idle-trace] frame 720 ped id=4 pos=(-1271.76,32.15,-551.82) idleSubState=34
+[idle-trace] frame 720 ped id=5 pos=(-1286.71,36.15,-474.41) idleSubState=34
+[idle-trace] frame 720 ped id=7 pos=(-1280.74,36.15,-473.55) idleSubState=34
+[idle-trace] frame 720 ped id=8 pos=(-1293.60,36.15,-497.09) idleSubState=34
+[idle-trace] frame 720 ped id=11 pos=(-1260.70,36.15,-494.92) idleSubState=34
+[idle-trace] frame 720 ped id=12 pos=(-1321.12,31.37,-555.25) idleSubState=34
+[idle-trace] frame 720 ped id=13 pos=(-1329.52,33.38,-541.56) idleSubState=34
+[idle-trace] frame 720 ped id=14 pos=(-1316.26,35.45,-509.78) idleSubState=34
+[idle-trace] frame 720 ped id=15 pos=(-1326.94,31.21,-538.79) idleSubState=34
+[idle-trace] frame 720 ped id=16 pos=(-1290.33,36.15,-493.94) idleSubState=34
+[idle-trace] frame 720 ped id=17 pos=(-1271.88,34.23,-501.52) idleSubState=34
+[idle-trace] frame 720 ped id=18 pos=(-1267.03,29.94,-413.17) idleSubState=34
+[idle-trace] frame 720 ped id=19 pos=(-1271.99,34.26,-498.59) idleSubState=34
+[idle-trace] frame 720 ped id=20 pos=(-1301.18,27.92,-516.35) idleSubState=34
+[idle-trace] frame 720 ped id=22 pos=(-1256.15,33.21,-579.61) idleSubState=34
+[idle-trace] frame 720 ped id=23 pos=(-1271.88,33.80,-529.03) idleSubState=34
+[idle-trace] frame 720 ped id=24 pos=(-1286.52,36.04,-491.57) idleSubState=34
+[idle-trace] frame 720 ped id=26 pos=(-1265.70,32.53,-584.16) idleSubState=34
+[traffic] frame 750 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1214.01,-471.41) heading=114.9deg seg=4463 valid=1
+  [lane] id=3 pos=(-1397.40,-451.85) heading=-537.4deg seg=4248 valid=1
+  [lane] id=6 pos=(-1221.40,-451.85) heading=315.4deg seg=4661 valid=1
+  [lane] id=7 pos=(-1331.90,-523.53) heading=21.6deg seg=4537 valid=1
+  [lane] id=8 pos=(-1201.95,-406.68) heading=12.3deg seg=4506 valid=1
+  [lane] id=9 pos=(-1379.98,-565.38) heading=391.8deg seg=4761 valid=1
+[peds] frame 750 near-field ambient peds live=20/48
+[population] frame 750 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 750 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=94 edges=4543 (avg 48.3)
+[idle-trace] frame 750 ped id=1 pos=(-1319.24,31.41,-553.79) idleSubState=34
+[idle-trace] frame 750 ped id=3 pos=(-1299.87,27.90,-510.16) idleSubState=34
+[idle-trace] frame 750 ped id=4 pos=(-1271.77,32.15,-550.32) idleSubState=34
+[idle-trace] frame 750 ped id=5 pos=(-1287.76,36.15,-474.65) idleSubState=34
+[idle-trace] frame 750 ped id=7 pos=(-1282.12,36.15,-473.58) idleSubState=34
+[idle-trace] frame 750 ped id=8 pos=(-1294.85,36.15,-498.67) idleSubState=34
+[idle-trace] frame 750 ped id=11 pos=(-1262.20,36.15,-494.96) idleSubState=34
+[idle-trace] frame 750 ped id=12 pos=(-1319.50,31.37,-554.04) idleSubState=34
+[idle-trace] frame 750 ped id=13 pos=(-1331.45,33.38,-542.67) idleSubState=34
+[idle-trace] frame 750 ped id=14 pos=(-1316.60,35.45,-511.60) idleSubState=34
+[idle-trace] frame 750 ped id=15 pos=(-1327.61,31.21,-539.64) idleSubState=34
+[idle-trace] frame 750 ped id=16 pos=(-1292.09,36.15,-495.36) idleSubState=34
+[idle-trace] frame 750 ped id=17 pos=(-1271.92,34.23,-499.67) idleSubState=34
+[idle-trace] frame 750 ped id=18 pos=(-1268.42,29.94,-413.14) idleSubState=34
+[idle-trace] frame 750 ped id=19 pos=(-1272.00,34.26,-496.57) idleSubState=34
+[idle-trace] frame 750 ped id=20 pos=(-1300.80,27.92,-514.36) idleSubState=34
+[idle-trace] frame 750 ped id=22 pos=(-1256.09,33.21,-580.68) idleSubState=34
+[idle-trace] frame 750 ped id=23 pos=(-1271.88,33.80,-527.95) idleSubState=34
+[idle-trace] frame 750 ped id=24 pos=(-1288.57,36.04,-492.52) idleSubState=34
+[idle-trace] frame 750 ped id=26 pos=(-1263.44,32.53,-584.22) idleSubState=34
+[traffic] frame 780 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1215.83,-467.35) heading=111.8deg seg=4463 valid=1
+  [lane] id=3 pos=(-1403.87,-451.75) heading=-544.9deg seg=4248 valid=1
+  [lane] id=6 pos=(-1215.42,-457.97) heading=311.8deg seg=4613 valid=1
+  [lane] id=7 pos=(-1323.27,-519.76) heading=25.3deg seg=4537 valid=1
+  [lane] id=8 pos=(-1201.95,-406.68) heading=48.3deg seg=4506 valid=1
+  [lane] id=9 pos=(-1378.71,-564.44) heading=399.0deg seg=4761 valid=1
+[peds] frame 780 near-field ambient peds live=20/48
+[population] frame 780 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 780 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=98 edges=4727 (avg 48.2)
+[idle-trace] frame 780 ped id=1 pos=(-1320.43,31.41,-554.70) idleSubState=34
+[idle-trace] frame 780 ped id=3 pos=(-1299.36,27.90,-508.38) idleSubState=34
+[idle-trace] frame 780 ped id=4 pos=(-1271.77,32.15,-548.81) idleSubState=34
+[idle-trace] frame 780 ped id=5 pos=(-1288.80,36.15,-474.94) idleSubState=34
+[idle-trace] frame 780 ped id=7 pos=(-1283.50,36.15,-473.67) idleSubState=34
+[idle-trace] frame 780 ped id=8 pos=(-1295.98,36.15,-500.34) idleSubState=34
+[idle-trace] frame 780 ped id=11 pos=(-1263.71,36.15,-494.99) idleSubState=34
+[idle-trace] frame 780 ped id=12 pos=(-1317.93,31.37,-552.77) idleSubState=34
+[idle-trace] frame 780 ped id=13 pos=(-1333.57,33.38,-543.44) idleSubState=34
+[idle-trace] frame 780 ped id=14 pos=(-1316.96,35.45,-513.41) idleSubState=34
+[idle-trace] frame 780 ped id=15 pos=(-1328.28,31.21,-540.49) idleSubState=34
+[idle-trace] frame 780 ped id=16 pos=(-1293.56,36.15,-497.06) idleSubState=34
+[idle-trace] frame 780 ped id=17 pos=(-1271.96,34.23,-497.83) idleSubState=34
+[idle-trace] frame 780 ped id=18 pos=(-1269.80,29.94,-413.10) idleSubState=34
+[idle-trace] frame 780 ped id=19 pos=(-1272.00,34.26,-494.54) idleSubState=34
+[idle-trace] frame 780 ped id=20 pos=(-1300.44,27.92,-512.37) idleSubState=34
+[idle-trace] frame 780 ped id=22 pos=(-1256.02,33.21,-581.76) idleSubState=34
+[idle-trace] frame 780 ped id=23 pos=(-1271.89,33.80,-526.87) idleSubState=34
+[idle-trace] frame 780 ped id=24 pos=(-1290.33,36.04,-493.94) idleSubState=34
+[idle-trace] frame 780 ped id=26 pos=(-1261.18,32.53,-584.28) idleSubState=34
+[traffic] frame 810 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=101.4deg seg=4463 valid=1
+  [lane] id=3 pos=(-1404.94,-451.54) heading=-553.6deg seg=4248 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=300.3deg seg=4613 valid=1
+  [lane] id=7 pos=(-1314.40,-515.25) heading=27.7deg seg=4608 valid=1
+  [lane] id=8 pos=(-1201.95,-406.68) heading=126.7deg seg=4506 valid=1
+  [lane] id=9 pos=(-1375.98,-561.99) heading=403.9deg seg=4761 valid=1
+[peds] frame 810 near-field ambient peds live=20/48
+[population] frame 810 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 810 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=102 edges=4911 (avg 48.1)
+[idle-trace] frame 810 ped id=1 pos=(-1321.63,31.41,-555.62) idleSubState=34
+[idle-trace] frame 810 ped id=3 pos=(-1298.85,27.90,-506.60) idleSubState=34
+[idle-trace] frame 810 ped id=4 pos=(-1271.78,32.15,-547.30) idleSubState=34
+[idle-trace] frame 810 ped id=5 pos=(-1289.80,36.15,-475.34) idleSubState=34
+[idle-trace] frame 810 ped id=7 pos=(-1284.85,36.15,-473.98) idleSubState=34
+[idle-trace] frame 810 ped id=8 pos=(-1296.90,36.15,-502.14) idleSubState=34
+[idle-trace] frame 810 ped id=11 pos=(-1265.22,36.15,-495.03) idleSubState=34
+[idle-trace] frame 810 ped id=12 pos=(-1316.52,31.37,-551.32) idleSubState=34
+[idle-trace] frame 810 ped id=13 pos=(-1335.78,33.38,-543.56) idleSubState=34
+[idle-trace] frame 810 ped id=14 pos=(-1317.32,35.45,-515.23) idleSubState=34
+[idle-trace] frame 810 ped id=15 pos=(-1329.08,31.21,-541.20) idleSubState=34
+[idle-trace] frame 810 ped id=16 pos=(-1294.97,36.15,-498.83) idleSubState=34
+[idle-trace] frame 810 ped id=17 pos=(-1271.99,34.23,-495.98) idleSubState=34
+[idle-trace] frame 810 ped id=18 pos=(-1271.19,29.94,-413.07) idleSubState=34
+[idle-trace] frame 810 ped id=19 pos=(-1272.00,34.26,-492.52) idleSubState=34
+[idle-trace] frame 810 ped id=20 pos=(-1299.95,27.92,-510.41) idleSubState=34
+[idle-trace] frame 810 ped id=22 pos=(-1255.95,33.21,-582.84) idleSubState=34
+[idle-trace] frame 810 ped id=23 pos=(-1271.89,33.80,-525.79) idleSubState=34
+[idle-trace] frame 810 ped id=24 pos=(-1292.09,36.04,-495.36) idleSubState=34
+[idle-trace] frame 810 ped id=26 pos=(-1258.92,32.53,-584.33) idleSubState=34
+signal   : t=27522 ms junction 125 (-1383,-424, 131 m from player) AMBER -> phase 0
+signal   : t=27654 ms junction 140 (-1264,-481, 20 m from player) AMBER -> phase 0
+[traffic] frame 840 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=76.7deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.16,-451.49) heading=-568.3deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=271.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1305.59,-510.52) heading=28.8deg seg=4608 valid=1
+  [lane] id=8 pos=(-1201.95,-406.68) heading=206.9deg seg=4506 valid=1
+  [lane] id=9 pos=(-1371.96,-557.78) heading=408.4deg seg=4761 valid=1
+[peds] frame 840 near-field ambient peds live=20/48
+[population] frame 840 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 840 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=106 edges=5095 (avg 48.1)
+[idle-trace] frame 840 ped id=1 pos=(-1322.91,31.41,-556.39) idleSubState=34
+[idle-trace] frame 840 ped id=3 pos=(-1298.23,27.90,-504.87) idleSubState=34
+[idle-trace] frame 840 ped id=4 pos=(-1271.79,32.15,-545.80) idleSubState=34
+[idle-trace] frame 840 ped id=5 pos=(-1290.81,36.15,-475.74) idleSubState=34
+[idle-trace] frame 840 ped id=7 pos=(-1286.20,36.15,-474.29) idleSubState=34
+[idle-trace] frame 840 ped id=8 pos=(-1297.82,36.15,-503.94) idleSubState=34
+[idle-trace] frame 840 ped id=11 pos=(-1266.72,36.15,-495.07) idleSubState=34
+[idle-trace] frame 840 ped id=12 pos=(-1315.11,31.37,-549.87) idleSubState=34
+[idle-trace] frame 840 ped id=13 pos=(-1338.03,33.38,-543.34) idleSubState=34
+[idle-trace] frame 840 ped id=14 pos=(-1317.69,35.45,-517.04) idleSubState=34
+[idle-trace] frame 840 ped id=15 pos=(-1329.92,31.21,-541.88) idleSubState=34
+[idle-trace] frame 840 ped id=16 pos=(-1296.18,36.15,-500.72) idleSubState=34
+[idle-trace] frame 840 ped id=17 pos=(-1270.77,34.23,-495.58) idleSubState=34
+[idle-trace] frame 840 ped id=18 pos=(-1271.63,29.94,-412.27) idleSubState=34
+[idle-trace] frame 840 ped id=19 pos=(-1272.00,34.26,-490.50) idleSubState=34
+[idle-trace] frame 840 ped id=20 pos=(-1299.39,27.92,-508.47) idleSubState=34
+[idle-trace] frame 840 ped id=22 pos=(-1255.89,33.21,-583.92) idleSubState=34
+[idle-trace] frame 840 ped id=23 pos=(-1271.89,33.80,-524.71) idleSubState=34
+[idle-trace] frame 840 ped id=24 pos=(-1293.56,36.04,-497.06) idleSubState=34
+[idle-trace] frame 840 ped id=26 pos=(-1256.66,32.53,-584.39) idleSubState=34
+[traffic] frame 870 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.16,-451.49) heading=-609.1deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1296.92,-505.54) heading=31.0deg seg=4608 valid=1
+  [lane] id=8 pos=(-1201.95,-406.68) heading=273.2deg seg=4506 valid=1
+  [lane] id=9 pos=(-1369.33,-554.67) heading=422.5deg seg=4553 valid=1
+[peds] frame 870 near-field ambient peds live=20/48
+[population] frame 870 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 6) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 870 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=109 edges=5233 (avg 48.0)
+[idle-trace] frame 870 ped id=1 pos=(-1324.27,31.41,-557.04) idleSubState=34
+[idle-trace] frame 870 ped id=3 pos=(-1297.43,27.90,-503.20) idleSubState=34
+[idle-trace] frame 870 ped id=4 pos=(-1271.79,32.15,-544.29) idleSubState=34
+[idle-trace] frame 870 ped id=5 pos=(-1291.81,36.15,-476.13) idleSubState=34
+[idle-trace] frame 870 ped id=7 pos=(-1287.55,36.15,-474.60) idleSubState=34
+[idle-trace] frame 870 ped id=8 pos=(-1298.56,36.15,-505.82) idleSubState=34
+[idle-trace] frame 870 ped id=11 pos=(-1268.23,36.15,-495.10) idleSubState=34
+[idle-trace] frame 870 ped id=12 pos=(-1313.82,31.37,-548.31) idleSubState=34
+[idle-trace] frame 870 ped id=13 pos=(-1340.14,33.38,-542.56) idleSubState=34
+[idle-trace] frame 870 ped id=14 pos=(-1318.05,35.45,-518.85) idleSubState=34
+[idle-trace] frame 870 ped id=15 pos=(-1330.83,31.21,-542.43) idleSubState=34
+[idle-trace] frame 870 ped id=16 pos=(-1297.21,36.15,-502.74) idleSubState=34
+[idle-trace] frame 870 ped id=17 pos=(-1268.92,34.23,-495.53) idleSubState=34
+[idle-trace] frame 870 ped id=18 pos=(-1271.67,29.94,-410.89) idleSubState=34
+[idle-trace] frame 870 ped id=19 pos=(-1273.22,34.26,-489.60) idleSubState=34
+[idle-trace] frame 870 ped id=20 pos=(-1298.83,27.92,-506.52) idleSubState=34
+[idle-trace] frame 870 ped id=22 pos=(-1255.88,33.21,-584.99) idleSubState=34
+[idle-trace] frame 870 ped id=23 pos=(-1271.90,33.80,-523.63) idleSubState=34
+[idle-trace] frame 870 ped id=24 pos=(-1294.97,36.04,-498.83) idleSubState=34
+[idle-trace] frame 870 ped id=26 pos=(-1257.86,32.53,-584.40) idleSubState=34
+[traffic] frame 900 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.16,-451.49) heading=-688.9deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1288.51,-500.15) heading=35.3deg seg=4370 valid=1
+  [lane] id=8 pos=(-1201.95,-406.68) heading=296.3deg seg=4506 valid=1
+  [lane] id=9 pos=(-1369.33,-554.67) heading=480.1deg seg=4553 valid=1
+[peds] frame 900 near-field ambient peds live=20/48
+[population] frame 900 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 7) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 900 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=113 edges=5417 (avg 47.9)
+[idle-trace] frame 900 ped id=1 pos=(-1325.62,31.41,-557.70) idleSubState=34
+[idle-trace] frame 900 ped id=3 pos=(-1296.63,27.90,-501.54) idleSubState=34
+[idle-trace] frame 900 ped id=4 pos=(-1271.80,32.15,-542.79) idleSubState=34
+[idle-trace] frame 900 ped id=5 pos=(-1292.81,36.15,-476.53) idleSubState=34
+[idle-trace] frame 900 ped id=7 pos=(-1288.88,36.15,-474.98) idleSubState=34
+[idle-trace] frame 900 ped id=8 pos=(-1299.15,36.15,-507.75) idleSubState=34
+[idle-trace] frame 900 ped id=11 pos=(-1269.73,36.15,-495.14) idleSubState=34
+[idle-trace] frame 900 ped id=12 pos=(-1312.63,31.37,-546.68) idleSubState=34
+[idle-trace] frame 900 ped id=13 pos=(-1342.21,33.38,-541.66) idleSubState=34
+[idle-trace] frame 900 ped id=14 pos=(-1318.41,35.45,-520.67) idleSubState=34
+[idle-trace] frame 900 ped id=15 pos=(-1331.84,31.21,-542.80) idleSubState=34
+[idle-trace] frame 900 ped id=16 pos=(-1298.24,36.15,-504.75) idleSubState=35
+[idle-trace] frame 900 ped id=17 pos=(-1267.07,34.23,-495.48) idleSubState=34
+[idle-trace] frame 900 ped id=18 pos=(-1271.71,29.94,-409.50) idleSubState=34
+[idle-trace] frame 900 ped id=19 pos=(-1275.23,34.26,-489.46) idleSubState=34
+[idle-trace] frame 900 ped id=20 pos=(-1298.12,27.92,-504.64) idleSubState=34
+[idle-trace] frame 900 ped id=23 pos=(-1271.90,33.80,-522.56) idleSubState=34
+[idle-trace] frame 900 ped id=24 pos=(-1296.18,36.04,-500.72) idleSubState=34
+[idle-trace] frame 900 ped id=26 pos=(-1260.12,32.53,-584.40) idleSubState=34
+[idle-trace] frame 900 ped id=27 pos=(-1255.10,35.14,-517.92) idleSubState=34
+[traffic] frame 930 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.16,-451.49) heading=-769.2deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1280.71,-493.89) heading=41.7deg seg=4370 valid=1
+  [lane] id=8 pos=(-1201.69,-407.04) heading=306.3deg seg=4506 valid=1
+  [lane] id=9 pos=(-1369.33,-554.67) heading=560.3deg seg=4553 valid=1
+[peds] frame 930 near-field ambient peds live=20/48
+[population] frame 930 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 7) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 930 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=117 edges=5601 (avg 47.9)
+[idle-trace] frame 930 ped id=1 pos=(-1326.98,31.41,-558.35) idleSubState=34
+[idle-trace] frame 930 ped id=3 pos=(-1295.75,27.90,-499.92) idleSubState=34
+[idle-trace] frame 930 ped id=4 pos=(-1271.81,32.15,-541.28) idleSubState=34
+[idle-trace] frame 930 ped id=5 pos=(-1293.78,36.15,-477.00) idleSubState=34
+[idle-trace] frame 930 ped id=7 pos=(-1290.17,36.15,-475.49) idleSubState=34
+[idle-trace] frame 930 ped id=8 pos=(-1299.75,36.15,-509.69) idleSubState=34
+[idle-trace] frame 930 ped id=11 pos=(-1271.24,36.15,-495.18) idleSubState=34
+[idle-trace] frame 930 ped id=12 pos=(-1311.43,31.37,-545.05) idleSubState=34
+[idle-trace] frame 930 ped id=13 pos=(-1344.12,33.38,-540.48) idleSubState=34
+[idle-trace] frame 930 ped id=14 pos=(-1318.98,35.45,-522.43) idleSubState=34
+[idle-trace] frame 930 ped id=15 pos=(-1332.86,31.21,-543.17) idleSubState=34
+[idle-trace] frame 930 ped id=16 pos=(-1297.37,36.15,-502.99) idleSubState=34
+[idle-trace] frame 930 ped id=17 pos=(-1265.22,34.23,-495.43) idleSubState=34
+[idle-trace] frame 930 ped id=18 pos=(-1271.75,29.94,-408.12) idleSubState=34
+[idle-trace] frame 930 ped id=19 pos=(-1277.25,34.26,-489.32) idleSubState=34
+[idle-trace] frame 930 ped id=20 pos=(-1297.24,27.92,-502.81) idleSubState=34
+[idle-trace] frame 930 ped id=23 pos=(-1271.91,33.80,-521.48) idleSubState=34
+[idle-trace] frame 930 ped id=24 pos=(-1297.21,36.04,-502.74) idleSubState=34
+[idle-trace] frame 930 ped id=26 pos=(-1262.38,32.53,-584.40) idleSubState=34
+[idle-trace] frame 930 ped id=27 pos=(-1255.12,35.14,-519.31) idleSubState=34
+signal   : t=30888 ms junction 125 (-1383,-424, 131 m from player) SWITCH -> phase 1
+signal   : t=31020 ms junction 140 (-1264,-481, 20 m from player) SWITCH -> phase 1
+[traffic] frame 960 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.16,-451.49) heading=-830.7deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1273.45,-487.02) heading=44.7deg seg=4376 valid=1
+  [lane] id=8 pos=(-1200.14,-408.89) heading=312.3deg seg=4506 valid=1
+  [lane] id=9 pos=(-1369.33,-554.67) heading=640.5deg seg=4553 valid=1
+[peds] frame 960 near-field ambient peds live=20/48
+[population] frame 960 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 8) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 960 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=121 edges=5785 (avg 47.8)
+[idle-trace] frame 960 ped id=1 pos=(-1328.42,31.41,-558.76) idleSubState=34
+[idle-trace] frame 960 ped id=3 pos=(-1294.64,27.90,-498.44) idleSubState=34
+[idle-trace] frame 960 ped id=4 pos=(-1271.81,32.15,-539.77) idleSubState=34
+[idle-trace] frame 960 ped id=5 pos=(-1294.72,36.15,-477.53) idleSubState=34
+[idle-trace] frame 960 ped id=7 pos=(-1291.46,36.15,-475.99) idleSubState=34
+[idle-trace] frame 960 ped id=8 pos=(-1300.27,36.15,-511.64) idleSubState=34
+[idle-trace] frame 960 ped id=11 pos=(-1271.67,36.15,-494.03) idleSubState=34
+[idle-trace] frame 960 ped id=12 pos=(-1310.48,31.37,-543.27) idleSubState=34
+[idle-trace] frame 960 ped id=13 pos=(-1345.93,33.38,-539.13) idleSubState=34
+[idle-trace] frame 960 ped id=14 pos=(-1319.55,35.45,-524.19) idleSubState=34
+[idle-trace] frame 960 ped id=15 pos=(-1333.87,31.21,-543.55) idleSubState=34
+[idle-trace] frame 960 ped id=16 pos=(-1296.37,36.15,-500.97) idleSubState=34
+[idle-trace] frame 960 ped id=17 pos=(-1263.37,34.23,-495.39) idleSubState=34
+[idle-trace] frame 960 ped id=19 pos=(-1279.25,34.26,-489.56) idleSubState=34
+[idle-trace] frame 960 ped id=20 pos=(-1296.37,27.92,-500.99) idleSubState=34
+[idle-trace] frame 960 ped id=23 pos=(-1271.91,33.80,-520.40) idleSubState=34
+[idle-trace] frame 960 ped id=24 pos=(-1298.24,36.04,-504.75) idleSubState=34
+[idle-trace] frame 960 ped id=26 pos=(-1264.64,32.53,-584.40) idleSubState=34
+[idle-trace] frame 960 ped id=27 pos=(-1255.13,35.14,-520.69) idleSubState=34
+[idle-trace] frame 960 ped id=28 pos=(-1192.98,37.92,-490.31) idleSubState=34
+[traffic] frame 990 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.16,-451.49) heading=-851.4deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.89,-481.27) heading=50.2deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=319.1deg seg=4374 valid=1
+  [lane] id=9 pos=(-1369.33,-554.67) heading=685.4deg seg=4553 valid=1
+[peds] frame 990 near-field ambient peds live=20/48
+[population] frame 990 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 8) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 990 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=124 edges=5923 (avg 47.8)
+[idle-trace] frame 990 ped id=1 pos=(-1329.89,31.41,-559.09) idleSubState=34
+[idle-trace] frame 990 ped id=3 pos=(-1293.54,27.90,-496.95) idleSubState=34
+[idle-trace] frame 990 ped id=4 pos=(-1271.82,32.15,-538.27) idleSubState=34
+[idle-trace] frame 990 ped id=5 pos=(-1295.67,36.15,-478.05) idleSubState=34
+[idle-trace] frame 990 ped id=7 pos=(-1292.75,36.15,-476.50) idleSubState=34
+[idle-trace] frame 990 ped id=8 pos=(-1300.64,36.15,-513.63) idleSubState=34
+[idle-trace] frame 990 ped id=11 pos=(-1271.78,36.15,-492.53) idleSubState=34
+[idle-trace] frame 990 ped id=12 pos=(-1309.55,31.37,-541.47) idleSubState=34
+[idle-trace] frame 990 ped id=13 pos=(-1347.74,33.38,-537.78) idleSubState=34
+[idle-trace] frame 990 ped id=14 pos=(-1320.12,35.45,-525.95) idleSubState=34
+[idle-trace] frame 990 ped id=15 pos=(-1334.92,31.21,-543.63) idleSubState=34
+[idle-trace] frame 990 ped id=16 pos=(-1295.13,36.15,-499.08) idleSubState=34
+[idle-trace] frame 990 ped id=17 pos=(-1261.52,34.23,-495.34) idleSubState=34
+[idle-trace] frame 990 ped id=19 pos=(-1281.25,34.26,-489.86) idleSubState=34
+[idle-trace] frame 990 ped id=20 pos=(-1295.29,27.92,-499.29) idleSubState=34
+[idle-trace] frame 990 ped id=23 pos=(-1271.91,33.80,-519.32) idleSubState=34
+[idle-trace] frame 990 ped id=24 pos=(-1298.90,36.04,-506.91) idleSubState=34
+[idle-trace] frame 990 ped id=26 pos=(-1266.90,32.53,-584.41) idleSubState=34
+[idle-trace] frame 990 ped id=27 pos=(-1255.15,35.14,-522.08) idleSubState=34
+[idle-trace] frame 990 ped id=28 pos=(-1190.98,37.92,-489.97) idleSubState=34
+[traffic] frame 1020 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=3 pos=(-1405.64,-451.91) heading=-860.8deg seg=4313 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.89,-481.27) heading=69.9deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=337.2deg seg=4374 valid=1
+  [lane] id=9 pos=(-1369.33,-554.67) heading=700.9deg seg=4553 valid=1
+[peds] frame 1020 near-field ambient peds live=20/48
+[population] frame 1020 vehicles live=6 (spawn passes 9, distance-despawned 3) peds live=20 (distance-despawned 8) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1020 vehicle gathers=9 candidates=36 (avg 4.0) lane-spawns=9; ped gathers=128 edges=6107 (avg 47.7)
+[idle-trace] frame 1020 ped id=1 pos=(-1331.36,31.41,-559.43) idleSubState=34
+[idle-trace] frame 1020 ped id=3 pos=(-1292.29,27.90,-495.60) idleSubState=34
+[idle-trace] frame 1020 ped id=4 pos=(-1271.83,32.15,-536.76) idleSubState=34
+[idle-trace] frame 1020 ped id=5 pos=(-1296.61,36.15,-478.58) idleSubState=34
+[idle-trace] frame 1020 ped id=7 pos=(-1293.99,36.15,-477.11) idleSubState=34
+[idle-trace] frame 1020 ped id=8 pos=(-1300.98,36.15,-515.35) idleSubState=34
+[idle-trace] frame 1020 ped id=11 pos=(-1271.88,36.15,-491.03) idleSubState=34
+[idle-trace] frame 1020 ped id=12 pos=(-1308.62,31.37,-539.67) idleSubState=34
+[idle-trace] frame 1020 ped id=13 pos=(-1349.55,33.38,-536.43) idleSubState=34
+[idle-trace] frame 1020 ped id=14 pos=(-1320.68,35.45,-527.70) idleSubState=34
+[idle-trace] frame 1020 ped id=15 pos=(-1336.00,31.21,-543.53) idleSubState=34
+[idle-trace] frame 1020 ped id=16 pos=(-1293.78,36.15,-497.27) idleSubState=34
+[idle-trace] frame 1020 ped id=17 pos=(-1259.67,34.23,-495.29) idleSubState=34
+[idle-trace] frame 1020 ped id=19 pos=(-1283.26,34.26,-490.16) idleSubState=34
+[idle-trace] frame 1020 ped id=20 pos=(-1294.08,27.92,-497.67) idleSubState=34
+[idle-trace] frame 1020 ped id=23 pos=(-1271.92,33.80,-518.24) idleSubState=34
+[idle-trace] frame 1020 ped id=24 pos=(-1299.56,36.04,-509.07) idleSubState=34
+[idle-trace] frame 1020 ped id=26 pos=(-1269.16,32.53,-584.41) idleSubState=34
+[idle-trace] frame 1020 ped id=27 pos=(-1255.17,35.14,-523.47) idleSubState=34
+[idle-trace] frame 1020 ped id=28 pos=(-1188.99,37.92,-489.63) idleSubState=34
+[traffic] frame 1050 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.89,-481.27) heading=127.1deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=389.5deg seg=4374 valid=1
+  [lane] id=9 pos=(-1368.14,-554.96) heading=708.7deg seg=4553 valid=1
+  [lane] id=10 pos=(-1205.66,-391.91) heading=-173.3deg seg=4497 valid=1
+[peds] frame 1050 near-field ambient peds live=20/48
+[population] frame 1050 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 8) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1050 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=132 edges=6291 (avg 47.7)
+[idle-trace] frame 1050 ped id=1 pos=(-1332.83,31.41,-559.74) idleSubState=34
+[idle-trace] frame 1050 ped id=3 pos=(-1290.89,27.90,-494.39) idleSubState=34
+[idle-trace] frame 1050 ped id=4 pos=(-1271.83,32.15,-535.26) idleSubState=34
+[idle-trace] frame 1050 ped id=5 pos=(-1297.53,36.15,-479.13) idleSubState=34
+[idle-trace] frame 1050 ped id=7 pos=(-1295.20,36.15,-477.79) idleSubState=34
+[idle-trace] frame 1050 ped id=8 pos=(-1301.38,36.15,-517.33) idleSubState=34
+[idle-trace] frame 1050 ped id=11 pos=(-1272.13,36.15,-489.67) idleSubState=34
+[idle-trace] frame 1050 ped id=12 pos=(-1307.70,31.37,-537.88) idleSubState=34
+[idle-trace] frame 1050 ped id=13 pos=(-1351.23,33.38,-534.91) idleSubState=34
+[idle-trace] frame 1050 ped id=14 pos=(-1321.36,35.45,-529.42) idleSubState=34
+[idle-trace] frame 1050 ped id=15 pos=(-1337.07,31.21,-543.43) idleSubState=34
+[idle-trace] frame 1050 ped id=16 pos=(-1292.29,36.15,-495.59) idleSubState=34
+[idle-trace] frame 1050 ped id=17 pos=(-1257.83,34.23,-495.24) idleSubState=34
+[idle-trace] frame 1050 ped id=19 pos=(-1282.06,34.26,-489.96) idleSubState=34
+[idle-trace] frame 1050 ped id=20 pos=(-1292.83,27.92,-496.08) idleSubState=34
+[idle-trace] frame 1050 ped id=23 pos=(-1271.92,33.80,-517.16) idleSubState=34
+[idle-trace] frame 1050 ped id=24 pos=(-1300.20,36.04,-511.24) idleSubState=34
+[idle-trace] frame 1050 ped id=26 pos=(-1271.42,32.53,-584.41) idleSubState=34
+[idle-trace] frame 1050 ped id=27 pos=(-1255.18,35.14,-524.85) idleSubState=34
+[idle-trace] frame 1050 ped id=28 pos=(-1187.19,37.92,-489.13) idleSubState=34
+[traffic] frame 1080 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.89,-481.27) heading=207.4deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=469.7deg seg=4374 valid=1
+  [lane] id=9 pos=(-1364.84,-555.43) heading=714.2deg seg=4553 valid=1
+  [lane] id=10 pos=(-1206.95,-392.06) heading=-173.3deg seg=4497 valid=1
+[peds] frame 1080 near-field ambient peds live=20/48
+[population] frame 1080 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 8) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1080 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=136 edges=6475 (avg 47.6)
+[idle-trace] frame 1080 ped id=1 pos=(-1334.34,31.41,-559.74) idleSubState=34
+[idle-trace] frame 1080 ped id=3 pos=(-1289.50,27.90,-493.18) idleSubState=34
+[idle-trace] frame 1080 ped id=4 pos=(-1271.84,32.15,-533.75) idleSubState=34
+[idle-trace] frame 1080 ped id=5 pos=(-1298.36,36.15,-479.82) idleSubState=34
+[idle-trace] frame 1080 ped id=7 pos=(-1296.41,36.15,-478.47) idleSubState=34
+[idle-trace] frame 1080 ped id=8 pos=(-1301.79,36.15,-519.31) idleSubState=34
+[idle-trace] frame 1080 ped id=11 pos=(-1273.63,36.15,-489.56) idleSubState=34
+[idle-trace] frame 1080 ped id=12 pos=(-1306.77,31.37,-536.08) idleSubState=34
+[idle-trace] frame 1080 ped id=13 pos=(-1352.87,33.38,-535.02) idleSubState=34
+[idle-trace] frame 1080 ped id=14 pos=(-1322.18,35.45,-531.08) idleSubState=34
+[idle-trace] frame 1080 ped id=15 pos=(-1338.14,31.21,-543.33) idleSubState=34
+[idle-trace] frame 1080 ped id=16 pos=(-1290.58,36.15,-494.11) idleSubState=34
+[idle-trace] frame 1080 ped id=17 pos=(-1256.21,34.23,-494.96) idleSubState=34
+[idle-trace] frame 1080 ped id=19 pos=(-1280.06,34.26,-489.62) idleSubState=34
+[idle-trace] frame 1080 ped id=20 pos=(-1291.31,27.92,-494.75) idleSubState=34
+[idle-trace] frame 1080 ped id=23 pos=(-1271.93,33.80,-516.08) idleSubState=34
+[idle-trace] frame 1080 ped id=24 pos=(-1300.61,36.04,-513.46) idleSubState=34
+[idle-trace] frame 1080 ped id=26 pos=(-1271.69,32.53,-586.14) idleSubState=34
+[idle-trace] frame 1080 ped id=27 pos=(-1255.20,35.14,-526.24) idleSubState=34
+[idle-trace] frame 1080 ped id=28 pos=(-1187.14,37.92,-487.11) idleSubState=34
+[traffic] frame 1110 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.89,-481.27) heading=287.6deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=549.9deg seg=4374 valid=1
+  [lane] id=9 pos=(-1359.41,-555.69) heading=719.8deg seg=4553 valid=1
+  [lane] id=10 pos=(-1210.32,-392.46) heading=-173.3deg seg=4497 valid=1
+[peds] frame 1110 near-field ambient peds live=20/48
+[population] frame 1110 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 9) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1110 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=139 edges=6613 (avg 47.6)
+[idle-trace] frame 1110 ped id=1 pos=(-1335.84,31.41,-559.75) idleSubState=34
+[idle-trace] frame 1110 ped id=3 pos=(-1287.90,27.90,-492.27) idleSubState=34
+[idle-trace] frame 1110 ped id=4 pos=(-1271.85,32.15,-532.24) idleSubState=34
+[idle-trace] frame 1110 ped id=5 pos=(-1299.20,36.15,-480.51) idleSubState=34
+[idle-trace] frame 1110 ped id=7 pos=(-1297.60,36.15,-479.18) idleSubState=34
+[idle-trace] frame 1110 ped id=8 pos=(-1302.19,36.15,-521.30) idleSubState=34
+[idle-trace] frame 1110 ped id=11 pos=(-1275.13,36.15,-489.46) idleSubState=34
+[idle-trace] frame 1110 ped id=12 pos=(-1306.03,31.37,-534.20) idleSubState=34
+[idle-trace] frame 1110 ped id=13 pos=(-1354.51,33.38,-536.59) idleSubState=34
+[idle-trace] frame 1110 ped id=14 pos=(-1323.00,35.45,-532.74) idleSubState=34
+[idle-trace] frame 1110 ped id=15 pos=(-1339.16,31.21,-542.99) idleSubState=34
+[idle-trace] frame 1110 ped id=16 pos=(-1288.81,36.15,-492.73) idleSubState=34
+[idle-trace] frame 1110 ped id=17 pos=(-1256.09,34.23,-493.11) idleSubState=34
+[idle-trace] frame 1110 ped id=19 pos=(-1278.06,34.26,-489.33) idleSubState=34
+[idle-trace] frame 1110 ped id=20 pos=(-1289.78,27.92,-493.42) idleSubState=34
+[idle-trace] frame 1110 ped id=23 pos=(-1271.93,33.80,-515.00) idleSubState=34
+[idle-trace] frame 1110 ped id=24 pos=(-1301.05,36.04,-515.68) idleSubState=34
+[idle-trace] frame 1110 ped id=27 pos=(-1255.21,35.14,-527.62) idleSubState=34
+[idle-trace] frame 1110 ped id=28 pos=(-1187.10,37.92,-485.08) idleSubState=34
+[idle-trace] frame 1110 ped id=29 pos=(-1255.68,36.15,-469.78) idleSubState=34
+[traffic] frame 1140 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.89,-481.27) heading=332.8deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=600.5deg seg=4374 valid=1
+  [lane] id=9 pos=(-1354.63,-555.48) heading=728.5deg seg=4553 valid=1
+  [lane] id=10 pos=(-1215.80,-393.11) heading=-173.2deg seg=4497 valid=1
+[peds] frame 1140 near-field ambient peds live=20/48
+[population] frame 1140 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 10) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1140 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=143 edges=6797 (avg 47.5)
+[idle-trace] frame 1140 ped id=1 pos=(-1337.35,31.41,-559.75) idleSubState=34
+[idle-trace] frame 1140 ped id=3 pos=(-1286.25,27.90,-491.43) idleSubState=34
+[idle-trace] frame 1140 ped id=4 pos=(-1271.85,32.15,-530.74) idleSubState=34
+[idle-trace] frame 1140 ped id=5 pos=(-1300.03,36.15,-481.19) idleSubState=34
+[idle-trace] frame 1140 ped id=7 pos=(-1298.66,36.15,-480.07) idleSubState=34
+[idle-trace] frame 1140 ped id=8 pos=(-1302.59,36.15,-523.28) idleSubState=34
+[idle-trace] frame 1140 ped id=11 pos=(-1276.63,36.15,-489.36) idleSubState=34
+[idle-trace] frame 1140 ped id=12 pos=(-1305.38,31.37,-532.28) idleSubState=34
+[idle-trace] frame 1140 ped id=14 pos=(-1323.82,35.45,-534.39) idleSubState=34
+[idle-trace] frame 1140 ped id=15 pos=(-1340.15,31.21,-542.56) idleSubState=34
+[idle-trace] frame 1140 ped id=16 pos=(-1286.79,36.15,-491.71) idleSubState=34
+[idle-trace] frame 1140 ped id=17 pos=(-1255.98,34.23,-491.27) idleSubState=34
+[idle-trace] frame 1140 ped id=19 pos=(-1276.04,34.26,-489.31) idleSubState=34
+[idle-trace] frame 1140 ped id=20 pos=(-1288.08,27.92,-492.36) idleSubState=34
+[idle-trace] frame 1140 ped id=23 pos=(-1271.93,33.80,-513.92) idleSubState=34
+[idle-trace] frame 1140 ped id=24 pos=(-1301.50,36.04,-517.89) idleSubState=34
+[idle-trace] frame 1140 ped id=27 pos=(-1255.23,35.14,-529.01) idleSubState=34
+[idle-trace] frame 1140 ped id=28 pos=(-1187.05,37.92,-483.06) idleSubState=34
+[idle-trace] frame 1140 ped id=29 pos=(-1255.80,36.15,-467.94) idleSubState=34
+[idle-trace] frame 1140 ped id=30 pos=(-1271.97,32.65,-442.26) idleSubState=34
+signal   : t=37917 ms junction 125 (-1383,-424, 131 m from player) AMBER -> phase 1
+signal   : t=38049 ms junction 140 (-1264,-481, 20 m from player) AMBER -> phase 1
+[traffic] frame 1170 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1267.88,-481.27) heading=348.4deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.34,-411.70) heading=617.5deg seg=4374 valid=1
+  [lane] id=9 pos=(-1352.88,-555.15) heading=731.3deg seg=4549 valid=1
+  [lane] id=10 pos=(-1223.66,-394.04) heading=-173.1deg seg=4451 valid=1
+[peds] frame 1170 near-field ambient peds live=20/48
+[population] frame 1170 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 10) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1170 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=147 edges=6981 (avg 47.5)
+[idle-trace] frame 1170 ped id=1 pos=(-1338.84,31.41,-559.61) idleSubState=34
+[idle-trace] frame 1170 ped id=3 pos=(-1284.60,27.90,-490.60) idleSubState=34
+[idle-trace] frame 1170 ped id=4 pos=(-1271.86,32.15,-529.23) idleSubState=34
+[idle-trace] frame 1170 ped id=5 pos=(-1300.86,36.15,-481.88) idleSubState=34
+[idle-trace] frame 1170 ped id=7 pos=(-1299.73,36.15,-480.95) idleSubState=34
+[idle-trace] frame 1170 ped id=8 pos=(-1303.05,36.15,-525.24) idleSubState=34
+[idle-trace] frame 1170 ped id=11 pos=(-1278.13,36.15,-489.39) idleSubState=34
+[idle-trace] frame 1170 ped id=12 pos=(-1304.74,31.37,-530.37) idleSubState=34
+[idle-trace] frame 1170 ped id=14 pos=(-1324.73,35.45,-535.99) idleSubState=34
+[idle-trace] frame 1170 ped id=15 pos=(-1341.14,31.21,-542.13) idleSubState=34
+[idle-trace] frame 1170 ped id=16 pos=(-1284.77,36.15,-490.69) idleSubState=34
+[idle-trace] frame 1170 ped id=17 pos=(-1255.63,34.23,-489.65) idleSubState=34
+[idle-trace] frame 1170 ped id=19 pos=(-1274.02,34.26,-489.29) idleSubState=34
+[idle-trace] frame 1170 ped id=20 pos=(-1286.27,27.92,-491.45) idleSubState=34
+[idle-trace] frame 1170 ped id=23 pos=(-1271.94,33.80,-512.84) idleSubState=34
+[idle-trace] frame 1170 ped id=24 pos=(-1301.95,36.04,-520.11) idleSubState=34
+[idle-trace] frame 1170 ped id=27 pos=(-1255.24,35.14,-530.40) idleSubState=34
+[idle-trace] frame 1170 ped id=28 pos=(-1187.01,37.92,-481.04) idleSubState=34
+[idle-trace] frame 1170 ped id=29 pos=(-1255.83,36.15,-467.57) idleSubState=34
+[idle-trace] frame 1170 ped id=30 pos=(-1271.96,32.65,-440.41) idleSubState=34
+[traffic] frame 1200 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1266.66,-481.40) heading=356.1deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.45,-412.71) heading=625.7deg seg=4374 valid=1
+  [lane] id=9 pos=(-1349.07,-554.36) heading=731.9deg seg=4549 valid=1
+  [lane] id=10 pos=(-1233.28,-395.23) heading=-172.8deg seg=4451 valid=1
+[peds] frame 1200 near-field ambient peds live=20/48
+[population] frame 1200 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 11) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1200 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=151 edges=7165 (avg 47.5)
+[idle-trace] frame 1200 ped id=3 pos=(-1282.81,27.90,-490.16) idleSubState=34
+[idle-trace] frame 1200 ped id=4 pos=(-1271.86,32.15,-527.73) idleSubState=34
+[idle-trace] frame 1200 ped id=5 pos=(-1301.69,36.15,-482.57) idleSubState=34
+[idle-trace] frame 1200 ped id=7 pos=(-1300.80,36.15,-481.83) idleSubState=34
+[idle-trace] frame 1200 ped id=8 pos=(-1303.68,36.15,-527.17) idleSubState=34
+[idle-trace] frame 1200 ped id=11 pos=(-1279.62,36.15,-489.61) idleSubState=34
+[idle-trace] frame 1200 ped id=12 pos=(-1304.09,31.37,-528.45) idleSubState=34
+[idle-trace] frame 1200 ped id=14 pos=(-1325.87,35.45,-537.44) idleSubState=34
+[idle-trace] frame 1200 ped id=15 pos=(-1342.13,31.21,-541.70) idleSubState=34
+[idle-trace] frame 1200 ped id=16 pos=(-1282.60,36.15,-490.13) idleSubState=34
+[idle-trace] frame 1200 ped id=17 pos=(-1253.79,34.23,-489.53) idleSubState=34
+[idle-trace] frame 1200 ped id=19 pos=(-1272.37,34.26,-489.68) idleSubState=34
+[idle-trace] frame 1200 ped id=20 pos=(-1284.47,27.92,-490.53) idleSubState=34
+[idle-trace] frame 1200 ped id=23 pos=(-1271.94,33.80,-511.77) idleSubState=34
+[idle-trace] frame 1200 ped id=24 pos=(-1302.40,36.04,-522.32) idleSubState=34
+[idle-trace] frame 1200 ped id=27 pos=(-1255.26,35.14,-531.78) idleSubState=34
+[idle-trace] frame 1200 ped id=28 pos=(-1186.96,37.92,-479.02) idleSubState=34
+[idle-trace] frame 1200 ped id=29 pos=(-1255.83,36.15,-467.57) idleSubState=34
+[idle-trace] frame 1200 ped id=30 pos=(-1271.95,32.65,-438.56) idleSubState=34
+[idle-trace] frame 1200 ped id=31 pos=(-1256.22,30.82,-433.67) idleSubState=33
+[traffic] frame 1230 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1263.34,-481.47) heading=360.7deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.51,-415.82) heading=631.1deg seg=4374 valid=1
+  [lane] id=9 pos=(-1343.18,-553.05) heading=733.2deg seg=4549 valid=1
+  [lane] id=10 pos=(-1243.10,-396.92) heading=-166.3deg seg=4460 valid=1
+[peds] frame 1230 near-field ambient peds live=20/48
+[population] frame 1230 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 11) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1230 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=154 edges=7303 (avg 47.4)
+[idle-trace] frame 1230 ped id=3 pos=(-1281.00,27.90,-489.83) idleSubState=34
+[idle-trace] frame 1230 ped id=4 pos=(-1271.87,32.15,-526.22) idleSubState=34
+[idle-trace] frame 1230 ped id=5 pos=(-1302.52,36.15,-483.26) idleSubState=34
+[idle-trace] frame 1230 ped id=7 pos=(-1301.86,36.15,-482.72) idleSubState=34
+[idle-trace] frame 1230 ped id=8 pos=(-1304.31,36.15,-529.09) idleSubState=34
+[idle-trace] frame 1230 ped id=11 pos=(-1281.11,36.15,-489.84) idleSubState=34
+[idle-trace] frame 1230 ped id=12 pos=(-1303.44,31.37,-526.53) idleSubState=34
+[idle-trace] frame 1230 ped id=14 pos=(-1327.02,35.45,-538.89) idleSubState=34
+[idle-trace] frame 1230 ped id=15 pos=(-1343.09,31.21,-541.24) idleSubState=34
+[idle-trace] frame 1230 ped id=16 pos=(-1280.38,36.15,-489.72) idleSubState=34
+[idle-trace] frame 1230 ped id=17 pos=(-1251.94,34.23,-489.40) idleSubState=34
+[idle-trace] frame 1230 ped id=19 pos=(-1272.24,34.26,-491.70) idleSubState=34
+[idle-trace] frame 1230 ped id=20 pos=(-1282.50,27.92,-490.11) idleSubState=34
+[idle-trace] frame 1230 ped id=23 pos=(-1271.95,33.80,-510.69) idleSubState=34
+[idle-trace] frame 1230 ped id=24 pos=(-1302.85,36.04,-524.54) idleSubState=34
+[idle-trace] frame 1230 ped id=27 pos=(-1255.28,35.14,-533.17) idleSubState=34
+[idle-trace] frame 1230 ped id=28 pos=(-1186.92,37.92,-476.99) idleSubState=34
+[idle-trace] frame 1230 ped id=29 pos=(-1255.83,36.15,-467.57) idleSubState=34
+[idle-trace] frame 1230 ped id=30 pos=(-1271.95,32.65,-436.71) idleSubState=34
+[idle-trace] frame 1230 ped id=31 pos=(-1256.20,30.82,-435.46) idleSubState=34
+signal   : t=41283 ms junction 125 (-1383,-424, 131 m from player) SWITCH -> phase 0
+signal   : t=41415 ms junction 140 (-1264,-481, 20 m from player) SWITCH -> phase 0
+[traffic] frame 1260 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1257.90,-481.22) heading=364.1deg seg=4509 valid=1
+  [lane] id=8 pos=(-1197.17,-421.04) heading=635.8deg seg=4374 valid=1
+  [lane] id=9 pos=(-1334.96,-550.93) heading=735.2deg seg=4545 valid=1
+  [lane] id=10 pos=(-1250.74,-399.29) heading=-152.5deg seg=4373 valid=1
+[peds] frame 1260 near-field ambient peds live=20/48
+[population] frame 1260 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1260 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=158 edges=7487 (avg 47.4)
+[idle-trace] frame 1260 ped id=3 pos=(-1279.18,27.90,-489.50) idleSubState=34
+[idle-trace] frame 1260 ped id=4 pos=(-1271.88,32.15,-524.71) idleSubState=34
+[idle-trace] frame 1260 ped id=5 pos=(-1303.35,36.15,-483.95) idleSubState=34
+[idle-trace] frame 1260 ped id=7 pos=(-1302.93,36.15,-483.60) idleSubState=34
+[idle-trace] frame 1260 ped id=8 pos=(-1304.94,36.15,-531.01) idleSubState=34
+[idle-trace] frame 1260 ped id=11 pos=(-1282.60,36.15,-490.06) idleSubState=34
+[idle-trace] frame 1260 ped id=12 pos=(-1302.90,31.37,-524.59) idleSubState=34
+[idle-trace] frame 1260 ped id=14 pos=(-1328.17,35.45,-540.34) idleSubState=34
+[idle-trace] frame 1260 ped id=15 pos=(-1343.96,31.21,-540.59) idleSubState=34
+[idle-trace] frame 1260 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1260 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1260 ped id=19 pos=(-1272.10,34.26,-493.71) idleSubState=34
+[idle-trace] frame 1260 ped id=20 pos=(-1280.51,27.92,-489.74) idleSubState=34
+[idle-trace] frame 1260 ped id=23 pos=(-1271.95,33.80,-509.61) idleSubState=34
+[idle-trace] frame 1260 ped id=24 pos=(-1303.52,36.04,-526.69) idleSubState=34
+[idle-trace] frame 1260 ped id=27 pos=(-1255.29,35.14,-534.55) idleSubState=34
+[idle-trace] frame 1260 ped id=29 pos=(-1256.26,36.15,-467.56) idleSubState=34
+[idle-trace] frame 1260 ped id=30 pos=(-1271.94,32.65,-434.86) idleSubState=34
+[idle-trace] frame 1260 ped id=31 pos=(-1256.17,30.82,-437.31) idleSubState=34
+[idle-trace] frame 1260 ped id=32 pos=(-1272.90,35.56,-460.21) idleSubState=34
+[traffic] frame 1290 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1250.11,-480.49) heading=365.8deg seg=4661 valid=1
+  [lane] id=8 pos=(-1196.58,-425.49) heading=668.6deg seg=4463 valid=1
+  [lane] id=9 pos=(-1325.52,-548.19) heading=737.3deg seg=4545 valid=1
+  [lane] id=10 pos=(-1250.74,-399.29) heading=-132.8deg seg=4373 valid=1
+[peds] frame 1290 near-field ambient peds live=20/48
+[population] frame 1290 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1290 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=162 edges=7671 (avg 47.4)
+[idle-trace] frame 1290 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1290 ped id=4 pos=(-1271.88,32.15,-523.21) idleSubState=34
+[idle-trace] frame 1290 ped id=5 pos=(-1304.10,36.15,-484.57) idleSubState=33
+[idle-trace] frame 1290 ped id=7 pos=(-1304.00,36.15,-484.49) idleSubState=34
+[idle-trace] frame 1290 ped id=8 pos=(-1305.56,36.15,-532.94) idleSubState=34
+[idle-trace] frame 1290 ped id=11 pos=(-1284.04,36.15,-490.43) idleSubState=34
+[idle-trace] frame 1290 ped id=12 pos=(-1302.49,31.37,-522.61) idleSubState=34
+[idle-trace] frame 1290 ped id=14 pos=(-1329.54,35.45,-541.57) idleSubState=34
+[idle-trace] frame 1290 ped id=15 pos=(-1344.83,31.21,-539.95) idleSubState=34
+[idle-trace] frame 1290 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1290 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1290 ped id=19 pos=(-1271.09,34.26,-494.81) idleSubState=34
+[idle-trace] frame 1290 ped id=20 pos=(-1278.52,27.92,-489.38) idleSubState=34
+[idle-trace] frame 1290 ped id=23 pos=(-1271.96,33.80,-508.53) idleSubState=34
+[idle-trace] frame 1290 ped id=24 pos=(-1304.22,36.04,-528.84) idleSubState=34
+[idle-trace] frame 1290 ped id=27 pos=(-1255.31,35.14,-535.94) idleSubState=34
+[idle-trace] frame 1290 ped id=29 pos=(-1258.11,36.15,-467.52) idleSubState=34
+[idle-trace] frame 1290 ped id=30 pos=(-1271.93,32.65,-433.02) idleSubState=34
+[idle-trace] frame 1290 ped id=31 pos=(-1256.15,30.82,-439.16) idleSubState=34
+[idle-trace] frame 1290 ped id=32 pos=(-1272.71,35.56,-461.70) idleSubState=34
+[traffic] frame 1320 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1240.49,-479.48) heading=366.3deg seg=4661 valid=1
+  [lane] id=8 pos=(-1196.58,-425.49) heading=748.8deg seg=4463 valid=1
+  [lane] id=9 pos=(-1324.85,-547.97) heading=750.3deg seg=4543 valid=1
+  [lane] id=10 pos=(-1251.14,-399.86) heading=-123.8deg seg=4373 valid=1
+[peds] frame 1320 near-field ambient peds live=20/48
+[population] frame 1320 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1320 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=166 edges=7855 (avg 47.3)
+[idle-trace] frame 1320 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1320 ped id=4 pos=(-1271.89,32.15,-521.70) idleSubState=34
+[idle-trace] frame 1320 ped id=5 pos=(-1303.30,36.15,-483.90) idleSubState=34
+[idle-trace] frame 1320 ped id=7 pos=(-1304.88,36.15,-485.56) idleSubState=34
+[idle-trace] frame 1320 ped id=8 pos=(-1306.21,36.15,-534.85) idleSubState=34
+[idle-trace] frame 1320 ped id=11 pos=(-1285.41,36.15,-491.07) idleSubState=34
+[idle-trace] frame 1320 ped id=12 pos=(-1302.07,31.37,-520.63) idleSubState=34
+[idle-trace] frame 1320 ped id=14 pos=(-1331.09,35.45,-542.54) idleSubState=34
+[idle-trace] frame 1320 ped id=15 pos=(-1345.69,31.21,-539.30) idleSubState=34
+[idle-trace] frame 1320 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1320 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1320 ped id=19 pos=(-1269.07,34.26,-494.86) idleSubState=34
+[idle-trace] frame 1320 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1320 ped id=23 pos=(-1271.96,33.80,-507.45) idleSubState=34
+[idle-trace] frame 1320 ped id=24 pos=(-1304.93,36.04,-530.99) idleSubState=34
+[idle-trace] frame 1320 ped id=27 pos=(-1255.32,35.14,-537.33) idleSubState=34
+[idle-trace] frame 1320 ped id=29 pos=(-1259.96,36.15,-467.47) idleSubState=34
+[idle-trace] frame 1320 ped id=30 pos=(-1271.93,32.65,-431.17) idleSubState=34
+[idle-trace] frame 1320 ped id=31 pos=(-1256.13,30.82,-441.01) idleSubState=34
+[idle-trace] frame 1320 ped id=32 pos=(-1272.52,35.56,-463.19) idleSubState=34
+[traffic] frame 1350 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1230.59,-478.30) heading=367.5deg seg=4613 valid=1
+  [lane] id=8 pos=(-1196.58,-425.49) heading=826.0deg seg=4463 valid=1
+  [lane] id=9 pos=(-1323.62,-547.10) heading=757.6deg seg=4543 valid=1
+  [lane] id=10 pos=(-1252.55,-402.24) heading=-118.3deg seg=4373 valid=1
+[peds] frame 1350 near-field ambient peds live=20/48
+[population] frame 1350 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1350 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=169 edges=7993 (avg 47.3)
+[idle-trace] frame 1350 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1350 ped id=4 pos=(-1271.90,32.15,-520.20) idleSubState=34
+[idle-trace] frame 1350 ped id=5 pos=(-1302.47,36.15,-483.20) idleSubState=34
+[idle-trace] frame 1350 ped id=7 pos=(-1305.73,36.15,-486.65) idleSubState=34
+[idle-trace] frame 1350 ped id=8 pos=(-1307.12,36.15,-536.66) idleSubState=34
+[idle-trace] frame 1350 ped id=11 pos=(-1286.78,36.15,-491.70) idleSubState=34
+[idle-trace] frame 1350 ped id=12 pos=(-1301.66,31.37,-518.65) idleSubState=34
+[idle-trace] frame 1350 ped id=14 pos=(-1332.83,35.45,-543.17) idleSubState=34
+[idle-trace] frame 1350 ped id=15 pos=(-1346.56,31.21,-538.66) idleSubState=34
+[idle-trace] frame 1350 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1350 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1350 ped id=19 pos=(-1267.04,34.26,-494.91) idleSubState=34
+[idle-trace] frame 1350 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1350 ped id=23 pos=(-1271.96,33.80,-506.37) idleSubState=34
+[idle-trace] frame 1350 ped id=24 pos=(-1305.63,36.04,-533.14) idleSubState=34
+[idle-trace] frame 1350 ped id=27 pos=(-1255.34,35.14,-538.71) idleSubState=34
+[idle-trace] frame 1350 ped id=29 pos=(-1261.81,36.15,-467.43) idleSubState=34
+[idle-trace] frame 1350 ped id=30 pos=(-1271.92,32.65,-429.32) idleSubState=34
+[idle-trace] frame 1350 ped id=31 pos=(-1256.10,30.82,-442.86) idleSubState=34
+[idle-trace] frame 1350 ped id=32 pos=(-1272.33,35.56,-464.69) idleSubState=34
+[traffic] frame 1380 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1220.70,-476.81) heading=369.4deg seg=4599 valid=1
+  [lane] id=8 pos=(-1196.58,-425.49) heading=858.8deg seg=4463 valid=1
+  [lane] id=9 pos=(-1320.88,-544.76) heading=762.5deg seg=4543 valid=1
+  [lane] id=10 pos=(-1254.67,-406.62) heading=-114.1deg seg=4373 valid=1
+[peds] frame 1380 near-field ambient peds live=20/48
+[population] frame 1380 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1380 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=173 edges=8177 (avg 47.3)
+[idle-trace] frame 1380 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1380 ped id=4 pos=(-1271.90,32.15,-518.69) idleSubState=34
+[idle-trace] frame 1380 ped id=5 pos=(-1301.65,36.15,-482.50) idleSubState=34
+[idle-trace] frame 1380 ped id=7 pos=(-1306.58,36.15,-487.74) idleSubState=34
+[idle-trace] frame 1380 ped id=8 pos=(-1308.02,36.15,-538.47) idleSubState=34
+[idle-trace] frame 1380 ped id=11 pos=(-1288.15,36.15,-492.33) idleSubState=34
+[idle-trace] frame 1380 ped id=12 pos=(-1301.25,31.37,-516.67) idleSubState=34
+[idle-trace] frame 1380 ped id=14 pos=(-1334.58,35.45,-543.67) idleSubState=34
+[idle-trace] frame 1380 ped id=15 pos=(-1347.42,31.21,-538.01) idleSubState=34
+[idle-trace] frame 1380 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1380 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1380 ped id=19 pos=(-1265.02,34.26,-494.97) idleSubState=34
+[idle-trace] frame 1380 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1380 ped id=23 pos=(-1271.97,33.80,-505.29) idleSubState=34
+[idle-trace] frame 1380 ped id=24 pos=(-1306.40,36.04,-535.25) idleSubState=34
+[idle-trace] frame 1380 ped id=27 pos=(-1255.35,35.14,-540.10) idleSubState=34
+[idle-trace] frame 1380 ped id=29 pos=(-1263.65,36.15,-467.39) idleSubState=34
+[idle-trace] frame 1380 ped id=30 pos=(-1271.91,32.65,-427.47) idleSubState=34
+[idle-trace] frame 1380 ped id=31 pos=(-1256.08,30.82,-444.71) idleSubState=34
+[idle-trace] frame 1380 ped id=32 pos=(-1272.13,35.56,-466.18) idleSubState=34
+[traffic] frame 1410 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1210.86,-475.06) heading=370.8deg seg=4599 valid=1
+  [lane] id=8 pos=(-1196.69,-425.43) heading=871.5deg seg=4463 valid=1
+  [lane] id=9 pos=(-1316.81,-540.71) heading=766.8deg seg=4543 valid=1
+  [lane] id=10 pos=(-1257.26,-412.98) heading=-109.2deg seg=4376 valid=1
+[peds] frame 1410 near-field ambient peds live=20/48
+[population] frame 1410 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1410 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=177 edges=8361 (avg 47.2)
+[idle-trace] frame 1410 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1410 ped id=4 pos=(-1271.91,32.15,-517.18) idleSubState=34
+[idle-trace] frame 1410 ped id=5 pos=(-1300.83,36.15,-481.81) idleSubState=34
+[idle-trace] frame 1410 ped id=7 pos=(-1307.44,36.15,-488.83) idleSubState=34
+[idle-trace] frame 1410 ped id=8 pos=(-1308.93,36.15,-540.28) idleSubState=34
+[idle-trace] frame 1410 ped id=11 pos=(-1289.38,36.15,-493.18) idleSubState=34
+[idle-trace] frame 1410 ped id=12 pos=(-1300.86,31.37,-514.68) idleSubState=34
+[idle-trace] frame 1410 ped id=14 pos=(-1336.42,35.45,-543.49) idleSubState=34
+[idle-trace] frame 1410 ped id=15 pos=(-1348.29,31.21,-537.37) idleSubState=34
+[idle-trace] frame 1410 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1410 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1410 ped id=19 pos=(-1263.00,34.26,-495.02) idleSubState=34
+[idle-trace] frame 1410 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1410 ped id=23 pos=(-1271.97,33.80,-504.21) idleSubState=34
+[idle-trace] frame 1410 ped id=24 pos=(-1307.42,36.04,-537.27) idleSubState=34
+[idle-trace] frame 1410 ped id=27 pos=(-1255.37,35.14,-541.48) idleSubState=34
+[idle-trace] frame 1410 ped id=29 pos=(-1265.50,36.15,-467.35) idleSubState=34
+[idle-trace] frame 1410 ped id=30 pos=(-1271.91,32.65,-425.62) idleSubState=34
+[idle-trace] frame 1410 ped id=31 pos=(-1256.06,30.82,-446.55) idleSubState=34
+[idle-trace] frame 1410 ped id=32 pos=(-1271.15,35.56,-466.80) idleSubState=34
+[traffic] frame 1440 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1201.05,-473.09) heading=371.7deg seg=4485 valid=1
+  [lane] id=8 pos=(-1198.32,-424.70) heading=878.2deg seg=4463 valid=1
+  [lane] id=9 pos=(-1311.49,-534.52) heading=771.9deg seg=4540 valid=1
+  [lane] id=10 pos=(-1257.26,-412.98) heading=-89.4deg seg=4376 valid=1
+[peds] frame 1440 near-field ambient peds live=20/48
+[population] frame 1440 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1440 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=181 edges=8545 (avg 47.2)
+[idle-trace] frame 1440 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1440 ped id=4 pos=(-1271.92,32.15,-515.68) idleSubState=34
+[idle-trace] frame 1440 ped id=5 pos=(-1300.00,36.15,-481.11) idleSubState=34
+[idle-trace] frame 1440 ped id=7 pos=(-1308.29,36.15,-489.92) idleSubState=34
+[idle-trace] frame 1440 ped id=8 pos=(-1309.84,36.15,-542.09) idleSubState=34
+[idle-trace] frame 1440 ped id=11 pos=(-1290.55,36.15,-494.12) idleSubState=34
+[idle-trace] frame 1440 ped id=12 pos=(-1300.50,31.37,-512.69) idleSubState=34
+[idle-trace] frame 1440 ped id=14 pos=(-1338.27,35.45,-543.32) idleSubState=34
+[idle-trace] frame 1440 ped id=15 pos=(-1349.15,31.21,-536.73) idleSubState=34
+[idle-trace] frame 1440 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1440 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1440 ped id=19 pos=(-1260.98,34.26,-495.07) idleSubState=34
+[idle-trace] frame 1440 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1440 ped id=23 pos=(-1271.98,33.80,-503.13) idleSubState=34
+[idle-trace] frame 1440 ped id=24 pos=(-1308.43,36.04,-539.29) idleSubState=34
+[idle-trace] frame 1440 ped id=27 pos=(-1255.39,35.14,-542.87) idleSubState=34
+[idle-trace] frame 1440 ped id=29 pos=(-1267.35,36.15,-467.30) idleSubState=34
+[idle-trace] frame 1440 ped id=30 pos=(-1271.93,32.65,-423.77) idleSubState=34
+[idle-trace] frame 1440 ped id=31 pos=(-1256.03,30.82,-448.40) idleSubState=34
+[idle-trace] frame 1440 ped id=32 pos=(-1269.65,35.56,-466.84) idleSubState=34
+signal   : t=48312 ms junction 125 (-1383,-424, 131 m from player) AMBER -> phase 0
+signal   : t=48444 ms junction 140 (-1264,-481, 20 m from player) AMBER -> phase 0
+[traffic] frame 1470 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1191.27,-471.02) heading=372.3deg seg=4482 valid=1
+  [lane] id=8 pos=(-1201.98,-423.42) heading=882.5deg seg=4463 valid=1
+  [lane] id=9 pos=(-1305.89,-526.53) heading=777.9deg seg=4540 valid=1
+  [lane] id=10 pos=(-1257.16,-413.68) heading=-80.4deg seg=4376 valid=1
+[peds] frame 1470 near-field ambient peds live=20/48
+[population] frame 1470 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1470 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=184 edges=8683 (avg 47.2)
+[idle-trace] frame 1470 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1470 ped id=4 pos=(-1271.92,32.15,-514.17) idleSubState=34
+[idle-trace] frame 1470 ped id=5 pos=(-1299.18,36.15,-480.42) idleSubState=34
+[idle-trace] frame 1470 ped id=7 pos=(-1309.15,36.15,-491.01) idleSubState=34
+[idle-trace] frame 1470 ped id=8 pos=(-1310.74,36.15,-543.90) idleSubState=34
+[idle-trace] frame 1470 ped id=11 pos=(-1291.72,36.15,-495.07) idleSubState=34
+[idle-trace] frame 1470 ped id=12 pos=(-1300.04,31.37,-510.72) idleSubState=34
+[idle-trace] frame 1470 ped id=14 pos=(-1339.98,35.45,-542.64) idleSubState=34
+[idle-trace] frame 1470 ped id=15 pos=(-1350.00,31.21,-536.05) idleSubState=34
+[idle-trace] frame 1470 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1470 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1470 ped id=19 pos=(-1258.95,34.26,-495.12) idleSubState=34
+[idle-trace] frame 1470 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1470 ped id=23 pos=(-1271.98,33.80,-502.05) idleSubState=34
+[idle-trace] frame 1470 ped id=24 pos=(-1309.45,36.04,-541.31) idleSubState=34
+[idle-trace] frame 1470 ped id=27 pos=(-1255.40,35.14,-544.25) idleSubState=34
+[idle-trace] frame 1470 ped id=29 pos=(-1269.20,36.15,-467.26) idleSubState=34
+[idle-trace] frame 1470 ped id=30 pos=(-1271.94,32.65,-421.92) idleSubState=34
+[idle-trace] frame 1470 ped id=31 pos=(-1256.01,30.82,-450.25) idleSubState=34
+[idle-trace] frame 1470 ped id=32 pos=(-1268.14,35.56,-466.88) idleSubState=34
+[traffic] frame 1500 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1181.51,-468.85) heading=372.7deg seg=4482 valid=1
+  [lane] id=8 pos=(-1207.80,-421.80) heading=885.9deg seg=4463 valid=1
+  [lane] id=9 pos=(-1300.76,-517.97) heading=779.3deg seg=4537 valid=1
+  [lane] id=10 pos=(-1256.54,-416.37) heading=-74.7deg seg=4376 valid=1
+[peds] frame 1500 near-field ambient peds live=20/48
+[population] frame 1500 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1500 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=188 edges=8867 (avg 47.2)
+[idle-trace] frame 1500 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1500 ped id=4 pos=(-1271.93,32.15,-512.67) idleSubState=34
+[idle-trace] frame 1500 ped id=5 pos=(-1298.35,36.15,-479.72) idleSubState=34
+[idle-trace] frame 1500 ped id=7 pos=(-1309.81,36.15,-492.23) idleSubState=34
+[idle-trace] frame 1500 ped id=8 pos=(-1311.86,36.15,-545.58) idleSubState=34
+[idle-trace] frame 1500 ped id=11 pos=(-1292.81,36.15,-496.10) idleSubState=34
+[idle-trace] frame 1500 ped id=12 pos=(-1299.48,31.37,-508.78) idleSubState=34
+[idle-trace] frame 1500 ped id=14 pos=(-1341.67,35.45,-541.90) idleSubState=34
+[idle-trace] frame 1500 ped id=15 pos=(-1350.79,31.21,-535.32) idleSubState=34
+[idle-trace] frame 1500 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1500 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1500 ped id=19 pos=(-1256.93,34.26,-495.17) idleSubState=34
+[idle-trace] frame 1500 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1500 ped id=23 pos=(-1271.98,33.80,-500.98) idleSubState=34
+[idle-trace] frame 1500 ped id=24 pos=(-1310.46,36.04,-543.33) idleSubState=34
+[idle-trace] frame 1500 ped id=27 pos=(-1255.42,35.14,-545.64) idleSubState=34
+[idle-trace] frame 1500 ped id=29 pos=(-1271.05,36.15,-467.22) idleSubState=34
+[idle-trace] frame 1500 ped id=30 pos=(-1271.95,32.65,-420.07) idleSubState=34
+[idle-trace] frame 1500 ped id=31 pos=(-1255.98,30.82,-452.10) idleSubState=34
+[idle-trace] frame 1500 ped id=32 pos=(-1266.64,35.56,-466.92) idleSubState=34
+[traffic] frame 1530 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1171.78,-466.53) heading=374.4deg seg=4480 valid=1
+  [lane] id=8 pos=(-1216.08,-419.93) heading=888.1deg seg=4448 valid=1
+  [lane] id=9 pos=(-1295.72,-509.34) heading=780.4deg seg=4608 valid=1
+  [lane] id=10 pos=(-1255.05,-421.01) heading=-70.2deg seg=4376 valid=1
+[peds] frame 1530 near-field ambient peds live=20/48
+[population] frame 1530 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1530 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=192 edges=9051 (avg 47.1)
+[idle-trace] frame 1530 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1530 ped id=4 pos=(-1271.94,32.15,-511.16) idleSubState=34
+[idle-trace] frame 1530 ped id=5 pos=(-1297.46,36.15,-479.12) idleSubState=34
+[idle-trace] frame 1530 ped id=7 pos=(-1310.43,36.15,-493.47) idleSubState=34
+[idle-trace] frame 1530 ped id=8 pos=(-1313.02,36.15,-547.24) idleSubState=34
+[idle-trace] frame 1530 ped id=11 pos=(-1293.75,36.15,-497.28) idleSubState=34
+[idle-trace] frame 1530 ped id=12 pos=(-1298.92,31.37,-506.84) idleSubState=34
+[idle-trace] frame 1530 ped id=14 pos=(-1343.32,35.45,-541.08) idleSubState=34
+[idle-trace] frame 1530 ped id=15 pos=(-1351.58,31.21,-534.59) idleSubState=34
+[idle-trace] frame 1530 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1530 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1530 ped id=19 pos=(-1256.17,34.26,-493.84) idleSubState=34
+[idle-trace] frame 1530 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1530 ped id=23 pos=(-1271.99,33.80,-499.90) idleSubState=34
+[idle-trace] frame 1530 ped id=24 pos=(-1311.63,36.04,-545.26) idleSubState=34
+[idle-trace] frame 1530 ped id=27 pos=(-1255.43,35.14,-547.03) idleSubState=34
+[idle-trace] frame 1530 ped id=29 pos=(-1271.64,36.15,-465.91) idleSubState=34
+[idle-trace] frame 1530 ped id=30 pos=(-1271.97,32.65,-418.22) idleSubState=34
+[idle-trace] frame 1530 ped id=31 pos=(-1255.96,30.82,-453.95) idleSubState=34
+[idle-trace] frame 1530 ped id=32 pos=(-1265.13,35.56,-466.96) idleSubState=34
+[traffic] frame 1560 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1162.14,-463.86) heading=376.9deg seg=4471 valid=1
+  [lane] id=8 pos=(-1225.74,-418.16) heading=891.5deg seg=4448 valid=1
+  [lane] id=9 pos=(-1291.02,-500.51) heading=784.1deg seg=4608 valid=1
+  [lane] id=10 pos=(-1252.45,-427.37) heading=-64.7deg seg=4509 valid=1
+[peds] frame 1560 near-field ambient peds live=20/48
+[population] frame 1560 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1560 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=196 edges=9235 (avg 47.1)
+[idle-trace] frame 1560 ped id=3 pos=(-1278.33,27.90,-489.28) idleSubState=34
+[idle-trace] frame 1560 ped id=4 pos=(-1271.94,32.15,-509.65) idleSubState=34
+[idle-trace] frame 1560 ped id=5 pos=(-1296.53,36.15,-478.57) idleSubState=34
+[idle-trace] frame 1560 ped id=7 pos=(-1311.06,36.15,-494.70) idleSubState=34
+[idle-trace] frame 1560 ped id=8 pos=(-1314.22,36.15,-548.86) idleSubState=34
+[idle-trace] frame 1560 ped id=11 pos=(-1294.68,36.15,-498.46) idleSubState=34
+[idle-trace] frame 1560 ped id=12 pos=(-1298.26,31.37,-504.93) idleSubState=34
+[idle-trace] frame 1560 ped id=14 pos=(-1344.80,35.45,-539.97) idleSubState=34
+[idle-trace] frame 1560 ped id=15 pos=(-1352.35,31.21,-533.84) idleSubState=34
+[idle-trace] frame 1560 ped id=16 pos=(-1278.30,36.15,-489.32) idleSubState=34
+[idle-trace] frame 1560 ped id=17 pos=(-1250.35,34.23,-489.30) idleSubState=34
+[idle-trace] frame 1560 ped id=19 pos=(-1256.03,34.26,-491.82) idleSubState=34
+[idle-trace] frame 1560 ped id=20 pos=(-1278.32,27.92,-489.27) idleSubState=34
+[idle-trace] frame 1560 ped id=23 pos=(-1271.99,33.80,-498.82) idleSubState=34
+[idle-trace] frame 1560 ped id=24 pos=(-1312.93,36.04,-547.11) idleSubState=34
+[idle-trace] frame 1560 ped id=27 pos=(-1255.45,35.14,-548.41) idleSubState=34
+[idle-trace] frame 1560 ped id=29 pos=(-1271.70,36.15,-464.06) idleSubState=34
+[idle-trace] frame 1560 ped id=30 pos=(-1271.98,32.65,-416.37) idleSubState=34
+[idle-trace] frame 1560 ped id=31 pos=(-1255.94,30.82,-455.80) idleSubState=34
+[idle-trace] frame 1560 ped id=32 pos=(-1263.63,35.56,-466.99) idleSubState=34
+signal   : t=51678 ms junction 125 (-1383,-424, 131 m from player) SWITCH -> phase 1
+signal   : t=51810 ms junction 140 (-1264,-481, 20 m from player) SWITCH -> phase 1
+[traffic] frame 1590 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1152.71,-460.55) heading=381.4deg seg=4471 valid=1
+  [lane] id=8 pos=(-1226.07,-418.11) heading=948.5deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=792.2deg seg=4608 valid=1
+  [lane] id=10 pos=(-1252.45,-427.37) heading=-47.9deg seg=4509 valid=1
+[peds] frame 1590 near-field ambient peds live=20/48
+[population] frame 1590 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1590 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=199 edges=9373 (avg 47.1)
+[idle-trace] frame 1590 ped id=3 pos=(-1278.29,27.90,-487.92) idleSubState=34
+[idle-trace] frame 1590 ped id=4 pos=(-1271.95,32.15,-508.15) idleSubState=34
+[idle-trace] frame 1590 ped id=5 pos=(-1295.60,36.15,-478.02) idleSubState=34
+[idle-trace] frame 1590 ped id=7 pos=(-1311.69,36.15,-495.94) idleSubState=34
+[idle-trace] frame 1590 ped id=8 pos=(-1315.60,36.15,-550.34) idleSubState=34
+[idle-trace] frame 1590 ped id=11 pos=(-1295.62,36.15,-499.64) idleSubState=35
+[idle-trace] frame 1590 ped id=12 pos=(-1297.38,31.37,-503.11) idleSubState=34
+[idle-trace] frame 1590 ped id=14 pos=(-1346.28,35.45,-538.87) idleSubState=34
+[idle-trace] frame 1590 ped id=15 pos=(-1353.12,31.21,-533.07) idleSubState=34
+[idle-trace] frame 1590 ped id=16 pos=(-1278.27,36.15,-487.66) idleSubState=34
+[idle-trace] frame 1590 ped id=17 pos=(-1250.31,34.23,-487.94) idleSubState=34
+[idle-trace] frame 1590 ped id=19 pos=(-1255.89,34.26,-489.80) idleSubState=34
+[idle-trace] frame 1590 ped id=20 pos=(-1278.28,27.92,-487.79) idleSubState=34
+[idle-trace] frame 1590 ped id=23 pos=(-1272.00,33.80,-497.74) idleSubState=34
+[idle-trace] frame 1590 ped id=24 pos=(-1313.97,36.04,-548.59) idleSubState=34
+[idle-trace] frame 1590 ped id=27 pos=(-1255.46,35.14,-549.80) idleSubState=34
+[idle-trace] frame 1590 ped id=29 pos=(-1271.76,36.15,-462.21) idleSubState=34
+[idle-trace] frame 1590 ped id=30 pos=(-1271.99,32.65,-414.53) idleSubState=34
+[idle-trace] frame 1590 ped id=31 pos=(-1255.92,30.82,-457.65) idleSubState=34
+[idle-trace] frame 1590 ped id=32 pos=(-1262.12,35.56,-467.03) idleSubState=34
+[traffic] frame 1620 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1148.96,-458.98) heading=388.5deg seg=4492 valid=1
+  [lane] id=8 pos=(-1226.07,-418.11) heading=1028.7deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=811.1deg seg=4608 valid=1
+  [lane] id=10 pos=(-1251.70,-428.04) heading=-39.8deg seg=4509 valid=1
+[peds] frame 1620 near-field ambient peds live=20/48
+[population] frame 1620 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1620 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=203 edges=9557 (avg 47.1)
+[idle-trace] frame 1620 ped id=3 pos=(-1278.25,27.90,-486.08) idleSubState=34
+[idle-trace] frame 1620 ped id=4 pos=(-1271.96,32.15,-506.64) idleSubState=34
+[idle-trace] frame 1620 ped id=5 pos=(-1294.67,36.15,-477.47) idleSubState=34
+[idle-trace] frame 1620 ped id=7 pos=(-1312.31,36.15,-497.17) idleSubState=34
+[idle-trace] frame 1620 ped id=8 pos=(-1316.97,36.15,-551.82) idleSubState=34
+[idle-trace] frame 1620 ped id=11 pos=(-1294.83,36.15,-498.60) idleSubState=34
+[idle-trace] frame 1620 ped id=12 pos=(-1296.51,31.37,-501.28) idleSubState=34
+[idle-trace] frame 1620 ped id=14 pos=(-1347.76,35.45,-537.76) idleSubState=34
+[idle-trace] frame 1620 ped id=15 pos=(-1353.88,31.21,-532.31) idleSubState=34
+[idle-trace] frame 1620 ped id=16 pos=(-1278.21,36.15,-485.40) idleSubState=34
+[idle-trace] frame 1620 ped id=17 pos=(-1250.26,34.23,-486.09) idleSubState=34
+[idle-trace] frame 1620 ped id=19 pos=(-1254.00,34.26,-489.54) idleSubState=34
+[idle-trace] frame 1620 ped id=20 pos=(-1278.23,27.92,-485.77) idleSubState=34
+[idle-trace] frame 1620 ped id=23 pos=(-1272.00,33.80,-496.66) idleSubState=34
+[idle-trace] frame 1620 ped id=24 pos=(-1312.65,36.04,-546.75) idleSubState=34
+[idle-trace] frame 1620 ped id=27 pos=(-1255.48,35.14,-551.18) idleSubState=34
+[idle-trace] frame 1620 ped id=29 pos=(-1271.82,36.15,-460.37) idleSubState=34
+[idle-trace] frame 1620 ped id=30 pos=(-1271.26,32.65,-413.40) idleSubState=34
+[idle-trace] frame 1620 ped id=31 pos=(-1255.91,30.82,-459.50) idleSubState=34
+[idle-trace] frame 1620 ped id=32 pos=(-1260.62,35.56,-467.07) idleSubState=34
+[traffic] frame 1650 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1146.98,-457.74) heading=394.3deg seg=4492 valid=1
+  [lane] id=8 pos=(-1226.07,-418.11) heading=1108.9deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=866.0deg seg=4608 valid=1
+  [lane] id=10 pos=(-1249.20,-429.91) heading=-34.9deg seg=4509 valid=1
+[peds] frame 1650 near-field ambient peds live=20/48
+[population] frame 1650 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1650 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=207 edges=9741 (avg 47.1)
+[idle-trace] frame 1650 ped id=3 pos=(-1278.20,27.90,-484.23) idleSubState=34
+[idle-trace] frame 1650 ped id=4 pos=(-1271.96,32.15,-505.14) idleSubState=34
+[idle-trace] frame 1650 ped id=5 pos=(-1293.73,36.15,-476.95) idleSubState=34
+[idle-trace] frame 1650 ped id=7 pos=(-1312.94,36.15,-498.41) idleSubState=34
+[idle-trace] frame 1650 ped id=8 pos=(-1318.24,36.15,-553.03) idleSubState=34
+[idle-trace] frame 1650 ped id=11 pos=(-1293.91,36.15,-497.40) idleSubState=34
+[idle-trace] frame 1650 ped id=12 pos=(-1295.64,31.37,-499.77) idleSubState=34
+[idle-trace] frame 1650 ped id=14 pos=(-1349.25,35.45,-536.66) idleSubState=34
+[idle-trace] frame 1650 ped id=15 pos=(-1354.64,31.21,-531.55) idleSubState=34
+[idle-trace] frame 1650 ped id=16 pos=(-1278.16,36.15,-483.14) idleSubState=34
+[idle-trace] frame 1650 ped id=17 pos=(-1250.22,34.23,-484.24) idleSubState=34
+[idle-trace] frame 1650 ped id=19 pos=(-1251.98,34.26,-489.41) idleSubState=34
+[idle-trace] frame 1650 ped id=20 pos=(-1278.18,27.92,-483.75) idleSubState=34
+[idle-trace] frame 1650 ped id=23 pos=(-1272.00,33.80,-495.58) idleSubState=34
+[idle-trace] frame 1650 ped id=24 pos=(-1311.33,36.04,-544.92) idleSubState=34
+[idle-trace] frame 1650 ped id=27 pos=(-1255.50,35.14,-552.57) idleSubState=34
+[idle-trace] frame 1650 ped id=29 pos=(-1271.88,36.15,-458.52) idleSubState=34
+[idle-trace] frame 1650 ped id=30 pos=(-1269.41,32.65,-413.36) idleSubState=34
+[idle-trace] frame 1650 ped id=31 pos=(-1255.90,30.82,-461.35) idleSubState=34
+[idle-trace] frame 1650 ped id=32 pos=(-1259.11,35.56,-467.11) idleSubState=34
+[traffic] frame 1680 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=7 pos=(-1143.40,-455.09) heading=398.1deg seg=4492 valid=1
+  [lane] id=8 pos=(-1226.07,-418.11) heading=1153.4deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=946.2deg seg=4608 valid=1
+  [lane] id=10 pos=(-1244.82,-432.75) heading=-31.4deg seg=4509 valid=1
+[peds] frame 1680 near-field ambient peds live=20/48
+[population] frame 1680 vehicles live=6 (spawn passes 10, distance-despawned 4) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1680 vehicle gathers=10 candidates=43 (avg 4.3) lane-spawns=10; ped gathers=211 edges=9925 (avg 47.0)
+[idle-trace] frame 1680 ped id=3 pos=(-1278.16,27.90,-482.38) idleSubState=34
+[idle-trace] frame 1680 ped id=4 pos=(-1271.97,32.15,-503.63) idleSubState=34
+[idle-trace] frame 1680 ped id=5 pos=(-1292.73,36.15,-476.53) idleSubState=34
+[idle-trace] frame 1680 ped id=7 pos=(-1313.43,36.15,-499.70) idleSubState=34
+[idle-trace] frame 1680 ped id=8 pos=(-1319.85,36.15,-554.26) idleSubState=34
+[idle-trace] frame 1680 ped id=11 pos=(-1292.99,36.15,-496.21) idleSubState=34
+[idle-trace] frame 1680 ped id=12 pos=(-1294.43,31.37,-498.15) idleSubState=34
+[idle-trace] frame 1680 ped id=14 pos=(-1350.65,35.45,-535.45) idleSubState=34
+[idle-trace] frame 1680 ped id=15 pos=(-1355.41,31.21,-530.79) idleSubState=34
+[idle-trace] frame 1680 ped id=16 pos=(-1278.11,36.15,-480.88) idleSubState=34
+[idle-trace] frame 1680 ped id=17 pos=(-1250.17,34.23,-482.40) idleSubState=34
+[idle-trace] frame 1680 ped id=19 pos=(-1250.29,34.26,-488.96) idleSubState=34
+[idle-trace] frame 1680 ped id=20 pos=(-1278.14,27.92,-481.72) idleSubState=34
+[idle-trace] frame 1680 ped id=23 pos=(-1272.00,33.80,-494.50) idleSubState=34
+[idle-trace] frame 1680 ped id=24 pos=(-1310.29,36.04,-542.91) idleSubState=34
+[idle-trace] frame 1680 ped id=27 pos=(-1255.51,35.14,-553.96) idleSubState=34
+[idle-trace] frame 1680 ped id=29 pos=(-1271.92,36.15,-456.67) idleSubState=34
+[idle-trace] frame 1680 ped id=30 pos=(-1267.57,32.65,-413.31) idleSubState=34
+[idle-trace] frame 1680 ped id=31 pos=(-1255.88,30.82,-463.19) idleSubState=34
+[idle-trace] frame 1680 ped id=32 pos=(-1257.61,35.56,-467.15) idleSubState=34
+[traffic] frame 1710 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=8 pos=(-1226.07,-418.10) heading=1168.9deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=1026.4deg seg=4608 valid=1
+  [lane] id=10 pos=(-1238.26,-436.53) heading=-29.1deg seg=4661 valid=1
+  [lane] id=11 pos=(-1150.11,-478.18) heading=-177.8deg seg=3842 valid=1
+[peds] frame 1710 near-field ambient peds live=20/48
+[population] frame 1710 vehicles live=6 (spawn passes 11, distance-despawned 5) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1710 vehicle gathers=11 candidates=47 (avg 4.3) lane-spawns=11; ped gathers=214 edges=10063 (avg 47.0)
+[idle-trace] frame 1710 ped id=3 pos=(-1278.11,27.90,-480.53) idleSubState=34
+[idle-trace] frame 1710 ped id=4 pos=(-1271.98,32.15,-502.12) idleSubState=34
+[idle-trace] frame 1710 ped id=5 pos=(-1291.74,36.15,-476.11) idleSubState=34
+[idle-trace] frame 1710 ped id=7 pos=(-1313.84,36.15,-501.03) idleSubState=34
+[idle-trace] frame 1710 ped id=8 pos=(-1321.45,36.15,-555.48) idleSubState=34
+[idle-trace] frame 1710 ped id=11 pos=(-1291.86,36.15,-495.22) idleSubState=34
+[idle-trace] frame 1710 ped id=12 pos=(-1293.22,31.37,-496.52) idleSubState=34
+[idle-trace] frame 1710 ped id=14 pos=(-1352.00,35.45,-534.19) idleSubState=34
+[idle-trace] frame 1710 ped id=15 pos=(-1356.17,31.21,-530.02) idleSubState=34
+[idle-trace] frame 1710 ped id=16 pos=(-1278.06,36.15,-478.62) idleSubState=34
+[idle-trace] frame 1710 ped id=17 pos=(-1250.12,34.23,-480.55) idleSubState=34
+[idle-trace] frame 1710 ped id=19 pos=(-1250.24,34.26,-486.93) idleSubState=34
+[idle-trace] frame 1710 ped id=20 pos=(-1278.09,27.92,-479.70) idleSubState=34
+[idle-trace] frame 1710 ped id=23 pos=(-1272.00,33.80,-493.42) idleSubState=34
+[idle-trace] frame 1710 ped id=24 pos=(-1309.26,36.04,-540.90) idleSubState=34
+[idle-trace] frame 1710 ped id=27 pos=(-1255.53,35.14,-555.34) idleSubState=34
+[idle-trace] frame 1710 ped id=29 pos=(-1271.92,36.15,-454.82) idleSubState=34
+[idle-trace] frame 1710 ped id=30 pos=(-1265.72,32.65,-413.27) idleSubState=34
+[idle-trace] frame 1710 ped id=31 pos=(-1255.87,30.82,-465.04) idleSubState=34
+[idle-trace] frame 1710 ped id=32 pos=(-1256.24,35.56,-467.33) idleSubState=34
+[traffic] frame 1740 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=8 pos=(-1226.16,-416.88) heading=1176.7deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=1074.3deg seg=4608 valid=1
+  [lane] id=10 pos=(-1229.88,-441.18) heading=-29.0deg seg=4661 valid=1
+  [lane] id=11 pos=(-1151.67,-478.36) heading=-171.1deg seg=3842 valid=1
+[peds] frame 1740 near-field ambient peds live=20/48
+[population] frame 1740 vehicles live=6 (spawn passes 11, distance-despawned 5) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1740 vehicle gathers=11 candidates=47 (avg 4.3) lane-spawns=11; ped gathers=218 edges=10247 (avg 47.0)
+[idle-trace] frame 1740 ped id=3 pos=(-1278.07,27.90,-478.68) idleSubState=34
+[idle-trace] frame 1740 ped id=4 pos=(-1271.98,32.15,-500.62) idleSubState=34
+[idle-trace] frame 1740 ped id=5 pos=(-1290.75,36.15,-475.69) idleSubState=34
+[idle-trace] frame 1740 ped id=7 pos=(-1314.24,36.15,-502.35) idleSubState=34
+[idle-trace] frame 1740 ped id=8 pos=(-1323.18,36.15,-556.52) idleSubState=34
+[idle-trace] frame 1740 ped id=11 pos=(-1290.72,36.15,-494.23) idleSubState=34
+[idle-trace] frame 1740 ped id=12 pos=(-1291.76,31.37,-495.14) idleSubState=34
+[idle-trace] frame 1740 ped id=14 pos=(-1353.34,35.45,-535.47) idleSubState=34
+[idle-trace] frame 1740 ped id=15 pos=(-1356.93,31.21,-529.26) idleSubState=34
+[idle-trace] frame 1740 ped id=16 pos=(-1278.01,36.15,-476.36) idleSubState=34
+[idle-trace] frame 1740 ped id=17 pos=(-1250.07,34.23,-478.70) idleSubState=34
+[idle-trace] frame 1740 ped id=19 pos=(-1250.20,34.26,-484.91) idleSubState=34
+[idle-trace] frame 1740 ped id=20 pos=(-1278.04,27.92,-477.68) idleSubState=34
+[idle-trace] frame 1740 ped id=23 pos=(-1272.00,33.80,-492.34) idleSubState=34
+[idle-trace] frame 1740 ped id=24 pos=(-1308.22,36.04,-538.89) idleSubState=34
+[idle-trace] frame 1740 ped id=27 pos=(-1255.54,35.14,-556.73) idleSubState=34
+[idle-trace] frame 1740 ped id=29 pos=(-1271.92,36.15,-452.97) idleSubState=34
+[idle-trace] frame 1740 ped id=30 pos=(-1263.87,32.65,-413.23) idleSubState=34
+[idle-trace] frame 1740 ped id=31 pos=(-1255.98,30.82,-466.77) idleSubState=34
+[idle-trace] frame 1740 ped id=32 pos=(-1256.14,35.56,-468.84) idleSubState=34
+[traffic] frame 1770 near-field live=6/48; roadblock armed=0 filled=0/8
+  [lane] id=2 pos=(-1216.98,-464.07) heading=35.5deg seg=4463 valid=1
+  [lane] id=6 pos=(-1212.71,-461.21) heading=214.7deg seg=4613 valid=1
+  [lane] id=8 pos=(-1226.74,-413.61) heading=1182.4deg seg=4494 valid=1
+  [lane] id=9 pos=(-1287.67,-492.52) heading=1090.5deg seg=4608 valid=1
+  [lane] id=10 pos=(-1221.16,-445.99) heading=-28.9deg seg=4613 valid=1
+  [lane] id=11 pos=(-1155.27,-479.12) heading=-165.9deg seg=3842 valid=1
+[peds] frame 1770 near-field ambient peds live=20/48
+[population] frame 1770 vehicles live=6 (spawn passes 11, distance-despawned 5) peds live=20 (distance-despawned 12) tod_idx=2 hood=HOOD_NE_03 category=sp_cat_RosenOaks graph=REAL road/sidewalk
+[roadgraph] frame 1770 vehicle gathers=11 candidates=47 (avg 4.3) lane-spawns=11; ped gathers=222 edges=10431 (avg 47.0)
+[idle-trace] frame 1770 ped id=3 pos=(-1278.02,27.90,-476.83) idleSubState=34
+[idle-trace] frame 1770 ped id=4 pos=(-1271.99,32.15,-499.11) idleSubState=34
+[idle-trace] frame 1770 ped id=5 pos=(-1289.75,36.15,-475.27) idleSubState=34
+[idle-trace] frame 1770 ped id=7 pos=(-1314.65,36.15,-503.68) idleSubState=34
+[idle-trace] frame 1770 ped id=8 pos=(-1325.00,36.15,-557.40) idleSubState=34
+[idle-trace] frame 1770 ped id=11 pos=(-1289.58,36.15,-493.25) idleSubState=34
+[idle-trace] frame 1770 ped id=12 pos=(-1290.23,31.37,-493.81) idleSubState=34
+[idle-trace] frame 1770 ped id=14 pos=(-1354.67,35.45,-536.75) idleSubState=34
+[idle-trace] frame 1770 ped id=15 pos=(-1357.70,31.21,-528.50) idleSubState=34
+[idle-trace] frame 1770 ped id=16 pos=(-1277.95,36.15,-474.11) idleSubState=34
+[idle-trace] frame 1770 ped id=17 pos=(-1250.03,34.23,-476.85) idleSubState=34
+[idle-trace] frame 1770 ped id=19 pos=(-1250.15,34.26,-482.89) idleSubState=34
+[idle-trace] frame 1770 ped id=20 pos=(-1277.99,27.92,-475.66) idleSubState=34
+[idle-trace] frame 1770 ped id=23 pos=(-1272.00,33.80,-491.26) idleSubState=34
+[idle-trace] frame 1770 ped id=24 pos=(-1307.19,36.04,-536.88) idleSubState=34
+[idle-trace] frame 1770 ped id=27 pos=(-1255.56,35.14,-558.11) idleSubState=34
+[idle-trace] frame 1770 ped id=29 pos=(-1271.92,36.15,-451.12) idleSubState=34
+[idle-trace] frame 1770 ped id=30 pos=(-1262.02,32.65,-413.19) idleSubState=34
+[idle-trace] frame 1770 ped id=31 pos=(-1257.83,30.82,-466.82) idleSubState=34
+[idle-trace] frame 1770 ped id=32 pos=(-1256.04,35.56,-470.34) idleSubState=34
+signal   : t=58707 ms junction 125 (-1383,-424, 131 m from player) AMBER -> phase 1
+signal   : t=58839 ms junction 140 (-1264,-481, 20 m from player) AMBER -> phase 1
+actor-placement-trace: actors=26 y_differs_from_player_ground=24 mean_abs_dy=3.163 median_abs_dy=3.764 max_abs_dy=11.091 sample_vs_node_gt1m=21 max_sample_vs_node=14.343 heading_nonzero=26 ground_samples=9795 frames=1800
+traffic-overtake-gate-trace: frames=1800 live_near_field_vehicles=6 overtake_gate_fire_count=1939 net_displacement_range=[10.87,128.59]
+traffic-signals-trace: switches=80 amber_onsets=96 car_signal_stops=0 car_signal_releases=0 car_stopline_stops=0 car_stopline_releases=0 car_frames_on_controlled_lane=1029 car_frames_on_red_or_amber_lane=0
+traffic-review-trace: lane_requeries=73 obstacle_probe_runs=1226 obstacle_probe_reuses=4857 yield_brake_frames=0 yield_stops=0 yield_runs=846 yield_conflicts_found=0
+ped-crossings-trace: waits=6 crosses=17 crosses_after_wait=6 crosses_unsignalled=0
+ped-navigator-trace: path_searches=50 search_fails=0 route_nodes_reached=220 arrivals=17 event8_posted=17
+ambient-models-trace: ready=1 distinct_vehicle_models=8 (cap 8) distinct_ped_characters=16 (cap 16) load_ms_total=351.5 cache_hits=44 cache_misses=24 vehicle_assignments=11 ped_assignments=33 vehicle_load_failures=0 ped_load_failures=0 streamed_sets_built=2 peak_working_set_bytes=3846909952
+ambient-models-trace: vehicle_use: bike_rocket02_0=1 car_2dr_luxury04_0=2 car_2dr_standard03_0=1 car_2dr_standard06_0=2 car_4dr_compact01_0=2 car_4dr_standard03_0=1 minivan_4dr_01_0=1 wagon_4dr_sprt01_0=1
+ambient-models-trace: ped_use: alfred=2 amanda=2 brianne=2 frieda=2 hoissy=4 joey=2 john4=3 lisa=2 lucille=3 mitch=3 selma=2 selma2=2 tasha=3 violet=1
+ambient-ped-anim-trace: clips_ready=0 draws_animated=0 draws_still_frame0=34472 draws_stale=0 pose_updates=0 pose_cache_skips=0 pose_ms_total=0.0 pose_ms_per_update=0.000 peds_without_clip=0 (max 24 updates/frame, radius 80 m)
+jump-crouch-trace: jumps=0 landings=0 peak_above_takeoff=0.000 last_airtime_ms=0 air_frames=0 crouch_frames=0 crouch_max_ground_speed=0.00 stand_max_ground_speed=10.00 airborne_at_exit=0 jump_height_arg=1.00 final_y=36.150
+player-vitals-trace: damage_events=0 total_damage=0 deaths=0 respawns=0 min_health=100 max_health=100 final_health=100 dead_at_exit=0 respawn_delay_ms=4000
+npc-ai   : near-field ped loop summary: ped_ticks=34472 tracked_now=20 flee_entries=0 cower_entries=0 open_tick_skips=0
+npc-ai   :   OPEN action routine 37 ('follow to car') refused 2164 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 38 ('follow other car') refused 2164 time(s) (not implemented in the port)
+frames   : 1800 presented (4 cell loads, 0 cell evictions, 4 cells/1 ground tiles resident); final player pos (-1274.49 36.15 -497.66), locomotion state 0; near-field traffic live=6/48, roadblock armed=0 filled=0/8

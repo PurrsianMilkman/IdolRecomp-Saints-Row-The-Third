@@ -289,7 +289,7 @@ int stub_pcr_purchase_tattoo(lua_State* L) {
         ++tattoo.negativePriceRefusedCount; // HARDENED (named task-brief divergence: real engine PAYS the player)
         return 0;
     }
-    st->playerCash() -= price; // CONFIRMED: reason 0xb, "cash_adjust" path (Sec23.1/Sec43.3 cross-reference)
+    st->debitPlayerCash(price); // CONFIRMED: reason 0xb, "cash_adjust" path (Sec23.1/Sec43.3 cross-reference)
     EngineState::PurchaseRecord rec;
     rec.tag = "tattoo";
     rec.amountCharged = price;

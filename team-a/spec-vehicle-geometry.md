@@ -1865,6 +1865,94 @@ OPEN -- the non-zero kind bands' meaning.]**
 
 **Review status (2026-10-08): CONFIRMED for §12.1's loading chain (direct file extraction + address-for-address disassembly against already-documented machinery), §12.3's equip→override-matrix splice, and the steering/suspension formulas; HIGH CONFIDENCE for `descriptor+0x4c`'s specific "Havok wheel index" meaning and the primary-wheel/secondary-wheel suspension-sharing question; OPEN, honestly, for the per-frame steer/spin/suspension writer of render-object `+0x84` and the §12.2 per-part/draw-range segmentation question (unchanged from §7.2 Q2) — independently re-derived from the executable and the real shipped game files.**
 
+### 12.4 Aircraft mesh layout, and rotor/propeller spin (2026-10-19, Team B Q batch B)
+
+Sources: streamed reads of `vehicles.vpp_pc` (`tools/scratchpad/wq_aircraft_mesh.py`, `wq_mesh_check.py`) and
+read-only listings. This answers Team B's "group × part × LOD" question. The water and physics questions of the same
+batch are in `spec-physics-runtime.md` §10.13.9.
+
+**Mesh layout — HIGH (data, 20 aircraft and boat files; draw-rule GUESS where marked).**
+
+- The embedded mesh's groups (Mesh header `+0x04` count; 0x30-byte records: `+0x00` range count, `+0x04`…`+0x18` bbox
+  min x, y, z then max x, y, z) form **runs, one run per sub-mesh**. A run is 1 to 3 consecutive groups: LOD0, LOD1,
+  LOD2. Index counts fall about 3× per step.
+  - `heli_4dr_police01`: 72 groups = 24 sub-meshes × 3.
+  - `heli_standard_02`: 78 groups, where `antenna_C` has 2 LODs and `rotor_tailPart` has 1.
+  - 12 of the 20 aircraft and boat files have a group count that is not a multiple of 3.
+- **Sub-mesh ↔ part:** the LOD0 group's bbox equals the part record's `+0x60` (min x, y, z) / `+0x70` (max x, y, z)
+  bbox to 1e-4.
+  - In `heli_4dr_police01` all 23 parts match. Groups 0–2 are the hull, which has no part.
+  - Runs are **not** in part order. In `heli_4dr_police01`, `Rotor_Main_A` = groups 21–23, `Rotor_Main_B` = 24–26,
+    the tail rotor blades 30–35 and `Tail` 39–41.
+  - Mirror-identical parts (`glass_FL`/`glass_FR`) share one bbox, so the bbox match cannot tell them apart.
+  - The exe's own link is the part's 64-byte record `+0x04` index through the §11.7 remap (OPEN).
+- **Inside a group:** each draw range is one material (low 16 bits = material index). The high 16 bits are the
+  per-object slot of §11.9. They are not a plain LOD × layer code: the police heli uses slots {0,1,2} / {3,4,5} /
+  {6,7,8} for LOD 0/1/2, while `plane_standard01` uses {0,3,4} / {1,5,6} / {2,7,8}.
+- Team B's "group 0 is a few triangles for aircraft" is explained: group 0 is the LOD0 of whichever small sub-mesh is
+  stored first (`heli_standard_02`: `antenna_C`; `plane_standard01`: an aileron), not the hull.
+- **Draw rule:** draw only the LOD0 group of each run, posed with its part's bone (the hull run with the root). Never
+  draw every group.
+- **Run boundaries (GUESS where no part matches):** a group whose bbox equals a part's bbox starts that part's run; the
+  groups after it, up to the next such group, are its lower LODs.
+
+**Rotor and propeller spin — FINAL except where marked.**
+
+- **Per-part switch.** The per-frame pose driver `0x00a85ec0` switches on part type through the byte table at
+  `0x00a862a0`, indexed by type − 4. Parts with render flag bits `0xe00000` are skipped.
+
+  | Part type | Handler |
+  |---|---|
+  | 25 (rotor) | `0x00a8c6e0` |
+  | 11 / 12 / 13 (aileron or flap, elevator, rudder) | `0x00a8c3e0` (control-surface pose, not read further) |
+  | 4 (door) | `0x00a8df70`, when render flag `0x100000` is set |
+  | 6 / 24 (extra axles) | `0x00a89470` (§12.3) |
+  | 7 | `0x00a8e510` |
+  | 8 | `0x00a89ed0` |
+  | 26 | `0x00a8e160` |
+- **`0x00a8c6e0`** acts only when render flag bit 2 is set (part `+0x48` bit 2; every shipped rotor has it) and the
+  part's parent is not itself type 25.
+  - So child blades inherit the spin: `Rotor_Main_B` rides on `Rotor_Main_A`.
+  - The rotation is axis-angle, with **axis = the vec3 at the part record's `+0xA0` target** and **angle = −θ**. It is
+    written into the render object's rotation rows `+0x88`…`+0xa8`, then propagated to the children (`0x00abf740`).
+  - Shipped axes: `heli_4dr_police01` `Rotor_Main_A`/`_B` (0, −1, 0); `Tail_Rotor_A`/`_B` (1, 0, 0);
+    `plane_standard01` `Prop` (0, 0, −1). The `+0xA0` w component is not used here (the doors carry about 0.80 there;
+    HIGH that it is a hinge limit).
+- **Rotor state**, one per vehicle (`0x00aefa00`): class 2 at vehicle `+0x328`, classes 3 and 4 at `+0x5b8`.
+
+  | Offset | Content |
+  |---|---|
+  | `+0x00` | u8 flags: bit 0 start request, bit 1 stop request, bit 2 instant, bit 3 at speed |
+  | `+0x04` | state: 0 off, 1 spin-up, 2 spin-down, 3 running |
+  | `+0x08` | angle θ (rad, wrapped to [0, 2π)) |
+  | `+0x0C` | speed ω (rad/s) |
+  | `+0x10` | audio level |
+- **Update** `0x00aefb70` runs once a frame, called from `0x00a7a002`.
+  - Class 4 returns at once, so the VTOL never spins its state. No shipped VTOL part has type 25.
+  - The state machine runs first. Then integrator `0x00aef3f0` advances the state with dt = the global frame time
+    `0x0132a0ac` (1/30 by default).
+  - The target speed is 0 in states 0 and 2, and **ω_max = 31.4154 rad/s (300 rpm)** in states 1 and 3. ω moves toward
+    the target at **10.4718 rad/s²**, so it takes 3 s from 0 to full speed.
+  - θ += ω·dt (+ ½·a·dt² while ramping), wrapped by 2π (`0x012a2eb0`).
+  - Bit 3 (at speed) is set once ω ≥ 20.94 rad/s (2/3 of ω_max; the code compares ω / 10.4718 × 1000 with 2000).
+    It is cleared again below that speed while spinning down.
+  - When ω reaches the target, state 1 → 3 and state 2 → 0. A stop request in state 1 or 3 gives state 2, or state 0
+    when the instant bit is set.
+- **Start and stop.**
+  - Engine start `0x00aa91c0` calls `0x00aefa50(vehicle, instant)`. This sets the start request; an instant start goes
+    straight to state 3 at full speed, otherwise the rotor spins up.
+  - Engine off (`0x00aa9260`, `0x00aa92c0`) calls `0x00aefae0`, which gives state 2 (or 0 when instant).
+  - **The spin rate does not depend on collective, throttle or airspeed.** A plane's propeller uses the same 31.4 rad/s.
+
+| # | Setup | Expected | Status |
+|---|---|---|---|
+| R1 | Engine start, not instant | ω after 1 s = 10.47 rad/s; after 3 s = 31.415 rad/s, state 3 | FINAL |
+| R2 | Running at 30 fps | θ advances 1.0472 rad (60°) a frame; the main and tail rotors and a plane's prop share θ | FINAL |
+| R3 | Engine off from running | 3 s to ω = 0, then state 0 | FINAL |
+| R4 | `heli_4dr_police01` main rotor | blades rotate by −θ about (0, −1, 0), i.e. +θ about +y | FINAL (axis data) |
+| M1 | `heli_4dr_police01` | 72 groups; draw groups 0, 3, 6, …, 69 (24 LOD0 groups) | HIGH |
+| M2 | `heli_standard_02` | 78 groups; LOD0 groups = run heads, e.g. 0 (`antenna_C`, run of 2), 2 (hull), 59 (`rotor_tailPart`, run of 1) | HIGH |
+
 ## Changelog
 
 - **2026-10-09 — §7.1 item 2's long-standing runtime-paint-writer OPEN item ANSWERED** (SPEC TEAM, agent

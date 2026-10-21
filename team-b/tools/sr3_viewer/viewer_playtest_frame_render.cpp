@@ -2,6 +2,7 @@
 // Code moved verbatim out of the former single-function runPlaytest() (see viewer_playtest_session.h).
 #include "viewer_platform.h"
 #include "viewer_playtest_session.h"
+#include "sr3sky/sun.h"
 
 namespace sr3viewer {
 
@@ -14,7 +15,6 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
     auto& vehicleEnabled = sess.vehicleEnabled;
     const auto& bones = *sess.bones_p;
     auto& todSegments = sess.todSegments;
-    const auto& kWeatherStageForPlaytest = sess.kWeatherStageForPlaytest;
     const auto& stateActions = *sess.stateActions_;
     auto& bridge = *sess.bridge_;
     const auto& realPoseEnabled = sess.realPoseEnabled;
@@ -80,9 +80,8 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
         // vehicle is disabled (never read in that case either way).
         float vehWorld[16] = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
         if (vehicleEnabled) {
-            sr3render::buildWorldMatrix(static_cast<float>(vehicleRig.sim->state_.posX), finalGroundY,
-                                        static_cast<float>(vehicleRig.sim->state_.posZ),
-                                        static_cast<float>(vehicleRig.sim->state_.heading), 1.0f, vehWorld);
+            // AW-15: craftWorldMatrix == the old buildWorldMatrix(...) for every non-craft car (same arguments).
+            craftWorldMatrix(sess, finalGroundY, vehWorld);
         }
 
         // ===================== SUN/CASCADE SHADOW MAP (THIS TASK, 2026-10-09) =====================
@@ -99,7 +98,10 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
         // function with this identical `todFraction` - verified by reading
         // src/tod_lighting.cpp, not assumed).
         float sunDirectionForShadow[3];
-        sr3render::ComputeChosenSunDirection(static_cast<float>(todFraction), sunDirectionForShadow);
+        {  // Team C: the real sun path (spec-tables-environment 19.2, differential D-23), not the CHOSEN arc
+            const auto toward = sr3sky::SunTowardDirection(sr3sky::HourFromDayFraction(todFraction));
+            for (int i = 0; i < 3; ++i) sunDirectionForShadow[i] = toward[i];
+        }
         // CHOSEN v1 scene-bounds fit (see sun_shadow_map.h's own banner): a
         // single local bounding sphere centred on the camera's current
         // focus point (the same focusX/focusZ this frame's own
@@ -132,7 +134,9 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 characterRenderer.drawDepthOnly(device.context(), lightViewProjection, charWorld);
                 characterHeadRenderer.drawDepthOnly(device.context(), lightViewProjection, charWorld);
             }
-            if (vehicleEnabled) vehicleRig.DrawDepthOnly(device.context(), lightViewProjection, vehWorld);
+            if (vehicleEnabled)
+                (sess.activeCarModel ? sess.activeCarModel->rig : vehicleRig)
+                    .DrawDepthOnly(device.context(), lightViewProjection, vehWorld);
             sunShadowMap.endDepthPass(device.context(), swapChain.width(), swapChain.height());
         }
 
@@ -160,11 +164,16 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
         // by default, so every OTHER command's frozen golden baseline (city_corner, walk_demo*,
         // drive_demo_coverage*, golden_scene_check) renders byte-for-byte unchanged - verified,
         // not merely argued, by this task's own ctest run (see HANDOFF.md/this task's commit).
-        const sr3render::TodLightingResult todLighting =
-            sr3render::ComputeTodLighting(todSegments, static_cast<float>(todFraction), kWeatherStageForPlaytest);
+        // Gap #9: stage A/B + blend come from the weather scheduler (sess.weatherTick). Without weather.xtbl the
+        // names are empty -> ComputeTodLightingBlended falls back to its old fixed defaults.
+        sr3render::TodLightingResult todLighting = sr3render::ComputeTodLightingBlended(
+            todSegments, static_cast<float>(todFraction), sess.weatherLightA, sess.weatherLightB, sess.weatherLightBlend);
+        applySceneExposure(sess, todFraction, todLighting.ambientColor, todLighting.sunColor);  // Team C exposure
+        for (int i = 0; i < 3; ++i) todLighting.sunDirection[i] = sunDirectionForShadow[i];  // Team C: 19.2 sun path
         swapChain.clear(device.context(), todLighting.skyClearColor[0], todLighting.skyClearColor[1],
                         todLighting.skyClearColor[2], 1.0f);
         focusBox.clearDepth(device.context());
+        drawSkyGradient(sess, viewProjection, todFraction);  // Team C: TOD District_Skybox gradient
 
         // Real ground textures when resolveGroundTextureBindings() found them
         // (ground-tile texture fix merged into main after this command's own
@@ -220,7 +229,7 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
         // occupant is visible; no more blanket "always hide while driving" and no more
         // double-guessed CHOSEN stand-at-an-offset placeholder. Everything above this point
         // (ground/city props) still draws normally either way.
-        if (!inVehicle || !vehicleHideOccupant) {
+        if (!inVehicle || !(vehicleHideOccupant || sess.craft.rig.active)) {  // AW-15: no seated pose for craft classes
             if (characterTextured)
                 characterRenderer.drawTextured(device.context(), viewProjection, characterPerMaterialSrv, charWorld,
                                                todLighting.sunDirection, todLighting.ambientColor,
@@ -263,12 +272,10 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
             // nested scope is intentional and does not affect the earlier
             // depth-only pass, which already captured its own copy by value.
             float vehWorld[16];
-            sr3render::buildWorldMatrix(static_cast<float>(vehicleRig.sim->state_.posX), vehicleGroundY,
-                                        static_cast<float>(vehicleRig.sim->state_.posZ),
-                                        static_cast<float>(vehicleRig.sim->state_.heading), 1.0f, vehWorld);
-            vehicleRig.Draw(device.context(), viewProjection, vehWorld, todLighting.sunDirection,
-                            todLighting.ambientColor, todLighting.sunColor, lightViewProjection, shadowSrv,
-                            shadowSmp);
+            craftWorldMatrix(sess, vehicleGroundY, vehWorld);  // AW-15: == buildWorldMatrix(...) for every non-craft car
+            (sess.activeCarModel ? sess.activeCarModel->rig : vehicleRig)
+                .Draw(device.context(), viewProjection, vehWorld, todLighting.sunDirection,
+                      todLighting.ambientColor, todLighting.sunColor, lightViewProjection, shadowSrv, shadowSmp);
         }
 
         // Near-field ambient vehicle traffic (THIS TASK) - drawn via the SAME
@@ -292,7 +299,10 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
             auto doSample = [&]() {
                 pl.sampX = x;
                 pl.sampZ = z;
-                const float s = sess.sampleGroundHeight(x, z, static_cast<float>(nodeY));
+                // G1: walkable collision ground from the actor's own node (spec 13.5.1 item 4: start = node Y + 2 m,
+                // CHOSEN for a port that has only (x, z)); no real hit (tile not resident / hole) -> its node Y.
+                const auto g = sess.sampleGround(x, z, nodeY + 2.0, static_cast<float>(nodeY));
+                const float s = g.real() ? g.y : static_cast<float>(nodeY);
                 pl.sampledMinusNode = s - static_cast<float>(nodeY);
                 pl.y = std::fabs(pl.sampledMinusNode) <= 3.0f ? s : static_cast<float>(nodeY);
                 ++sess.actorGroundSamples;
@@ -363,7 +373,7 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 // numeric), so CHOSEN: 0 offset, same as the player vehicle's vehicleGroundY placement.
                 const float nfY = sampleActorGroundY(sess.nearFieldVehiclePlace[nfv.id], nfv.pos.x, nfv.pos.z, nfv.pos.y, false);
                 float nfWorld[16];
-                sr3render::buildWorldMatrix(static_cast<float>(nfv.pos.x), nfY,
+                sr3render::buildWorldMatrixSimHeading(static_cast<float>(nfv.pos.x), nfY,
                                             static_cast<float>(nfv.pos.z), static_cast<float>(nfHeading), 1.0f,
                                             nfWorld);
                 (ambientModel ? ambientModel->rig : vehicleRig)
@@ -373,10 +383,10 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
             // Cars the player parked (enter-ambient-cars): same single model at their stored pose.
             for (const auto& pk : sess.parkedVehicles) {
                 float pkWorld[16];
-                sr3render::buildWorldMatrix(static_cast<float>(pk.x), pk.y, static_cast<float>(pk.z),
-                                            static_cast<float>(pk.heading), 1.0f, pkWorld);
-                vehicleRig.Draw(device.context(), viewProjection, pkWorld, todLighting.sunDirection,
-                                todLighting.ambientColor, todLighting.sunColor);
+                craftParkedWorldMatrix(sess, pk, pkWorld);  // AW-15: == buildWorldMatrix(...) for every non-craft car
+                (pk.model ? pk.model->rig : vehicleRig)
+                    .Draw(device.context(), viewProjection, pkWorld, todLighting.sunDirection,
+                          todLighting.ambientColor, todLighting.sunColor);
             }
         }
 
@@ -407,9 +417,52 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 }
             }
             if (ambientPed) {
-                // Own per-model skinned buffers, static bind pose (CHOSEN: no per-ped walk clip yet).
+                // Own per-model skinned buffers, re-posed per ped with the specced walk clip (spec-ai-runtime 20.6.9(a); see
+                // viewer_playtest_ambient_models.h poseWalk). Phase advances with the distance the ped actually moved.
+                auto& pedAnim = sess.nearFieldPedAnim[nfp.id];
+                double moved = 0.0;
+                if (pedAnim.valid) moved = std::hypot(nfp.pos.x - pedAnim.lastX, nfp.pos.z - pedAnim.lastZ);
+                pedAnim.lastX = nfp.pos.x;
+                pedAnim.lastZ = nfp.pos.z;
+                pedAnim.valid = true;
+                if (sess.noPedAnim || !ambient->clipsReady()) {
+                    ++ambient->mutableStats().pedDrawsStill;
+                } else {
+                    const double pedSpeed = sess.nearFieldPedWalkSpeed.count(nfp.id) ? sess.nearFieldPedWalkSpeed[nfp.id]
+                                                                                     : sr3airuntime::kWanderWalkSpeedMsChosen;
+                    const AmbientModelRegistry::WalkChoice wc = ambient->walkChoiceFor(*ambientPed, pedSpeed);
+                    if (wc.record >= 0 && wc.strideM > 0.0f && wc.durationUnits > 0.0f) {
+                        // Moving = displacement rate above 0.05 m/s; a jump over 3 m in one frame is a re-placement.
+                        const bool moving = frm.dt > 0.0 && moved / frm.dt > 0.05 && moved < 3.0;
+                        if (moving) {
+                            pedAnim.cycles += moved / static_cast<double>(wc.strideM);
+                            pedAnim.cycles -= std::floor(pedAnim.cycles);
+                        } else {
+                            pedAnim.cycles = 0.0;  // stationary: hold walk frame 0 (CHOSEN, no ped idle clip specced)
+                        }
+                        int tick = static_cast<int>(pedAnim.cycles * static_cast<double>(wc.durationUnits));
+                        if (tick >= static_cast<int>(wc.durationUnits)) tick = 0;
+                        const double cdx = nfp.pos.x - static_cast<double>(diagEyeX), cdz = nfp.pos.z - static_cast<double>(diagEyeZ);
+                        size_t rank = 0;
+                        for (const auto& o : nearFieldPedsLive) {
+                            const double ox = o.pos.x - static_cast<double>(diagEyeX), oz = o.pos.z - static_cast<double>(diagEyeZ);
+                            if (ox * ox + oz * oz < cdx * cdx + cdz * cdz) ++rank;
+                        }
+                        const bool allowPose =
+                            cdx * cdx + cdz * cdz <= AmbientModelRegistry::kAnimRadiusM * AmbientModelRegistry::kAnimRadiusM &&
+                            rank < static_cast<size_t>(AmbientModelRegistry::kMaxPoseUpdatesPerFrame);
+                        bool uploaded = false;
+                        const bool posed = ambient->poseWalk(*ambientPed, device.context(), wc, tick, allowPose, uploaded);
+                        auto& animStats = ambient->mutableStats();
+                        if (!posed) ++animStats.pedDrawsStale;
+                        else if (moving) ++animStats.pedDrawsAnimated;
+                        else ++animStats.pedDrawsStill;
+                    }
+                }
+                // Same sun-shadow receive parameters the player's own character draw passes (parity with the brad path).
                 AmbientModelRegistry::DrawPed(*ambientPed, device.context(), viewProjection, nfPedWorld,
-                                              todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+                                              todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor,
+                                              lightViewProjection, shadowSrv, shadowSmp);
                 continue;
             }
             if (characterTextured)
@@ -430,6 +483,74 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                                            todLighting.ambientColor, todLighting.sunColor);
         }
 
+        // Police response units (feature/police-response, stepPolice): chase cars and on-foot cops, drawn with the
+        // police models the registry resolved at spawn (placeholder: the player demo vehicle / brad character mesh).
+        for (auto& pu : sess.police.units) {
+            if (pu.dead) continue;
+            if (pu.car) {
+                AmbientVehicleModel* pm2 = pu.vmodel;
+                if (!pm2 && !(vehicleEnabled && vehicleRig.ready)) continue;
+                float puWorld[16];
+                sr3render::buildWorldMatrixSimHeading(static_cast<float>(pu.pos.x), static_cast<float>(pu.pos.y),
+                                            static_cast<float>(pu.pos.z), static_cast<float>(pu.heading), 1.0f, puWorld);
+                (pm2 ? pm2->rig : vehicleRig)
+                    .Draw(device.context(), viewProjection, puWorld, todLighting.sunDirection, todLighting.ambientColor,
+                          todLighting.sunColor);
+                continue;
+            }
+            const float puY = sampleActorGroundY(pu.place, pu.pos.x, pu.pos.z, pu.pos.y, true);
+            float puPed[16];
+            sr3render::buildWorldMatrix(static_cast<float>(pu.pos.x), puY, static_cast<float>(pu.pos.z),
+                                        static_cast<float>(pu.place.heading), 1.0f, puPed);
+            if (pu.pmodel) {
+                AmbientModelRegistry::DrawPed(*pu.pmodel, device.context(), viewProjection, puPed, todLighting.sunDirection,
+                                              todLighting.ambientColor, todLighting.sunColor, lightViewProjection, shadowSrv,
+                                              shadowSmp);
+            } else if (characterTextured) {
+                characterRenderer.drawTextured(device.context(), viewProjection, characterPerMaterialSrv, puPed,
+                                               todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+            } else {
+                characterRenderer.draw(device.context(), viewProjection, sr3render::MeshDrawMode::Checker, nullptr, puPed,
+                                       nullptr, todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+            }
+        }
+
+        // Homies (feature/homies, stepHomies): the drive-up car, parked homie cars, and the followers on foot (a member
+        // inside a car, boarding-hidden or seated is not drawn).
+        {
+            auto& hs = sess.homies;
+            auto drawCar = [&](AmbientVehicleModel* m, const sr3airuntime::Vec3& p, double heading) {
+                if (!m && !(vehicleEnabled && vehicleRig.ready)) return;
+                float w[16];
+                sr3render::buildWorldMatrixSimHeading(static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z),
+                                            static_cast<float>(heading), 1.0f, w);
+                (m ? m->rig : vehicleRig).Draw(device.context(), viewProjection, w, todLighting.sunDirection,
+                                               todLighting.ambientColor, todLighting.sunColor);
+            };
+            for (const auto& pc : hs.parkedCars) drawCar(pc.model, pc.pos, pc.heading);
+            if (hs.callPhase >= 3) drawCar(hs.carModel, hs.carPos, hs.carHeading);
+            for (auto& hm : hs.members) {
+                if (hm.dead || hm.phase == PlaytestSession::HomieMember::Phase::InCar ||
+                    hm.phase == PlaytestSession::HomieMember::Phase::Seated)
+                    continue;
+                const float hy = sampleActorGroundY(hm.place, hm.pos.x, hm.pos.z, hm.pos.y, true);
+                float hw[16];
+                sr3render::buildWorldMatrix(static_cast<float>(hm.pos.x), hy, static_cast<float>(hm.pos.z),
+                                            static_cast<float>(hm.place.heading), 1.0f, hw);
+                if (hm.pmodel) {
+                    AmbientModelRegistry::DrawPed(*hm.pmodel, device.context(), viewProjection, hw, todLighting.sunDirection,
+                                                  todLighting.ambientColor, todLighting.sunColor, lightViewProjection, shadowSrv,
+                                                  shadowSmp);
+                } else if (characterTextured) {
+                    characterRenderer.drawTextured(device.context(), viewProjection, characterPerMaterialSrv, hw,
+                                                   todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+                } else {
+                    characterRenderer.draw(device.context(), viewProjection, sr3render::MeshDrawMode::Checker, nullptr, hw,
+                                           nullptr, todLighting.sunDirection, todLighting.ambientColor, todLighting.sunColor);
+                }
+            }
+        }
+
         // T3: prune placement caches of despawned ids (same lazy size-threshold style as the other near-field maps).
         if (sess.nearFieldVehiclePlace.size() > nearFieldLive.size() + 64) {
             std::unordered_set<uint64_t> live;
@@ -446,6 +567,8 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 it = live.count(it->first) ? std::next(it) : sess.nearFieldPedPlace.erase(it);
             for (auto it = sess.nearFieldPedModel.begin(); it != sess.nearFieldPedModel.end();)
                 it = live.count(it->first) ? std::next(it) : sess.nearFieldPedModel.erase(it);
+            for (auto it = sess.nearFieldPedAnim.begin(); it != sess.nearFieldPedAnim.end();)
+                it = live.count(it->first) ? std::next(it) : sess.nearFieldPedAnim.erase(it);
         }
 
         // Police roadblock spawn visuals (THIS TASK) - one draw per
@@ -505,6 +628,15 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
             hudHost->runChunk(hudGp, "g_hp = get_current_hit_points('player')", "playtest_hud.lua");
             const double hudHp = readLuaGlobalNumber(hudGp, "g_hp");
             const int64_t hudAmmo = hudEs->weaponTemporaryInventory()["player"]["pistol"].ammoCount;
+            // Gap #17: when the player has a weapon inventory, feed its live clip/reserve (spec-hud-runtime.md
+            // Sec 717 ammo string form "clip/reserve"; infinite weapons show the clip only).
+            std::string hudAmmoText = std::to_string(static_cast<long long>(hudAmmo));
+            if (sess.weaponInv && sess.weaponInv->active()) {
+                const auto* aw = sess.weaponInv->active();
+                hudAmmoText = aw->inst.infiniteAmmo() ? std::string("INF")
+                                                      : std::to_string(aw->inst.roundsInClip()) + "/" + std::to_string(sess.weaponInv->reserve(sess.weaponInv->activeIndex()));
+                hudAmmoText += "  [" + aw->def.name + (sess.weaponInv->reloading() ? " RELOADING" : "") + "]";
+            }
             const double hudCashDollars = hudEs->playerCash() / 100.0;
             auto hudSetLabel = [&](uint32_t h, const std::string& text) {
                 sr3luahost::VintTaggedValue v;
@@ -546,7 +678,7 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
 
             hudSetLabel(hudHealthH, "HEALTH " + std::to_string(static_cast<int>(hudHp)) + "/" +
                                         std::to_string(static_cast<int>(hudMaxHp)));
-            hudSetLabel(hudAmmoH, "AMMO " + std::to_string(static_cast<long long>(hudAmmo)));
+            hudSetLabel(hudAmmoH, "AMMO " + hudAmmoText);
             hudSetLabel(hudMoneyH, "MONEY " + sess.hudCashDisplay.text());
             hudSetLabel(hudNotorietyH, "NOTORIETY " + std::to_string(hudNoto.police.lit) +
                                            (hudNoto.gang.lit > 0 ? "  GANG " + std::to_string(hudNoto.gang.lit)
@@ -612,7 +744,7 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 const double clamped = (std::min)(static_cast<double>(hudHealthPct), 1.0);  // health_pct (H.2)
                 const uint8_t fg[4] = {static_cast<uint8_t>(220 - 140 * clamped), static_cast<uint8_t>(60 + 140 * clamped),
                                        40, 255};
-                hudPipe.rect(device.context(), barX0, barY0, barX0 + (barX1 - barX0) * clamped, barY1, fg);
+                drawHudBarFill(sess, barX0, barY0, barX0 + (barX1 - barX0) * clamped, barY1, fg);  // Team C: real HUD art
             }
             const uint8_t hudWhite[4] = {255, 255, 255, 255};
             drawHudLabel(*hudEs, hudHealthH, hudFont, hudPipe, device.context(), hudWhite);
@@ -620,6 +752,7 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
             drawHudLabel(*hudEs, hudMoneyH, hudFont, hudPipe, device.context(), hudWhite);
             drawHudLabel(*hudEs, hudNotorietyH, hudFont, hudPipe, device.context(), hudWhite);
             drawHudLabel(*hudEs, sess.hudRespectH, hudFont, hudPipe, device.context(), hudWhite);
+            drawActivityHud(sess, *hudEs, hudFont, hudPipe, device.context());  // Team C activities
             drawHudLabel(*hudEs, hudVehiclePromptH, hudFont, hudPipe, device.context(), hudWhite);
             for (uint32_t h : hudObjectiveH) drawHudLabel(*hudEs, h, hudFont, hudPipe, device.context(), hudWhite);
 
@@ -636,9 +769,12 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 hudPipe.rect(device.context(), 0, 0, static_cast<double>(swapChain.width()),
                             static_cast<double>(swapChain.height()), dim);
             }
-            hudSetLabel(pauseTitleH, pauseMenuOpen ? "PAUSED" : std::string());
-            hudSetLabel(pauseResumeH, pauseMenuOpen ? "Resume: Esc" : std::string());
-            hudSetLabel(pauseQuitH, pauseMenuOpen ? "Quit: F10" : std::string());
+            // sr3.exe: the front end's own pause menu replaces the three default labels below.
+            const bool pauseHookDraws = pauseMenuOpen && static_cast<bool>(sess.hooks.pauseDraw);
+            hudSetLabel(pauseTitleH, pauseMenuOpen && !pauseHookDraws ? "PAUSED" : std::string());
+            hudSetLabel(pauseResumeH, pauseMenuOpen && !pauseHookDraws ? "Resume: Esc" : std::string());
+            hudSetLabel(pauseQuitH, pauseMenuOpen && !pauseHookDraws ? "Quit: F10" : std::string());
+            if (pauseHookDraws) sess.hooks.pauseDraw(sess);
             drawHudLabel(*hudEs, pauseTitleH, hudFont, hudPipe, device.context(), hudWhite);
             drawHudLabel(*hudEs, pauseResumeH, hudFont, hudPipe, device.context(), hudWhite);
             drawHudLabel(*hudEs, pauseQuitH, hudFont, hudPipe, device.context(), hudWhite);
@@ -723,6 +859,8 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
                 const sr3hud::Vec2 mmN = sr3hud::MinimapNorthMarker(mmC, mmRot.mapTheta, ui);
                 const uint8_t mmNorth[4] = {230, 60, 60, 255};
                 hudPipe.rect(device.context(), mmN.x - g, mmN.y - g, mmN.x + g, mmN.y + g, mmNorth);
+                drawHudNotorietyIcons(sess, mmC.x, mmC.y, ui, hudNoto.police.lit);  // Team C: real HUD art
+                drawHudRespectMeter(sess, ui, sess.hudItems.respect.getFloat(sr3hud::respect::RespectPct));
             }
         }
 
@@ -794,7 +932,12 @@ bool stepRender(PlaytestSession& sess, PlaytestFrame& frm) {
 
         swapChain.present(true);
         ++frames;
-        if (maxFrames >= 0 && frames >= maxFrames) return true;
+        if (maxFrames >= 0 && frames >= maxFrames) {
+            // gap #17: final weapon-state trace (only if the weapon inventory saw any activity).
+            if (sess.weaponInv && (sess.scriptWeapons || sess.weaponInv->totalSwitches() > 0 || sess.weaponInv->totalReloads() > 0 || (sess.weaponInv->active() && sess.weaponInv->active()->shots > 0)))
+                std::printf("%s\n", sess.weaponInv->traceLine().c_str());
+            return true;
+        }
     return false;
 }
 
@@ -938,6 +1081,11 @@ void reportPlaytest(PlaytestSession& sess) {
                         static_cast<unsigned long long>(obstacleProbeReuses), static_cast<unsigned long long>(yieldBrakeFrames),
                         static_cast<unsigned long long>(yieldStops), static_cast<unsigned long long>(yieldRuns),
                         static_cast<unsigned long long>(yieldConflictsFound));
+            std::printf("traffic-braking-trace: car_frames=%llu row_frames=%llu fallback_frames=%llu cars_with_row=%zu cars_ever_fallback=%zu aB_min=%.3f aB_max=%.3f (fallback AI_Max_Braking_Decel %.2f CHOSEN, condition 0 CHOSEN)\n",
+                        static_cast<unsigned long long>(sess.aBCarFrames), static_cast<unsigned long long>(sess.aBRowFrames),
+                        static_cast<unsigned long long>(sess.aBCarFrames - sess.aBRowFrames), sess.aBRowCars.size(),
+                        sess.aBFallbackCars.size(), sess.aBCarFrames ? sess.aBMin : 0.0, sess.aBCarFrames ? sess.aBMax : 0.0,
+                        kNearFieldVehicleAiMaxBrakingDecel);
             std::printf("ped-crossings-trace: waits=%llu crosses=%llu crosses_after_wait=%llu crosses_unsignalled=%llu\n",
                         static_cast<unsigned long long>(pedCrossWaits), static_cast<unsigned long long>(pedCrossCrosses),
                         static_cast<unsigned long long>(pedCrossAfterWait), static_cast<unsigned long long>(pedCrossUnsignalled));
@@ -961,6 +1109,11 @@ void reportPlaytest(PlaytestSession& sess) {
                     js.crouchMaxSpeed, js.standMaxSpeed, sess.jump_->airborne() ? 1 : 0, sess.jumpHeight,
                     sess.pm_ ? sess.pm_->st.position.y : 0.0);
     }
+    printVehicleCollisionTrace(sess);
+    printPoliceTrace(sess);
+    printGpsTrace(sess);
+    printCraftSummary(sess);  // AW-15 craft-trace / freefall-trace SUMMARY
+    printHomieTrace(sess);
     if (sess.vitals_) {
         const sr3player::PlayerVitals& vv = *sess.vitals_;
         std::printf("player-vitals-trace: damage_events=%llu total_damage=%.0f deaths=%llu respawns=%llu min_health=%d max_health=%d "
@@ -1113,6 +1266,13 @@ void reportPlaytest(PlaytestSession& sess) {
                         "driving_now=%d\n",
                         as.entries, as.carjacks, as.reentries, as.genkiEntries, as.exits, as.distanceDriven,
                         sess.parkedVehicles.size(), sess.rigCarIsGenki ? 1 : 0, sess.inVehicle ? 1 : 0);
+        if (as.entries + as.genkiEntries + as.exits > 0) {
+            std::string parked;
+            for (const auto& pk : sess.parkedVehicles)
+                parked += (parked.empty() ? "" : ",") + std::string(pk.model ? pk.model->key : (pk.isGenki ? "original(genki)" : "placeholder"));
+            std::printf("ambient-entry-trace: active_car_model=%s parked_car_models=[%s] (own meshes: entered ambient cars keep nearFieldVehicleModel[id])\n",
+                        sess.activeCarModel ? sess.activeCarModel->key.c_str() : "original(genki)", parked.c_str());
+        }
     }
     if (sess.vehicleChaseCamStats.frames > 0) {
         const auto& vs = sess.vehicleChaseCamStats;

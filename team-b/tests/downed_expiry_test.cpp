@@ -95,6 +95,18 @@ int main() {
         CHECK(EngineState::characterReadsDead(c));
         CHECK(c.downedReviveAtExpiryCount == 0);
     }
+    // Team A 2026-10-20 (Sec21.10.1 note): an absent or non-positive duration keeps the type's default (30000 ms).
+    for (const char* call : {"human_enter_downed('d0')", "human_enter_downed('d0', 0)", "human_enter_downed('d0', -5)"}) {
+        Host host(names());
+        lua_State* gp = host.gameplayState();
+        CharacterState& c = mkNpc(host, "d0", 20, 0);
+        ok(host, gp, call);
+        CHECK(c.lifeState.get() == 6);
+        frames(host, 30 * 29);
+        CHECK(c.lifeState.get() == 6);  // default 30000 ms, not an instant expiry
+        frames(host, 30 * 2);
+        CHECK(c.lifeState.get() == 5);
+    }
     // Types 3 and 4: stand up at the deadline, no heal (Sec21.10.1 table: type 3 heal only while the attack flag is set -
     // that flag has no host source, OPEN; type 4 "stands, no heal").
     for (int type = 3; type <= 4; ++type) {

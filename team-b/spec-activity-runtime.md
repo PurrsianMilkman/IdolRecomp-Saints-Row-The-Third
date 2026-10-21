@@ -985,6 +985,84 @@ countdown out of the client's vehicle (§6.8).
   **OPEN:** whether the cash banked in-run is also paid out (HIGH CONFIDENCE not: it is the exit
   gate currency).
 
+#### 6.9.1 Combo rule (2026-10-18)
+
+Answers Team B spec-sync question 7 (HANDOFF-C `a8053de`). Static read of the executable: the combo
+object's reader `0x00677c90` and methods `0x00677fa0`-`0x00678e30`, and the Genki activity's
+host/single-player class (combo at `+0x1d18`, scoring globals at `+0x1910`). Labels: **FINAL** = read from
+the instruction stream; **HIGH** = strong inference; **GUESS** = not checked.
+
+- **Data (FINAL; reader `0x00677c90`, called from the `Scoring/Combos` reader at `0x0064788a`).**
+  `Base_decay_rate` and `Max_combo_ticks` are integers. `Multiplier_table/Multiplier` rows (max 16) and
+  `Decay_rate_table/Decay_rate` rows (max 8) each hold an integer `Threshold`, a float `Factor` (default
+  1.0) and an optional float `Intensity`. A row is kept only if `Threshold` ≥ 0, it is strictly greater
+  than the previous kept row's `Threshold`, and `Factor` > 0. `Beep_table/Beep` rows (max 4; child lookups
+  are case-insensitive, so the shipped `Beep_Table` matches) hold a float `Threshold` in [0, 1], strictly
+  decreasing, and an integer `Interval` in ms, > 0. Shipped values: multiplier 2…12 → ×1.5…×6.5; decay
+  200/400/600/800/1000 → 1.1/1.25/1.5/2.0/5.0; `Max_combo_ticks` 2000; `Base_decay_rate` 100; beeps
+  0.5/0.25/0.1/0.0 → 1000/750/500/250 ms.
+- **State (FINAL).** Multiplier level m and decay level d (−1 = none), ticks T, peak P, combo count N,
+  combo bank B (cash), a "multiplier reached" flag and an "expired" flag. Reset (`0x00678570`) sets m = d =
+  −1 and everything else to 0/false.
+- **Current factors (FINAL).** Multiplier M = `Multiplier[m].Factor`, or 1.0 when m = −1 (`0x00677fa0`).
+  Decay factor F = `Decay_rate[d].Factor`, or 1.0 when d = −1.
+- **Add(n, cash, ticks) (FINAL, `0x00677ff0`).** (1) T = min(T + ticks, `Max_combo_ticks`); P = max(P, T).
+  (2) If T ≤ 0, stop; nothing else changes. (3) N += n; if row m+1 exists and N ≥ its `Threshold`, m += 1
+  and the "multiplier reached" flag is set. (4) B += cash; if row d+1 exists and B ≥ its `Threshold`,
+  d += 1. Each level moves at most one step per call. N and B saturate at 2³¹−1.
+- **Refill (FINAL, `0x006785b0`).** ticks = trunc(trunc(`Base_decay_rate` × F) × k), then Add. The only
+  live caller passes k = 4.0 (float at `0x012a2f6c`), so each counted score refills four seconds of decay
+  at the current rate: 400 / 440 / 500 / 600 / 800 / 2000 ticks for F = 1 / 1.1 / 1.25 / 1.5 / 2 / 5 (then
+  capped at 2000).
+- **Decay (FINAL, `0x00678e30`).** Called once per frame by the activity tick `0x0064f890` with dt = the
+  frame-time global `0x0132a0ac` (seconds). If T > 0: T −= trunc(trunc(`Base_decay_rate` × F) × dt); if
+  T ≤ 0, T = 0 and "expired" is set. The nominal rate is `Base_decay_rate` × F ticks per second (100 to
+  500). The two truncations make it frame-rate dependent: 3/3/4/5/6/16 ticks per frame at dt = 1/30 s.
+- **What counts as a consecutive score (FINAL).** Only a kill, credited by the kill callback `0x0064c1f0`
+  (vtable slot `0x0112eb84`). It reads M first, pays the victim row's `Base` and each applicable bonus as
+  trunc(value × M), sums the terms, then refills with n = 1 and cash = that sum. So the kill that raises N
+  is paid at the old M: kill k of a combo is paid at the factor for count k−1 (kills 1-2 at ×1.0, kill 3 at
+  ×1.5, … kill 13 onward at ×6.5). "Consecutive" means the next kill lands while T > 0: within about four
+  seconds of the last refill, plus whatever was stored (up to 2000 ticks).
+- **Other cash events (FINAL; trap-evade routing HIGH).** Target pickups (callback `0x0064f350`, vtable slot
+  `0x0112eb88`) and `Button` (`0x0064a4b0`) pay trunc(cash × M), add it to the run total, then call
+  Add(0, cash, 0). They add to B (and can step d) only while a combo is live. They never count, never
+  refill and never step m. The pickup rows are 12-byte {cash, time, …} records in the `Targets`/`Trap_Evade`
+  block: Ethical, Money, Time, Unethical (both deductions stored negated), Health, Fire, Electrical. Trap
+  evades use this path, judging by the row layout (HIGH). Time is never multiplied.
+- **Breaks and resets (FINAL).**
+  - Expiry: in the same frame as the decay, if "expired" is set, the activity reports the combo end (event
+    3 carrying B, `0x00649b40`) and resets the combo. B is not paid again: each score's cash already went to
+    the run total when it was scored.
+  - A pickup whose cash or time is negative (the shipped `Unethical_Target`) reports B and resets the combo
+    instead of calling Add. Its cash deduction is trunc(−100 × M), so the combo factor in force multiplies
+    it. The run total is floored at 0: if total + delta < 0, the total becomes 0.
+  - Level start (the state handler at `0x0064b618`) resets the combo.
+- **Beep (HIGH, `0x00678610`, runs after every decay).** Only while the "multiplier reached" flag is set:
+  fraction = max(T, 0) / P; take the first beep row with fraction ≥ its `Threshold`. When the beep timer
+  has run for at least that row's `Interval` ms, re-arm it and play the sound hashed from
+  `SYS_HUD_CNTDWN_POS`. If the timer is unarmed, it is armed and nothing plays that frame.
+- **Not part of the rule.** `Intensity` (decay rows 0/0.2/0.4/0.7/1.0; absent from the multiplier rows, so
+  0) is returned by `0x00677fc0`. Its one caller, `0x0064cdc3`, is in the second (co-op client) class.
+  GUESS: it drives a presentation intensity. Each frame the activity also sends HUD event 1 carrying
+  trunc(M).
+- **Port note for `GenkiComboFactor(g, N)`.** It returns the factor for count N. Pay kill k with
+  `GenkiComboFactor(g, k − 1)`, i.e. read the factor before the increment.
+
+Test vectors (shipped data, dt = 1/30 s; reference simulation `tools/scratchpad/genki_combo_sim_1018.py`):
+
+| # | Input | Expected |
+|---|---|---|
+| V1 | Fresh combo, one civilian kill (`Base` 50), then decay only | Cash 50 at ×1.0; T = 400; expires on the 134th frame (≈ 4.47 s) |
+| V2 | 13 civilian kills, no decay between them | Cash 50, 50, 75, 100, 125, 150, 175, 200, 225, 250, 275, 300, 325; M after kill k = 1.0, 1.5, 2.0 … 6.5 (6.5 from kill 12); T 400, 800, 1200, 1600, then 2000 (capped from kill 5); d steps at kills 4 (B 275), 5 (400), 7 (725), 8 (925), 9 (1150) |
+| V3 | Fresh combo, hunter kill: `Base` 500 + `Headshot` 25 | Cash 525; B = 525 but d = 0 only (F 1.1; one step per call); T = 400 |
+| V4 | 3 civilian kills (total 175), then an Unethical target | Deduction trunc(−100 × 2.0) = −200 cash and −10 s; total floored 175 → 0; combo ends (event 3 with B = 175) and resets |
+| V5 | No live combo, Money target | +100 (× 1.0) to the run total; B stays 0, T stays 0 |
+| V6 | Kill, 60 frames of decay, kill | T 400 → 220 → 620; the second kill is paid at ×1.0, then M = 1.5 |
+| V7 | d = 4 (F 5.0), T = 2000, no more kills | 16 ticks per frame; expires on the 125th frame (≈ 4.17 s) |
+
+Residual: not checked whether `0x0132a0ac` is the clamped variable dt or the fixed 1/30 s (the vectors assume 1/30). Not traced: the co-op client copy (combo at `+0x197c`, refill scale sent ×1000) and `Event_Multiplier`'s effect on the combo. The flag-taking refill at `0x0064a2c0` has no caller in the image.
+
 ### 6.10 Open items for §6 (summary)
 
 Closed on 2026-10-12: the in-run scoring for Fraud, Mayhem/Tank Mayhem and Escort, and their
@@ -1000,6 +1078,8 @@ Plain hex addresses throughout. No Ghidra auto-names, no decompiler pseudocode, 
 Audiokinetic/RAD material.
 
 ## Changelog
+
+- **2026-10-18 — new §6.9.1 Genki combo rule (FINAL/HIGH)** (SPEC TEAM, static read of the executable). Answers Team B spec-sync question 7: only kills count and refill four seconds of decay at the current rate; decay is `Base_decay_rate` × F ticks per second, with F stepped by the combo cash bank; a kill is paid at the multiplier in force before its own count step; an Unethical target breaks the combo and the run total floors at 0. Seven test vectors. Clean-room self-check: no decompiler tokens.
 
 - **2026-10-12 — new §6 per-activity rules (FINAL); Clean-room check renumbered to §7; §4 reward-grant path CLOSED for the instanced activity family** (SPEC TEAM). The common `Activity` reader is `0x0061c6e0` (up to 6 levels; `Cash_Award`/`Props_Award`/`Reward`/`Reward2`). The teardown batch grant is `0x0061bb50` (caller `0x005e97a0`), which calls `0x009e2440` and `0x0094d920` once per not-yet-saved level. Rules for the 8 activities were taken from the per-instance `_a_*` xtbls and `running_man_globals.xtbl`.
 

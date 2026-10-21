@@ -52,6 +52,14 @@ namespace {
 
 using Bytes = std::vector<uint8_t>;
 
+// These population gates describe the forgiving reader (ParseOptions::legacyTolerant); the default parser follows the
+// original (spec-differential-results.md D-16) and rejects files these gates expect to be accepted with warnings.
+sr3xtbl::Document legacyParse(const uint8_t* d, size_t n) {
+    sr3xtbl::ParseOptions o;
+    o.legacyTolerant = true;
+    return sr3xtbl::ParseDocument(d, n, o);
+}
+
 int g_fail = 0;
 #define GATE(ok, ...)                                        \
     do {                                                     \
@@ -332,7 +340,7 @@ const Item* findItem(const std::string& nameCi, const std::string& archiveEndsWi
 // Row-name hashes, in file order, of `Table/<rowName>/Name`.
 std::vector<uint32_t> rowNameHashes(const Item& it, const char* rowName, std::vector<std::string>* names = nullptr) {
     std::vector<uint32_t> out;
-    sr3xtbl::Document doc = sr3xtbl::ParseDocument(it.data.data(), it.data.size());
+    sr3xtbl::Document doc = legacyParse(it.data.data(), it.data.size());
     const sr3xtbl::Node* table = doc.table();
     for (const sr3xtbl::Node* row = sr3xtbl::FindChild(table, rowName); row; row = sr3xtbl::NextSibling(table, row, rowName)) {
         const std::string* nm = sr3xtbl::ChildText(row, "Name");
@@ -433,7 +441,7 @@ int main(int argc, char** argv) {
         if (it.status != 0) continue;
         sr3xtbl::Document doc;
         try {
-            doc = sr3xtbl::ParseDocument(it.data.data(), it.data.size());
+            doc = legacyParse(it.data.data(), it.data.size());
         } catch (const sr3xtbl::FormatError& e) {
             ++rejected;
             rejectLines.push_back(it.archive + " :: " + it.name + " : " + e.what() + " @" + std::to_string(e.offset()) + "  " + hexAround(it.data, e.offset()));
@@ -582,7 +590,7 @@ int main(int argc, char** argv) {
         std::printf("  entries with warnings:\n");
         for (const Item& it : g_items) {
             if (it.status != 0) continue;
-            sr3xtbl::Document doc = sr3xtbl::ParseDocument(it.data.data(), it.data.size());
+            sr3xtbl::Document doc = legacyParse(it.data.data(), it.data.size());
             if (doc.warningCount() == 0) continue;
             std::printf("    %s :: %s  (%zu warnings; first: [%s] %s @%zu)\n", it.archive.c_str(), it.name.c_str(), doc.warningCount(),
                         sr3xtbl::WarningKindName(doc.warnings()[0].kind), doc.warnings()[0].detail.c_str(), doc.warnings()[0].offset);
@@ -686,7 +694,7 @@ int main(int argc, char** argv) {
             {
                 bool threw = false;
                 // keep '<' plus ONE more byte: cutting after two name bytes can already complete a tag (`<X>`)
-                try { sr3xtbl::ParseDocument(d.data(), lt + 2); } catch (const sr3xtbl::FormatError&) { threw = true; }
+                try { legacyParse(d.data(), lt + 2); } catch (const sr3xtbl::FormatError&) { threw = true; }
                 throwsOk += threw;
             }
             // (b) cut right after a '>' in the middle
@@ -695,14 +703,14 @@ int main(int argc, char** argv) {
             {
                 bool okEof = false;
                 try {
-                    sr3xtbl::Document doc = sr3xtbl::ParseDocument(d.data(), gt + 1);
+                    sr3xtbl::Document doc = legacyParse(d.data(), gt + 1);
                     for (const auto& w : doc.warnings()) if (w.kind == sr3xtbl::WarningKind::UnclosedAtEof) okEof = true;
                 } catch (const sr3xtbl::FormatError&) {}
                 eofOk += okEof;
             }
             // (c) inject: rename the first close tag (</X>) to </X_> ... only where the file is warning-free
             {
-                sr3xtbl::Document base = sr3xtbl::ParseDocument(d.data(), d.size());
+                sr3xtbl::Document base = legacyParse(d.data(), d.size());
                 if (base.warningCount() == 0) {
                     size_t p = 0;
                     while (p + 2 < d.size() && !(d[p] == '<' && d[p + 1] == '/')) ++p;
@@ -713,7 +721,7 @@ int main(int argc, char** argv) {
                         Bytes m = d;
                         m.insert(m.begin() + static_cast<std::ptrdiff_t>(p) + 2, '#');  // </#Name> : names no open element
                         ++injTrials;
-                        sr3xtbl::Document md = sr3xtbl::ParseDocument(m.data(), m.size());
+                        sr3xtbl::Document md = legacyParse(m.data(), m.size());
                         long long mm = 0;
                         for (const auto& w : md.warnings()) mm += w.kind == sr3xtbl::WarningKind::MismatchedCloseTag;
                         injOk += (mm == 1 && md.elementCount() == base.elementCount());
@@ -725,7 +733,7 @@ int main(int argc, char** argv) {
                 ++junkTrials;
                 Bytes m(d.begin() + 1, d.end());
                 bool threw = false;
-                try { sr3xtbl::ParseDocument(m.data(), m.size()); } catch (const sr3xtbl::FormatError&) { threw = true; }
+                try { legacyParse(m.data(), m.size()); } catch (const sr3xtbl::FormatError&) { threw = true; }
                 junkOk += threw;
             }
         }
@@ -806,7 +814,7 @@ int main(int argc, char** argv) {
         std::unordered_map<uint32_t, uint32_t> prioOf;
         for (const Item* src : {unl, pun}) {
             if (!src) continue;
-            sr3xtbl::Document pd = sr3xtbl::ParseDocument(src->data.data(), src->data.size());
+            sr3xtbl::Document pd = legacyParse(src->data.data(), src->data.size());
             const sr3xtbl::Node* tb = pd.table();
             for (const sr3xtbl::Node* row = sr3xtbl::FindChild(tb, "Unlockable"); row; row = sr3xtbl::NextSibling(tb, row, "Unlockable")) {
                 const std::string* nm = sr3xtbl::ChildText(row, "Name");
@@ -884,7 +892,7 @@ int main(int argc, char** argv) {
     }
     if (chs && !saves.empty()) {
         // cheats: ids at 0x0CC (count) / 0x0D0.. ; the ids are CRC(lower(UnlockString)) per spec-tables-progression.md
-        sr3xtbl::Document doc = sr3xtbl::ParseDocument(chs->data.data(), chs->data.size());
+        sr3xtbl::Document doc = legacyParse(chs->data.data(), chs->data.size());
         std::unordered_map<uint32_t, std::string> byHash;  // hash -> "row/child = text"
         std::vector<const sr3xtbl::Node*> st{doc.table()};
         while (!st.empty()) {

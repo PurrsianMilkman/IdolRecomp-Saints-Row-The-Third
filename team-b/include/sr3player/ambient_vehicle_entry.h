@@ -75,7 +75,10 @@ inline AmbientEntryPick PickAmbientEntryTarget(double px, double pz, const std::
         if (slotIdx[s] < 0) break;
         const AmbientEntryCandidate& c = cands[static_cast<size_t>(slotIdx[s])];
         bool ok = validate(c);
-        if (!ok && fastFlag) ok = validate(c);  // Sec13.3 step 4: one retry of the same candidate
+        if (!ok && fastFlag) {
+            ok = validate(c);   // Sec13.3 step 4: one retry of the same candidate ...
+            fastFlag = false;   // ... the engine clears request bit 0x23 bit 0 then: ONE retry across both candidates (EC-2)
+        }
         if (ok) {
             AmbientEntryPick p;
             p.index = slotIdx[s];

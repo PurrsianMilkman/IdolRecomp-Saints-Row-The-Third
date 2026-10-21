@@ -1283,7 +1283,7 @@ int runVintDoc(int argc, char** argv) {
     if (!device.readBack(pixels, error)) { std::fprintf(stderr, "readback failed: %s\n", error.c_str()); return 1; }
     for (auto& a : texArchives)
         for (auto& kv : a->texCache.uploadedByWantedName)
-            if (kv.second.srv) { kv.second.srv->Release(); kv.second.srv = nullptr; }
+            sr3render::releaseSrv(kv.second.srv);
     if (!sr3render::writePng(outPath, device.width(), device.height(), pixels, error)) {
         std::fprintf(stderr, "png write failed: %s\n", error.c_str());
         return 1;

@@ -77,13 +77,15 @@ inline bool FleeFromStillActive(double distSq) { return !(distSq > 900.0); }
 // 21.1 Advance step 6 / 0x004e68e0 and the weapon-band test 0x004df080. FINAL.
 // a = minimum range, b = maximum range, d2 = squared distance. -1 too close, +1 too far, 0 inside the band.
 inline int WeaponBand(double d2, double a, double b) {
-    if (d2 < a * a) return -1;
+    // D-27 minor: d2 is float32; the too-close test is d2 < float32(a*a).
+    if (static_cast<float>(d2) < static_cast<float>(a * a)) return -1;
     if (d2 > b * b) return 1;
     return 0;
 }
 // Distance from the TARGET along the human direction at which the band test places its out point.
 inline double WeaponBandOutDistance(int band, double a, double b) {
-    if (band < 0) return a + 0.1 * (b - a);
+    // D-27 minor: out fraction is float32 0.1 widened (0.10000000149); result rounded to float32.
+    if (band < 0) return static_cast<double>(static_cast<float>(a + (b - a) * 0.10000000149011612));
     if (band > 0) return a + 0.9 * (b - a);
     return 0.0;  // out = the human's own position
 }
@@ -184,8 +186,13 @@ inline bool DownedType0ExpiryKills(int64_t nowMs, int64_t deadlineMs, bool noTim
 }
 // Get-up body 0x009a78d0: HP is SET (HP setter 0x0094cfc0) to int(max_hp) x pct; pct = Human_revive_percent_hit_points
 // 1.0 when the team byte is 0, else Enemy_revive_percent_hit_points 0.25.
-inline int DownedGetUpHeal(int maxHp, bool enemySide) {
-    return static_cast<int>(static_cast<double>(maxHp) * (enemySide ? 0.25 : 1.0));
+// D-27 FINAL: the result is a FLOAT, float32(float32(max HP) x pct), clamped to [0, max HP], NOT rounded to a whole number.
+inline float DownedGetUpHeal(int maxHp, bool enemySide) {
+    const float mx = static_cast<float>(maxHp);
+    float hp = static_cast<float>(static_cast<double>(mx) * (enemySide ? 0.25 : 1.0));
+    if (hp > mx) hp = mx;
+    if (hp < 0.0f) hp = 0.0f;
+    return hp;
 }
 
 // Selector 0x009735d0, first match wins. Every input is a host fact (default false); -1 = no downed state.

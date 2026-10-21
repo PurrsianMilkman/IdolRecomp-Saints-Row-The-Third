@@ -122,9 +122,9 @@ WeaponInstance::FireOutcome WeaponInstance::fire(double nowMs, const Vec3& origi
     // generic timer-primitive writes on the weapon INSTANCE... with +0xfc
     // set to a literal 1000ms" - see header doc comments for the other two).
     timerF4_.set(0.0);
-    timerFc_.set(kRefireDelayMs);
+    timerFc_.set(refireDelayMs_);
     timer104_.set(0.0);
-    nextAllowedFireMs_ = nowMs + kRefireDelayMs;
+    nextAllowedFireMs_ = nowMs + refireDelayMs_;
 
     // Weapon-specific sound/FX dispatch (0x009ba4a0): dry-fire vs normal,
     // keyed by whether ammo is available (spec Sec2.2c).

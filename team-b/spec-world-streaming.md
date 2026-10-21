@@ -1037,7 +1037,78 @@ The routine that registers one zone's content (`0x00859110`; the build-shared so
 
 - **`SR3Z +0x1E` is the zone type — the selector of the container kind.** The registration routine switches on this word: `{1, 3, 8, 10, 11, 13}` → kind `0x1B` Level Always Loaded; `{5, 6}` → `0x21` mission; `7` → `0x1F` Interior zone; `9` → `0x20` Large interior zone; `12` → `0x22` large mission; anything else (incl. 2) → `0x1D` Zone. Over **all 2,971 `.czh_pc` files** (every container with a zone-header entry in every archive, kind taken from its manifest record) the observed pairs are: Zone ↔ 2 (1,194), Interior ↔ 7 (140), Large interior ↔ 9 (174), Level Always Loaded ↔ 1 / 3 / 8 / 10 / 13 (2 / 1,194 / 58 / 51 / 21), mission ↔ 5 / 6 (62 / 72), large mission ↔ 12 (3) — **0 exceptions, 11 is the only case value never observed.** Resolves `spec-ctorless-types.md` §5 / §8 item 2 for `+0x1E` (that document is not edited here). In `sr3_city_0/1` the zone file names carry a marker character before the extension: activity zones (type 6, 59) end in a backtick, the six arena zones (type 9, §10.8) in `$`, ordinary zones have none (the name parser tolerates `! $ \` ^ ~` after the four digits). **[CONFIRMED — disassembly + empirical, 2,971/2,971.]**
 - **`SR3Z +0x0C..+0x17` are three `f32`: the world-space origin the record positions are relative to.** Over the 1,265 tile / sub-area / activity-zone headers of `sr3_city_0/1`: zero in every file without records, non-zero in all 248 files that have records. **All 248 files with records are `~f` (fast) headers; all 603 `~s` (slow) headers in the same set have count 0** — an observation on `spec-ctorless-types.md` §8 item 3 (fast vs slow). **[CONFIRMED — disassembly (used as the translation) + empirical.]**
-- **Record fields as read by the hN packing routine** (partial answer to `spec-ctorless-types.md` §5.1): `+0`, `+2`, `+4` = `s16` position words, **1/64 m** per unit (constant `2⁻⁶`), added to the header origin (validated: spreads 317 / 279 m, §10.6(g)); `+12` = `u16` name index compared with a list of the source zone file's level-mesh names; `+6` = `s16` scaled by `2⁻¹²` and fed to a one-scalar transform builder (a rotation angle in radians fits the zero-heavy distribution better than a scale factor — **HYPOTHESIS**, not established); `+8`, `+10` are not read by this consumer. The shipped `.czh_pc` name list does **not** contain the level-mesh names (it holds textures and `.fmeshx` names, `spec-terrain-format.md` §2), so mapping a record's name index to a mesh file is not possible from the header alone — **OPEN**.
+- **Record fields as read by the hN packing routine** (partial answer to `spec-ctorless-types.md` §5.1): `+0`, `+2`, `+4` = `s16` position words, **1/64 m** per unit (constant `2⁻⁶`), added to the header origin (validated: spreads 317 / 279 m, §10.6(g)); `+12` = `u16` name index compared with a list of the source zone file's level-mesh names; `+6` = `s16` scaled by `2⁻¹²` and fed to a one-scalar transform builder (a rotation angle in radians fits the zero-heavy distribution better than a scale factor — **HYPOTHESIS**, not established); `+8`, `+10` are not read by this consumer. The shipped `.czh_pc` name list does **not** contain the level-mesh names (it holds textures and `.fmeshx` names, `spec-terrain-format.md` §2), so mapping a record's name index to a mesh file is not possible from the header alone — **OPEN**. **[2026-10-19 Team B blocker: FINAL — superseded by §10.7.1: `+12` is a byte offset into the `~f` header's own name pool, whose target is `<mesh>.lmeshx` (93,212 / 93,212); `+6`/`+8`/`+10` are pitch/roll/yaw at 2⁻¹² rad (yaw = `+10`); the "not read" claim for `+8`/`+10` is wrong.]**
+
+#### 10.7.1 The 14-byte placement record, fully decoded: name binding, rotation, position [2026-10-19 Team B blocker: FINAL — CONFIRMED by disassembly + full-population data]
+
+**Answer in one line.** Record `+12` is a **byte offset into the name pool of the same `~f` `.czh_pc` file's own material-reference block** (the pool that starts at file `+0x20`, `spec-geometry-format.md` §3.1). The string at that offset is `<mesh>.lmeshx`. The shipped mesh is `<mesh>~l1.clmesh_pc`/`.glmesh_pc` in the tile bundle `CCRR.str2_pc`, and `<mesh>.clmesh_pc`/`.glmesh_pc` in the fine cells `CCRRhN.str2_pc`. It is **not** an ordinal index, it is not `.asm_pc` order, and it is not a hash. The bullet above ("not possible from the header alone") is **withdrawn**. Its description of the pool (textures and `.fmeshx`) fits the `~s` header, which carries no records. The `~f` header's pool holds the `.lmeshx` names. Its other entries (`.effectx`, `.lightmult`, `cc:N`) are never the target of a record. The bullet's "`+8`, `+10` are not read" is also **wrong**: `+6`, `+8` and `+10` are three Euler angles, and `+10` is the yaw.
+
+**How the code does it (`0x00858e40`, the per-record loop of the hN packing routine; helpers read in full).**
+1. `0x008574f0` builds a `u16` table with one entry per name-list entry. Entry `i` = Σ over `j < i` of (`strlen(name_j)` + `strlen(ext_j)` + 1). The name and extension pointers come from the zone object's 16-byte entry array (`+0x28`, count `u16 +0x30`): `0x00ddc6e0` returns entry `+0` (the base name) and `0x00ddc6c0` returns entry `+8` (the extension, with its dot). This table is exactly the byte offset of each `name.ext\0` string in the on-disk pool.
+2. For each record (array at `SR3Z +0x18`, stride `0x0E`, count `u16 SR3Z +0x1C`), the loop compares the record's `u16 +0x0C` with that table and takes the matching entry `i`. It skips the record unless that entry's extension equals `".lmeshx"` (literal `0x01164ab0`, string compare via `0x00eaa178`). It then formats `"%s%s"` (`0x0129b988`) from the name plus the platform `.clmesh_*` extension (table `0x011529b8`, `.clmesh_pc` first).
+3. `0x00858d70` loads that mesh's local bounding box. The routine reads `+6`, `+8` and `+10` as `s16`. Each one is converted to float and multiplied by the double `2⁻¹²` (`0x01164708` = 0.000244140625). The three values are passed, in that order, as the three arguments of the rotation builder `0x00da41c0`.
+4. It reads `+0`, `+2` and `+4` as `s16`. Each one is multiplied by the double `2⁻⁶` (`0x01164710` = 0.015625) and added to the header origin `f32` at `SR3Z +0x0C` / `+0x10` / `+0x14` respectively.
+5. `0x00dc9200` / `0x00dc8400` transform the box: an AABB-by-matrix pass in which output axis `j` = Σᵢ `M[i][j]`·(min or max)ᵢ, plus the position. `0x00db9f50` then tests that box against the fine-cell sub-box (§10.5).
+
+**Rotation builder `0x00da41c0` (read in full).** It takes `(a, b, c)` = (`+6`, `+8`, `+10`) × 2⁻¹² rad. It calls the CRT `sin` (`0x00ea2470`, x87 `fsin`) and `cos` (`0x00ea3a70`, `fcos`) on each angle. Writing `sX`/`cX` for the sine/cosine of angle X, it stores a row-major 3×3 matrix:
+
+```
+r0 = ( sa·sb·sc + cb·cc,   ca·sb,   sa·sb·cc − sc·cb )
+r1 = ( sa·sc·cb − sb·cc,   ca·cb,   sa·cb·cc + sc·sb )
+r2 = ( ca·sc,              −sa,     ca·cc            )
+```
+
+The rows are the world images of the local X, Y and Z axes, and points are row vectors: `world = pos + lx·r0 + ly·r1 + lz·r2` (the `0x00dc8400` contraction). With `a = b = 0` this is a pure rotation about world **+Y (up)**: `x' = x·cos c + z·sin c`, `z' = −x·sin c + z·cos c`. So **`+10` is the yaw**, `+6` is the rotation about local X (pitch) and `+8` is the rotation about Z (roll). All-zero angles give the identity.
+
+| Offset | Type | Meaning | Decode |
+|---|---|---|---|
+| `+0x00` | `s16` | position X | `world_x = SR3Z+0x0C (f32) + v / 64` |
+| `+0x02` | `s16` | position Y (up) | `world_y = SR3Z+0x10 (f32) + v / 64` |
+| `+0x04` | `s16` | position Z | `world_z = SR3Z+0x14 (f32) + v / 64` |
+| `+0x06` | `s16` | angle `a`, about X (pitch) | `v / 4096` rad (range seen ±π: ±12,867) |
+| `+0x08` | `s16` | angle `b`, about Z (roll) | `v / 4096` rad |
+| `+0x0A` | `s16` | angle `c`, about Y — **yaw** | `v / 4096` rad |
+| `+0x0C` | `u16` | name binding | byte offset into the same file's name pool (file `+0x20` .. `+0x20 + u32(file+4)`); the target string is `<mesh>.lmeshx` |
+
+Team B's question, point by point: "+6 yaw (s16/2^12 rad?)" — the scale is right, but the yaw is `+10`, not `+6`. `+6` and `+8` are pitch and roll, and they are zero in most records (§5.1's "bytes 6–9 predominantly zero"). "Origin Y + y/64 = world Y" is **CONFIRMED** (step 4), and X and Z use the same rule. The position is the mesh's **pivot**, not its lowest point. Ground contact is pivot + rotated `bbox.min`. Example: `lamppoststrbse_a` has local `y ∈ [−0.336, +0.336]`.
+
+**Validation — every plain tile (`CCRR`, no `^` variant) of `sr3_city_0` and `sr3_city_1`, streamed one entry at a time** (`tools/scratchpad/sr3z_bind3.py`, output `sr3z_bind3_out.txt`):
+- **Binding.** 122 `~f` headers with records, **93,212 / 93,212 records** (100 %): `+12` lands on a string start, the string ends in `.lmeshx`, and `<mesh>~l1.clmesh_pc` is present in the same tile bundle. Control: reading `+12` as an ordinal index into the same list gives an `.lmeshx` in only 3,719 / 93,212 records, and the same mesh in only 587.
+- **Geometry, via the code's own fine-cell rule (§10.5).** For each record, the script takes the mesh's local AABB, transforms it with the decoded rotation and position, and lists the sub-boxes it overlaps. Sub-box `N` is the tile box (centre from §10.6(g), ±160 × ±140 m) halved, with N = 0 (low x, high z), 1 (high x, high z), 2 (low x, low z), 3 (high x, low z). The resulting per-cell mesh sets are compared with the real `CCRRhN.str2_pc` contents, minus the skyline appends that no record places.
+  - The local AABB is `min` at `+0x20` and `max` at `+0x30` of the `.clmesh_pc` header (relative to magic `0x4fe66afa`; this is the lead of `spec-physics-format.md` §4.4.2(f)). The base mesh's box is used, or the `~l1` box when no hN holds the base mesh.
+  - **Full decode: 488 / 488 cells exact over 122 tiles** (20,957 mesh-cell memberships, 0 false positives, 0 false negatives).
+  - Controls, each changing one thing: angles ignored, 314 / 488 cells exact; yaw sign flipped, 394; matrix transposed, 393; position scale 1/128, 171; X and Z swapped, 73.
+  - The test ignores Y (the sub-box Y extent was not read). It therefore pins X, Z, the 1/64 scale, the binding, and the sign and order of all three angles. It is **CONFIRMED** for those.
+- **Y.** Y is pinned by the code (step 4) and by stacking. In tile 1018, records #1/#2 place `lamppoststrbse_a` (world Y 2.325..2.997) and `lamppoststr_b` (2.960..11.205): the post starts on top of the base. It is also consistent with Team B's own measurement of record Y against the collision ground (median +0.00..+0.04 m on 6 tiles). The ground itself was not re-measured here.
+- **Tile 1018** (Team B's refuted case): 200 / 200 records bound; 4 / 4 cells exact (52 memberships). **Tile 0915**: 992 / 992 bound; 4 / 4 cells exact (194 memberships).
+
+**Port recipe.**
+1. Open the tile's `sr3_city~fCCRR.czh_pc`. Read the material block: `ntl = u32(+4)`, pool = bytes `[0x20, 0x20 + ntl)`. Split the pool on NUL and keep a map from each string's start offset to the string.
+2. Locate the `SR3Z` block at `H = (0x20 + ntl)` rounded up to the next multiple of 16, always advancing (`spec-ctorless-types.md` §5). Read the origin as three `f32` at `H + 0x0C`, `count = u16(H + 0x1C)`, and records from `align4(H + 0x40)`, stride 14.
+3. For each record: `name = pool[u16(+12)]`, which must end in `.lmeshx`; strip it to get `<mesh>`. Load `<mesh>~l1.clmesh_pc` (tile level, LOD 1) or `<mesh>.clmesh_pc` (hN, full detail).
+4. `pos = origin + (s16 +0, +2, +4) / 64`. `(a, b, c) = (s16 +6, +8, +10) / 4096`. Build `M` as above and place each vertex as `world = pos + v·M`, with `v` a row vector. In column-vector APIs, use `Mᵀ` as the rotation. For a yaw-only record (`a = b = 0`), this is a rotation about +Y by `+c` (right-handed, Y up).
+   [2026-10-19 Team B Q8: FINAL/HIGH — "right-handed" here describes the rotation formula (rows obey X = Y × Z). On screen, +X is the right of a body facing +Z, and +yaw is a clockwise (right) turn seen from above. The canonical axis and heading convention, with test vectors and the car-rig mirror verdict, is `spec-physics-runtime.md` §10.15.]
+
+**Test vectors** (all values CONFIRMED by the run above; positions to 1e-4 m):
+
+| Tile, record | Raw `(+0,+2,+4,+6,+8,+10,+12)` | Mesh | World position | Angles `(a, b, c)` rad | World AABB Y | hN |
+|---|---|---|---|---|---|---|
+| 1018 #0 | `(-5718, 847, 3124, 0, 0, 0, 0)` | `lite_fixh` | (−903.8536, 21.4897, −1343.0100) | (0, 0, 0) | 21.236..21.507 | h0 |
+| 1018 #1 | `(1839, -358, 982, 0, 0, 11606, 17)` | `lamppoststrbse_a` | (−785.7755, 2.6616, −1376.4788) | (0, 0, 2.83350) | 2.325..2.997 | h1 |
+| 1018 #2 | `(1839, -338, 982, 0, 0, 11606, 41)` | `lamppoststr_b` | (−785.7755, 2.9741, −1376.4788) | (0, 0, 2.83350) | 2.960..11.205 | h1 |
+| 1018 #16 | `(-2457, 721, 1644, -257, -874, -5836, 62)` | `sheer_cliff_seambuster` | (−852.9005, 19.5209, −1366.1350) | (−0.06274, −0.21338, −1.42480) | −1.938..21.539 | h0 |
+| 1018 #18 | `(-3005, -61, 1257, 0, 0, -12867, 92)` | `drain_wall_lrg_01` | (−861.4630, 7.3022, −1372.1819) | (0, 0, −3.14136) | 5.077..9.527 | h0 |
+| 1018 #22 | `(-8654, 663, 8187, 57, 256, -6428, 147)` | `solar_panels_a01` | (−949.7286, 18.6147, −1263.9006) | (0.01392, 0.06250, −1.56934) | 18.331..20.844 | h0 |
+| 0915 #3 | `(7718, -509, -1193, 0, 0, -6433, 76)` | `sh_megabrothel` | (−1158.9612, 32.3299, −575.7545) | (0, 0, −1.57056) | 26.277..77.115 | h1, h3 |
+| 0915 #4 | `(8928, -115, 4240, -6391, 12867, 12867, 98)` | `lightinseta` | (−1140.0549, 38.4862, −490.8639) | (−1.56030, 3.14136, 3.14136) | 38.361..38.612 | h1 |
+
+The header origins are 1018 (−814.5098877, 8.2553046, −1391.8225098) and 0915 (−1279.5549316, 40.2830467, −557.1138916). The `+12` offsets 0 / 17 / 41 in 1018 are `lite_fixh.lmeshx` (16 characters + NUL = 17), `lamppoststrbse_a.lmeshx` (23 + 1 = 24, so 17 + 24 = 41) and `lamppoststr_b.lmeshx`.
+
+**Residuals (OPEN, none blocking).**
+- The Y extent of the fine-cell sub-box was not read, so the cell test does not cover Y. Y rests on the code and the stacking check.
+- The authoring routine takes its box from the `.lmeshx` source. The shipped `.clmesh_pc` header box reproduced it on every cell, but byte-identity of the two boxes is not shown.
+- The shipped game's own runtime consumer of these records (as opposed to this authoring-time packing routine) was not traced. The field semantics above are what the engine's code applies, and the data matches them exactly.
+- `^` variant tiles and non-city zones (`~al`, interiors, missions) were not run. They use the same header layout, so the same rule is expected — **HIGH CONFIDENCE**, not run.
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 
@@ -1060,7 +1131,7 @@ The routine that registers one zone's content (`0x00859110`; the build-shared so
 - **§5.1** — section 4's `index` scheme resolved (§10.6(e)); section 3's index is `(row << 8) | col`.
 - **§6 items 5 and 6, and item 4's "section 4's index-value scheme"** — struck through in place.
 - **§7.2 / §8** — the two allocator names now have a code-level meaning: `medium lod level allocator` = the pool of container kind `Zone` (tile bundle, `~L1`), `high lod level allocator` = the pool of kind `Zone (High LOD)` (fine cells, base meshes). `zone always loaded` is the level-0 kind's pool (**HYPOTHESIS** by name — §10.3; that kind row's pool byte was not read this pass).
-- **OPEN:** (1) what drives the reconciliation each frame (§10.4) — **advanced, not closed, by §11.5**; (2) how up to four resident cells fit the tier-2/4 high-LOD budgets (§10.4); (3) the meaning of record word `+6` and the name-index → mesh mapping for shipped headers (§10.7); (4) display names of the ten activity types (needs `activity_types.xtbl`, not found as a top-level archive entry *[since found in `misc_tables.vpp_pc`, `spec-tables-progression.md` §14.16; the code→name mapping is still open]*) and whether the region letters are compass sectors (§10.8); (5) the per-level window/capacity numbers of levels 0–2 and 5 (only levels 3 and 4 were tabulated); (6) the meaning of `SR3Z +0x1E` case 11 and of the level-5 manager (kind 0).
+- **OPEN:** (1) what drives the reconciliation each frame (§10.4) — **advanced, not closed, by §11.5**; (2) how up to four resident cells fit the tier-2/4 high-LOD budgets (§10.4); ~~(3) the meaning of record word `+6` and the name-index → mesh mapping for shipped headers (§10.7);~~ **(3) CLOSED 2026-10-19, §10.7.1;** (4) display names of the ten activity types (needs `activity_types.xtbl`, not found as a top-level archive entry *[since found in `misc_tables.vpp_pc`, `spec-tables-progression.md` §14.16; the code→name mapping is still open]*) and whether the region letters are compass sectors (§10.8); (5) the per-level window/capacity numbers of levels 0–2 and 5 (only levels 3 and 4 were tabulated); (6) the meaning of `SR3Z +0x1E` case 11 and of the level-5 manager (kind 0).
 
 **Review status (2026-09-30): DESK-PASS — desk review (not re-derived from the executable).**
 

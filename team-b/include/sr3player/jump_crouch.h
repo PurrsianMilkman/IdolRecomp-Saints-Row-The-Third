@@ -4,7 +4,8 @@
 //   * Jump input gate: spec-player-runtime.md Sec3.6.4 (CONFIRMED). Only on CBA_OFC_JUMP_CLIMB pressed, with the
 //     permission bit +0x2078 & 0x200 and no melee started this frame; "unless 0x0098b970" (already jumping) the ledge
 //     probe runs; "unless 0x00989670" the jump is launched via 0x0098bea0(player, sprint held).
-//     0x00989670's meaning is not published -> JumpGateInputs::blocked is a CHOSEN stand-in (see below).
+//     0x00989670 = "climbing or vaulting" (spec-player-runtime.md Sec5.5 step 1; JC-2) -> JumpGateInputs::blocked.
+//     0x0098b970 ("already jumping") ONLY suppresses the ledge probe (not modelled here), NOT the jump itself.
 //   * Launch formula: Sec5.6.5 "Jump launch" (CONFIRMED): gravityDir = normalize(world gravity);
 //     speed = sqrt(2 * |gravity| * |heightArg|); velocity = -gravityDir * speed. Bit 0x04 (supported) is cleared.
 //     World gravity = (0, -9.8, 0) (spec-physics-runtime.md Sec4.1 step 5, CONFIRMED).
@@ -17,7 +18,8 @@
 //     (Sec5.6.5 says the two other callers pass "1.0/x of the cast sub-object" and a fixed ~0.016667, neither
 //     identifies the default jump); the real clips (spec-anim-runtime.md jump_sm, 'force use velocity' window) drive
 //     the take-off vertical. 1.0 m is a plain human standing-jump height. Team A question T2-Q1.
-//   * JumpGateInputs::blocked: stand-in for the unnamed predicate 0x00989670 (Q2).
+//   * JumpGateInputs::airborne (JC-2): NOT a spec gate (0x0098b970 only suppresses the ledge probe); kept as a CHOSEN
+//     guard so a mid-air press cannot launch a second jump (the 0.1 m supported test below is the same guard).
 //   * "grounded" for the gate: the controller's supported state (CapsuleStepResult::grounded of the previous frame).
 //
 // Pure, header-only, unit-tested by tests/synthetic_jump_crouch_test.cpp.
@@ -41,8 +43,8 @@ struct JumpGateInputs {
     bool permitted = true;          // +0x2078 bit 0x200 (on-foot jump/climb permission)
     bool meleeStarted = false;      // "no melee started this frame"
     bool controlsDisabled = false;  // Sec2.7: the controls-disabled gate skips the action dispatch entirely
-    bool airborne = false;          // 0x0098b970 "already jumping" (also CHOSEN: any unsupported state)
-    bool blocked = false;           // stand-in for 0x00989670 (unnamed predicate), CHOSEN, default never
+    bool airborne = false;          // CHOSEN guard (not the spec: 0x0098b970 only suppresses the ledge probe)
+    bool blocked = false;           // 0x00989670 "climbing or vaulting" (Sec3.6.4 step 2: no jump while set)
     double heightAboveGround = 0.0; // position.y - ground chain value; the "supported" stand-in (CHOSEN, below)
 };
 
@@ -101,12 +103,19 @@ public:
             launched = true;
         }
         if (launchedOut) *launchedOut = launched;
-        return airborne_ ? vy_ : 0.0;
+        // Not jumping: carry the controller's own fall velocity (0 when it was grounded), so walking off a ledge /
+        // down a slope the ground target stepped below falls under accumulating gravity instead of restarting from
+        // vy = 0 every frame (that gave a constant ~|g|*dt^2 = 0.011 m/frame at 30 Hz "drift", never reaching terminal).
+        return airborne_ ? vy_ : fallVy_;
     }
 
     // Called once per controller step AFTER it runs, with the controller's published result.
     void endFrame(double newY, double newVy, bool grounded, double dtSeconds) {
-        if (!airborne_) return;
+        if (!airborne_) {
+            fallVy_ = (grounded || newVy > 0.0) ? 0.0 : newVy;
+            return;
+        }
+        fallVy_ = 0.0;
         ++stats_.airFrames;
         airtimeMs_ += dtSeconds * 1000.0;
         peakY_ = std::max(peakY_, newY);
@@ -141,6 +150,7 @@ private:
     bool requested_ = false;
     bool airborne_ = false;
     double vy_ = 0.0;
+    double fallVy_ = 0.0;  // controller fall velocity carried while NOT jumping (0 when grounded)
     double takeoffY_ = 0.0, peakY_ = 0.0, airtimeMs_ = 0.0;
     JumpStats stats_;
 };

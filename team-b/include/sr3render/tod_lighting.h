@@ -12,6 +12,11 @@
 // address/offset cited in a comment is copied from the spec's own prose, as
 // with every other file in this project's clean-room boundary.
 //
+// UPDATE (gap #9): the weather-STAGE schedule now exists - sr3render/weather_schedule.h
+// (WeatherScheduler) - and the playtest drives ComputeTodLightingBlended() with its stage A/B +
+// blend; the "no schedule / constant stage" statements below describe ComputeTodLighting(), the
+// single-stage form kept for the other callers and tests.
+//
 // WHAT IS SPEC-CONFIRMED (Sec18), implemented faithfully here:
 //   * The TOD-segment crossfade formula: given the bracketing segment pair
 //     [low, high] by current TOD fraction t, timeToNextStart =
@@ -228,5 +233,11 @@ struct TodLightingResult {
 TodLightingResult ComputeTodLighting(
     const std::vector<sr3tables_environment::WeatherTimeSegment>& segments, float t,
     const std::string& chosenWeatherStageName);
+
+// Weather-schedule form (spec Sec18 2x2 corner blend): corners are stage A and stage B (by name),
+// stageBlend is the weight of B in [0,1]. Same old-defaults fallback if any of the four cells is absent.
+TodLightingResult ComputeTodLightingBlended(
+    const std::vector<sr3tables_environment::WeatherTimeSegment>& segments, float t,
+    const std::string& stageAName, const std::string& stageBName, float stageBlend);
 
 }  // namespace sr3render

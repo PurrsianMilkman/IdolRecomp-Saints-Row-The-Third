@@ -581,7 +581,10 @@ int stub_set_max_hit_points(lua_State* L) {
         int32_t oldMax = st->drawOrGetMaxHitPoints(name); // closes OPEN for an ordinary character, Sec60.4
         int32_t oldCurrent = st->drawOrGetCurrentHitPoints(name); // Sec34.2: starts at the table/max value
         double ratio = (oldMax != 0) ? (static_cast<double>(oldCurrent) / static_cast<double>(oldMax)) : 0.0;
-        c.maxHitPoints.set(newValue); // +0x1cac = +0x1cb0 (always 0 in this project) + arg -> plain overwrite, see doc comment
+        // +0x1cac = +0x1cb0 + arg (spec-lua-api-behaviour 13.29 #7, 0x0094d1f0): the local player carries the
+        // Player_Health_Bonus delta (review V10-6 fix); every other character has bonus 0, a plain overwrite.
+        if (EngineState::isLocalPlayerName(name)) newValue += st->playerMaxHpBonus_;
+        c.maxHitPoints.set(newValue);
         if (resetCurrent) {
             c.currentHitPoints.set(newValue);
         } else {

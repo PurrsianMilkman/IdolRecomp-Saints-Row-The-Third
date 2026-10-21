@@ -132,6 +132,20 @@ inline float AddRespectBonus(float multiplier, float modifier) { return multipli
 // Pay-Cash-for-Respect.
 int32_t ScaleByMultiplier(float multiplier, int32_t amount);
 
+// The game's "round(multiplier x amount)" (spec-differential-results D-1): the product rounded to
+// single precision, then to the nearest integer with halves away from zero; a result outside the
+// signed 32-bit range is -2147483648.
+int32_t RoundProductF32(double product);
+// A signed 32-bit wrap of a sum (the award routine keeps its sums in 32 bits, D-4).
+int64_t Wrap32(int64_t v);
+
+// The cash wallet add for the local player (spec-differential-results D-22): a positive amount is
+// first scaled by the cash-gain multiplier (Cash_Bonus_* / Cash_Bonus_Modifier, 1.0 at a new game):
+// round_half_away(single(single(single(amount) / 100) x multiplier x 100)), clamped to +-2e9; then
+// new = clamp(cash) + amount in signed 32 bits (a wrap goes negative), clamped to +-2e9, floored at 0.
+// Negative amounts and other players' grants are not scaled. Raw cash (cents).
+int64_t AddCashToWallet(int64_t cashRaw, int64_t amountRaw, float cashMultiplier, bool localPlayer = true);
+
 // Instanced activity completion: two awards, Props_Award then
 // round(Props_Award x (multiplier - 1)).
 struct ActivityAwards {
@@ -167,10 +181,13 @@ struct RewardToast {
     int32_t respect = 0;
     float cashDollars = 0.0f;
 };
+// Respect OR cash, never both (spec-differential-results D-3): with respect > 0 only the respect is
+// awarded (rounded as RoundProductF32; a 0 amount does nothing); otherwise a cash field > 0 pays
+// round_half_away(single(cash x 100)), clamped.
 struct ToastFinalisation {
     AwardResult award;          // round(multiplier x respect), source 3
-    int64_t cashRaw = 0;        // cashDollars x 100, clamped
-    bool zeroGrantHint = false; // the "nothing granted" path instead of hint +8
+    int64_t cashRaw = 0;        // the toast's own cash (only when it carries no respect)
+    bool zeroGrantHint = false; // the "nothing granted" notification
 };
 ToastFinalisation FinaliseRewardToast(const RewardToast& toast, float multiplier, PlayerRespect& p,
                                       const RespectTable& table, AppliedUnlocks& applied,

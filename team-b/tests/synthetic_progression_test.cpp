@@ -256,7 +256,7 @@ void testMultiplierAndSources() {
     d = DiversionRewardFor(0.5f, 75, 5000, 100, 5000);
     CHECK(d.respect == 0 && d.cashDollars == 50);
     d = DiversionRewardFor(0.555f, 30, 3000, 80, 3000);
-    CHECK(d.cashDollars == 44);  // round(44.4)
+    CHECK(d.cashDollars == 44);  // floor(44.4) (D-2)
     d = DiversionRewardFor(1.7f, 30, 3000, 80, 0);  // clamped to 1
     CHECK(d.respect == 30);
     d = DiversionRewardFor(0.0f, 30, 3000, 80, 0);
@@ -270,10 +270,10 @@ void testMultiplierAndSources() {
     PlayerRespect p;
     ToastFinalisation f = FinaliseRewardToast({100, 12.5f}, 1.35f, p, t, ap);
     CHECK(f.award.granted == 135 && p.total == 135);
-    CHECK(f.cashRaw == 1250);
+    CHECK(f.cashRaw == 0);  // a toast with respect pays no cash (spec-differential D-3)
     CHECK(!f.zeroGrantHint);
     f = FinaliseRewardToast({0, 3000.0f}, 1.0f, p, t, ap);
-    CHECK(f.zeroGrantHint && f.cashRaw == 300000);
+    CHECK(!f.zeroGrantHint && f.cashRaw == 300000);  // no respect: cash only, no notification (D-3)
 
     // Kills: 10 by rank, unscaled, gang members only.
     const KillRespectTable props;
@@ -320,6 +320,52 @@ void testUnlockableApply() {
 
 }  // namespace
 
+// spec-tables-progression.md 5.4 note (2026-10-20, Team D emulation FINAL): the level table 2115, 3000, 4000,
+// 5000, ...; one pass pays record L's cost and applies the unlockables of record L + 1 (the new level).
+void testLevelUpRecordVectors() {
+    std::vector<RespectLevelRow> rows;
+    const int32_t costs[] = {2115, 3000, 4000, 5000, 6000};
+    for (int i = 0; i < 5; ++i) rows.push_back({costs[i], {"u" + std::to_string(i)}});
+    const RespectTable t(rows);
+    {
+        PlayerRespect p;
+        AppliedUnlocks a;
+        const auto ups = ApplyLevelUp(p, 2115, t, a);
+        CHECK(p.level == 1 && p.inLevel == 0);
+        CHECK(ups.size() == 1 && ups[0].level == 1);
+        CHECK(ups.size() == 1 && ups[0].newlyApplied.size() == 1 && ups[0].newlyApplied[0] == "u1");
+    }
+    {
+        PlayerRespect p;
+        AppliedUnlocks a;
+        CHECK(ApplyLevelUp(p, 2114, t, a).empty());
+        CHECK(p.level == 0 && p.inLevel == 2114);
+    }
+    {
+        PlayerRespect p{0, 100, 0};
+        AppliedUnlocks a;
+        CHECK(ApplyLevelUp(p, 2015, t, a).size() == 1);
+        CHECK(p.level == 1 && p.inLevel == 0);
+    }
+    {
+        PlayerRespect p;
+        AppliedUnlocks a;
+        const auto ups = ApplyLevelUp(p, 5115, t, a);
+        CHECK(p.level == 2 && p.inLevel == 0);
+        CHECK(ups.size() == 2 && ups[0].level == 1 && ups[1].level == 2);
+    }
+    {
+        // A needed value <= 1 blocks levelling, also after a level-up inside one award.
+        std::vector<RespectLevelRow> r2 = {{100, {}}, {1, {}}, {100, {}}, {100, {}}};
+        PlayerRespect p;
+        AppliedUnlocks a;
+        CHECK(ApplyLevelUp(p, 150, RespectTable(r2), a).size() == 1);
+        CHECK(p.level == 1 && p.inLevel == 50);
+        PlayerRespect q;
+        CHECK(ApplyLevelUp(q, -5, t, a).empty() && q.inLevel == 0);  // negative floors at 0
+    }
+}
+
 int main() {
     run("testTable", testTable);
     run("testFromParsed", testFromParsed);
@@ -329,6 +375,7 @@ int main() {
     run("testAwardGuardsAndEvents", testAwardGuardsAndEvents);
     run("testMultiplierAndSources", testMultiplierAndSources);
     run("testUnlockableApply", testUnlockableApply);
+    run("testLevelUpRecordVectors", testLevelUpRecordVectors);
     if (g_failures != 0) {
         std::cerr << g_failures << " of " << g_checks << " checks FAILED.\n";
         return 1;

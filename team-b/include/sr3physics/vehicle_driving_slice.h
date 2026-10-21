@@ -209,7 +209,16 @@ struct EngineCurveTuning {
     double torqueFactorIdle = 0.5;      // +0x20
     double torqueFactorPeak = 1.0;      // +0x24
     double torqueFactorRedline = 0.5;   // +0x28
+    // D-17 (spec-differential-results.md): the TABLE field roles (not crossed) used by the original curve.
+    double torque = 0.0, minRpm = 0.0, optRpm = 0.0, maxRpm = 0.0;
+    double minTorqueFactor = 1.0, maxTorqueFactor = 1.0;                   // Min/Max_RPM_Torque_Factor
+    double minResistance = 0.0, optResistance = 0.0, maxResistance = 0.0;  // Min/Opt/Max_RPM_Resistance
+    double clutchSlipRpm = 0.0;                                            // Clutch_Slip_RPM
 };
+
+// D-18 (vectors E2): the original's engine-RPM update. target = Min_RPM + (Clutch_Slip_RPM - Min_RPM) * throttle; if the
+// transmission RPM is at or above target the new engine RPM IS the transmission RPM; otherwise the (two-way) ramp of EngineRampRpm.
+double EngineRpmUpdate(const EngineCurveTuning& tuning, double currentRpm, double throttle, double transmissionRpm, double dt);
 
 // `0x00ae31f0` (CONFIRMED formula+constants, Sec10.2): ramps RPM UP-ONLY
 // toward a throttle-lerped target - "no explicit fall-rate path (falling RPM
@@ -243,7 +252,7 @@ double EngineRampRpm(double currentRpm, double targetRpm, double dt);
 // function always return zero, which the spec's own words say cannot be
 // the shipped behaviour).
 double EngineNetTorque(const EngineCurveTuning& tuning, double rpm, double throttle, bool attachedObjectPenalty,
-                       double finalScale = 1.0);
+                       double finalScale = 1.0, double transmissionRpm = -1.0, double vehicleMass = 0.0);
 
 // ===========================================================================
 // 10.3 Transmission (`hk_custom_vehicle_transmission`, row 32)
@@ -276,7 +285,7 @@ public:
     // Advances cooldown/shift timers by dt, then evaluates the single shared
     // upshift threshold and the per-gear downshift table against rpm,
     // clamped at [1, maxGear] and gated by shiftDurationSec/cooldowns.
-    void Update(double rpm, double dt);
+    void Update(double rpm, double dt, bool shiftWindowClosed = false, bool upshiftInhibited = false);
 
     int gear() const { return gear_; }
     bool midShift() const { return shiftTimer_ > 0.0; }
@@ -324,20 +333,25 @@ struct SuspensionWheelTuning {
     double damperRelaxation = 2500.0;    // rebound-branch damper, CHOSEN concrete magnitude
     double damperCompression = 3500.0;   // compression-branch damper, CHOSEN concrete magnitude
     double restLength = 0.3;              // m, CHOSEN concrete magnitude
+    double chassisMass = 1.0;              // M (FINAL D-25): the force is multiplied by the chassis mass
     double loadFactor = 1.0;               // HIGH role (anti-roll/weight-transfer), CHOSEN default (no weighting)
 };
 
-// `0x00c59630` (CONFIRMED formula, Sec10.4), Havok's own base suspension
-// method: force = ((restLength-currentLength)*spring*loadFactor -
-// damper*compressionVelocity) * (1/X). The damper branch is selected by
-// compression-velocity sign (damperCompression when compressionVelocity>0,
-// i.e. the spring is being compressed further; damperRelaxation on rebound).
-// `X` (CONFIRMED to exist as a denominator, "*(1/X)" - OPEN, the spec does
-// not identify X) is CHOSEN here as 1.0 (a no-op denominator) rather than
-// guessing a concrete value the spec does not give - flagged explicitly via
-// the function's own name omitting any claim about X beyond "not modelled".
+// `0x00c59630` (FINAL, D-25 emulation, 12,000 wheel cases bit-exact):
+//   spring = float32(L - C) * S * k;   damping = (v < 0) ? damperCompression : damperRelaxation (v >= 0 incl. 0, -0);
+//   force  = float32(float32(spring - damping * v) * M),  M = chassis mass (1 / inverse mass; 0 if inverse mass 0).
+// `v` is the closing speed in the SPEC sign (d(length)/dt: NEGATIVE while compressing). A wheel not touching
+// the ground gives 0 (touching = false). Strength and damping are per unit mass. (Replaces the CHOSEN
+// "divide by unknown X" / compress-on-positive-velocity stand-in.)
 double SuspensionSpringDamperForceNoXDenominator(const SuspensionWheelTuning& tuning, double currentLength,
-                                                  double compressionVelocity);
+                                                  double closingSpeed, bool touching = true);
+
+// `0x00c14790` (FINAL, D-25, Sec10.4): M = 1 / inverse mass (motion +0xCC, the w of +0xC0), stored as f32; 0 when the
+// inverse mass is 0. Feed it into SuspensionWheelTuning::chassisMass: the default 1.0 only stands in for callers with
+// no chassis and drops the mass factor of the force.
+double ChassisMassFromInverseMass(double inverseMass);
+// Copy of `base` with chassisMass set from the chassis inverse mass (Sec10.4).
+SuspensionWheelTuning WithChassisInverseMass(SuspensionWheelTuning base, double inverseMass);
 
 struct SuspensionStepResult {
     double averageForce = 0.0;

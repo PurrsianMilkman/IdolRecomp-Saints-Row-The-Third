@@ -94,7 +94,7 @@ CollisionBvh BuildCollisionBvh(const std::vector<std::array<float, 3>>& localTri
 
 struct CityProp {
     std::string name;
-    std::vector<std::unique_ptr<sr3render::MeshRenderer>> renderers;
+    std::vector<std::shared_ptr<sr3render::MeshRenderer>> renderers;
     std::vector<ID3D11ShaderResourceView*> perMaterialSrv;
     float localMin[3] = {1e30f, 1e30f, 1e30f};
     float localMax[3] = {-1e30f, -1e30f, -1e30f};
@@ -240,13 +240,33 @@ struct CityGroundTile {
     // completely unaffected, same "additive, zero-cost unless opted in"
     // discipline ClmeshTriangleCollisionWorld's own CityProp::collisionBvh
     // already uses for props.
+    // UPDATE (TEAM B task G1, 2026-10-18, spec-zone-data-format.md Sec13.5.1): collisionBvh is now built from the
+    // world-space tail collision mesh of the `0x2237` record in `sr3_city~s<CCRR>.czn_pc` (strip stand-in triangles,
+    // CHOSEN/GUESS per the spec), NOT from the render mesh described above - that was the near-origin render content,
+    // not the walkable surface. See loadCityGroundTileCollision().
     CollisionBvh collisionBvh;
+    bool collisionLoaded = false;          // collisionBvh holds the real walkable ground for this tile
+    std::string collisionSource;           // czn entry the mesh came from ("" if none)
+    std::string collisionWhy;              // why collision is absent (diagnostics)
+    size_t collisionVertexCount = 0;       // n1 of the located mesh(es)
+    size_t collisionTriangleCount = 0;     // strip stand-in triangles in collisionBvh
 };
 
 bool groundTexDebugLog();
 
+// allBlocks: draw every Mesh sub-block of the tile's zone as ground (playtest / sr3.exe); false keeps the
+// first-block-only ground every golden-scene command renders.
 bool loadCityGroundTile(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives, ID3D11Device* device,
-                        CityGroundTile& tile, std::string& why, bool buildCollision = false);
+                        CityGroundTile& tile, std::string& why, bool buildCollision = false, bool allBlocks = false);
+
+// Walkable-ground collision only (no D3D device needed): loads `~s<CCRR>` (or the active `^variant`) tail mesh into
+// tile.collisionBvh. Returns false with `why` set when the tile has none (the caller's labelled CHOSEN fallback applies).
+bool loadCityGroundTileCollision(int col, int row, std::vector<std::unique_ptr<CityArchive>>& archives,
+                                 CityGroundTile& tile, std::string& why);
+// Which `^name` zone variant is active ("" = none, the free-roam default). CHOSEN: no mission->variant mapping is
+// specified, so nothing selects a variant automatically (Team A question).
+void setActiveZoneVariant(const std::string& variant);
+const std::string& activeZoneVariant();
 
 double cityNowMs();
 

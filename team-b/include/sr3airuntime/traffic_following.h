@@ -3,10 +3,11 @@
 //   * Sec20.6.3(b) throttle law 0x00b207d0 (AmbientThrottleLaw);
 //   * Sec20.6.7(b) car-following law 0x00b51950 (FollowingLaw): 5 m standstill gap, ~11 m steady gap, 0.75/0.5
 //     brake hysteresis. The caller owns the obstacle probe (Sec20.6.7(a)), the 300 ms memory and the combiner.
-// NOT implemented (OPEN): signal controller / stop line (Sec13.2a(i), stop-line geometry OPEN), junction yield
-// (Sec20.6.7(c), time windows HIGH only).
+// Signal controller (Sec20.6.13) and the junction yield (Sec20.6.7(c)) live in their own headers (traffic_signals.h,
+// traffic_yield.h) and are wired by the viewer; this file holds only the two speed laws. Stop-line geometry stays OPEN.
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace sr3airuntime {
 
@@ -73,6 +74,16 @@ inline int ObstacleProbeRearmMs(double v) {
 inline double ConditionScaledBrakingDecel(double aiMaxBrakingDecel, int conditionLevel) {
     static const double kScale[5] = {1.0, 0.8, 0.7, 0.6, 0.5};
     return aiMaxBrakingDecel * kScale[std::clamp(conditionLevel, 0, 4)];
+}
+
+// Per-car a_b: the car's own vehicle-info AI_Max_Braking_Decel (+0x770) when it has a usable row value (present, finite
+// and > 0), else `fallbackAiMax` (CHOSEN by the caller); then the Sec20.6.3(b) condition scale. `usedRow` (optional) is
+// set to whether the row value was used.
+inline double PerCarBrakingDecel(std::optional<double> rowAiMax, double fallbackAiMax, int conditionLevel,
+                                 bool* usedRow = nullptr) {
+    const bool use = rowAiMax.has_value() && std::isfinite(*rowAiMax) && *rowAiMax > 0.0;
+    if (usedRow) *usedRow = use;
+    return ConditionScaledBrakingDecel(use ? *rowAiMax : fallbackAiMax, conditionLevel);
 }
 
 // ---- Sec20.6.13(f)/(g) mode gate (RF-2) ----

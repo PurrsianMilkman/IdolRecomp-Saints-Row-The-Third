@@ -1,10 +1,11 @@
-// lua_spec_confirmed_stubs_b21_wave2_sec17_18_part2.cpp
+﻿// lua_spec_confirmed_stubs_b21_wave2_sec17_18_part2.cpp
 //
 // Second half of lua_spec_confirmed_stubs_b21_wave2_sec17_18.cpp's stub functions, moved
 // here unchanged to keep each file under ~1,500 lines (Team C refactor, 2026-10-17). The
 // names/registration pair stays in that file; see its header comment for scope, sources
 // and policy.
 
+#include "sr3player/vitals.h"
 #include "lua_spec_confirmed_stubs_common.h"
 #include "lua_spec_confirmed_stubs_sections.h"
 #include "sr3luahost/save_game_bridge.h"
@@ -270,7 +271,7 @@ int stub_cash_add(lua_State* L) {
     double scaled = amount * 100.0;
     scaled = std::max<double>(-2000000000.0, std::min<double>(2000000000.0, scaled)); // CONFIRMED saturating clamp
     if (c.forceFlagGatePasses.get()) { // CONFIRMED true in single player, Sec3.7
-        st->playerCash() += scaled;
+        st->addPlayerCash(scaled);  // cap: spec-tables-progression cash cap
     } else {
         EngineState::replicateStateChange("cash_add", target);
     }

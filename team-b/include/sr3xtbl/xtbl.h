@@ -199,6 +199,7 @@ public:
 
 private:
     friend class Parser;
+    friend class EngineParser;
     std::string name_;
     std::string text_;
     bool hasText_ = false;
@@ -214,6 +215,11 @@ struct ParseOptions {
     // Whether the engine's own reader does this is not stated by any spec (the shipped
     // data contains &lt; / &gt; / &amp; only, e.g. `Display Case&lt;001&gt;`).
     bool decodeEntities = true;
+    // false (default): the original's document rules, spec-differential-results.md D-16 / spec-differential-vectors-xml.md
+    // (text trimmed of bytes 1-32, first non-empty text run only, strict entities / close tags / UTF-8, files the
+    // original rejects throw FormatError, last top-level element is the root, no attributes: see ParseDocument).
+    // true: the earlier forgiving reader described in the header comment above (kept for the population validators).
+    bool legacyTolerant = false;
 };
 
 class Document {
@@ -249,6 +255,7 @@ public:
 
 private:
     friend class Parser;
+    friend class EngineParser;
     std::deque<Node> nodes_;          // stable addresses
     const Node* root_ = nullptr;
     std::vector<const Node*> topLevel_;

@@ -18,6 +18,19 @@ Ghidra from Bash. No leaked Volition/Havok/Audiokinetic/RAD material. All addres
 call-shape/context evidence, callee body not independently opened), **HYPOTHESIS** (plausible,
 materially uncertain), **OPEN** (not resolved — reported honestly rather than guessed).
 
+**Update 2026-10-19 — superseded points (full text in `spec-frontend-flow.md` §1, §3, §6, §12):**
+(1) §1: mode 3 is the session starter (registrar `0x0088CF70`), mode 4 is the city loading screen
+(`0x007AD410`), mode 6 is the pause menu/map (not the control-scheme UI), mode 9 is the co-op synced
+pause; the mode-3/mode-4 HYPOTHESIS lines below are withdrawn. §9 item 5 is closed: `+0x27C` is the
+mode the session state pushes when done. (2) §3: `0x007AE420` is the main-menu per-frame worker; the
+Lua native `main_menu_continue` is `0x007C9EB0` → `0x007ADE30`. (3) §6/§9 item 3: screen codes are
+2 campaign, 3 main_menu_common, 4 main_menu_top, 5 main_menu_new_game, 9 pause_menu_common,
+10 pause_menu_top, 11 pause_save_game, 12 pause_options_menu, 17 pause_options_display_cal; so
+`0x007AF660`/`0x007AF6C0` (§7) re-open the pause menu. (4) §7: the pause menu opens through
+`0x007B4190` → push mode 6; the `0x007C1EF0` / reason 4 / `"dialog_pause_show"` chain is the "PAUSED"
+overlay of `dialog.lua`. (5) §2 step 7: the zone is copied from the buffer `0x012FCA18`, whose
+shipped content is `"sr3_city"`.
+
 ---
 
 ## 1. The top-level "which screen/mode is active" architecture
@@ -703,6 +716,9 @@ executable's own data sections, not sourced externally.
 
 ## Changelog
 
+- **2026-10-19 — superseded-points note added at the top** (modes 3/4/6/9, `0x007AE420` vs
+  `main_menu_continue`, screen codes, pause-open path, zone buffer). Full text and evidence:
+  `spec-frontend-flow.md`. Old text left in place.
 - **2026-10-11 — §9 item 1: unlockables (`Auto_Unlock`) and wardrobe defaults CLOSED** (SPEC TEAM,
   self, direct Ghidra query + direct file reads, no agent dispatched). The unlockables row reader
   (`0x0071E5E0`) zeroes the state bits unconditionally and never applies `Auto_Unlock` itself — but

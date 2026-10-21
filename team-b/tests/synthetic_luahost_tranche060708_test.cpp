@@ -140,6 +140,12 @@ int main() {
     CHECK(es.teamRelationOobGuardCount() == 1);
     CHECK(es.teamRelationForTesting(9, 9) == -2); // out of bounds: never written
 
+    // Team A 2026-10-20 (Sec12.7 note, FINAL): the default matrix is the .data table at 0x01175100; no pair starts at 0.
+    CHECK(es.teamRelationForTesting(0, 0) == 4 && es.teamRelationForTesting(0, 1) == 1 && es.teamRelationForTesting(1, 2) == 4);
+    CHECK(es.teamRelationForTesting(1, 4) == 2 && es.teamRelationForTesting(5, 6) == 4 && es.teamRelationForTesting(6, 7) == 3);
+    CHECK(es.teamRelationForTesting(7, 0) == 2 && es.teamRelationForTesting(7, 5) == 3 && es.teamRelationForTesting(0, 7) == 2);
+    for (int a = 0; a < 8; ++a)
+        for (int b = 0; b < 8; ++b) CHECK(es.teamRelationForTesting(a, b) != 0);
     es.registerTeamIdForTesting("Saints", 0);
     es.registerTeamIdForTesting("Police", 1);
     ok(host, gp, "team_make_hostile('Saints', 'Police')"); // both in-bounds: real write

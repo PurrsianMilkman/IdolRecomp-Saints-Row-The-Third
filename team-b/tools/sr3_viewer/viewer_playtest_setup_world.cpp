@@ -2,6 +2,9 @@
 // Code moved verbatim out of the former single-function runPlaytest() (see viewer_playtest_session.h).
 #include "viewer_platform.h"
 #include "viewer_playtest_session.h"
+#include "sr3zone/zone_placement.h"
+#include <cstring>
+#include <map>
 
 namespace sr3viewer {
 
@@ -364,13 +367,62 @@ int setupStreamingGround(PlaytestSession& sess) {
         auto lc = std::make_unique<CityLoadedCell>();
         lc->cellIndex = cellIndex;
         const double t0 = cityNowMs();
+        bool placedMode = false;
+        size_t instPlaced = 0, meshesUnplaced = 0;
         try {
             vpp::Container str2 = a.top->openNested(c.entryIndex);
             std::vector<std::string> clNames;
             for (const auto& e : str2.entries())
                 if (endsWithNoCase(e.name, ".clmesh_pc")) clNames.push_back(e.name);
             lc->propEntries = clNames.size();
+            // PLACEMENT (spec-world-streaming.md Sec10.7.1, FINAL): the tile's `~f` .czh_pc records bind each
+            // object to `<mesh>.lmeshx` (+12 = byte offset into the header's own name pool) with a real
+            // position (+0/+2/+4) and Euler angles (+6/+8/+10). A fine cell holds every mesh whose
+            // transformed box overlaps the cell (X/Z, the Sec10.7.1 cell test), so an instance belongs to this
+            // cell iff its box overlaps this cell's box. SR3_PROP_GRID=1 forces the old CHOSEN grid stand-in.
+            const bool forceGrid = std::getenv("SR3_PROP_GRID") != nullptr;
+            std::shared_ptr<std::vector<sr3zone::PlacedObject>> placements;
+            if (!forceGrid) {
+                static std::map<std::pair<int, int>, std::shared_ptr<std::vector<sr3zone::PlacedObject>>> tileCache;
+                auto itc = tileCache.find({c.col, c.row});
+                if (itc == tileCache.end()) {
+                    std::shared_ptr<std::vector<sr3zone::PlacedObject>> got;
+                    char nameBuf[48];
+                    std::snprintf(nameBuf, sizeof(nameBuf), "sr3_city~f%02d%02d.czh_pc", c.col, c.row);
+                    for (auto& arch : archives) {
+                        std::vector<uint8_t> czh, dummy;
+                        if (!findEntry(*arch->top, nameBuf, czh, dummy, std::string())) continue;
+                        try {
+                            got = std::make_shared<std::vector<sr3zone::PlacedObject>>(
+                                sr3zone::DecodeZonePlacements(vpp::ByteView(czh.data(), czh.size())));
+                        } catch (const std::exception& ex) {
+                            std::printf("[placement] tile %02d%02d czh parse failed: %s\n", c.col, c.row, ex.what());
+                        }
+                        break;
+                    }
+                    size_t bound = 0;
+                    if (got) for (auto& o : *got) bound += o.bound ? 1 : 0;
+                    std::printf("[placement] tile %02d%02d: %zu records, %zu bound%s\n", c.col, c.row,
+                                got ? got->size() : size_t(0), bound, got ? "" : " (no ~f czh: grid fallback)");
+                    if (got && got->empty()) got.reset();
+                    itc = tileCache.emplace(std::make_pair(c.col, c.row), got).first;
+                }
+                placements = itc->second;
+            }
+            std::map<std::string, std::vector<size_t>> recordsByMesh; // lower-case mesh -> record indices
+            if (placements)
+                for (size_t i = 0; i < placements->size(); ++i)
+                    if ((*placements)[i].bound) recordsByMesh[toLowerLocal((*placements)[i].meshName)].push_back(i);
+            placedMode = placements != nullptr;
             for (const auto& nm : clNames) {
+                std::vector<size_t> recIdx;
+                if (placements) {
+                    std::string base = toLowerLocal(nm);
+                    base.erase(base.size() - 10); // ".clmesh_pc"
+                    auto itr = recordsByMesh.find(base);
+                    if (itr == recordsByMesh.end()) { ++meshesUnplaced; continue; } // no record places it (skyline etc.)
+                    recIdx = itr->second;
+                }
                 CityProp p;
                 std::string why;
                 std::vector<std::array<float, 3>> localCollisionTris;
@@ -379,6 +431,39 @@ int setupStreamingGround(PlaytestSession& sess) {
                     lc->texturesWanted += p.texturesWanted;
                     lc->texturesFound += p.texturesFound;
                     lc->texturesFoundElsewhere += p.texturesFoundElsewhere;
+                    if (placements) {
+                        size_t made = 0;
+                        for (size_t ri : recIdx) {
+                            const sr3zone::PlacedObject& o = (*placements)[ri];
+                            float mnx = 1e30f, mxx = -1e30f, mnz = 1e30f, mxz = -1e30f;
+                            for (int k = 0; k < 8; ++k) {
+                                const auto q = sr3zone::PlacementTransformPoint(
+                                    o, {(k & 1) ? p.localMax[0] : p.localMin[0], (k & 2) ? p.localMax[1] : p.localMin[1],
+                                        (k & 4) ? p.localMax[2] : p.localMin[2]});
+                                mnx = (std::min)(mnx, q[0]); mxx = (std::max)(mxx, q[0]);
+                                mnz = (std::min)(mnz, q[2]); mxz = (std::max)(mxz, q[2]);
+                            }
+                            if (!(mxx > c.centreX - kFineCellHalfX && mnx < c.centreX + kFineCellHalfX &&
+                                  mxz > c.centreZ - kFineCellHalfZ && mnz < c.centreZ + kFineCellHalfZ))
+                                continue;
+                            CityProp inst = p; // shares the GPU renderers; own world matrix + collision
+                            const float w[16] = {o.rows[0], o.rows[1], o.rows[2], 0.0f, o.rows[3], o.rows[4], o.rows[5], 0.0f,
+                                                 o.rows[6], o.rows[7], o.rows[8], 0.0f, o.position[0], o.position[1],
+                                                 o.position[2], 1.0f};
+                            std::memcpy(inst.world, w, sizeof(w));
+                            if (!localCollisionTris.empty()) {
+                                std::vector<std::array<float, 3>> wt;
+                                wt.reserve(localCollisionTris.size());
+                                for (const auto& v : localCollisionTris) wt.push_back(sr3zone::PlacementTransformPoint(o, v));
+                                inst.collisionBvh = BuildCollisionBvh(wt, 0.0f, 0.0f, 0.0f);
+                            }
+                            lc->props.push_back(std::move(inst));
+                            ++made;
+                        }
+                        instPlaced += made;
+                        if (made == 0) ++meshesUnplaced;
+                        continue;
+                    }
                     p.collisionLocalTrisStash = std::move(localCollisionTris);
                     lc->props.push_back(std::move(p));
                 } else {
@@ -390,7 +475,10 @@ int setupStreamingGround(PlaytestSession& sess) {
             std::printf("[stream]   %s: container open failed: %s\n", c.name.c_str(), ex.what());
         }
         const size_t m = lc->props.size();
-        if (m > 0) {
+        if (placedMode)
+            std::printf("[placement] %s: %zu instances placed (%zu mesh entries had no record/instance in this cell)\n",
+                        c.name.c_str(), instPlaced, meshesUnplaced);
+        if (m > 0 && !placedMode) {
             const int cols = (std::max)(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(m) *
                                                                                  kFineCellHalfX / kFineCellHalfZ))));
             const int rows = static_cast<int>((m + static_cast<size_t>(cols) - 1) / static_cast<size_t>(cols));
@@ -489,7 +577,7 @@ int setupStreamingGround(PlaytestSession& sess) {
             // collision) - real ground-pavement VERTICAL support follows
             // that same unconditional precedent, not the horizontal
             // `noCollision` gate.
-            if (loadCityGroundTile(t.first, t.second, archives, device.device(), *gt, why, true)) {
+            if (loadCityGroundTile(t.first, t.second, archives, device.device(), *gt, why, true, /*allBlocks=*/true)) {
                 // Collision diagnostics appended to this LOAD line (street-
                 // collision-0x2237-mopp follow-up task, 2026-10-11) - the
                 // real triangle count and this tile's own collision-mesh
@@ -509,6 +597,19 @@ int setupStreamingGround(PlaytestSession& sess) {
             } else {
                 std::printf("[ground] frame %d tile %02d%02d: SKIPPED (no real ground rendered): %s\n", frame,
                             t.first, t.second, why.c_str());
+            }
+            // Walkable-ground collision (spec 13.5.1): reported for every tile, independent of whether its render mesh loaded.
+            if (gt->collisionLoaded) {
+                const CollisionBvhNode& cr = gt->collisionBvh.nodes[static_cast<size_t>(gt->collisionBvh.root)];
+                std::printf("[ground] frame %d COLLISION tile %02d%02d: %s n1=%zu strip-standin tris=%zu bounds "
+                            "x[%.1f,%.1f] y[%.1f,%.1f] z[%.1f,%.1f]\n", frame, t.first, t.second,
+                            gt->collisionSource.c_str(), gt->collisionVertexCount, gt->collisionTriangleCount,
+                            static_cast<double>(cr.min[0]), static_cast<double>(cr.max[0]),
+                            static_cast<double>(cr.min[1]), static_cast<double>(cr.max[1]),
+                            static_cast<double>(cr.min[2]), static_cast<double>(cr.max[2]));
+            } else {
+                std::printf("[ground] frame %d COLLISION tile %02d%02d: NONE (%s) - CHOSEN node-ground fallback applies\n",
+                            frame, t.first, t.second, gt->collisionWhy.c_str());
             }
             groundTiles[t] = std::move(gt);
         }
@@ -556,10 +657,61 @@ int setupStreamingGround(PlaytestSession& sess) {
         finalGroundY = 0.5f * (groundYMin + groundYMax);
     }
     if (nodeGroundOn && !haveGroundBounds) {
-        // CHOSEN: no real ground renderer covers the spawn -> start at the nearest graph node's Y (within 40 m).
+        // CHOSEN (last-resort fallback only): no real ground renderer covers the spawn -> nearest graph node's Y.
         double ny = 0.0;
         if (sess.nodeGround.Nearest(spawnX, spawnZ, sr3player::kNodeGroundMaxDistance, 0.0, ny))
             finalGroundY = static_cast<float>(ny);
+    }
+    // WALKABLE GROUND AT THE SPAWN (G1, spec-zone-data-format.md Sec13.5.1 port recipe steps 3-4): ray from a start
+    // height over the resident tiles' walkable collision (the `~s` tail mesh). Start height, spec item 4: CHOSEN for a
+    // port that only has (x, z): nearest road/sidewalk node Y + 2 m (keeps rooftops out); otherwise (no node) the
+    // collision AABB max Y + 1 m (the topmost surface). Replaces the render-bounds-derived finalGroundY above whenever
+    // the collision resolves; the render-bounds / node values above stay only as the fallback for a spawn with no
+    // collision mesh (tile failed to load).
+    bool spawnCollisionResolved = false;  // read by the one-time probe print below
+    double spawnCollisionY = 0.0;
+    std::string spawnCollisionHow;
+    {
+        double hit = 0.0, startY = 0.0;
+        bool got = false;
+        const char* how = "";
+        double ny = 0.0;
+        const bool haveNodeSpawn =
+            nodeGroundOn && sess.nodeGround.Nearest(spawnX, spawnZ, sr3player::kNodeGroundMaxDistance, 0.0, ny);
+        if (haveNodeSpawn) {
+            startY = ny + 2.0;
+            got = SampleGroundMeshHeight(groundTiles, spawnX, spawnZ, startY, hit);
+            how = "node Y + 2 m start (CHOSEN, spec item 4)";
+        }
+        if (!got) {
+            got = SampleGroundMeshTopHeight(groundTiles, spawnX, spawnZ, hit);
+            how = "collision AABB max Y + 1 m start (spec item 4)";
+        }
+        if (!got && startY != 0.0) {
+            const double rr = SampleGroundMeshHoleFill(groundTiles, spawnX, spawnZ, startY, hit);
+            if (rr > 0.0) {
+                got = true;
+                static char holeBuf[160];
+                std::snprintf(holeBuf, sizeof(holeBuf), "CHOSEN hole fill: median hit of the %.0f m ring (strip stand-in hole at the spawn)", rr);
+                how = holeBuf;
+            }
+        }
+        if (!got && nodeGroundOn && haveNodeSpawn) {
+            // CHOSEN labelled fallback: no collision under/near the spawn -> the nearest node's Y beats the render-bounds midpoint.
+            finalGroundY = static_cast<float>(ny);
+        }
+        if (got) {
+            spawnCollisionResolved = true;
+            spawnCollisionY = hit;
+            spawnCollisionHow = how;
+            finalGroundY = static_cast<float>(hit);
+            std::printf("ground-y : walkable collision ground at spawn (%.1f %.1f) = %.3f m [%s]\n",
+                        static_cast<double>(spawnX), static_cast<double>(spawnZ), hit, how);
+        } else {
+            std::printf("ground-y : NO walkable collision resolved at spawn (%.1f %.1f) - falling back to the CHOSEN "
+                        "node/render-bounds value %.2f m\n", static_cast<double>(spawnX), static_cast<double>(spawnZ),
+                        static_cast<double>(finalGroundY));
+        }
     }
     if (spawnYOverrideGiven) finalGroundY = spawnYOverride;  // --spawn-y, see its own doc comment above
     // Honest banner note (this task, 2026-10-08): says directly whether what was just
@@ -570,7 +722,7 @@ int setupStreamingGround(PlaytestSession& sess) {
                                  : (groundYMax - groundYMin) <= 3.0f
                                        ? " (flat, street-level - not a rooftop)"
                                        : " (NOT flat - spans more than 3m, elevated/ledge-shaped real geometry)";
-    std::printf("ground-y : measured real ground bounds [%.2f, %.2f] across %zu loaded tile(s) - spawn/collision "
+    std::printf("ground-y : RENDER-mesh bounds (diagnostic, not collision) [%.2f, %.2f] across %zu loaded tile(s) - spawn/collision "
                 "groundY = %.2f%s\n",
                 static_cast<double>(groundYMin), static_cast<double>(groundYMax), groundTiles.size(),
                 static_cast<double>(finalGroundY), groundShapeNote);
@@ -641,19 +793,55 @@ int setupStreamingGround(PlaytestSession& sess) {
     // already represents "the best height known before this query" -
     // consistent with every other call site in this file that threads a
     // `fallback` through unchanged.
-    sess.sampleGroundHeight = [&](double x, double z, float fallback) -> float {
-        double meshY = 0.0;
-        if (SampleGroundMeshHeight(groundTiles, x, z, static_cast<double>(fallback), meshY))
-            return static_cast<float>(meshY);
-        // CHOSEN: heightmap with no data -> nearest road/sidewalk node Y within 40 m (see node_ground.h).
-        if (sess.noNodeGround) return sampleRealGroundHeight(x, z, fallback);  // old behaviour, unchanged
-        const float hm = sampleRealGroundHeight(x, z, -1.0e30f);
-        if (hm > -1.0e29f) return hm;
+    // G1 (TEAM B, 2026-10-18) - THE walkable-ground query for the character, vehicle and ambient actors. The 0x2244
+    // heightmap is NOT in this chain any more (aircraft clearance, spec 13.5.1(d)); sampleRealGroundHeight above is kept
+    // only for the SR3_TRACE_PLAYER_Y diagnostic and the one-time spawn probe print.
+    //   1. ray from startY + 0.05 down 500 m over the resident `~s` tail-collision tiles, closest hit      [Mesh]
+    //   2. miss -> CHOSEN retry from the spec's item-4 start height (nearest road/sidewalk node Y + 2 m, else the
+    //      collision AABB max Y + 1 m) - the engine always has a position to start from, a port teleported
+    //      to a new (x, z) or standing over a strip stand-in hole may not                                  [MeshRetry]
+    //   3. still a miss: tile resident with collision -> hold (spec: "on a miss, leave Y unchanged")       [HeldMiss]
+    //      tile resident but its collision failed to load -> CHOSEN labelled fallback: nearest node Y     [NodeFallback]
+    //      tile not resident -> hold the character (spec item 6, "before the tile is resident")           [HeldNoTile]
+    sess.sampleGround = [&](double x, double z, double startY, float holdY) -> PlaytestSession::GroundSampleResult {
+        using GS = PlaytestSession::GroundSource;
+        PlaytestSession::GroundSampleResult r;
+        double y = 0.0;
+        if (SampleGroundMeshHeight(groundTiles, x, z, startY, y)) {
+            r.y = static_cast<float>(y);
+            r.source = GS::Mesh;
+            return r;
+        }
         double ny = 0.0;
-        if (!sess.noNodeGround && sess.nodeGround.Nearest(x, z, sr3player::kNodeGroundMaxDistance,
-                                                     static_cast<double>(fallback), ny))
-            return static_cast<float>(ny);
-        return fallback;
+        const bool haveNode = !sess.noNodeGround &&
+                              sess.nodeGround.Nearest(x, z, sr3player::kNodeGroundMaxDistance, startY, ny);
+        if (haveNode && SampleGroundMeshHeight(groundTiles, x, z, ny + 2.0, y)) {
+            r.y = static_cast<float>(y);
+            r.source = GS::MeshRetry;
+            return r;
+        }
+        if (!haveNode && SampleGroundMeshTopHeight(groundTiles, x, z, y)) {
+            r.y = static_cast<float>(y);
+            r.source = GS::MeshRetry;
+            return r;
+        }
+        int tc = 0, tr = 0;
+        cityTileColRowForWorld(static_cast<float>(x), static_cast<float>(z), tc, tr);
+        const auto it = groundTiles.find({tc, tr});
+        if (it == groundTiles.end()) {
+            r.y = holdY;
+            r.source = GS::HeldNoTile;
+        } else if (it->second->collisionLoaded) {
+            r.y = holdY;
+            r.source = GS::HeldMiss;
+        } else if (haveNode) {
+            r.y = static_cast<float>(ny);  // CHOSEN fallback: this tile's collision failed to load
+            r.source = GS::NodeFallback;
+        } else {
+            r.y = holdY;
+            r.source = GS::HeldMiss;
+        }
+        return r;
     };
     sess.playerGroundFollower_.emplace(static_cast<double>(finalGroundY));
     sess.vehicleGroundFollower_.emplace(static_cast<double>(finalGroundY));
@@ -667,7 +855,7 @@ int setupStreamingGround(PlaytestSession& sess) {
         // brief asks to answer precisely for THIS spawn.
         const float probe = sampleRealGroundHeight(static_cast<double>(spawnX), static_cast<double>(spawnZ), -1.0e30f);
         if (probe > -1.0e29f) {
-            std::printf("heightmap: real Sec13.5 sample at spawn (%.1f %.1f) = %.2fm (flat-plane fallback was "
+            std::printf("heightmap: 0x2244 sample at spawn (%.1f %.1f) = %.2fm (aircraft-clearance field, NOT ground; spawn ground was "
                         "%.2fm)\n",
                         static_cast<double>(spawnX), static_cast<double>(spawnZ), static_cast<double>(probe),
                         static_cast<double>(finalGroundY));
@@ -682,15 +870,15 @@ int setupStreamingGround(PlaytestSession& sess) {
         // can see directly whether the spawn tile's own real mesh
         // resolved (and at what height) rather than falling through to
         // the Heightmap/flat-plane chain above.
-        double meshProbe = 0.0;
-        if (SampleGroundMeshHeight(groundTiles, static_cast<double>(spawnX), static_cast<double>(spawnZ),
-                                    static_cast<double>(finalGroundY), meshProbe)) {
-            std::printf("groundmesh: real 0x2237 collision-mesh sample at spawn (%.1f %.1f) = %.2fm (used in "
-                        "preference to the heightmap/flat-plane chain above)\n",
-                        static_cast<double>(spawnX), static_cast<double>(spawnZ), meshProbe);
+        // G1: the probe reports the walkable `~s` tail-mesh result computed in the spawn block above.
+        if (spawnCollisionResolved) {
+            std::printf("groundmesh: real 0x2237 collision-mesh sample at spawn (%.1f %.1f) = %.2fm [%s] (the "
+                        "walkable ground; 0x2244 is not consulted)\n",
+                        static_cast<double>(spawnX), static_cast<double>(spawnZ), spawnCollisionY,
+                        spawnCollisionHow.c_str());
         } else {
             std::printf("groundmesh: NO real 0x2237 collision-mesh triangle resolved at spawn (%.1f %.1f) - "
-                        "falling back to the heightmap/flat-plane chain above\n",
+                        "CHOSEN node-ground / render-bounds fallback above\n",
                         static_cast<double>(spawnX), static_cast<double>(spawnZ));
         }
     }
@@ -711,9 +899,20 @@ int setupStreamingGround(PlaytestSession& sess) {
             sr3player::JumpGateInputs gate;
             gate.controlsDisabled = pm.world.readControlsDisabled();
             gate.permitted = (pm.world.permissions2078.get() & 0x200u) != 0;  // Sec3.6.4: +0x2078 bit 0x200
+            gate.blocked = pm.world.climbingOrVaulting.get();  // JC-2: 0x00989670 (Sec3.6.4 step 2)
             gate.heightAboveGround = from.y - collisionDriver.groundY();
             vel.y = sess.jump_->beginFrame(gate, from.y);
+            // AW-15 freefall / parachute (spec-player-runtime.md Sec19.5): while active the horizontal velocity is the
+            // law's r and the vertical fall law runs with the per-frame terminal speed T (45 / 9 ... , Sec5.6.5).
+            if (sess.craft.ffOverride) {
+                vel.x = sess.craft.ff.rx;
+                vel.z = sess.craft.ff.rz;
+                collisionDriver.setTerminalFallSpeed(sess.craft.ff.terminalT);
+            } else {
+                collisionDriver.setTerminalFallSpeed(0.0);  // default 44.704
+            }
             const sr3player::CapsuleStepResult r = collisionDriver.step(from, vel, dt);
+            sess.craft.playerGrounded = r.grounded;
             sess.jump_->endFrame(r.position.y, r.velocity.y, r.grounded, dt);
             if (pm.st.crouched) sess.jump_->noteCrouchFrame();
             sess.jump_->noteGroundSpeed(std::hypot(r.velocity.x, r.velocity.z), pm.st.crouched);

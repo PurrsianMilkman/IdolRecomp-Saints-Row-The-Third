@@ -74,6 +74,16 @@ void applyLoadedSave(PlaytestSession& sess) {
         const int ci = sr3saveflow::KnownCribIndex(plan.placement.handle);
         where = ci >= 0 ? sr3saveflow::kKnownCribs[static_cast<size_t>(ci)].name : "respawn crib";
     }
+    // sr3.exe sidecar (see writeSaveTo): the exact saved position overrides the crib / marker placement.
+    if (sess.writePositionSidecar) {
+        std::ifstream pin(sess.loadSavePath + ".sr3pos");
+        double px = 0, py = 0, pz = 0;
+        if (pin && (pin >> px >> py >> pz)) {
+            sess.spawnX = static_cast<float>(px);
+            sess.spawnZ = static_cast<float>(pz);
+            where = "saved position (.sr3pos sidecar)";
+        }
+    }
     if (sess.hudEs) {
         sess.hudEs->playerCash() = static_cast<double>(plan.cashRaw);
         sess.hudEs->restoreRespectFromSave(plan.respectTotal, plan.respectInLevel, plan.respectLevel);
@@ -87,12 +97,11 @@ void applyLoadedSave(PlaytestSession& sess) {
                 plan.clock.second, plan.playTime.value_or(0.0), sess.hudEs ? "" : " (no --hud: cash/respect not applied)");
 }
 
-void writeSaveAtExit(PlaytestSession& sess) {
-    if (sess.saveAtExitPath.empty()) return;
+bool writeSaveTo(PlaytestSession& sess, const std::string& savePath) {
     std::string reason;
-    if (!sr3io::isOutputPathSafe(sess.saveAtExitPath, ".sr3s_pc", 4 * sr3save::kSaveSnapshotSize, reason)) {
+    if (!sr3io::isOutputPathSafe(savePath, ".sr3s_pc", 4 * sr3save::kSaveSnapshotSize, reason)) {
         std::printf("save     : --save-at-exit refused: %s\n", reason.c_str());
-        return;
+        return false;
     }
     std::vector<uint8_t> image =
         sess.loadedSaveImage.empty() ? sr3saveflow::BuildNewGameSnapshot() : sess.loadedSaveImage;
@@ -135,14 +144,40 @@ void writeSaveAtExit(PlaytestSession& sess) {
         st.respectMultiplier = b.respectMultiplier;
     }
     sr3saveflow::PatchFreeRoamSave(image, st);
-    std::ofstream out(sess.saveAtExitPath, std::ios::binary | std::ios::trunc);
+    std::ofstream out(savePath, std::ios::binary | std::ios::trunc);
     out.write(reinterpret_cast<const char*>(image.data()), static_cast<std::streamsize>(image.size()));
     const sr3saveflow::SnapshotBlocks w = sr3saveflow::SnapshotBlocks::read(image);
     const int ci = sr3saveflow::KnownCribIndex(w.respawnCrib);
     std::printf("save     : wrote %s (%s; respawn crib %s; cash $%.2f; respect %u level %u; play time %u s)\n",
-                sess.saveAtExitPath.c_str(), out ? "ok" : "WRITE FAILED",
+                savePath.c_str(), out ? "ok" : "WRITE FAILED",
                 ci >= 0 ? sr3saveflow::kKnownCribs[static_cast<size_t>(ci)].name : "none (player-start marker)",
                 w.cashRaw / 100.0, w.respectTotal, w.respectLevel, w.playTimeSeconds);
+    const bool wrote = static_cast<bool>(out);
+    out.close();
+    if (wrote && sess.writePositionSidecar) {
+        // CHOSEN recomp extension: the retail save format records no player position (spec-save-format.md A.2,
+        // "No player position is written anywhere"; a load places at the respawn crib or the player-start marker).
+        // So "back where I saved" needs a sidecar next to the .sr3s_pc: three decimal numbers, x y z (world metres).
+        double px = 0, py = 0, pz = 0;
+        if (sess.inVehicle && sess.vehicleRig_ && sess.vehicleRig_->sim) {
+            px = sess.vehicleRig_->sim->state_.posX;
+            pz = sess.vehicleRig_->sim->state_.posZ;
+        } else if (sess.pm_) {
+            px = sess.pm_->st.position.x;
+            py = sess.pm_->st.position.y;
+            pz = sess.pm_->st.position.z;
+        }
+        std::ofstream pos(savePath + ".sr3pos", std::ios::trunc);
+        pos.precision(9);
+        pos << px << " " << py << " " << pz << "\n";
+        std::printf("save     : wrote %s.sr3pos (CHOSEN sidecar): position %.2f %.2f %.2f\n", savePath.c_str(), px, py, pz);
+    }
+    return wrote;
+}
+
+void writeSaveAtExit(PlaytestSession& sess) {
+    if (sess.saveAtExitPath.empty()) return;
+    writeSaveTo(sess, sess.saveAtExitPath);
 }
 
 }  // namespace sr3viewer

@@ -1058,7 +1058,7 @@ int runDriveDemo(int argc, char** argv) {
 
         // ---- Vehicle world transform tracks the REAL physics state, every
         // frame - NOT a hand-animated path (the whole point of this demo). ----
-        sr3render::buildWorldMatrix(static_cast<float>(sim.state_.posX), 0.0f,
+        sr3render::buildWorldMatrixSimHeading(static_cast<float>(sim.state_.posX), 0.0f,
                                     static_cast<float>(sim.state_.posZ), static_cast<float>(sim.state_.heading),
                                     1.0f, vehicleObj.world);
 

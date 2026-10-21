@@ -207,7 +207,7 @@ int main() {
         CHECK(DownedDeadlineMs(0, 1.0, false) == 30000);
         CHECK(DownedDeadlineMs(1000, 2.0, false) == 61000);   // 30000 x difficulty scale
         CHECK(DownedDeadlineMs(0, 2.0, /*mode5*/ true) == 15000);  // fixed 15000 in game mode 5
-        CHECK(DownedGetUpHeal(200, /*enemySide*/ true) == 50);   // get-up/revive path: enemy +0x1ca8 != 0 -> 0.25
+        CHECK(DownedGetUpHeal(200, /*enemySide*/ true) == 50.0f);   // get-up/revive path: enemy +0x1ca8 != 0 -> 0.25
         CHECK(DownedGetUpHeal(200, false) == 200);               // human side -> 1.0
         // Sec21.10.1 FINAL (supersedes the old "DownedStandsUp"): type-0 expiry KILLS (vector 1).
         CHECK(DownedType0ExpiryKills(29999, 30000, false) == false);

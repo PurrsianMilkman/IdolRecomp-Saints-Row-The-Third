@@ -72,7 +72,7 @@ Every loader here has the same shape, built from the same six shared functions i
 3. **Read the row** with the accessors of §1.4.
 4. **Close:** `0x00DAB9D0(doc)` frees the parsed document.
 
-**Node layout (parsed XML element):** `+0x00` name (`char*`), `+0x04` next sibling, `+0x08` first child, `+0x0C` text (`char*`, `NULL` when the element has no text). Children are matched by name, first match wins; text is never trimmed by the lookup (leading/trailing whitespace is handled by each parser below). **[CONFIRMED — disassembly, the three lookup functions read in full.]** **[Desk review 2026-09-30: for mixed content (an element with its own text and child elements, §17.2) the readers of §9.3/§11.5 take the element's own leading text; the real colour values sit in that leading text (§17.2).]** **[OPEN — desk review 2026-09-30: the text does not state whether `+0x0C` holds only the element's leading character data or also text that follows a child element; to be settled against the executable.]** **[2026-10-01, job `20261001T123123-team-a-ytgi`: still OPEN — the child lookups (`0x00DC4FF0`, thunk `0x00DAB9E0`) only read `+0x0C`; the text is assigned by the tokenizer/tree builder `0x00DC56B0`, reached from the open helper `0x00DAC9A0` through `0x00DC5AC0` → `0x00DC5820`, and `0x00DC56B0` was not dumped. Incidental, CONFIRMED — disassembly (`0x00DC5820`): the parse fails with a message carrying the line number when the file does not tokenise, holds no element, or leaves a tag unclosed.]**
+**Node layout (parsed XML element):** `+0x00` name (`char*`), `+0x04` next sibling, `+0x08` first child, `+0x0C` text (`char*`, `NULL` when the element has no text). Children are matched by name, first match wins; text is never trimmed by the lookup ~~(leading/trailing whitespace is handled by each parser below)~~ — it does not need to be: **[2026-10-19 corrected per Team D emulation D-16: FINAL]** the document parser `0x00DC5820` has already trimmed bytes 1..32 from both ends of every text run and kept only the first non-empty run (`spec-xtbl-format.md` §7). **[CONFIRMED — disassembly, the three lookup functions read in full.]** **[Desk review 2026-09-30: for mixed content (an element with its own text and child elements, §17.2) the readers of §9.3/§11.5 take the element's own leading text; the real colour values sit in that leading text (§17.2).]** **[OPEN — desk review 2026-09-30: the text does not state whether `+0x0C` holds only the element's leading character data or also text that follows a child element; to be settled against the executable.]** **[2026-10-01, job `20261001T123123-team-a-ytgi`: still OPEN — the child lookups (`0x00DC4FF0`, thunk `0x00DAB9E0`) only read `+0x0C`; the text is assigned by the tokenizer/tree builder `0x00DC56B0`, reached from the open helper `0x00DAC9A0` through `0x00DC5AC0` → `0x00DC5820`, and `0x00DC56B0` was not dumped. Incidental, CONFIRMED — disassembly (`0x00DC5820`): the parse fails with a message carrying the line number when the file does not tokenise, holds no element, or leaves a tag unclosed.]**
 
 **Re-entrancy.** Most array-backed loaders allocate on first call and, when called again with the array already present, only reload if the new row count fits the old capacity (`if capacity < new count: return`). Capacity is therefore fixed by the first load. **[CONFIRMED — disassembly for `weather`, `wind`, `rain`, `lightning`; the pattern is not universal.]**
 
@@ -110,7 +110,7 @@ Every loader here has the same shape, built from the same six shared functions i
 | `0x00DE0200(node, dest)` | `f32` from the element's own text; returns 1/0 | returns 0 | C `atof` |
 | `0x00DAC830(names[], count, node)` | **enum lookup**: index of the element's text in a table of literal names (`_stricmp`), `-1` if none or if the node is `NULL` | `-1` | — |
 
-**Engine float grammar** (`0x00DACB20`): optional `-`; a leading `.` is accepted; **a leading `0x`/`0X` returns 0.0**; integer digits, optional `.` fraction, optional `e`/`E` exponent. **Engine integer grammar** (`0x00DAB8B0`): decimal, or `0x` hexadecimal; stops at the first non-digit. ~~**[Desk review 2026-09-30: sign handling is in the accessor, not here — per `spec-tables-traffic-ai.md` §1.3 only `0x00DABC70`/`0x00DABD20` accept a leading `-`; `0x00DABDF0`/`0x00DABE80` read it as 0.]**~~ **[CORRECTED — CONFIRMED — disassembly 2026-10-01: the float grammar `0x00DACB20` handles a leading `-` itself (it negates the integer part, the fraction and the result), so every float accessor built on it (`0x00DACCB0`, `0x00DACD40`, `0x00DACDE0`, `0x00DACE80`) is signed; `-.5` works and `-0x10` is 0.0. For integers the sign is handled by the accessor — `0x00DABD20` (and, per `spec-tables-traffic-ai.md` §1.3, `0x00DABC70`) negate after a leading `-`, `0x00DABE80` (and `0x00DABDF0`) pass the text straight to the grammar, which stops at the `-` and yields 0. The fraction is the digits after the first `.` found anywhere in the text, weighted by successive powers of 0.1 in single precision; an `e`/`E` right after them takes the rest as a C integer power of ten (`0x007D9B00`).]** **[OPEN — desk review 2026-09-30: this document does not say which accessor (signed or unsigned) each integer field below uses (`Density`, `Start_Time`, `On_Time`, `Priority`, `Life_Time`, `Fade_Time`, `Blocker/LifeSpan`, `rampin`/`duration`/`return`, …), so whether a negative value survives is not pinned; **[2026-10-01, CONFIRMED — disassembly: `Start_Time`, `Ramp_Out_Time` (`0x005A89F0`), `Priority` (`0x005CE140`) and `Blocker/LifeSpan` (`0x005C3E70`) use `0x00DABC70` (signed, always-write); `Audio_Occlusion` (`0x006F7780` is among the callers of `0x00DABE80`) is unsigned write-if-present. The others (`Density`, `On_Time`/`Off_Time`/`Variation`, `Life_Time`/`Fade_Time`, `rampin`/`duration`/`return`, `max_drunk_*`, `Skybox_Layer`, `TODRange`) remain OPEN.]** ~~also the float grammar's handling of a leading `+`, leading whitespace and a bare `-` is not stated~~ **[2026-10-01: a leading `+`, leading whitespace and a bare `-` are not treated by the float grammar itself and fall through to the integer parser `0x00DAB8B0` (not yet read; expected 0 for the integer part, so ` 1.5` and `+1.5` would read 0.5 — HYPOTHESIS)]**; to be settled against the executable.]** Both work on a 1 KiB copy of the text (`strncpy`, NUL forced at `[0x3FF]`). This is the grammar `spec-vehicle-data.md` §7.2 describes; the addresses of the accessors are the ones named there.
+**Engine float grammar** (`0x00DACB20`): optional `-`; a leading `.` is accepted; **a leading `0x`/`0X` returns 0.0**; integer digits, optional `.` fraction, optional `e`/`E` exponent. **Engine integer grammar** (`0x00DAB8B0`): decimal, or `0x` hexadecimal; stops at the first non-digit (decimal); **[2026-10-19 corrected per Team D emulation D-15: FINAL]** the hex branch reads past the end of the text, because its `strchr` on the hex-digit set matches the terminating NUL (`spec-tables-weapons-combat.md` §1). ~~**[Desk review 2026-09-30: sign handling is in the accessor, not here — per `spec-tables-traffic-ai.md` §1.3 only `0x00DABC70`/`0x00DABD20` accept a leading `-`; `0x00DABDF0`/`0x00DABE80` read it as 0.]**~~ **[CORRECTED — CONFIRMED — disassembly 2026-10-01: the float grammar `0x00DACB20` handles a leading `-` itself (it negates the integer part, the fraction and the result), so every float accessor built on it (`0x00DACCB0`, `0x00DACD40`, `0x00DACDE0`, `0x00DACE80`) is signed; `-.5` works and `-0x10` is 0.0. For integers the sign is handled by the accessor — `0x00DABD20` (and, per `spec-tables-traffic-ai.md` §1.3, `0x00DABC70`) negate after a leading `-`, `0x00DABE80` (and `0x00DABDF0`) pass the text straight to the grammar, which stops at the `-` and yields 0. The fraction is the digits after the first `.` found anywhere in the text, weighted by successive powers of 0.1 in single precision; an `e`/`E` right after them takes the rest as a C integer power of ten (`0x007D9B00`).]** **[OPEN — desk review 2026-09-30: this document does not say which accessor (signed or unsigned) each integer field below uses (`Density`, `Start_Time`, `On_Time`, `Priority`, `Life_Time`, `Fade_Time`, `Blocker/LifeSpan`, `rampin`/`duration`/`return`, …), so whether a negative value survives is not pinned; **[2026-10-01, CONFIRMED — disassembly: `Start_Time`, `Ramp_Out_Time` (`0x005A89F0`), `Priority` (`0x005CE140`) and `Blocker/LifeSpan` (`0x005C3E70`) use `0x00DABC70` (signed, always-write); `Audio_Occlusion` (`0x006F7780` is among the callers of `0x00DABE80`) is unsigned write-if-present. The others (`Density`, `On_Time`/`Off_Time`/`Variation`, `Life_Time`/`Fade_Time`, `rampin`/`duration`/`return`, `max_drunk_*`, `Skybox_Layer`, `TODRange`) remain OPEN.]** ~~also the float grammar's handling of a leading `+`, leading whitespace and a bare `-` is not stated~~ **[2026-10-01: a leading `+`, leading whitespace and a bare `-` are not treated by the float grammar itself and fall through to the integer parser `0x00DAB8B0` (not yet read; expected 0 for the integer part, so ` 1.5` and `+1.5` would read 0.5 — HYPOTHESIS)]**; to be settled against the executable.]** Both work on a 1 KiB copy of the text (`strncpy`, NUL forced at `[0x3FF]`). This is the grammar `spec-vehicle-data.md` §7.2 describes; the addresses of the accessors are the ones named there.
 
 **FOR TEAM B (2026-10-01, CORRECTION):** every float field read through the engine float grammar accepts a leading `-` (the sign is handled in `0x00DACB20`, not in the accessor); the "leading `-` reads as 0" rule applies only to the unsigned integer accessors `0x00DABE80`/`0x00DABDF0`.
 
@@ -1162,7 +1162,155 @@ call cluster whose field offset matches `weather_time_of_day`'s own `Ambient_Col
 Full detail, complete address index, and the 14 unopened orbital-list reader functions:
 `scratchpad/sky_lighting_tod_runtime_2026-10-08.md`.
 
+## 19. Sky, sun direction, base time-of-day curves and fog (2026-10-19)
+
+Static work only: the executable read with capstone (`tools/scratchpad/looks_2026-10-19/retool.py`), shipped tables and shaders extracted per entry (`vpp_get.py`), shader bytecode read with a public-format SM3 reader (`sm3dis.py`). Reference models with the test vectors below: `sun_vectors.py`, `district_eval.py`. This section closes §18's "sun/moon direction" OPEN item and §15.5's "which file" OPEN item. It also finds the base TOD curve file, which §18 did not name.
+
+### 19.1 Where the time-of-day values come from (2026-10-19)
+
+**Files. FINAL.**
+- `default_global.xtbl` (`misc_tables.vpp_pc`, 4,965 bytes). Loaded by `0x00B9D3F0`, which builds `"default_global" + ".xtbl"` and calls `0x00BB6400`. If that fails it tries `default.gtodx` (`0x0118C1C8`, not shipped). This **closes §15.5's OPEN item**: the second document is `default_global.xtbl`. It holds the four orbitals (§19.3), `day_begin` 630, `day_end` 2200, `skybox_mesh_filename` `rfg_skybox`, `cloud_mesh_filename` `skybox_clouds` with materials `Cloud_base_material` / `Cloud_overhead_material` / `m_sky_matte_01`, and `tod_segments` 500 / 930 / 1430 / 2100.
+- `default_district.xtbl` (`misc_tables.vpp_pc`, 23,434 bytes). Loaded by `0x00B9D190` (`"%s%s"` with `default_district` and `.xtbl`) into `0x00BA5DA0`. **This is the base TOD curve set.** Each element of §15.2's flattened vocabulary (`east0`…`east3`, `west0`…`west3`, `zenith`, `fog_*`, `ambient_color`, `tod_light_color`, …) holds repeated `<key><time>N</time><value>…</value></key>`. `N` is a half-hour slot 0–47. The shipped keys sit at slots 10, 19, 29 and 42 (05:00, 09:30, 14:30, 21:00). Colours are `"r g b intensity"`. Siblings `default_district_night.xtbl` and `default_district_special.xtbl` exist; their loader is a Residual.
+- `weather_time_of_day.xtbl` (§3) is a **sparse per-weather override layer** on top of the base curves. The shipped file has four segments (`night` 500, `sunrise` 800, `noon` 1430, `sunset` 1900, each `Ramp_Out_Time` 1 minute) and stages `Overcast`, `Light Rain`, `Heavy Rain` and `Post-Storm` only. **There is no `Clear Skies` row**, so in clear weather the base curves are used unchanged. [HIGH: that an all-clear cell leaves the base value in place follows from §3.2's presence bits and §18's presence-gated blend; the merge order was not traced instruction by instruction.]
+
+**48-slot resample, `0x00BA36E0` (float curves; vec4 curves use `0x00BA3520`, same shape). FINAL for the float version.** A curve object holds 48 `f32` slots at `+0x00`, 48 presence bytes at `+0xC0` and a default at `+0xF0`. For every slot `i` with no key:
+- no key at all: value = default `+0xF0`;
+- one key: value = that key;
+- else let `p` = the previous keyed slot (cyclic) and `n` = the next keyed slot (cyclic). If `p < n`: `w = (i − p) / (n − p)`. If `p > n` (wrap): `span = n − p + 47` and `num = i − p` when `i > p`, else `num = i − p + 47`. **The code uses 47, not 48** (a shipped quirk; keep it). `w` is clamped to `(0, 1]` (`w ≤ 0` gives `value[p]`). The value is `(1 − w)·value[p] + w·value[n]`.
+
+**Per-frame read, `0x00BA2E30` (`this` = curve, argument = hour `H` as `f32`).** `x = 2H` (`0x012A2E28` = 2.0), `slot = floor(x) mod 48`, `frac = x − floor(x)`. FINAL for slot and frac. FINAL (2026-10-19, Team D emulation): the result is the linear blend of `slot` and `slot + 1 (mod 48)`; H = 12.25 on keys 10=0, 19=0.6, 29=0, 42=1 gives 0.27 = 0.5 x 0.3 + 0.5 x 0.24; H = 23.9 gives 0.66667 (slot 47 blended with slot 0). Team D also confirmed by emulation the sun direction (`0x00B9E670`, all table rows), the record light direction (`0x00B9EA40`), the curve wrap with span 47 (`0x00BA36E0`) and the colour-times-intensity pack (`0x00BA5F80`); all FINAL. Zero components come out as -0.0.
+
+**Live wiring of the time-of-day curves (2026-10-20, Team D static trace, FINAL for shipped play).** The per-frame wrapper `0x00BB6690` is called from the master tick right after the weather and time updates. It is the only writer of the four curve-set pointers and their four weights: it sets every pointer to district slot 0, which is the curve set filled from `default_district.xtbl`, and the weights to 1, 0, 0, 0, then evaluates the lighting (`0x00BA8540`). Each live value is the sum over k of weight_k x curve(set_k, field, hour); with the shipped writer that collapses to `default_district` alone. **Port rule:** evaluate every time-of-day lighting value from the `default_district` curves only, with no district blending; the four-way weighted sum is unused machinery. The per-field colour blend `0x00BA38E0` is used only for orbital (sun/moon) records, not this path: out = (1 - b) x Y + b x (Z or X), Y absent -> X, X absent -> base (rgb only). **Residual closed [2026-10-20 per Team D emulation: FINAL] (D-24).** The weather time-of-day cells DO feed the lighting inside `0x00BA8540`; merge order, per field k (output block `0x0291E8F0 + 0x10*k`, cell field at cell `+ 0x10*k`):
+1. **base** = sum over the 4 curve sets (`0x0291E8C8..D4`) sampled by `0x00BA2F30` at the hour (`0x01311090`) times the weights (`0x0291E8D8..E4`). If the override byte `0x014EDEBD` is set (getter `0x006E1D60`) and the override record `0x014EDEC8` marks field k present, that record's value REPLACES the base (the curve sampling is skipped).
+2. **from** = cell `0x0140DDC4` (getter `0x005A6970`), **to** = cell `0x0140DDCC` (getter `0x005A6990`), each used only when byte `0x0140DDDC` = 1 and the cell marks field k present (presence byte cell `+0x2EC`, tested per field). Both cells come from ONE time segment (the setter `0x005A6806..0x005A68B9` writes them from one segment's cell array, stage indices from/to). The other segment's cells `0x0140DDC8`/`0x0140DDD0` are NOT read by `0x00BA8540`.
+3. **blend** `0x00BA3280` (out, base, from, to): if the flag byte `0x012E6B78` = 0 (getter `0x005A6B40`; initial 1; **cleared by the script weather override `0x005A79E0`**, set again by `0x005A68E0`), out = base. Else, with t = `0x0140DDD4`: F = from if present else base, T = to if present else base, **out = f32(f32(F x f32(1 - t)) + f32(T x t))** (double products, each rounded to f32); neither present -> exactly base. Applies to all 4 channels, including intensity.
+Test vectors (base (9,9,9,9), from (1,2,3,4), to (5,6,7,8), t 0.25): from+to -> (2,3,4,5); from only -> (3,3.75,4.5,5.25); to only -> (8,8.25,8.5,8.75); neither -> (9,9,9,9); flag 0 -> (9,9,9,9) in every case.
+
+**Blended live block. FINAL.** The per-frame blend (§18, `0x00BA8540`) writes a block laid out exactly as the §3.2 cell, at **`0x0291E8F0`**: West1 `0x0291E8F0` … West4 `0x0291E920`, East1 `0x0291E930` … East4 `0x0291E960`, West_Zenith `0x0291E970`, TOD_Light_Color `0x0291E980`, Ambient `0x0291E990`, Back_Ambient `0x0291E9A0`, Window_Tint `0x0291E9B0`, Fog_Color `0x0291E9C0`, Fog_Ground `0x0291E9F0`, Fog_Atmosphere_Scale `0x0291E9F4`, Fog_Density `0x0291E9F8`, Fog_Density_Offset `0x0291E9FC`, ldr_min `0x0291EA00`, ldr_max `0x0291EA04`. This is confirmed by the readers `0x00BA6040` and `0x00BA6160`.
+
+**Colour scaling, `0x00BA5F80(out, src)`. FINAL.** With the HDR byte `0x01310EF9` set (shipped value 1): `out = (r·k, g·k, b·k, k)` with `k = src.intensity × [0x013110D4]` (shipped 1.0). With the byte clear, the code maps through `ldr_min` / `ldr_max` instead (not used in the shipped configuration).
+
+**Test vectors: base curves, clear weather. FINAL (data + resample rule).** At 12:00 (slot 24 = the midpoint of keys 19 and 29) and at 21:00 (key 42). The second column of each pair is `rgb × intensity`:
+
+| element | 12:00 value (r g b I) | 12:00 rgb×I | 21:00 value | 21:00 rgb×I |
+|---|---|---|---|---|
+| `tod_light_color` | 1.0 0.692243 0.483099 16.5 | 16.5 11.42201 7.97113 | 1.0 0.42869 0.318547 17.0 | 17.0 7.28773 5.4153 |
+| `ambient_color` | 0.579296 0.726222 1.0 1.0 | 0.5793 0.72622 1.0 | 0.745404 0.904661 1.0 1.0 | 0.7454 0.90466 1.0 |
+| `back_ambient_color` | 0.252001 0.661881 1.0 2.0 | 0.504 1.32376 2.0 | 0.318547 0.723055 1.0 2.25 | 0.71673 1.62687 2.25 |
+| `fog_color` | 0.277011 0.676036 1.0 2.55 | 0.70638 1.72389 2.55 | 0.242281 0.679542 1.0 2.25 | 0.54513 1.52897 2.25 |
+| `zenith` | 0.086085 0.54912 1.0 1.0 | 0.08608 0.54912 1.0 | 0.045186 0.332452 0.603827 1.6 | 0.0723 0.53192 0.96612 |
+| `east0` / `west0` | 0.474043 0.791387 1.0 4.0 / 3.3 | 1.89617 3.16555 4.0 / 1.56434 2.61158 3.3 | (see script) | |
+| `fog_density_new`, `fog_atmosphere_scale`, `fog_density_offset`, `fog_ground` | 0.00125, 0.0025, 0.15, 0.0 | | 0.0015, 0.0025, 0.15, 0.0 | |
+
+Resample quirk vectors (keys 10/19/29/42): slot 24 → w 0.5 between 19 and 29; slot 45 → w = 3/15 = 0.2 from 42 toward 10; slot 47 → w = 5/15; slot 0 → w = 5/15 (the same weight as slot 47, because of the 47 span).
+
+### 19.2 Sun / TOD light direction, `0x00B9E670` (2026-10-19)
+
+**Signature:** cdecl `(f32 out[3], f32 H, f32 yawDeg, f32 minElevDeg)`, returns `out`. **FINAL (disassembly, every constant read).**
+
+```
+e   = minElevDeg * 0.017453
+t   = H - 7.5                      (0x01311C68 = 7.5)
+if t < 0: t += 24
+t   = t / 12                       (0x01153AB0 = 12.0)
+if REVERSE: t = 1 - t              (byte 0x01310EF8; shipped 1, no writer in the image)
+a   = (t - 1) * pi
+y   = min( max(|sin a|, sin e), 1 )
+v   = normalize( -cos a, y, 0.53 * sin a )      (0x01311C64 = 0.53)
+v   = rotateY(v, yawDeg * 0.017453)   x' = z*sin + x*cos, z' = z*cos - x*sin
+out = -v
+```
+
+`yawDeg` is `[0x0290FB70]`. It is zero-initialised by `0x00B9EC90` and has no other writer in shipped play (HIGH). `H` is `[0x01311090]`: the game clock hour as a float, `h + (m·60 + s)/3600` (`0x00B9EC10`), default 11.0 (`0x0113E090`). `out` is the direction the light travels, pointing down. The direction toward the sun is `−out`. The sun is highest at H = 13.5 and on the horizon line at 7.5 and 19.5. `y` never drops below `sin(minElev)`, so the light never comes from below the horizon, including at night.
+
+**Callers and their minimum elevations. FINAL.**
+
+| caller | `minElevDeg` | result goes to |
+|---|---|---|
+| `0x00BA6235` (TOD packet build `0x00BA6160`) | 40 (`0x01311094`) | **the sun directional light**: `0x00DA57B0` builds its 3×3 frame with forward = normalize(result), copied to the light instance `+0x04`…`+0x24`. The forward row `+0x1C`…`+0x24` is what `spec-render-pipeline.md` §23.6.3 reads and negates for kind 4 into `ir_light_pos` |
+| `0x00BA626C` | 1.0 | TOD packet `+0x04`…`+0x0C` |
+| `0x00BA67A7` | 90 (`0x01311098`) | packet `+0xF0` = normalize(0.5·result + 0.5·(0, −1, 0)) (`0x0131109C` = 0.5). HIGH: a shadow-cascade direction (consumer not traced) |
+| `0x00BA78D4` (sky constants `0x00BA72A0`) | 15 (`0x01117A58`) | sky shader `TOD_Light_Dir` (§19.4) |
+
+This only applies when byte `0x013110C6` (shipped 1) is set. `0x00B9E30D` clears it (a Lua/debug "fixed sun" path), and then the direction comes from the Euler triple `0x0290FBA4`/`A8`/`AC` through `0x00DA6DE0`, scaled by −1.0.
+
+**Test vectors (yaw 0, REVERSE = 1). The value is `out` as written. FINAL by transcription; Team D to confirm by emulation.**
+
+| H | E = 15 (sky) | E = 40 (sun light) | E = 1 |
+|---|---|---|---|
+| 0.0 | (−0.34369, −0.82975, −0.43977) | same | same |
+| 6.0 | (0.90544, −0.37505, −0.19877) | (0.80786, −0.56206, −0.17735) | (0.90544, −0.37505, −0.19877) |
+| 7.5 | (0.96810, −0.25056, 0) | (0.84121, −0.54071, 0) | (0.99985, −0.01745, 0) |
+| 12.0 | (0.34369, −0.82975, 0.43977) | same | same |
+| 13.5 | (0, −0.88357, 0.46829) | same | same |
+| 18.0 | (−0.90544, −0.37505, 0.19877) | (−0.80786, −0.56206, 0.17735) | same as E = 15 |
+| 19.5 | (−0.96810, −0.25056, 0) | (−0.84121, −0.54071, 0) | (−0.99985, −0.01745, 0) |
+
+### 19.3 Orbitals (sun and moon sprites), `0x00B9EA40` (2026-10-19)
+
+**Record.** The `default_global.xtbl` `<orbitals>/<orbital>` rows are parsed by `0x00BB60C0` into `0x5D0`-byte records at `0x0290FBB0` (count `+0x08`, at most 15): `plane_rot_x` `+0x00`, `plane_rot_y` `+0x04`, `distance_off_plane` `+0x08`, `map_name` `+0x0C` (44 bytes), `orbit_time_offset` `+0x38`, `alpha_blend` `+0x564`, `name` `+0x565`, `effect_name` `+0x583` (effect index `+0x5C4`), and the three curves `tint` (`+0x3C`, keys `+0x33C`), `scale` (`+0x37C`), `opacity` (`+0x470`). The per-frame `0xC0`-byte copies at `[0x013110D8]` (count `[0x013110E0]`) carry the same fields shifted by `+0x20`: rot x `+0x20`, rot y `+0x24`, distance `+0x28`, time offset `+0x58`, tint `+0x5C`, scale `+0x6C`, opacity `+0x70`, alpha_blend `+0x74`. FINAL for the parse. HIGH for the `+0x20` shift (matched field by field, copy routine not read).
+
+**Direction, cdecl `(f32 out[3], rec, f32 H)`. FINAL.**
+```
+c = clamp(dist, -1, 1);  s = sin(acos(c))
+u = offset + H;  if u < 0: u = 24 - u          (literal; not 24 + u)
+v = fmod(u, 24) / 24;  if REVERSE: v = 1 - v
+ang = 2*pi*v
+p = ( s*cos ang, dist, s*sin ang )
+p = rotateX(p, rotx deg)   y' = y*cos - z*sin, z' = y*sin + z*cos   (0x00DA0A70)
+p = rotateY(p, roty deg)   x' = z*sin + x*cos, z' = z*cos - x*sin   (0x00DA09E0)
+```
+Users: the glare effect `0x00B9DEF0` (position = direction + the vector at `0x013C8740`, HIGH: the camera position), the sprite record `0x00BA7CD0` (direction, colour = tint × intensity × opacity, scale `/ 0x012A2DD8`, texture from `map_name`), and a 48-point debug orbit drawer `0x00BA68E0`.
+
+**Test vectors (REVERSE = 1, shipped records).** At H = 12: `02-noonsun` (−0.43173, 0.86817, −0.24471); `01-morningsun` (−0.97815, 0, 0.20791); `04-moon` (0.70506, 0.64945, −0.28480). At H = 6: `01-morningsun` (−0.14702, 0.70711, −0.69166). The opacity curves decide which sun is visible: at 12:00 `02-noonsun` opacity = 0.2 (midpoint of 0 at slot 19 and 0.4 at slot 29) and `01-morningsun` 0.3.
+
+**The orbitals do not light the scene.** The lighting direction is §19.2's formula, not an orbital.
+
+### 19.4 Sky dome, clouds and mountains (2026-10-19)
+
+**Data. FINAL.** `skybox.vpp_pc` → `skybox_container.str2_pc` holds `rfg_skybox.csmesh_pc`/`.gsmesh_pc`/`.cpeg_pc` (the dome), `skybox_clouds.csmesh_pc`/`.gsmesh_pc`/`.cpeg_pc`/`.gpeg_pc` (cloud and mountain shells; textures `skybox_mountains01_n`, `horizon_cloud_layer_new_01`/`02`, `horizon_fade`, `overhead_cloud_layer_new_01`/`02`), `sr3_sun02.cvbm_pc`/`.gvbm_pc` and `sr3_moon01.cvbm_pc`/`.gvbm_pc`. The same archive holds the colour-correction LUTs `lut_<name>_<pc|ps3|xbox2>.cvbm_pc`/`.gvbm_pc`. Every `.gvbm_pc` is 131,072 bytes (HIGH: a 32×32×32 RGBA8 volume). `LUT_Filename` (§3.3) selects one. `misc.vpp_pc` also holds `lut_default.cpeg_pc`/`.gpeg_pc` and `lut_completion.cpeg_pc`/`.gpeg_pc` (131,072-byte g-side, same shape). The star and meteor layers are separate classes (`rfg-skybox-stars`, `rfg-skybox-meteors`).
+
+**Shaders** (`shaders.vpp_pc`): `rfg-skybox_s` (dome), `rfg-skybox-clouds_s`, `rfg-skybox-clouds-2_s`, `rfg-skybox-overhead_s`, `rfg-skybox-matte_s` (mountains), `rfg-skybox-simple_s`, `rfg-skybox-stars`, `rfg-skybox-meteors`.
+
+**Constant registration `0x00BB7F20` and upload `0x00BB7900`…`0x00BB7D81`. FINAL.** Handles are looked up by name (`0x00D9E740`): `Hemisphere_colors` → `0x0291EC90`, `Layer_strengths` `0x0291EC8C`, `Layer_strengths2` `0x0291EC88`, `Cloud_Fade_Height` `0x0291EC84`, `Cloud_Full_Height` `0x0291EC80`, `Cloud_U_Offset` `0x0291EC7C`, `TOD_Light_Color_Front` `0x0291EC78`, `TOD_Light_Color_Rear` `0x0291EC74`, `TOD_Light_Dir` `0x0291EC70`, `Rimlight_scale` `0x0291EC6C`, `Rimlight_power` `0x0291EC68`, `Mountain_color_front` `0x0291EC64`, `Mountain_color_back` `0x0291EC60`, `Mountain_fog_color` `0x0291EC5C`, `Mountain_fog_density` `0x0291EC58`, `Scale` `0x0291EC54`, `Offset` `0x0291EC50`. The per-frame values come from `0x00BA6040` (hemisphere) and `0x00BA72A0` (seven outputs: front/rear cloud light colours from the `clouds_*_light_color` slots `0x0291EA4C`…`0x0291EA88` scaled as in §19.1, two cloud floats, and `TOD_Light_Dir` = §19.2 with E = 15).
+
+**`Hemisphere_colors` (10 × vec4), REVERSE = 1. FINAL.** `[0..4]` = East1, East2, East3, East4, West_Zenith. `[5..9]` = West1, West2, West3, West4, West_Zenith. Each is `rgb × intensity` with w = intensity (`0x00BA5F80`). With REVERSE = 0 the two halves swap. The `default_district.xtbl` names `east0`…`east3` / `west0`…`west3` / `zenith` are these slots in order (HIGH: §15.2's vocabulary order).
+
+**Dome vertex shader (`rfg-skybox_s`, VS blob 0). FINAL (bytecode).** `v` is the dome vertex (object space, radius 10). `objTM` rows are c32–c34, `eyePos` c41, `Fog_dist` c42, `Scale` c10, `Offset` c11.
+- Elevation: `u = min(|dot(objTM.row1, v)|, 10) / 10`. `T = asin(u)·8/π + 4u`, using the shader's polynomial `asin`. `b = floor(T/2)`, `f = T/2 − b`.
+- `east = lerp(H[b], H[b+1], f)` and `west = lerp(H[b+5], H[b+6], f)`.
+- Azimuth: `q = clamp(−0.1·dot(objTM.row0, v), −1, 1)`, `wA = acos(q)/π`.
+- `colour = east + wA·(west − east)`. So the −X side of the dome takes the "east" set.
+- The fog term (below) is written to the colour's w. The dome pixel shader reads only rgb and outputs `(colour.rgb, 1) × Tint_color` (c37), so **the dome itself is not fogged**.
+
+**Fog formula (the same block in the dome, cloud and mountain vertex shaders). FINAL (bytecode).** Let `d = P − eyePos`, where `P` is the world position with `P.y` taken as `(objTM.row1·p − eyePos.y + Offset.x)` (literal), and `h = d.y · Fog_dist.x`.
+
+```
+g    = (1 - e^(-h)) / h      if |d.y| > 0.01, else 1
+fog  = 1 - min(1, 2^-( |d| * Fog_dist.y * g  - Fog_dist.w ))
+```
+
+D3D9 `exp` is base 2. The shader forms `e^(−h)` as `2^(−1.4427·h)`. Which CPU value fills which `Fog_dist` component is OPEN. GUESS: `.x` = `fog_atmosphere_scale` (height falloff), `.y` = `fog_density_new`, `.w` = `fog_density_offset`, with `fog_ground` used by the world shaders. The TOD packet carries all four, in this order, at `+0x80`/`+0x84`/`+0x88`/`+0x8C` (`0x00BA6678`…`0x00BA66FC`, each with a fixed-value fallback when its "TOD driven" byte `0x013110C2`…`C5` is clear; shipped bytes are 1). `Fog_color` (PS c38) is the packet `+0x70` = `fog_color` rgb×I.
+
+**Clouds and mountains (pixel shaders). HIGH (inputs FINAL, math not fully transcribed here).**
+- `rfg-skybox-clouds_s` and `-overhead_s` read `Diffuse_Map_1`/`_2` (two layers whose normals are rebuilt from .xz), `Layer_strengths` (c6), `Layer_strengths2` (c11), `Cloud_Fade_Height` (c1), `Cloud_Full_Height` (c2), `TOD_Light_Dir` (c3), `TOD_Light_Color_Front` (c4), `TOD_Light_Color_Rear` (c5), `Rimlight_scale` (c7), `Rimlight_power` (c8), `Fog_color` (c38), `V_ambient_render` (c28) and `Tint_color` (c37).
+- Lighting is `lerp(Front, Rear, 0.5 + 0.5·dot(n, −TOD_Light_Dir))`. Alpha fades with `saturate((|y| − Fade)/(Full − Fade))`. Fog colour is mixed by the vertex fog term.
+- `rfg-skybox-matte_s` (mountains) reads `Diffuse_Map`, `Normal_map`, `Diffuse_Color`, `Mountain_color_front`/`_back`, `Mountain_fog_color`, `Mountain_fog_density`, `TOD_Light_Dir` and `Tint_color`.
+- Full listings: `sm3dis.py <file> <blob>`.
+
+### 19.5 Residuals (2026-10-19)
+
+- The CPU → `Fog_dist` component mapping and the world-shader fog (role-6/7 passes use the same `Fog_dist`@c42 / `Fog_color`@c38 registers, `spec-render-pipeline.md` §20.12.2).
+- The loader and use of `default_district_night.xtbl` / `default_district_special.xtbl`.
+- The exact merge of `weather_time_of_day` overrides with the base curves inside `0x00BA8540`.
+- The consumer of TOD packet `+0xF0`.
+- The tail of `0x00BA2E30`.
+
+**Review status (2026-10-19): FINAL for §19.1 files, the resample and the blended-block layout; FINAL for §19.2 and §19.3 formulas and constants; FINAL for §19.4 data, constant names, hemisphere order, dome VS and fog formula; HIGH for the cloud/mountain PS summary; GUESS for the `Fog_dist` mapping.**
+
 ## Changelog
+
+- **2026-10-19 — new §19: sky, sun direction, base TOD curves, fog.** Base curves are `default_district.xtbl` (half-hour keys, 48-slot resample `0x00BA36E0` with a 47 wrap span). `default_global.xtbl` is §15.5's second document (closes that OPEN item). Sun/TOD light direction formula `0x00B9E670` (E = 40 for the sun light, 15 for the sky). Orbital sprite direction `0x00B9EA40`. Blended block at `0x0291E8F0`. Sky data and constants, `Hemisphere_colors` order, dome VS and fog formula from bytecode. Test vectors. Closes §18's sun-direction OPEN item. Static only. Cleanroom self-check: 0 hits.
 
 - **2026-10-08 — new §18: the weather/TOD runtime fully traced** (SPEC TEAM, agent `a99d0f8e76c2d1d73`).
   Closes §16 item 1's weather-state-machine question; confirms `Temp_Settings`/`Ramp_Out_Time` as

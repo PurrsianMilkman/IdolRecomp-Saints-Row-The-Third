@@ -109,7 +109,7 @@ int main() {
         CHECK(LexIntText("abc") == 0);
         CHECK(LexFloatText("0.5") == 0.5f && LexFloatText("-1e1") == -10.0f && LexFloatText("x") == 0.0f);
         const sr3xtbl::Document d = sr3xtbl::ParseDocument(std::string_view("<r><a>v </a><b></b></r>"));
-        CHECK(LexText(d.root(), "A", "none") == "v ");     // case-insensitive lookup, never trimmed
+        CHECK(LexText(d.root(), "A", "none") == "v");      // case-insensitive lookup; D-16: text is trimmed (bytes 1-32) by the document parser
         CHECK(LexText(d.root(), "b", "none") == "none");   // no text -> default
         CHECK(LexText(d.root(), "c", "") == "");
         CHECK(LexInt(d.root(), "c", 4) == 4);

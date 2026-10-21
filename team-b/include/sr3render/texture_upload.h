@@ -85,4 +85,14 @@ bool uploadTexture(ID3D11Device* device, const sr3texture::TexturePair& pair, si
 // already-released or never-populated UploadedTexture.
 void releaseTexture(UploadedTexture& texture);
 
+// Stability pass (sr3.exe builds a fresh playtest session per Load / New Game in ONE process): the playtest's per-session
+// texture holders are raw `ID3D11ShaderResourceView*` vectors that nobody ever Release()s (the viewer used to exit the
+// process right after one run), so every session leaked all its textures AND kept the D3D device alive (~250 MB of
+// private bytes per Load). Every SRV created by uploadTexture() / trackSrv() is therefore recorded here; a host that tears
+// a session down calls releaseTrackedSrvs() AFTER the session objects are destroyed to drop the creator's reference of
+// every SRV still recorded. releaseTexture()/releaseSrv() remove their SRV from the record first (no double release).
+void trackSrv(ID3D11ShaderResourceView* srv);
+void releaseSrv(ID3D11ShaderResourceView*& srv);   // untrack + Release + null; safe on null
+size_t releaseTrackedSrvs();                       // returns how many were still outstanding
+
 } // namespace sr3render

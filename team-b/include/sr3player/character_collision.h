@@ -365,11 +365,17 @@ public:
     void setGroundY(double groundY) { groundY_ = groundY; }
     double groundY() const { return groundY_; }
 
+    // AW-15 (spec-player-runtime.md Sec19.5 step 1 / Sec5.6.5): the fall law's terminal speed T (controller +0x170).
+    // Default 44.704 (kControllerTerminalFallSpeedCap); freefall/parachute set 45 / 9 / ... per frame, then restore.
+    void setTerminalFallSpeed(double t) { terminalFallSpeed_ = t > 0.0 ? t : kControllerTerminalFallSpeedCap; }
+    double terminalFallSpeed() const { return terminalFallSpeed_; }
+
 private:
     const ICollisionWorld& world_;
     double radius_;
     double height_;
     double groundY_;
+    double terminalFallSpeed_ = kControllerTerminalFallSpeedCap;
     sr3physics::CharacterProxyStepper stepper_;
 };
 

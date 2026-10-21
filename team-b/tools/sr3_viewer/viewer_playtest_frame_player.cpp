@@ -4,6 +4,7 @@
 #include "viewer_playtest_session.h"
 
 #include <cstdlib>  // getenv (SR3_TRACE_PLAYER_Y diagnostic)
+#include "viewer_craft_wiring.h"  // Sec19.4 freefall-start diagnostic (SR3_TRACE_FREEFALL), compile-checked adapters
 
 namespace sr3viewer {
 
@@ -59,7 +60,6 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
     auto& prevFireDown = sess.prevFireDown;
     auto& finalGroundY = sess.finalGroundY;
     auto& collisionDriver = *sess.collisionDriver_;
-    auto& sampleGroundHeight = sess.sampleGroundHeight;
     auto& playerGroundFollower = *sess.playerGroundFollower_;
     auto& vehicleGroundY = sess.vehicleGroundY;
     auto& vehicleRig = *sess.vehicleRig_;
@@ -76,6 +76,8 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
     auto& nowMsAccum = sess.nowMsAccum;
     auto& dt = frm.dt;
     auto& fireKeyDownNow = frm.fireKeyDownNow;
+    auto& reloadKeyDownNow = frm.reloadKeyDownNow;
+    auto& weaponSelKeysDownNow = frm.weaponSelKeysDownNow;
     auto& viewProjection = frm.viewProjection;
     auto& headingNow = frm.headingNow;
     auto& charWorld = frm.charWorld;
@@ -112,8 +114,11 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
         followCam.preUpdate(dt);
         sr3player::MoveFrameInput animFrame;
         animFrame.nowMs = nowMsAccum;
-        animFrame.dt = dt;
-        animFrame.axisDt = dt;
+        // PAUSE FIX (sr3.exe first playable): stepInput forces dt=0 while the pause menu is open, but the movement slot
+        // throws on a non-positive frame time (MoveFrameInput::axisDt must be > 0) -> std::terminate. CHOSEN: feed the
+        // movement/camera a 1 microsecond frame while paused (sim time itself stays frozen: nowMsAccum/TOD use dt=0).
+        animFrame.dt = sess.pauseMenuOpen ? 1e-6 : dt;
+        animFrame.axisDt = animFrame.dt;
         animFrame.camera = followCam.movementRows();
 
         // REAL per-frame heightmap ground height for the player (THIS
@@ -125,28 +130,92 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
         // spec-CONFIRMED gravity formula (spec-player-runtime.md Sec5.6.5),
         // now aimed at a ground height that itself never jumps underneath
         // an already-grounded player.
-        const float playerRawH =
-            sampleGroundHeight(pm.st.position.x, pm.st.position.z, finalGroundY);
+        // G1 (spec-zone-data-format.md Sec13.5.1): the ground is the walkable `~s` collision mesh, probed with the
+        // engine's ground ray from the character's OWN position (start = position + the ~0.52 m step-up limit of
+        // spec-player-runtime.md Sec5.6.5; the ray itself adds 0.05). A miss / not-yet-resident tile holds the current
+        // ground (the character does not fall). 0x2244 is not consulted.
+        constexpr double kPlayerGroundProbeStepUp = 0.52;
+        if (!sess.playerTargetSeeded) { sess.playerGroundTarget = static_cast<float>(playerGroundFollower.easedGroundY()); sess.playerTargetSeeded = true; }
+        const auto playerGround = sess.sampleGround(pm.st.position.x, pm.st.position.z,
+                                                    pm.st.position.y + kPlayerGroundProbeStepUp,
+                                                    sess.playerGroundTarget);
+        const float playerRawH = playerGround.y;
+        sess.playerGroundTarget = playerRawH;  // held results return the previous target unchanged
+        ++sess.groundSrcCount[static_cast<int>(playerGround.source)];
         collisionDriver.setGroundY(playerGroundFollower.update(playerRawH, dt).groundY);
         // Opt-in diagnostic (2026-10-18 freeroam ground-height investigation; OFF by default, no behaviour change):
         // SR3_TRACE_PLAYER_Y=1 prints, every 30 frames, the player Y, the raw ground sample fed to the follower, and
         // which link of the chain (0x2237 mesh / 0x2244 heightmap / flat fallback) supplied it.
         {
-            static const bool tracePlayerY = std::getenv("SR3_TRACE_PLAYER_Y") != nullptr;
-            if (tracePlayerY && frames % 30 == 0) {
+            static const char* const tracePlayerYEnv = std::getenv("SR3_TRACE_PLAYER_Y");
+            static const bool tracePlayerY = tracePlayerYEnv != nullptr;
+            // SR3_TRACE_PLAYER_Y=N (N > 1) prints every N frames instead of every 30.
+            static const int tracePlayerYEvery = (tracePlayerYEnv && std::atoi(tracePlayerYEnv) > 1) ? std::atoi(tracePlayerYEnv) : 30;
+            // Running tracking-error stat (evidence for G1): |eased ground - nearest road/sidewalk node Y| over frames
+            // where a node lies within 8 m in XZ; node Y is the spec's independent reference (collision vertices agree
+            // with it within 0.15 m, 13.5.1(e)).
+            static uint64_t trackN = 0;
+            static double trackSum = 0.0, trackMax = 0.0;
+            static uint64_t srcFrames[5] = {0, 0, 0, 0, 0};
+            static uint64_t trackOtherLevel = 0;
+            if (tracePlayerY) {
+                ++srcFrames[static_cast<int>(playerGround.source)];
+                double ny8 = 0.0;
+                if (sess.nodeGround.Nearest(pm.st.position.x, pm.st.position.z, 8.0, pm.st.position.y, ny8)) {
+                    const double e = std::fabs(playerGroundFollower.easedGroundY() - ny8);
+                    if (e <= 3.0) {  // same level as the node; larger = an overpass/other-level node above or below
+                        ++trackN;
+                        trackSum += e;
+                        if (e > trackMax) trackMax = e;
+                    } else {
+                        ++trackOtherLevel;
+                    }
+                }
+            }
+            if (tracePlayerY && frames % tracePlayerYEvery == 0) {
+                std::printf("ground-source-trace: frame %d frames-by-source mesh=%llu retry=%llu node=%llu held-miss=%llu "
+                            "held-no-tile=%llu | |ground-nodeY| (node within 8 m, same level <=3 m) n=%llu mean=%.3f max=%.3f other-level=%llu\n",
+                            frames, static_cast<unsigned long long>(srcFrames[0]),
+                            static_cast<unsigned long long>(srcFrames[1]), static_cast<unsigned long long>(srcFrames[2]),
+                            static_cast<unsigned long long>(srcFrames[3]), static_cast<unsigned long long>(srcFrames[4]),
+                            static_cast<unsigned long long>(trackN), trackN ? trackSum / static_cast<double>(trackN) : 0.0,
+                            trackMax, static_cast<unsigned long long>(trackOtherLevel));
                 const float hmOnly = sess.sampleRealGroundHeight(pm.st.position.x, pm.st.position.z, -1.0e30f);
-                const char* src = (playerRawH == hmOnly) ? "heightmap" : "0x2237-mesh";
+                static const char* const kSrcNames[] = {"collision-mesh", "collision-mesh(retry)", "node-fallback",
+                                                        "held(miss)", "held(tile-not-resident)"};
+                const char* src = kSrcNames[static_cast<int>(playerGround.source)];
                 double nodeY = -999.0;
                 const bool haveNode = sess.nodeGround.Nearest(pm.st.position.x, pm.st.position.z, 200.0, 0.0, nodeY);
-                if (hmOnly < -1.0e29f && haveNode && playerRawH == static_cast<float>(nodeY)) src = "road-node";
-                else if (hmOnly < -1.0e29f && playerRawH == finalGroundY) src = "flat-fallback(finalGroundY)";
-                std::printf("player-y-trace: frame %d pos (%.2f %.2f %.2f) rawGround=%.2f source=%s nearestNodeY(200m)=%.2f\n",
+                std::printf("player-y-trace: frame %d pos (%.2f %.2f %.2f) groundRay=%.2f source=%s easedGround=%.2f "
+                            "nearestNodeY(200m)=%.2f%s heightmap0x2244(not ground)=%.2f\n",
                             frames, pm.st.position.x, pm.st.position.y, pm.st.position.z, static_cast<double>(playerRawH),
-                            src, nodeY);
+                            src, playerGroundFollower.easedGroundY(), nodeY, haveNode ? "" : "(none)",
+                            static_cast<double>(hmOnly));
             }
         }
 
-        bridge.stepFrame(pm, animFrame);
+        // Opt-in diagnostic (2026-10-19, spec-player-runtime.md Sec19.4 step 1; OFF by default, read-only):
+        // SR3_TRACE_FREEFALL=1 prints a line each frame the freefall-start test (fall speed > 10 m/s, no ground within
+        // 10 m straight down, falling state) would succeed. "Falling state" is approximated by fall speed > 0 here.
+        {
+            static const bool traceFreefall = std::getenv("SR3_TRACE_FREEFALL") != nullptr;
+            static sr3viewer_craft::FreefallProbe freefallProbe;
+            if (traceFreefall) {
+                freefallProbe.Update(pm.st.position.y, static_cast<double>(playerRawH), dt, true);
+                if (freefallProbe.wouldStart)
+                    std::printf("freefall-trace: frame %d would START freefall (fall %.1f m/s, clearance %.1f m)\n", frames,
+                                freefallProbe.fallSpeed, freefallProbe.clearance);
+            }
+        }
+
+        // AW-15 (spec-player-runtime.md Sec19): freefall start test, E = deploy / cut away, the 19.5 movement law; the
+        // collision hook (setup_world) then runs the fall law with the per-frame terminal speed T and horizontal r.
+        freefallPreStep(sess, frm, static_cast<double>(playerRawH), playerGround.real());
+        // A zero-dt frame (pause menu open, or a >0.25 s hitch clamped by stepFrameBegin) crashed in here with
+        // 0xC0000409 (first-playable pause, Team C 2026-10-19; root cause not located - see HANDOFF-C 10).
+        // Nothing moves in a zero-dt frame, so the step is skipped.
+        if (animFrame.dt > 0.0) bridge.stepFrame(pm, animFrame);
+        freefallPostStep(sess);
 
         if (realPoseEnabled) {
             const float blendedDuration = sr3animpose::BlendedLoopingDurationUnits(bridge.lastOutput(), clipRegistry);
@@ -311,7 +380,62 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
             pedAiPlayerFiring = true;                           // civilians react to gunfire (NPC AI loop)
             if (hudEs) hudEs->npcAiPlayerFiringThisFrame = true;  // mission NPCs likewise
         }
-        if (fireEdge && bradWeapon) {
+        // ---- gap #17: weapon switch / reload, spec-weapons-runtime Sec5.4. Keys (PC defaults are CHOSEN, the spec
+        // gives none): R reload; 1-8 select Inv_Slot k-1 (Sec5.4.3: key 1 = empty-handed, 2 = melee, 3 = pistol,
+        // 4 = smg, 5 = shotgun, 6 = rifle, 7 = explosive, 8 = special); 9 = last weapon (selector 12);
+        // Q = CCW / Tab = CW cycle with the 50 ms repeat. ----
+        sr3weapons::WeaponInventory* winv = sess.weaponInv.get();
+        if (winv && inVehicle) {
+            const double nowW = static_cast<double>(nowMsAccum);
+            if (winv->cancelReload(nowW))  // Sec5.4.1: vehicle entry cancels a reload (no ammo moves)
+                std::printf("[weapon] frame %d: reload cancelled (vehicle entry), no ammo moved\n", frames);
+            winv->noteBusy(nowW);  // in a vehicle the human is busy: the 5000 ms idle top-up is re-armed every frame
+        }
+        if (winv && !inVehicle) {
+            const double nowW = static_cast<double>(nowMsAccum);
+            const uint32_t reloadsBefore = winv->totalReloads();
+            const bool wasReloadingW = winv->reloading();
+            winv->update(nowW);
+            if (!wasReloadingW && winv->reloading())
+                std::printf("[weapon] frame %d: auto-reload started on empty clip t=%.0f ms, done at %.0f ms "
+                            "(%.0f ms, rate %.4f)\n", frames, nowW, winv->reloadDeadlineMs(),
+                            winv->reloadDeadlineMs() - nowW, winv->reloadRate());
+            if (winv->totalReloads() != reloadsBefore && winv->active())
+                std::printf("[weapon] frame %d: reload complete t=%.0f ms ammo %d/%d\n", frames, nowW,
+                            winv->active()->inst.roundsInClip(), winv->reserve(winv->activeIndex()));
+            const uint32_t selEdges = weaponSelKeysDownNow & ~sess.prevWeaponSelKeys;
+            sess.prevWeaponSelKeys = weaponSelKeysDownNow;
+            const bool reloadEdge = reloadKeyDownNow && !sess.prevReloadDown;
+            sess.prevReloadDown = reloadKeyDownNow;
+            bool changed = false;
+            for (int k = 0; k < 8; ++k)
+                if (selEdges & (1u << k)) changed = winv->selectSlot(k, nowW) || changed;
+            if (selEdges & (1u << 8)) changed = winv->selectLast(nowW) || changed;
+            if (selEdges & (1u << 9)) changed = winv->selectPrev(nowW) || changed;
+            if (selEdges & (1u << 10)) changed = winv->selectNext(nowW) || changed;
+            if (changed) {
+                const std::string what = winv->active()
+                    ? "slot " + std::to_string(winv->activeIndex() + 1) + " '" + winv->active()->def.name + "'"
+                    : std::string("empty-handed (fists)");
+                std::printf("[weapon] frame %d: switched to %s t=%.0f ms (old weapon stowed at once; fire-ready in "
+                            "%.0f ms, equip clip ends in %.0f ms; radial shown 650 ms)\n", frames, what.c_str(), nowW,
+                            winv->readyAtMs() - nowW, winv->equipFullAtMs() - nowW);
+            }
+            if (reloadEdge && winv->active()) {
+                const bool ok = winv->startReload(nowW);
+                std::printf("[weapon] frame %d: reload %s t=%.0f ms (ammo %d/%d)", frames, ok ? "started" : "refused",
+                            nowW, winv->active()->inst.roundsInClip(), winv->reserve(winv->activeIndex()));
+                if (ok && winv->reloading())
+                    std::printf(" done at %.0f ms (%.0f ms, rate %.4f)", winv->reloadDeadlineMs(),
+                                winv->reloadDeadlineMs() - nowW, winv->reloadRate());
+                else if (ok)
+                    std::printf(" instant: transferred on the request frame");
+                std::printf("\n");
+            }
+            if (changed || reloadEdge) std::printf("%s\n", winv->traceLine().c_str());
+        }
+        if (fireEdge && winv && winv->active() && !inVehicle) {
+            const sr3tables_weapons::Weapon& activeDef = winv->active()->def;
             sr3player::Vec3 fireOrigin{static_cast<double>(camEye[0]), static_cast<double>(camEye[1]),
                                         static_cast<double>(camEye[2])};
             sr3player::Vec3 fireDir{static_cast<double>(camForward[0]), static_cast<double>(camForward[1]),
@@ -358,12 +482,33 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
                 beforeDeadMap[t.name] =
                     combatEs.hasCharacter(t.name) && combatEs.characters().at(t.name).isDeadHighConfidence;
             }
-            const double maxRange = bradWeaponDef.rangeMax.present ? static_cast<double>(bradWeaponDef.rangeMax.value)
-                                                                    : 1000.0;  // CHOSEN fallback - see
-                                                                               // WeaponInstance::fire()'s own doc
-                                                                               // comment (ordinarily def.rangeMax)
-            sr3weapons::WeaponInstance::FireOutcome outcome = bradWeapon->fire(
+            // Police on foot (stepPolice) are hit-scan targets too: a hit kills the named engine character
+            // "police_<id>" through the same lethal sink (police-trace reads its death on the next step).
+            for (const auto& pu : sess.police.units) {
+                if (pu.car || pu.dead) continue;
+                sr3weapons::HitscanTarget t;
+                t.name = "police_" + std::to_string(pu.id);
+                t.center = sr3player::Vec3{pu.pos.x, pu.pos.y + 0.9, pu.pos.z};
+                targets.push_back(t);
+                beforeDeadMap[t.name] = false;
+            }
+            const double maxRange = activeDef.rangeMax.present ? static_cast<double>(activeDef.rangeMax.value)
+                                                                : 1000.0;  // CHOSEN fallback - see
+                                                                           // WeaponInstance::fire()'s own doc
+                                                                           // comment (ordinarily def.rangeMax)
+            const sr3weapons::WeaponInventory::FireResult fireRes = winv->fire(
                 static_cast<double>(nowMsAccum), fireOrigin, fireDir, maxRange, targets, &bradDamageSink);
+            const sr3weapons::WeaponInstance::FireOutcome& outcome = fireRes.outcome;
+            if (fireRes.blockedBySwitch || fireRes.blockedByReload)
+                std::printf("[weapon] frame %d: fire blocked (%s)\n", frames,
+                            fireRes.blockedBySwitch ? "switching" : "reloading");
+            if (fireRes.autoReloadStarted)
+                std::printf("[weapon] frame %d: empty - auto-reload started (Sec5.4.1)\n", frames);
+            if (fireRes.autoSwitched)
+                std::printf("[weapon] frame %d: out of ammo - auto-switched to %s (Sec5.4.3)\n", frames,
+                            winv->active() ? winv->active()->def.name.c_str() : "empty-handed");
+            if (outcome.soundSelected == sr3weapons::WeaponInstance::FireSoundSelection::kDryFire)
+                std::printf("[weapon] frame %d: dry fire on '%s'\n", frames, activeDef.name.c_str());
             std::printf("[fire] frame %d: reachedItemUse=%d soundSelected=%d roundsAfter=%d refireGateBlocked=%d "
                         "hit=%d target='%s' damageApplied=%d\n",
                         frames, outcome.reachedItemUse, static_cast<int>(outcome.soundSelected),
@@ -383,8 +528,8 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
                     ++sess.weaponFireSoundsUnresolved;
                     std::printf("[fire-sound] UNRESOLVED %s event for weapon '%s' (soundbank '%s'): event id/media not in "
                                 "spec, not played (#%llu)\n",
-                                dry ? "dry-fire" : "fire", bradWeaponDef.name.c_str(),
-                                bradWeaponDef.audio.soundbankName ? bradWeaponDef.audio.soundbankName->c_str()
+                                dry ? "dry-fire" : "fire", activeDef.name.c_str(),
+                                activeDef.audio.soundbankName ? activeDef.audio.soundbankName->c_str()
                                                                   : "(default Wep_<model>)",
                                 static_cast<unsigned long long>(sess.weaponFireSoundsUnresolved));
                 }
@@ -398,8 +543,9 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
                             outcome.hitTargetName.c_str(), beforeDead, afterDead);
                 // T5 crime reports (spec-ai-runtime.md Sec19.8 G1). The activity names are confirmed (Sec6.1), the
                 // records are CHOSEN (notoriety_escalation.h): shooting a civilian, then killing one.
-                notorietyReportCrime(sess, sr3airuntime::kChosenCivilianShooting, "shot a civilian ped");
-                if (afterDead && !beforeDead)
+                const bool hitPolice = outcome.hitTargetName.rfind("police_", 0) == 0;  // not a civilian: no civilian crime record
+                if (!hitPolice) notorietyReportCrime(sess, sr3airuntime::kChosenCivilianShooting, "shot a civilian ped");
+                if (!hitPolice && afterDead && !beforeDead)
                     notorietyReportCrime(sess, sr3airuntime::kChosenCivilianKill, "killed a civilian ped");
 
                 // The real gunfire-to-flee reaction chain (spec-ai-runtime.md
@@ -501,7 +647,7 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
         // placeholder this comment used to describe (that placeholder's own three constants
         // and reasoning are gone - see the now-superseded comment above this function's own
         // vehicle-seat-offset declaration block, just above kScriptVehicleEnterFrame).
-        if (!vehicleHideOccupant) {
+        if (!(vehicleHideOccupant || sess.craft.rig.active)) {  // AW-15: no seated pose for craft classes
             // ---- seated/driving pose: resolve+compose the real driver-seat ride pose every
             // frame and place the character at the vehicle's own position/heading plus a seat
             // offset (see this block's own CHOSEN-offset note below), replacing the bind pose
@@ -608,7 +754,7 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
             const float seatX = static_cast<float>(vehicleRig.sim->state_.posX) + kSeatLateralOffset * seatRightX;
             const float seatZ = static_cast<float>(vehicleRig.sim->state_.posZ) + kSeatLateralOffset * seatRightZ;
             const float seatY = vehicleGroundY + kSeatHeightAbovePivot;
-            sr3render::buildWorldMatrix(seatX, seatY, seatZ, vHeading, 1.0f, charWorld);
+            sr3render::buildWorldMatrixSimHeading(seatX, seatY, seatZ, vHeading, 1.0f, charWorld);
         }
         // Sec4.15 vehicle chase camera (FD 7.5 / FH 0.7 / Lookat_Offset.Y 1.15 / FOV 50-75 / follow swing /
         // pitch clamp), replacing the CHOSEN rigid 9 m / 4 m camera. The demo vehicle is genki (see
@@ -625,7 +771,8 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
         camIn.vehicleHeading = vst.heading;
         camIn.velX = vst.velForwardBody * std::cos(vst.heading) - vst.velRightBody * std::sin(vst.heading);
         camIn.velZ = vst.velForwardBody * std::sin(vst.heading) + vst.velRightBody * std::cos(vst.heading);
-        camIn.speed = std::sqrt(vst.velForwardBody * vst.velForwardBody + vst.velRightBody * vst.velRightBody);
+        camIn.speed = sess.craft.rig.active ? sr3physics::craft::Len(sess.craft.rig.body.vel)  // AW-15: spec speed is the 3-D body speed
+                                            : std::sqrt(vst.velForwardBody * vst.velForwardBody + vst.velRightBody * vst.velRightBody);
         camIn.step = dt;
         // Collision: CHOSEN reuse of the on-foot sweep (RealCameraCollision, radius 0.12), pivot -> eye.
         const sr3player::VehicleCameraOutput camOut = sess.vehicleChaseCam.update(camIn, &realCameraCollision);
@@ -655,6 +802,13 @@ void stepPlayerView(PlaytestSession& sess, PlaytestFrame& frm) {
         buildViewProjectionFromCamera(eye, camRight, camUp, camForward, vehCamFovY, aspect, 0.3f, farZ,
                                       viewProjection);
         sess.vehicleChaseCamStats.add(camOut.distance, camOut.fov, camOut.collided);
+        if (sess.craft.rig.active) {  // AW-15 opt-in diagnostic: SR3_TRACE_CRAFT_CAM=1 prints the chase camera against the craft
+            static const bool traceCam = std::getenv("SR3_TRACE_CRAFT_CAM") != nullptr;
+            if (traceCam && frames % 15 == 0)
+                std::printf("craft-cam-trace: frame %d eye (%.1f %.1f %.1f) pivot (%.1f %.1f %.1f) fov %.2f dist %.1f collided %d craft (%.1f %.1f %.1f)\n",
+                            frames, eye[0], eye[1], eye[2], pivot[0], pivot[1], pivot[2], camOut.fov, camOut.distance,
+                            camOut.collided ? 1 : 0, sess.craft.rig.body.pos.x, sess.craft.rig.body.pos.y, sess.craft.rig.body.pos.z);
+        }
         headingNow = static_cast<double>(vHeading);
         diagEyeX = eye[0]; diagEyeY = eye[1]; diagEyeZ = eye[2];
         }

@@ -811,6 +811,18 @@ int stub_on_death(lua_State* L) {
     return 0;
 }
 
+// on_respawn (spec-player-runtime.md Sec18.15, 0x00a58380, FINAL): callback name + character name; player names register
+// slot 5 of +0x1f00. Fired by the revive (0x009e6f20) with one string argument, the player's script name.
+int stub_on_respawn(lua_State* L) {
+    logCall(L, upLog(L), "on_respawn", upStateTag(L));
+    std::string callbackName = argString(L, 1);
+    std::string targetName = argString(L, 2);
+    EngineState* st = upState(L);
+    if (st->objectResolves().get(targetName) && EngineState::isLocalPlayerName(targetName))
+        st->playerOnRespawnCallback_ = callbackName;
+    return 0;
+}
+
 // on_vehicle_destroyed (Sec3.3, 0x00a58840) - 284 calls/27 scripts.
 // CONFIRMED (full re-derivation 2026-10-07): 2 mandatory strings (callback
 // name, target name), same read shape as on_death. Body: arg 2 is resolved
@@ -1008,6 +1020,7 @@ const std::vector<std::string>& namesB07() {
         "audio_play_persona_line",
         "game_is_active_input_gamepad",
         "on_death",
+        "on_respawn",
         "on_vehicle_destroyed",
         "character_is_dead",
         "notoriety_force_no_spawn",
@@ -1052,6 +1065,7 @@ void registerB07(lua_State* L, EngineState& state, HitLog& log, const std::strin
     if (wants("audio_play_persona_line")) registerOne(L, state, log, stateTag, "audio_play_persona_line", openGuard<stub_audio_play_persona_line>);
     if (wants("game_is_active_input_gamepad")) registerOne(L, state, log, stateTag, "game_is_active_input_gamepad", openGuard<stub_game_is_active_input_gamepad>);
     if (wants("on_death")) registerOne(L, state, log, stateTag, "on_death", openGuard<stub_on_death>);
+    if (wants("on_respawn")) registerOne(L, state, log, stateTag, "on_respawn", openGuard<stub_on_respawn>);
     if (wants("on_vehicle_destroyed")) registerOne(L, state, log, stateTag, "on_vehicle_destroyed", openGuard<stub_on_vehicle_destroyed>);
     if (wants("character_is_dead")) registerOne(L, state, log, stateTag, "character_is_dead", openGuard<stub_character_is_dead>);
     if (wants("notoriety_force_no_spawn")) registerOne(L, state, log, stateTag, "notoriety_force_no_spawn", openGuard<stub_notoriety_force_no_spawn>);

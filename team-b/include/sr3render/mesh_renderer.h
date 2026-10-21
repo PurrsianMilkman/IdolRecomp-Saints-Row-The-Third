@@ -288,6 +288,15 @@ public:
     // Non-degenerate triangles actually emitted from the strip.
     uint32_t trianglesEmitted() const { return trianglesEmitted_; }
 
+    // CPU-posed meshes re-posed every frame for many instances (ambient peds): when set BEFORE upload(), the
+    // vertex buffer is created DYNAMIC and a CPU copy of the vertices is kept so updatePositions() can rewrite
+    // just the positions (Map/WRITE_DISCARD) without re-decoding the mesh or rebuilding the index buffer.
+    // Default false = the old IMMUTABLE path, unchanged.
+    void setDynamicVertices(bool on) { dynamicVertices_ = on; }
+    // Rewrites every vertex position (same order/count as the positions passed to upload()). False if the
+    // renderer was not uploaded in dynamic mode or the count differs.
+    bool updatePositions(ID3D11DeviceContext* context, const std::vector<std::array<float, 3>>& positions);
+
     // One entry per draw range of group 0, in range order, giving where
     // that range's expanded triangles sit in the index buffer.
     struct SubDraw {
@@ -342,6 +351,8 @@ private:
     uint32_t skeletonVertexCount_ = 0;
     float boundsMin_[3] = {0, 0, 0};
     float boundsMax_[3] = {0, 0, 0};
+    bool dynamicVertices_ = false;
+    std::vector<float> cpuVerts_;  // 8 floats per vertex (position3, uv2, normal3), dynamic mode only
 };
 
 // Builds a view-projection matrix framing `boundsMin`..`boundsMax` from a
@@ -379,6 +390,14 @@ void multiplyMatrix4x4(const float a[16], const float b[16], float outMatrix[16]
 // job, not a limitation of the approach.
 void buildWorldMatrix(float x, float y, float z, float yawRadians, float scale,
                       float outMatrix[16]);
+
+// Same, for a SIM heading theta whose forward on (X, Z) is (cos theta, sin theta) (the vehicle sim / AI convention).
+// buildWorldMatrix maps mesh +Z to (sin yaw, cos yaw) (engine heading h, spec-physics-runtime.md 10.15), so passing
+// theta unconverted mirrors the car across the x = z diagonal; convert h = pi/2 - theta (FINAL, 10.15 port rule).
+inline void buildWorldMatrixSimHeading(float x, float y, float z, float simHeadingRadians, float scale,
+                                       float outMatrix[16]) {
+    buildWorldMatrix(x, y, z, 1.57079632679489662f - simHeadingRadians, scale, outMatrix);
+}
 
 // A free-roaming (fly) camera's view-projection matrix: `eye` is the
 // camera position given DIRECTLY (unlike buildOrbitViewProjection, which

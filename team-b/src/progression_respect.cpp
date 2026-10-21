@@ -43,6 +43,8 @@ int64_t RespectTable::cumulative(int level) const {
     return sum;
 }
 
+int64_t Wrap32(int64_t v) { return static_cast<int32_t>(static_cast<uint32_t>(static_cast<uint64_t>(v))); }
+
 std::vector<std::string> ApplyLevelUnlocks(int level, const RespectTable& table, AppliedUnlocks& applied) {
     std::vector<std::string> fresh;
     if (level < 0 || level >= table.levelCount()) return fresh;
@@ -55,7 +57,7 @@ std::vector<LevelUp> ApplyLevelUp(PlayerRespect& p, int32_t grant, const Respect
                                   AppliedUnlocks& applied, const AwardContext& ctx) {
     std::vector<LevelUp> ups;
     const int lastLevel = table.levelCount() - 1;
-    int64_t r = static_cast<int64_t>(p.inLevel) + grant;
+    int64_t r = Wrap32(static_cast<int64_t>(p.inLevel) + grant);  // 32-bit sum (spec-differential D-4)
     int32_t c = table.cost(p.level);
     if (c > 1 && r >= c) {
         for (;;) {
@@ -72,7 +74,7 @@ std::vector<LevelUp> ApplyLevelUp(PlayerRespect& p, int32_t grant, const Respect
                 r = 0;
                 break;
             }
-            if (r < c) break;
+            if (c <= 1 || r < c) break;  // a needed value <= 1 blocks levelling (5.4 note, 2026-10-20)
         }
     }
     p.inLevel = static_cast<int32_t>(std::max<int64_t>(r, 0));
@@ -98,9 +100,11 @@ AwardResult AwardRespect(PlayerRespect& p, int32_t amount, const RespectTable& t
         res.overflowCashRaw = DollarsToRawCash(amount);
         return res;
     }
+    // The sums are signed 32-bit (spec-differential-results D-4): a total + amount that wraps negative
+    // skips the cap clamp, grants the full amount and leaves the total floored at 0.
     int32_t grant = amount;
-    if (static_cast<int64_t>(p.total) + amount >= cap) grant = cap - p.total;
-    p.total = static_cast<int32_t>(std::max<int64_t>(static_cast<int64_t>(p.total) + grant, 0));
+    if (Wrap32(static_cast<int64_t>(p.total) + amount) >= cap) grant = cap - p.total;
+    p.total = static_cast<int32_t>(std::max<int64_t>(Wrap32(static_cast<int64_t>(p.total) + grant), 0));
     res.levelUps = ApplyLevelUp(p, grant, table, applied, ctx);
     res.granted = grant;
     res.returned = grant;

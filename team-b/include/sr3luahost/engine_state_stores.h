@@ -11,6 +11,7 @@
 #pragma once
 
 #include "sr3luahost/engine_state_common.h"
+#include "sr3player/vitals.h"
 
 namespace sr3luahost {
 
@@ -1225,6 +1226,20 @@ public:
     VcustPreview& vcustPreview() { return vcustPreview_; }
     void recordVcustPreviewWheelSizingNullTargetGuard() { ++vcustPreview_.wheelSizingNullTargetGuardCount; }
     double& playerCash() { return playerCash_; }
+    // D-22 (spec-differential-results.md): the one wallet add for the local player. Positive amounts are scaled by the global cash
+    // multiplier (type 38 Cash_Bonus_Modifier, 1.0 at a new game); the sum wraps in signed 32 bits before the clamp/floor.
+    double& cashMultiplier() { return cashMultiplier_; }
+    void addPlayerCash(double cents) {
+        playerCash_ = static_cast<double>(sr3player::AddCashWallet(static_cast<int32_t>(playerCash_),
+            static_cast<int32_t>(std::max(-2000000000.0, std::min(2000000000.0, cents))), static_cast<float>(cashMultiplier_), true));
+    }
+    // R4F-3: every cash debit goes through here. Same rule as the setter / AddCashSaturating (spec-tables-progression cash cap):
+    // clamp +-2e9 saturating, then floor at 0. A negative amount credits (price <= 0 is not validated, per the callers).
+    void debitPlayerCash(double cents) {
+        double n = playerCash_ - cents;
+        n = n > 2000000000.0 ? 2000000000.0 : (n < -2000000000.0 ? -2000000000.0 : n);
+        playerCash_ = n < 0.0 ? 0.0 : n;
+    }
     std::vector<PurchaseRecord>& purchaseLedger() { return purchaseLedger_; }
 
     // New-game-with-no-save starting cash, raw units (cash x100, matching
@@ -1396,6 +1411,7 @@ protected: // private in EngineState before the split
     // doc comment above, spec-frontend-menu-runtime.md Sec9 item 1): CHOSEN
     // application point, real write-site still OPEN.
     double playerCash_ = kNewGameStartingCashCents;
+    double cashMultiplier_ = 1.0;
     std::vector<PurchaseRecord> purchaseLedger_;
     // grantNewGameAutoUnlocks()'s own backing store - see that method's doc
     // comment near kNewGameStartingCashCents above.

@@ -586,6 +586,40 @@ public:
     // Design notes: src/engine_state_world.cpp, above the definition.
     float damageDealtDifficultyMultiplier() const;
 
+    // spec-player-runtime.md Sec18.3 item 4 / Sec18.8 (PV-6): Damage_Received_Mult of the single-player difficulty
+    // record (sr3player::SpDifficultyVitals), applied inside the damage sinks for the local player and its followers.
+    // Design notes: src/lua_engine_state.cpp, above applyCharacterDamage.
+    float damageReceivedDifficultyMultiplier() const;
+    // "player" (the free-roam playtest character) or any "#PLAYER..." name (missions).
+    static bool isLocalPlayerName(const std::string& name);
+    bool isFollowerOfLocalPlayer(const std::string& name) const;
+    // Sec18.3 item 1: re-arm the regen wait timer after a damaging hit on the player. Item 2: the fixed 1/30 s tick,
+    // advancing the EngineState vitals clock by dtSeconds (real seconds, called once per host frame).
+    void armHealthRegenWait(CharacterState& c);
+    void tickHealthRegen(double dtSeconds);
+    double vitalsClockSeconds() const { return vitalsClockSeconds_; }
+    // Regen-speed factor (player +0x2770): 1.0 unless the host applies an unlockable Health_Regen_n (the progression
+    // state does not expose the unlock bits to the engine; spec Sec18.2 gives 1.25/1.5/1.75/2.0).
+    double healthRegenUnlockFactor = 1.0;
+    uint64_t healthRegenTickCount = 0;       // test-observable: steps that actually added health
+    uint64_t damageReceivedScaledCount = 0;  // test-observable: hits scaled by Damage_Received_Mult
+    double vitalsClockSeconds_ = 0.0;
+    // Sec18.13 (FINAL): the full-restore timer +0x19c4. Armed only by the ambulance-service marker (0x007e2d20): now + 500 ms
+    // (the literal; full_restore_time_ms 2000 has no reader). While armed the local player takes no damage (Sec4.5.4 step
+    // 10d); on expiry HP := maxHP (0x009a0860).
+    static constexpr double kAmbulanceFullRestoreSeconds = 0.5;
+    void armPlayerFullRestore();
+    bool playerFullRestoreArmed(const std::string& name) const;
+    // Sec18.14 (FINAL): Player_Health_Bonus apply 0x0071e510: bonus' = trunc((max - bonus) * (M - 1)); max += bonus' - bonus;
+    // HP is clamped, never healed. Tiers replace each other. Returns the new max HP.
+    int32_t applyPlayerHealthBonus(double modifier, const std::string& playerName = "player");
+    int32_t playerMaxHpBonus_ = 0;  // +0x1cb0
+    double playerFullRestoreUntilSeconds_ = -1.0;
+    // Sec18.15 (FINAL): player hook slot 5 of +0x1f00 = on_respawn(script_name). Fired by the revive (every caller).
+    // Slot 0xa (bust) has no Lua registration: nothing to fire.
+    std::string playerOnRespawnCallback_;
+    bool fireOnRespawn(const std::string& playerScriptName);
+
     // ===== Vehicles - data and types in engine_state_vehicles.h =====
 
     // Vehicle destroyed (spec D): queues on_vehicle_destroyed(vehicle_name, nil) on the vehicle's record slot

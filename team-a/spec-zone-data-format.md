@@ -2448,6 +2448,8 @@ Bit census on disk: 0:4542, 2:3133, 3:205, 4:1049, 5:179, 6:422, 7:195, 8:1016, 
 | 24 | unknown | none found | 301 | OPEN. 301 of 301 have bit 10; 135 also bit 3; 30 % have a left neighbour, none a right |
 | 25 | no usable opposite lane: the oncoming-lane finder returns nothing | `0x00b1f211`, `0x00b1f26e` in `0x00b1f180` (caller `0x00b20cb7`) | 1,256 | HIGH. Tested on the segment whose bit 0 says "left is oncoming"; 450 of the 1,256 have bit 0, 422 are highway (bit 4) |
 
+**[2026-10-19 (`spec-ai-runtime.md` §23.4): bits 28–29 are a run-time **island id**. `0x00A6AC70` floods each lane set from the district containing node A (`hood_island_type`, district record `+0x5C`), and water lanes (bit 18) get 0. Bit 15 marks the **GPS shortcuts**: bit 27 is set at load by `0x00A6AE90` from a persisted unlock bit array (the k-th bit-15 lane uses bit k). The GPS search uses only lanes matching the include mask `0x08062D00`, and avoids bit-24 lanes unless the trip starts or ends on one.]**
+
 How `0x00b1f180` uses bit 25: it walks the `+0x3c` chain until a segment with bit 0 (the oncoming boundary) is reached, then returns that segment's `+0x3c` neighbour, unless the boundary segment has bit 25, in which case it returns none. The right chain is walked the same way with bit 1 and bit 25 (no shipped segment has bit 1).
 
 Port rules, one per bit:
@@ -2907,6 +2909,42 @@ Everything else in both sections is FINAL.
 - **`0x2248` Wave killers** — minimal `{count,arrayPtr}`, zero inline processing, same lazy-materialization pattern as Heightmap.
 - **`0x2249` Water surfaces** — two-level array, outer 16-byte stride (subcount + fixup to an inner 20-byte-stride array).
 
+**`0x2247` Water volumes and `0x2249` Water surfaces, decoded (2026-10-19, Team B Q batch B).** Sources: the loaders
+`0x008644b0` and `0x00864770`, the runtime users `0x00792580` and `0x00796f60` (`spec-physics-runtime.md` §10.13.9 Q1),
+and a streamed census of every city `.czn_pc` (`tools/scratchpad/wq_water_vols.py`).
+
+`0x2247` payload: u32 count, then count u32 self-relative offsets (−1 = null) to the entries. Entry layout:
+
+| Entry offset | Content | Status |
+|---|---|---|
+| `+0x00` | vec4 centre (x, y, z, unused) | FINAL |
+| `+0x10` | vec4 half extents (x, y, z, unused); AABB = centre ± half, inserted into the zone grid (`0x00dc8960`, zone `+0xbc`/`+0xc8`) | FINAL |
+| `+0x20`, `+0x28` | u32; `+0x24`, `+0x2C` offsets (fixed up). All four are copied into the phantom's shape record (`+0x1C`, `+0x14`, `+0x18`, `+0x20`) | FINAL copy, OPEN meaning |
+| `+0x30` | u32 index; must equal the entry's own index or the load fails | FINAL |
+| `+0x34` | offset, fixed up, then resolved through `0x00dcd3d0` (the name/handle primitive Interior triggers also use) | FINAL |
+| `+0x38` | offset to the shape data that `0x00792580` turns into the Havok phantom (with `0x0078a8a0`/`0x0077a5b0`) | FINAL |
+| `+0x3C` | written at load: runtime phantom slot 0…299 (12-byte slots at `0x02235a20`); −1 fails the load | FINAL |
+| `+0x40` | offset, fixed up | OPEN |
+| `+0x44` | u32 flags; **bit 0 = ocean** (counted for the global sea level) | FINAL |
+
+At run time each entry becomes a phantom (collision filter `0x000c006b`) whose overlapping bodies take its top (AABB
+max y) as their water height. Ocean-flagged entries also feed the global sea level (largest x–z overlap wins).
+
+Census (city archives, 833 entries):
+- 681 entries have the ocean bit. 676 of them have top = 0.000 exactly (centre y −10.65, half y 10.65, sea tiles laid
+  out as 320 × 60 to 320 × 280 m boxes). 5 have top 5.236 (tiles 1310/1311/1411).
+- 152 entries are non-ocean (pools, canals, a barge; for example f1014 top 1.431, f0917 19.879, f1718 nuke pools 61.373).
+- **City sea level = 0.0 m.**
+
+`0x2249` payload: u32 outer count, then outer count × 16-byte cells {f32 x, f32 z (cell minimum corner on a 20 m grid),
+u32 n, u32 self-relative offset to n inner records of 20 bytes}. The inner records are stored back to back after the
+outer array. In the samples read, the inner words are 0, 0, 0xFFFFFFFF, 0xFFFFFFFF, 0.
+- Census: 121,184 cells, 96,828 of them non-empty.
+- **No physics or water-height code reads `0x2249`** (zone `+0xf4`/`+0xf8`). Its consumer is OPEN; GUESS: the
+  render-side water surface.
+- The water height is answered entirely by `0x2247` plus the wave term.
+
+
 **Water-vs-missing-ground hypothesis, tested 2026-10-11 — orchestrator-routed static pass on the
 long-parked ground-missing live-playtest bug, CLEAN NEGATIVE as a tile-classification signal**
 (SPEC TEAM, self, direct real-byte read against the real shipped `sr3_city_0.vpp_pc`/
@@ -3127,6 +3165,207 @@ The collision vertices agree with node Y within 0.15 m at every point that has v
 
 **Review status (2026-10-18): FINAL for (a), (b), the identity placement, `n1 == n2`, the surface-id accessor, the key decode and the tile-0915 bytes. HIGH for the heightmap's aircraft role and the `−5` meaning (§13.5's OPEN item is closed). GUESS for the `0x38ff` meaning and the strip stand-in.**
 
+#### 13.5.2 Visible street surface at the spawn tile 0915 (2026-10-19)
+
+Answers the "street missing at spawn" symptom in Team B/C's build (their `HANDOFF.md`: "STILL MISSING: street surface is not rendered (only the collision mesh exists)"). Static work only: tile bytes from `sr3_city_0.vpp_pc` → `0915.str2_pc` (only that entry inflated), scripts in `tools/scratchpad/looks_2026-10-19/` (`zone_render_tris.py`, `zone_render_cover.py`, `scan_inbox.py`; output `tris_0915.txt`).
+
+**(a) Which data draws streets. FINAL.** The visible road and sidewalk surface is the render geometry of the `0x2237` ("WE geom") record of `sr3_city~s<CCRR>.czn_pc`: its Mesh sub-blocks in the `.czn_pc`, with their index and vertex segments in the paired `sr3_city~s<CCRR>.gzn_pc`. Positions are world-space metres (identity placement, §13.2 / `spec-terrain-format.md` §5 item 2). Not sources of the street surface: `~f<CCRR>` (no `.gzn_pc`; its `0x2237` is a stub), the `0x2244` heightmap (§13.5, §13.5.1 (d)), the `<CCRR>h0`…`h3` `.clmesh_pc` objects (buildings, kerbs, props), and `~al` zones. There is no separate road-mesh, decal or terrain-tile format for the street.
+
+**(b) Tile 0915 carries the whole street. FINAL (bytes).** `sr3_city~s0915.czn_pc` (697,896 bytes) / `.gzn_pc` (1,606,532 bytes):
+- **143 Mesh sub-blocks** validate with the 4-byte-aligned chain rule (§10.4/§10.5). Only **5** of them validate if the segment search is limited to 16-aligned offsets.
+- **98 blocks are world-space** (bounds inside the tile, 29,836 position vertices). **45 blocks are near-origin** (bounds within about ±25 m of (0, 0, 0), 13,566 vertices). They are the population-wide local-space content of §13.2. Their placement source is a Residual.
+- Every position channel in this tile is layout `(sem 2, idx 1, stride 24)`, `(sem 2, idx 2, stride 28)`, `(sem 0, idx 0, stride 16)`, `(sem 0, idx 1, stride 20)` or `(sem 4, idx 0, stride 12)`. The position is a `float3` at channel offset 0 (`spec-vertex-format.md` §5/§6).
+- A brute scan of the `.gzn_pc` for `float3` triples inside the tile box finds 38,602 hits, all in constant-stride runs (strides 16/20/24/28). The world-space street data is present in the archive.
+
+The correction to `spec-terrain-format.md` §5 item 2 ("~170 vertices … too sparse to be real ground", 2026-10-11) is: that count came from a 16-aligned-only validation (`mesh_scan.validate`) and an exact-stride channel filter. With the chain rule the tile has 29,836 world-space vertices.
+
+**(c) Test vectors: render triangles under the §13.5.1 probe points. FINAL.** Each block's index buffer is decoded as one triangle strip, with a triangle dropped when two of its indices are equal (stitching, `spec-vertex-format.md` §12.13). A probe hits when its (x, z) is inside the triangle's XZ projection. The height is the barycentric Y.
+
+| probe (x, z) | collision ground (§13.5.1) | render hit Y | block (file order) | `.czn_pc` offset | `.gzn_pc` segment | verts | block bounds x / y / z |
+|---|---|---|---|---|---|---|---|
+| (−1280, −560) spawn | 32.39 vertex, 32.68 triangle | **32.68** | #98 | `0x0eaf8` | `0x1222bc` | 318 | −1373..−1274 / 21.5..36.2 / −657..−491 |
+| (−1266.9, −584.4) road | node 32.13 | **32.13** | #55 | `0x0c264` | `0x05dd9c` | 109 | −1274..−1254 / 32.0..36.2 / −584..−495 |
+| (−1272.0, −584.4) sidewalk | node 32.15 | **32.15** | #55 | `0x0c264` | `0x05dd9c` | 109 | as above |
+| (−1282.8, −478.6) road | node 36.06 | **36.04** | #38 | `0x0b208` | `0x03d8e4` | 629 | −1365..−1278 / 25.0..36.2 / −562..−471 |
+| (−1318.6, −681.3) road | node 23.82 | **23.81** | #136 | `0x10edc` | `0x18346c` | 241 | −1369..−1254 / 18.0..32.2 / −699..−612 |
+
+The render surface agrees with the collision surface and the road-graph node heights within 0.02 m at all five points. Ground at the spawn is 32.4–32.7 m, as §13.5.1 states.
+
+**(d) Diagnosis of the missing street. FINAL (from reading Team B's renderer; their code is not reproduced here).** Their ground loader locates all Mesh sub-blocks of the tile correctly (it uses the chain rule). It then renders **only the first sub-block that has a channel of layout code 0 or 2, and only that one channel**. The layout code is the channel record's byte `+5`, the `sem` field above. In `~s0915` that first block is **#0** (`.czn_pc` `0x08e20`, `.gzn_pc` `0x000000`): 32 vertices, bounds x −22..22, y −0.2..0.2, z −10..13. That is a near-origin local-space block. So the build draws one small near-origin patch about 1.4 km from the spawn and none of the 98 world-space street blocks. This explains their "~26 triangles near origin" observation and the sky showing under the street. Layout-4 channels (position only) are also skipped by that loader. They are rare (1 block in 0915) and not needed for the street.
+
+**Port recipe (render).**
+1. For each resident tile, take `sr3_city~s<CCRR>.czn_pc`/`.gzn_pc`. Use the `^variant` pair when that variant is active. Skip `~f`.
+2. Locate **every** Mesh sub-block with the chain rule (§10.4/§10.5).
+3. For **every** block and **every** draw range, use the range's channel and its own material id (`spec-terrain-format.md` §5 item 3). Do not stop at the first block or the first channel.
+4. Draw world-space blocks with an identity world matrix.
+5. **Skip near-origin blocks** until their placement is known (CHOSEN: a block whose bounds lie within ±50 m of the origin while the tile is elsewhere). Drawing them at identity puts geometry at (0, 0, 0). Dropping them loses no street surface at 0915: all five probes hit world-space blocks.
+6. Triangles: strip with degenerate stitching, as in (c).
+
+**Residual:** the placement of the 45 near-origin blocks (instancing by `0x2233` "Crunched ref geom" or another index is the open lead, §13.2 and `spec-terrain-format.md` §5 item 2 (1)); whether retail draws layout-4 channels in the colour pass.
+
+**Review status (2026-10-19): FINAL for (a)–(d) on tile 0915 bytes. Population-wide claims are stated only where §13.2 already measured them.**
+
+#### 13.5.3 Ground triangle list (2026-10-20, Team B blocker): FINAL
+
+Answers Team B blocker #1, "the real ground triangle list: how the ground/collision triangles are stored and drawn". It closes the §13.5.1 Residual "the exact MOPP key set is not enumerated" and replaces the §13.5.1 (c) strip stand-in (GUESS). Static work only: executable read with capstone, tile bytes from the files extracted on 2026-10-18 (`sr3_city_0.vpp_pc`, only the tile `.str2_pc` entries inflated). Scripts: `tools/scratchpad/mopp_2026-10-20/` (`mopp_walk.py` walker, decoder and ray probe; `stats.py` winding and opcode census; `find_vm.py`/`find_vm2.py`/`cases.py` to locate and dump the exe's MOPP interpreters).
+
+**(a) Structure. FINAL.** There is no explicit index list, strip or fan anywhere in the `0x2237` tail. The shape is Havok's `hkpMoppBvTreeShape` over an `hkpExtendedMeshShape` in a Volition-specific mode (RTTI, `spec-physics-format.md` §4.4.6(g)). The tail (§13.5.1 (c)) holds only:
+- `float3 v[n1]`: world-space vertices;
+- `u16 s[n1]`: surface id per *first vertex* of a triangle (accessor `0x00d54600` returns `s[key & 0x3ffff]`);
+- the MOPP blob: a header, then the bytecode tree whose terminals are the shape keys;
+- the AABB.
+
+Each triangle is carried by its shape key alone: the key packs the first vertex and two forward deltas. **The triangle set is exactly the set of keys at the MOPP terminals** (option (b) of the task). Keys are sparse (tile 0915: 13,503 keys, max `0xfe0815fb`), so iterating `0..N−1` is not possible; the tree must be walked.
+
+MOPP blob header (validated by `0x0077a5b0`; version 301 in 18/18 `~s` records):
+
+| blob offset | field | 0915 value |
+|---|---|---|
+| `+0x00` | magic `"MOPP"` (`u32 0x50504f4d`) | — |
+| `+0x04` | `u32` version; must be ≥ 300 | 301 |
+| `+0x08` | `float4` code info: offset x, y, z; w = quantisation scale | (−1461.6067, 3.7658, −722.7239), 45346.633 |
+| `+0x18` | `u32` byte code size (must be non-zero) | 192,709 |
+| `+0x1c` | `u8` build type (version 300: no field, taken as 1) | 1 |
+| `+0x20` | bytecode starts (version 300: at `+0x1c`) | file `0x31810` |
+
+`blobLen` (§13.5.1 (c)) = `0x20 + size` (0915: 192,741).
+
+**(b) Key → triangle (`0x00d55110`, the container's child-shape getter, vtable `0x01246814` slot 5). FINAL.** The getter takes this path when the shape's subpart-bit count (shape object `+0xb4`, the getter's `this` `+0xa4`) is 0, which is the case for every `0x2237` mesh; the other branch (`0x00d55275`) is stock subpart/index-array decoding and is not used here.
+```
+v0 = key & 0x3ffff            (bits 0..17)
+v1 = v0 + ((key >> 18) & 0x7f)   (bits 18..24, delta 1..127 observed)
+v2 = v1 + ((key >> 25) & 0x3f)   (bits 25..30, delta 1..63 observed)
+bit 31: not read by the getter
+triangle = (v[v0], v[v1], v[v2]), surface id = s[v0]
+```
+The getter builds the triangle in exactly the order (v0, v1, v2) with welding data 0 and the shape radius from object `+0xe8`.
+
+**Bit 31 = winding flag. HIGH (data; the exe ignores it for collision).** With the normal `(v1−v0)×(v2−v0)`, tile 0915: bit 31 clear → 5,186 up / 93 down / 1,460 walls; bit 31 set → 97 up / 5,097 down / 1,570 walls. So the outward-facing order is `(v0, v1, v2)` when bit 31 is clear and `(v0, v2, v1)` when it is set (strip parity). Ray casts against the collision mesh must be two-sided, or must apply this flip first.
+
+**`s[]` and `0x38ff`. FINAL (18/18 `~s` records).** In every record, the set of distinct `v0` over all keys equals exactly the set of vertices with `s[v] != 0x38ff`. So `0x38ff` means "no triangle starts at this vertex", which upgrades the §13.5.1 (c) GUESS. Several triangles can share a `v0`, and therefore share a surface id (0915: 13,503 triangles over 6,513 distinct `v0`).
+
+**(c) MOPP bytecode for full enumeration. FINAL.** These semantics are derived from the exe's own subtree collector `0x00f209d0`, which recurses into both children of every split and appends every terminal key to an array. Cross-checks:
+- the single-path walker `0x00f20d30`;
+- the k-DOP/AABB query `0x00f19410`, which calls `0x00f209d0` on fully contained subtrees.
+
+All three use the same 0x00..0x6b dispatch with identical operand lengths. Multi-byte operands are **big-endian**. `b1, b2, …` are the bytes after the opcode. "Left" is the fall-through child and is visited first.
+
+| opcode | length | meaning for enumeration |
+|---|---|---|
+| `00` | 1 | return (end of this path, no key) |
+| `01`–`04` | 4 | rescale (b1..b3 = x/y/z origin step, shift reduced by the opcode); skip |
+| `05` | 2 | jump: pc += 2 + b1 |
+| `06` | 3 | jump: pc += 3 + (b1<<8 \| b2) |
+| `07` | 4 | jump: pc += 4 + (b1<<16 \| b2<<8 \| b3) |
+| `09` | 2 | key offset += b1 (scoped to this subtree) |
+| `0a` | 3 | key offset += (b1<<8 \| b2) |
+| `0b` | 5 | key offset = (b1<<24 \| b2<<16 \| b3<<8 \| b4) (set, not add) |
+| `10`–`1c` | 4 | split on a plane (`10`/`11`/`12` = x/y/z; `13`–`1c` = other plane directions, not decoded); b1, b2 = the two plane values; children: left = pc+4, right = pc+4+b3 |
+| `20`–`22` | 3 | single-plane split x/y/z (b1 = plane); left = pc+3, right = pc+3+b2 |
+| `23`–`25` | 7 | split x/y/z with long jumps: b1, b2 = planes; left = pc+7+(b3<<8 \| b4), right = pc+7+(b5<<8 \| b6) |
+| `26`–`28` | 3 | x/y/z bound (b1 = low, b2 = high, 8-bit, shifted); one child at pc+3 |
+| `29`–`2b` | 7 | x/y/z bound, 24-bit low (b1..b3) and high (b4..b6); one child at pc+7 |
+| `30`–`4f` | 1 | **terminal: key = (op − 0x30) + offset** |
+| `50` | 2 | **terminal: key = b1 + offset** |
+| `51` | 3 | **terminal: key = (b1<<8 \| b2) + offset** |
+| `52` | 4 | **terminal: key = 24-bit (b1..b3) + offset** |
+| `53` | 5 | **terminal: key = 32-bit (b1..b4) + offset** |
+| `60`–`63` | 2 | property slot (op−0x60) = b1; skip |
+| `64`–`67` | 3 | property slot = 16-bit; skip |
+| `68`–`6b` | 5 | property slot = 32-bit; skip |
+| `08`, `0c`–`0f`, `1d`–`1f`, `2c`–`2f`, `54`–`5f`, > `6b` | — | invalid (the exe traps with `int3`) |
+
+The key offset starts at 0 at the root. It is passed by value into each child, so changes made by `09`/`0a`/`0b` do not leak to siblings (the exe copies the offset context before it modifies it). Every terminal ends its path. The plane and bound operands are compared in a 24-bit quantised space, `q = (p − offset.xyz) × scale`, with the `01`–`04` rescale origin and shift. They matter only for spatial queries and are **not needed to enumerate**. Their exact inclusive/exclusive edges are not specified here (Residual).
+
+**Port recipe (enumeration).**
+```
+stack = [(0, 0)]                       # (pc, keyOffset) into the bytecode at blob+0x20
+while stack:
+  pc, off = stack.pop()
+  loop:
+    op = code[pc]
+    00                -> break
+    01..04            -> pc += 4
+    05/06/07          -> pc += len + jump (above)
+    09/0a             -> off += value; pc += len
+    0b                -> off  = value; pc += 5
+    10..1c            -> push(pc+4+b3, off); pc += 4
+    20..22            -> push(pc+3+b2, off); pc += 3
+    23..25            -> push(pc+7+(b5<<8|b6), off); pc = pc+7+(b3<<8|b4)
+    26..28 / 29..2b   -> pc += 3 / 7
+    60..6b            -> pc += 2 / 3 / 5
+    30..4f, 50..53    -> emit(value + off); break
+    else              -> error
+for each key: (v0, v1, v2) as in (b); if key bit 31: swap v1, v2 for outward winding
+```
+Then build your own spatial index (a uniform XZ grid of about 8 m works) over the triangles for the downward ray of §13.5.1 port recipe step 3. A port does not need to run MOPP queries.
+
+**Self-checks (all pass, 18/18 `~s` records checked, including the `^megab1`/`^megab2`/`^burn`/`^barge` variants):** the walk visits every bytecode byte exactly once (0 uncovered, 0 visited twice); all keys are unique; every decoded vertex index is < `n1`; the deltas are never 0; the opcode set used is a subset of the table above.
+
+| record | n1 | triangles (keys) | bytecode bytes |
+|---|---|---|---|
+| ~s0714 | 4,375 | 6,623 | 97,244 |
+| ~s0715 | 3,112 | 4,776 | 71,707 |
+| ~s0716 | 7,467 | 10,884 | 155,387 |
+| ~s0814 | 13,581 | 19,532 | 276,631 |
+| ~s0815 | 9,976 | 14,666 | 205,266 |
+| ~s0816 | 8,544 | 12,435 | 178,441 |
+| ~s0914 (= ^burn) | 7,854 | 11,038 | 155,407 |
+| **~s0915** | **9,421** | **13,503** | **192,709** |
+| ~s0915^megab1 / ^megab2 | 9,495 | 13,530 | 193,097 |
+| ~s0916 | 11,388 | 16,327 | 237,471 |
+| ~s1014 (= ^barge) | 5,523 | 8,692 | 126,448 |
+| ~s1015 (= ^megab1/^megab2) | 12,746 | 18,304 | 264,568 |
+| ~s1016 | 8,034 | 11,988 | 176,565 |
+
+**(d) Validation on tile 0915. FINAL (bytes).** 13,503 triangles; 9,417 of the 9,421 vertices are referenced. Opcode use in 0915: terminals are almost all `53` (13,435), plus `30`–`38` (49), `50` (3) and `51` (16); `0b` occurs 34 times; there is no `09`/`0a`. The strip stand-in of §13.5.1 is wrong: of its 6,513 triangles only 2,841 are real triangles; they are exactly the keys with deltas (1, 1).
+
+Probe test: a vertical line at (x, z) is tested against all 13,503 triangles (XZ barycentric, two-sided). Every probe has exactly one hit, so the closest-hit rule of §13.5.1 is unambiguous here:
+
+| probe (x, z) | expected | MOPP-triangle hit Y | normal y | strip GUESS (§13.5.1) |
+|---|---|---|---|---|
+| (−1280, −560) spawn | ≈ 32.68 (render §13.5.2) | **32.676** | 0.997 | 32.68 |
+| (−1266.9, −584.4) road A | 32.13 (node / render) | **32.156** | 0.999 | 32.17 |
+| (−1272.0, −584.4) sidewalk | 32.15 (node / render) | **32.150** | 1.000 | miss |
+| (−1282.8, −478.6) road B | 36.06 node / 36.04 render | **36.058** | 0.998 | 36.02 |
+| (−1318.6, −681.3) road C | 23.82 node / 23.81 render | **23.795** | 0.987 | 23.85, 23.76 |
+| (−1311.1, −544.6) sidewalk 2 | 28.75 (node) | **28.749** | 0.995 | miss |
+
+6/6 hit, all within 0.03 m of the node or render height; all walkable (normal y ≥ 0.715).
+
+**Test vectors, `sr3_city~s0915.czn_pc`:** the vertex array is at file `0x114a4`, the bytecode at `0x31810`. The first 5 triangles in walk order (left-first depth-first, the order of `0x00f209d0`):
+
+| # | key | (v0, v1, v2) | s[v0] | v0 | v1 | v2 |
+|---|---|---|---|---|---|---|
+| 1 | `0x02040000` | (0, 1, 2) | `0x000b` | (−1461.602, 18.150, −699.213) | (−1438.096, 18.150, −722.719) | (−1452.980, 19.690, −715.564) |
+| 2 | `0x82080001` | (1, 3, 4) | `0x001e` | (−1438.096, 18.150, −722.719) | (−1458.879, 18.150, −696.491) | (−1461.602, 18.150, −699.213) |
+| 3 | `0x04080001` | (1, 3, 5) | `0x001e` | (−1438.096, 18.150, −722.719) | (−1458.879, 18.150, −696.491) | (−1435.373, 18.150, −719.997) |
+| 4 | `0x82080003` | (3, 5, 6) | `0x001e` | (−1458.879, 18.150, −696.491) | (−1435.373, 18.150, −719.997) | (−1458.773, 18.000, −696.384) |
+| 5 | `0x02040005` | (5, 6, 7) | `0x001e` | (−1435.373, 18.150, −719.997) | (−1458.773, 18.000, −696.384) | (−1435.267, 18.000, −719.891) |
+
+The first bytecode bytes are `28 00 ee 27 00 1b 26 00 ff 10 8a 84 7e 12 79 71 43 …` (z, y and x bounds, then an x split). Triangles 2 and 4 carry bit 31 (their outward order is (v0, v2, v1)).
+
+**(e) Collision versus what is drawn. FINAL.** These triangles are **physics only. Do not draw them.** The visible street is the separate render geometry of §13.5.2: the Mesh sub-blocks of the same `0x2237` record, with their buffers in `.gzn_pc`. In 0915 that is 98 world-space blocks and 29,836 vertices, against 9,421 collision vertices. The two meshes share no index or vertex data. The collision mesh is a coarser hull that follows the render surface: at the five probes that both cover, they agree within 0.03 m. Use for each:
+- the render blocks for drawing;
+- the collision triangles for ground snap, support and step probes (§13.5.1 recipe), optionally as a debug overlay.
+
+Kerbs, buildings and props add further collision from the placed `.clmesh_pc` objects (§13.5.1 (b) item 2). Those hulls use the same tail layout and may use the same key scheme; that was not checked this pass.
+
+**Team D cross-check [2026-10-20 per Team D emulation: FINAL]: CONFIRMED by emulation.** Team D ran the original code in an emulator (tile `sr3_city~s0915`, czn `0x2237` collision mesh, 9,421 vertices; only the containers were built synthetically from the file bytes): the bv-tree `queryAabb` `0x00D54190` -> MOPP AABB VM `0x00F0F9C0`/`0x00F0F060`, and `castRay` `0x00D54330` -> MOPP ray VM `0x00F10A50` -> container child-shape getter `0x00D55110` -> triangle ray cast.
+- Blob header: `'MOPP'`, `u32 0x12D` (301), float3 offset (-1461.607, 3.766, -722.724), `f32` scale 45346.633, code size `0x2F0C5` (192,709), `u32 1`, bytecode at blob `+0x20` (blob length = 192,709 + 0x20 = 192,741; first opcode `0x28`). All agree with the header table above.
+- Key decode `0x00D55110` confirmed from code: `v0 = key & 0x3FFFF`, `v1 = v0 + ((key>>18)&0x7F)`, `v2 = v1 + ((key>>25)&0x3F)`; triangle = (V[v0], V[v1], V[v2]) in that order. Bit 31 is not read by the decode (set on 6,764 of the keys); our winding-flip reading of bit 31 stays HIGH from data only.
+- Ray (-1280, 100, -560) -> (-1280, -500, -560): HIT, key `0x82040601`, vertices (1537, 1538, 1539), hit fraction 0.112206176, y = 100 - 600 x f = **32.6763** m, normal (-0.066082, 0.997185, -0.035428). A thin AABB query (+-0.01 m) at that x, z returns 2 candidates: `0x82040601` and `0x88080601` (1537, 1539, 1543). Our spawn probe (32.676, normal y 0.997) agrees.
+- Full enumeration (AABB +-1e5): **13,503 unique keys** (equals our 13,503 triangles), emitted in VM walk order (not sorted), **max vertex index 9420**, 9,417 of 9,421 vertices referenced (equals our count). First 10 in walk order: `0x02040000` (0,1,2); `0x82080001` (1,3,4); `0x04080001` (1,3,5); `0x82080003` (3,5,6); `0x02040005` (5,6,7); `0x02080006` (6,8,9); `0x82040008` (8,9,10); `0x82080008` (8,10,11); `0x0204000A` (10,11,12); `0x0208000A` (10,12,13). The first 5 match our test-vector table. Last 3: `0x0C040C3E`, `0x82040C3B`, `0x82080C3B`.
+- Full list (order, key, v0, v1, v2): `TEAM D\out\mopp_0915_keys.tsv`; script `TEAM D\harness\t_mopp.py` (`Mopp.query` / `cast`), reusable for other tiles. The ray VM needs the per-thread Havok stack allocator (TLS slot `0x029BFC48`).
+- No disagreement with our text was found.
+
+**Residual:**
+- the inclusive/exclusive edges of the split and bound compares, and the start shift of the 24-bit quantisation (needed only for running MOPP queries, not for enumeration);
+- whether placed `.clmesh_pc` hulls use the same delta-key mode (object `+0xb4` == 0);
+- bit 31's meaning is HIGH from data only (the exe's getter ignores it).
+
+**Review status (2026-10-20): FINAL for the structure, the key decode, the opcode lengths/children/terminals (three exe interpreters agree, 18/18 records walk with exact byte coverage), the `0x38ff` meaning and the tile-0915 validation. HIGH for bit 31 = winding flip.**
+
 ### 13.6 `0x2237`'s own Havok collision shape — cross-reference, full chain lives in `spec-player-runtime.md` §5.6 (2026-10-11)
 
 `0x2237` (already confirmed above and in §13.2 to carry street pavement's visible geometry) also
@@ -3145,6 +3384,10 @@ closes the "which file supplies ground collision" open item that section tracked
 ---
 
 ## Changelog
+
+- **2026-10-20 — new §13.5.3: ground triangle list (Team B blocker #1), FINAL.** The collision triangles are exactly the MOPP terminal keys; no index data exists. Opcode table derived from the exe's subtree collector `0x00f209d0` (cross-checked with `0x00f20d30`, `0x00f19410`); a full walk covers every bytecode byte exactly once in 18/18 `~s` records. Key decode `0x00d55110`; bit 31 = winding flip (HIGH). `0x38ff` = no triangle starts here (FINAL). Tile 0915: 13,503 triangles; 6/6 probes hit within 0.03 m. Collision is not drawn (render = §13.5.2). Team D cross-check CONFIRMED by emulation [2026-10-20 per Team D emulation: FINAL].
+
+- **2026-10-19 — new §13.5.2: visible street surface at spawn tile 0915.** The street is the render geometry of `~s0915`'s `0x2237` record: 143 Mesh sub-blocks, 98 world-space (29,836 vertices), 45 near-origin. Render triangles hit the spawn (32.68 m) and the four §13.5.1 road/sidewalk probes at collision height. Team B/C's loader draws only the first block with a layout-0/2 channel (block #0, near-origin), which is why the street is missing. Port recipe given. Static only. Cleanroom self-check: 0 hits.
 
 - **2026-10-18 — new §13.5.1: walkable ground source (SPEC-GAP GH-4).** The character stands on
   Havok collision: the world-space `0x2237` tail mesh of `sr3_city~s<CCRR>.czn_pc` plus placed

@@ -5063,6 +5063,12 @@ id `0xD11F2385` (`spec-save-format.md` §12.8.3) is FNV-1("KRHYME").
 | 11 | radio_newsbreaks | — (0) | News_Station | — | — | 0 entries | 14 news "songs" | 0/0/0 |
 | 12 | credits_radio | — (0) | none | — | — | 13 (Song) | 2 | 0/0/0 |
 
+[2026-10-20 Team B open Q: FINAL — **The Mix has 18 songs, not 24.**
+- **The Mix.** Only one copy of `the_mix_radio.xtbl` ships: `misc_tables.vpp_pc` entry 646, 41,413 bytes. A scan of every `packfiles\pc\cache` archive found no other copy. It has **18** `Song_List` rows, which matches the 18 records of The Mix media bank (see "Cue → media file" below).
+- **Correction.** The first number in row 10's "songs/ads/sweep/intro/outro" cell should read **18/81/2/54/36**. Its other four numbers are correct.
+- **The other stations** were re-counted from the same files. The `Song_List` rows are genx 18, krhyme 20, k12 17, klassic 17, adult swim 12, kabron 16, krunch 20 and credits 2, and all agree with the table.
+- **Krunch** lists 20 songs against 18 media records. Which two songs have no media was not checked.]
+
 - Pattern of the 6 ten-slot stations: Song, Song, Commercial, Song, Song, Sweeper, Song, Song, Song,
   Commercial.
 - Pattern of ADULT_SWIM: Song, Song, Commercial, Song, Commercial, Song, Sweeper.

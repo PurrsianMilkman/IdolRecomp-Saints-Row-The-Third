@@ -599,6 +599,19 @@ public:
     // to distinguish. Recorded for test-observability only (call count +
     // last mode value) - same "no Lua-visible effect beyond the call
     // itself to model" class as party_dismiss_all above.
+    // GPS hook (spec-ai-runtime.md Sec23.2): waypoint_add / waypoint_remove calls queue a request that the host's
+    // GPS planner drains each frame (name resolution to a position is the host's job). mode: bit 1 = local apply.
+    struct WaypointRequest {
+        std::string name;  // empty for a remove
+        int32_t mode = 3;
+        bool remove = false;
+    };
+    void recordWaypointAdd(const std::string& name, int32_t mode) { waypointRequests_.push_back({name, mode, false}); }
+    std::vector<WaypointRequest> drainWaypointRequests() {
+        std::vector<WaypointRequest> out;
+        out.swap(waypointRequests_);
+        return out;
+    }
     uint64_t waypointRemoveCount() const { return waypointRemoveCount_; }
     int32_t lastWaypointRemoveMode() const { return lastWaypointRemoveMode_; }
 
@@ -883,7 +896,8 @@ protected: // private in EngineState before the split
     std::unordered_map<std::string, bool> cityZoneSwaps_;
     std::unordered_map<std::string, bool> sidewalkNodesDisabled_;
     bool mipStreamingPaused_ = false;
-    uint64_t waypointRemoveCount_ = 0;                          // Sec6.17
+    std::vector<WaypointRequest> waypointRequests_;             // GPS hook (Sec23.2)
+    uint64_t waypointRemoveCount_ = 0;                         // Sec6.17
     int32_t lastWaypointRemoveMode_ = 0;                        // Sec6.17
     uint32_t drawbridgeDisabledMask_ = 0;                       // Sec6.4
     std::unordered_map<std::string, TeleportRequest> teleportRequests_;

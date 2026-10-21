@@ -1,0 +1,10 @@
+ambient-ped-anim evidence (branch feature/ambient-ped-anim), 1800 headless frames, default spawn, --no-input --no-audio.
+Another session's sr3_viewer was running during several of these runs; wall times carry about +/-5 s of noise.
+BEFORE (merge head, exe saved as build/before/sr3_viewer.exe): wall 73.9 s / 76.0 s, external peak working set 3669 MB / 3666 MB
+AFTER  (walk animation on):                                     wall 91.2 s / 79.9 s, peak 3667 MB / 3667 MB
+AFTER  --no-ped-anim (same exe, static bind pose):              wall 80.4 s / 78.4 s, peak 3669 MB / 3668 MB
+Pose cost (own timer): 31048 re-poses in 1800 frames, 2991 ms total = 0.096 ms per re-pose, 1.66 ms per frame averaged (body+head CPU skin + dynamic VB map).
+m01 --mission-timeout=60 (this exe): exit 0
+ctest: 100% tests passed out of 227 (golden_scene_check Passed)
+Captures: ped_anim_capture.png_frame{400,800,1200}.png (spawn -1280 -470), ped_anim_close.png_frame*.png (player warped 3 m behind a ped,
+--script-warp-to-ped-at=200), ped_anim_crop_ped_zoom*.png (4x crop), ped_anim_entercar.png_frame*.png (entered ambient bike, --script-enter-ambient-at=200).

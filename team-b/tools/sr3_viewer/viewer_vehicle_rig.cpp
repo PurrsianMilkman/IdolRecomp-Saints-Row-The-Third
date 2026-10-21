@@ -246,6 +246,7 @@ bool createSolidColorTextureV(ID3D11Device* device, const float colorRGBA[4], ID
     if (FAILED(device->CreateTexture2D(&td, &sub, &tex)) || !tex) return false;
     HRESULT hr = device->CreateShaderResourceView(tex, nullptr, outSrv);
     tex->Release(); // the SRV holds its own reference; the texture object itself is not needed past this call
+    if (SUCCEEDED(hr) && *outSrv != nullptr) sr3render::trackSrv(*outSrv);  // released with the session (releaseTrackedSrvs)
     return SUCCEEDED(hr) && *outSrv != nullptr;
 }
 

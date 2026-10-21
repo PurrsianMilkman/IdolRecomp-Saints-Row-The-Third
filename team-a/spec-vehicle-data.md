@@ -464,6 +464,64 @@ spawn-time selection are in `spec-customization-data.md`/the traffic spawner, no
 the customisation-record bytes that mirror `Wheel_Group` (§10.11.4); the `.rig_pc` bound via entry `+0xAC8`
 (§7.1 (d)).
 
+## Vehicle customisation data (2026-10-19) — FINAL except where marked
+
+Orchestrator queue item 6. Data-side summary for Rim Jobs. Laws: `spec-physics-runtime.md` §10.14; store flow
+and price: `spec-store-runtime.md` §9a.
+
+**Upgrades (closes §7.9 item 14 and the §7.3 `+0xAF8` OPEN).** The XML is
+`Upgrades/<Torque|Tire|Collision|Hitpoints>/Value/Levels/Level_1..4` (f32 multipliers → `+0xAF8 + 0x10·c + 4·(N−1)`)
+and `.../Cost/Levels/Level_1..4` (u32 dollars → `+0xB38 + 0x10·c + 4·(N−1)`). The category tags are literal.
+They are authored on the 19 group rows of `vehicle_groups.xtbl` (plus `vehicle_genericblank_veh.xtbl`), not on
+each vehicle. FINAL (data, and the reader `0x00ac9137`/`0x00ac913d`).
+
+| Category | Level_1..4 values (all 19 rows unless noted) |
+|---|---|
+| Torque | 1.05 / 1.10 / 1.15 / 1.20 (one row: 1.025 / 1.05 / 1.075 / 1.10) |
+| Tire | 1.75 / 2.5 / 3.25 / 4.0 |
+| Collision | 0.875 / 0.75 / 0.625 / 0.5 |
+| Hitpoints | 1.5 / 2.0 / 2.5 / 3.0 |
+
+Cost tiers (Torque block; the other three categories repeat the row's tier): 50/100/200/400 (5 rows),
+100/200/400/800 (4), 150/300/600/1200 (3), 200/400/800/1600 (6), 250/500/1000/2000 (1).
+
+**Nitrous and hydraulics data.** `Nitro_Capable` (flag bit 1 of `+0x870`), `Hydraulics_Capable` (bit 3),
+`Maximum_Speed_With_Nitrous` (`+0x87C`), `Perf_Torque_Multiplier` (`+0x9B4`, 1.1 on 2 files and 1.2 on 13; used
+only by the spawn-option applier), `Suspension_Raise_Max`/`Suspension_Lower_Min` (`+0x9AC`/`+0x9B0`, the
+hydraulics travel). Runtime: hydraulics raised = `vehicle+0x1d7a` bit 6; actions `CBA_VDC_HYDRAULICS_TOGGLE`,
+`CBA_VDC_HYDRAULICS_FULLY_EXTEND_TOGGLE`, `CAA_DRIVE_HYDRAULIC_FRONT_REAR`, `CAA_DRIVE_HYDRAULIC_LEFT_RIGHT`
+(strings; their handlers were not traced). Nitrous constants (1.5, 5000 ms, 300 ms) are in code, not data.
+
+**Paint, wheels, body kits, tint: where the data lives (not re-derived).**
+
+- Paint: colours `vehicle_cust_color_pool.xtbl`, per-vehicle sets `vehicle_cust_color_sets.xtbl`
+  (`spec-tables-vehicle-world.md` §9); per-variant `Colors/Color_Group` (`spec-customization-data.md` §3). The
+  render side is two shader constants, `Base_Paint_Color` (c2) × `Tint_color` (c37), no texture
+  (`spec-render-pipeline.md` §20.12.11–§20.12.16). The hop from the applied-option tree to those registers is
+  still OPEN there.
+- Wheels: `vehicle_wheel_groups.xtbl` (§5 there) and per-variant `Wheels/Wheel_Group` sizes; the rim meshes
+  are one shared asset pair (`spec-vehicle-geometry.md` §12.1).
+- Body kits (bumpers, spoilers, hoods and so on): per-variant `Components/Component_Group`, shared
+  `externalized_vehicle_components.xtbl` (§7 there), slots `vehicle_cust_slots.xtbl` (§8.1 there); the
+  per-vehicle compiled slot data is `.cvtf_pc` (`spec-geometry-format.md` §5). Swaps are component-mesh
+  selections within the vehicle's own model, not separate files.
+- Window tint: **no window-tint table or slot was found** (no `tint` element in any vehicle table read). GUESS
+  that SR3 has no window-tint option. Underglow is a separate colour (`vcust_set_underglow`).
+
+**Persistence (garage record, `spec-save-format.md` §9.2).** The 57-byte blob at record `+0x33` holds, after the
+`0x0A55B00B` header and the four paint bytes (`+0x40..+0x43` of the applied-customisation object), **four
+3-bit fields = the four upgrade levels** (bytes `+0..+3` of that object: Torque, Tire, Collision, Hitpoints).
+HIGH: the writer `0x00a98020` reads bytes `+0..+3` with the same "index < 4" guard as the level routines, and
+that object is the `vehicle+0xA88` pointer. The component choices follow as the per-group option indices. Where
+"has nitrous" (`vehicle+0x16c0` bit 14) is saved is OPEN: it is not one of the record's `+0x6C` flag bits.
+
+**Test vectors.** (1) `vehicle_groups.xtbl` 200-tier row, Hitpoints Level_3 → cost 800, value 2.5.
+(2) Tire Level_4 = 4.0 = the spawn "tough tyres" value. (3) Blob levels Torque 2, Tire 0, Collision 4,
+Hitpoints 1 → four 3-bit fields 2, 0, 4, 1.
+
+**Residual:** the save location of "has nitrous" and of hydraulics ownership; window tint confirmed absent
+only by search; the hydraulics input handlers.
+
 ## Changelog
 
 - 2026-10-14: new section "Per-vehicle data load path" (load order, override chain, variant naming, CoM and wheel

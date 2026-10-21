@@ -118,93 +118,51 @@ void testEngineRampRpm() {
 }
 
 void testEngineNetTorqueCurve() {
+    // D-17 (spec-differential-results.md): table field names are not crossed. Engine: Torque 1000, Min/Opt/Max 1000/4500/6500,
+    // Min/Max_Torque_Factor 0.9, resistances 0 / 0 / 0.2, Clutch_Slip 1750.
     EngineCurveTuning t;
-    t.idleRpm = 1000.0;
-    t.peakTorqueRpm = 5000.0;
-    t.redlineRpm = 7000.0;
-    t.torqueScale = 1.0;
-    t.resistanceLowBandCoeff = 1.0;
-    t.resistanceHighBandCoeff = 1.0;
-    t.torqueFactorIdle = 0.5;
-    t.torqueFactorPeak = 1.0;
-    t.torqueFactorRedline = 0.4;
+    t.torque = 1000.0; t.minRpm = 1000.0; t.optRpm = 4500.0; t.maxRpm = 6500.0;
+    t.minTorqueFactor = 0.9; t.maxTorqueFactor = 0.9;
+    t.minResistance = 0.0; t.optResistance = 0.0; t.maxResistance = 0.2;
+    t.clutchSlipRpm = 1750.0;
 
-    // At exactly peak-torque RPM (high-band branch, f=0): torqueFactor=peak
-    // (1.0), resistanceFactor=0 (f^2=0) -> netTorque = 0*throttle - 1.0 = -1.0,
-    // independent of throttle.
-    CHECK(Near(EngineNetTorque(t, 5000.0, 1.0, false), -1.0));
-    CHECK(Near(EngineNetTorque(t, 5000.0, 0.0, false), -1.0));
-
-    // At redline (high-band branch, f=1): torqueFactor=redline factor (0.4),
-    // resistanceFactor=resistanceHighBandCoeff*1^2=1.0 -> netTorque =
-    // 1.0*throttle - 0.4.
-    CHECK(Near(EngineNetTorque(t, 7000.0, 1.0, false), 1.0 * 1.0 - 0.4));
-    CHECK(Near(EngineNetTorque(t, 7000.0, 0.0, false), 0.0 * 0.0 - 0.4));
-
-    // At idle RPM exactly (low-band branch, f=0, no clutch scaling since
-    // rpm is NOT < idleRpm): torqueFactor=idle factor (0.5), resistanceFactor=0.
-    CHECK(Near(EngineNetTorque(t, 1000.0, 1.0, false), -0.5));
-
-    // Below idle (clutch/load ratio scaling, CHOSEN): rpm=500 -> f clamps to
-    // 0 (below idleRpm in the low-band fraction), torqueFactor=idle factor
-    // (0.5) scaled by clutchLoadRatio=clamp(500/1000)=0.5 -> 0.25;
-    // resistanceFactor=0 (f clamped to 0, f^2=0).
-    CHECK(Near(EngineNetTorque(t, 500.0, 1.0, false), -0.25));
-
-    // Attached-object penalty: exact x0.85 (CONFIRMED literal, Sec10.2).
-    const double redlineNoPenalty = EngineNetTorque(t, 7000.0, 1.0, false);
-    const double redlineWithPenalty = EngineNetTorque(t, 7000.0, 1.0, true);
-    CHECK(Near(redlineWithPenalty, redlineNoPenalty * 0.85));
-
-    // finalScale (models the OPEN _DAT_02845af4 global): a pure multiplier.
-    CHECK(Near(EngineNetTorque(t, 7000.0, 1.0, false, 0.5), redlineNoPenalty * 0.5));
-    CHECK(Near(EngineNetTorque(t, 7000.0, 1.0, false, 0.0), 0.0));
+    // At Opt_RPM the torque bump peaks at exactly Torque and the resistance is Opt_RPM_Resistance (0): torque = T*throttle - R.
+    CHECK(Near(EngineNetTorque(t, 4500.0, 1.0, false), 1000.0, 1e-3));
+    CHECK(Near(EngineNetTorque(t, 4500.0, 0.5, false), 500.0, 1e-3));
+    // Full throttle evaluates the curve at max(rpm, Min + (Slip - Min) x throttle) = 1750: T = 1000 x (1 + (0.9 - 1) (2750/3500)^2).
+    CHECK(Near(EngineNetTorque(t, 1000.0, 1.0, false), 938.265, 1e-2));
+    // At/above Max_RPM T = 0 and R = Torque x Max_RPM_Resistance.
+    CHECK(Near(EngineNetTorque(t, 6500.0, 1.0, false), -200.0, 1e-3));
+    // Attached-object penalty: exact x0.85; finalScale is a pure multiplier.
+    const double base = EngineNetTorque(t, 4500.0, 1.0, false);
+    CHECK(Near(EngineNetTorque(t, 4500.0, 1.0, true), base * 0.85, 1e-3));
+    CHECK(Near(EngineNetTorque(t, 4500.0, 1.0, false, 0.5), base * 0.5, 1e-3));
+    CHECK(Near(EngineNetTorque(t, 4500.0, 1.0, false, 0.0), 0.0, 1e-9));
+    // Zero throttle (coasting): -(mass x 0.35 x rpm / Max_RPM) = -(1500 x 0.35 x 3000 / 6500) = -242.308.
+    CHECK(Near(EngineNetTorque(t, 3000.0, 0.0, false, 1.0, -1.0, 1500.0), -242.308, 1e-2));
 }
 
 // ---------------------------------------------------------------------------
 // 10.3 Transmission
 // ---------------------------------------------------------------------------
 void testGearShiftStateMachineUpshiftSequence() {
+    // D-19 (spec-differential-results.md): no cooldowns, no mid-shift block, strict comparisons; one decision per step.
     GearShiftTuning tuning;
-    tuning.downshiftRpmByGear = {2000.0, 2500.0, 3000.0, 3500.0};  // size = maxGear-1 = 4
+    tuning.downshiftRpmByGear = {2000.0, 2500.0, 3000.0, 3500.0};
     tuning.upshiftRpmThreshold = 5000.0;
     tuning.maxGear = 5;
     tuning.shiftDurationSec = 0.2;
-    tuning.upshiftCooldownSec = 0.3;
-    tuning.downshiftCooldownSec = 0.3;
-
     GearShiftStateMachine sm(tuning, /*startGear=*/1);
-
-    // Call 1: rpm above threshold, no cooldown/mid-shift gating yet -> upshift fires immediately.
     sm.Update(6000.0, 0.1);
     CHECK(sm.gear() == 2);
     CHECK(sm.midShift());
-
-    // Call 2: mid-shift still active (0.2 - 0.1 = 0.1 remaining) -> gated, no new shift.
-    sm.Update(6000.0, 0.1);
-    CHECK(sm.gear() == 2);
+    sm.Update(6000.0, 0.1);  // timer 0.1 left; it does not block the next upshift
+    CHECK(sm.gear() == 3);
     CHECK(sm.midShift());
-
-    // Call 3: shiftTimer reaches exactly 0 this call (0.1 - 0.1 = 0) -> no
-    // longer mid-shift. upCooldown reaches 0.1 this call (0.2 - 0.1), still
-    // > 0 -> blocks a new upshift even though rpm already qualifies.
-    sm.Update(6000.0, 0.1);
-    CHECK(sm.gear() == 2);
+    sm.Update(5000.0, 0.1);  // exactly at the threshold: strict, no shift; timer expired -> not shifting
+    CHECK(sm.gear() == 3);
+    sm.Update(5000.0, 0.1);
     CHECK(!sm.midShift());
-
-    // Call 4: timers are decremented BEFORE the shift decision every call
-    // (Update()'s own order), so upCooldown reaches exactly 0 (0.1 - 0.1)
-    // at the START of this same call, and the upshift fires within it -
-    // one call earlier than a "decrement happens after the decision" reading
-    // would suggest. Verified against the actual implementation, not assumed.
-    sm.Update(6000.0, 0.1);
-    CHECK(sm.gear() == 3);
-    CHECK(sm.midShift());
-
-    // Call 5: new shiftTimer (0.2) ticks down to 0.1, still mid-shift.
-    sm.Update(6000.0, 0.1);
-    CHECK(sm.gear() == 3);
-    CHECK(sm.midShift());
 }
 
 void testGearShiftStateMachineDownshiftAndClamps() {
@@ -284,21 +242,31 @@ void testSuspensionSpringDamperForce() {
     t.restLength = 0.3;
     t.loadFactor = 1.0;
 
-    // Compressing (currentLength < restLength, positive compressionVelocity):
-    // damperCompression branch. force = (0.3-0.25)*1000*1 - 50*2 = 50 - 100 = -50.
-    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.25, 2.0), -50.0));
+    // FINAL D-25: v is the spec closing speed; v < 0 (compressing) uses the COMPRESSION damper.
+    // force = (0.3-0.25)*1000 - 50*(-2) = 150.
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.25, -2.0), 150.0, 1e-3));
 
-    // Rebounding (negative compressionVelocity): damperRelaxation branch.
-    // force = 0.05*1000 - 20*(-2) = 50 + 40 = 90.
-    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.25, -2.0), 90.0));
+    // v >= 0: RELAXATION damper. force = 50 - 20*2 = 10; v = 0 / -0 also relaxation.
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.25, 2.0), 10.0, 1e-3));
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.25, -0.0), 50.0, 1e-3));
+    // Not touching: 0. Chassis mass multiplies the force.
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.25, 2.0, false), 0.0));
+    SuspensionWheelTuning tm = t; tm.chassisMass = 1500.0;
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(tm, 0.25, 2.0), 15000.0, 1e-2));
+
+    // TA-2: M = 1 / inverse mass (f32), 0 when the inverse mass is 0; the helper feeds the tuning.
+    CHECK(Near(ChassisMassFromInverseMass(1.0 / 1500.0), 1500.0, 1e-2) && ChassisMassFromInverseMass(0.0) == 0.0);
+    const SuspensionWheelTuning tw = WithChassisInverseMass(t, 1.0 / 1500.0);
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(tw, 0.25, 2.0), 15000.0, 1.0));
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(WithChassisInverseMass(t, 0.0), 0.25, 2.0), 0.0));
 
     // At rest length with zero velocity: zero force.
-    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.3, 0.0), 0.0));
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t, 0.3, 0.0), 0.0, 1e-6));
 
     // loadFactor scales only the spring term (CONFIRMED, Sec10.4).
     SuspensionWheelTuning t2 = t;
     t2.loadFactor = 2.0;
-    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t2, 0.25, 0.0), 100.0));  // spring term doubled, no damper term to compare against
+    CHECK(Near(SuspensionSpringDamperForceNoXDenominator(t2, 0.25, 0.0), 100.0, 1e-3));  // spring term doubled, no damper term to compare against
 }
 
 void testSuspensionSubstepReslicing() {

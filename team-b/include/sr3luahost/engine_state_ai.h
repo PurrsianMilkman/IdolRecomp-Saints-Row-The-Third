@@ -1126,10 +1126,18 @@ protected: // private in EngineState before the split
     // installSpawnRankHitPoints()'s doc comment.
     std::vector<int32_t> spawnRankHitPoints_;
     std::unordered_map<std::string, int> teamIdByName_; // Sec30.6/Sec20.6, test-only; unregistered -> sentinel 9
-    // CONFIRMED 8x8 (Sec20.6); -1 = "never written" (this project's own sentinel, not a spec fact).
+    // CONFIRMED 8x8 (Sec20.6). Default = the .data table at 0x01175100 copied by 0x009b70e0 (Team A 2026-10-20, spec-ai-runtime.md
+    // Sec12.7 note, FINAL; row = observer team, column = other team; 0 hostile, 1 unfriendly, 2 neutral, 3 wary, 4 allied):
+    // no pair starts at 0, so mission enemies are not hostile from the default relation. Teams 8 and later (the matrix is
+    // 8 wide in the spec; any extra rows this project carries) keep -1 = "never written" (this project's sentinel).
     std::array<std::array<int, kTeamRelationMatrixDim>, kTeamRelationMatrixDim> teamRelation_ = [] {
         std::array<std::array<int, kTeamRelationMatrixDim>, kTeamRelationMatrixDim> m{};
         for (auto& row : m) row.fill(-1);
+        static const int kDefault[8][8] = {{4, 1, 1, 1, 1, 1, 1, 2}, {1, 4, 4, 4, 2, 1, 1, 2}, {1, 4, 4, 4, 2, 1, 1, 2},
+                                           {1, 4, 4, 4, 2, 1, 1, 2}, {1, 1, 1, 1, 4, 1, 1, 2}, {1, 1, 1, 1, 1, 4, 4, 2},
+                                           {1, 1, 1, 1, 1, 4, 4, 3}, {2, 2, 2, 2, 2, 3, 3, 2}};
+        for (size_t r = 0; r < 8 && r < m.size(); ++r)
+            for (size_t c = 0; c < 8 && c < m[r].size(); ++c) m[r][c] = kDefault[r][c];
         return m;
     }();
     int teamRelationOobGuardCount_ = 0; // Sec30.6/Sec30.7 - test-observable only, not a real engine field
@@ -1238,7 +1246,7 @@ protected: // private in EngineState before the split
     // citation/reasoning. (stagActive_ itself is NOT re-declared here -
     // reuses the existing field above, see set_stag_active's own doc
     // comment on the public accessor side.) ---
-    bool partyRecruitable_ = false;
+    bool partyRecruitable_ = true;  // .data byte 0x0130af60 = 1 (Team A 2026-10-20, Sec24.3)
     bool notorietyForceNoAirSpawn_ = false;
     std::unordered_set<std::string> humanKindResolves_;
     std::vector<std::string> civilianNames_;

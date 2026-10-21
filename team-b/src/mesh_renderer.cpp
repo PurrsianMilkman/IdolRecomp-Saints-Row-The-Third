@@ -582,7 +582,12 @@ bool MeshRenderer::upload(ID3D11Device* device, const sr3mesh::MeshBlock& mesh,
 
     D3D11_BUFFER_DESC vbDesc{};
     vbDesc.ByteWidth = static_cast<UINT>(gpu.size() * sizeof(GpuVertex));
-    vbDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    vbDesc.Usage = dynamicVertices_ ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_IMMUTABLE;
+    if (dynamicVertices_) {
+        vbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        cpuVerts_.resize(gpu.size() * 8);
+        std::memcpy(cpuVerts_.data(), gpu.data(), gpu.size() * sizeof(GpuVertex));
+    }
     vbDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     D3D11_SUBRESOURCE_DATA vbData{};
     vbData.pSysMem = gpu.data();
@@ -656,6 +661,23 @@ bool MeshRenderer::upload(ID3D11Device* device, const sr3mesh::MeshBlock& mesh,
         error = "CreateBuffer (indices) failed: " + hrToString(hr);
         return false;
     }
+    return true;
+}
+
+bool MeshRenderer::updatePositions(ID3D11DeviceContext* context,
+                                   const std::vector<std::array<float, 3>>& positions) {
+    static_assert(sizeof(GpuVertex) == 8 * sizeof(float), "GpuVertex layout");
+    if (context == nullptr || vertexBuffer_ == nullptr || !dynamicVertices_) return false;
+    if (positions.size() * 8 != cpuVerts_.size()) return false;
+    for (size_t i = 0; i < positions.size(); ++i) {
+        cpuVerts_[i * 8 + 0] = positions[i][0];
+        cpuVerts_[i * 8 + 1] = positions[i][1];
+        cpuVerts_[i * 8 + 2] = positions[i][2];
+    }
+    D3D11_MAPPED_SUBRESOURCE m{};
+    if (FAILED(context->Map(vertexBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) return false;
+    std::memcpy(m.pData, cpuVerts_.data(), cpuVerts_.size() * sizeof(float));
+    context->Unmap(vertexBuffer_, 0);
     return true;
 }
 

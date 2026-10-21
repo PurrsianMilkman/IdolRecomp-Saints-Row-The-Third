@@ -1,4 +1,4 @@
-// lua_spec_confirmed_stubs_b25_wave2_vcust_store_garage.cpp
+﻿// lua_spec_confirmed_stubs_b25_wave2_vcust_store_garage.cpp
 //
 // Wave 2, Batch W2-5 (2026-10-08) of the post-wave-1 parallel fan-out -
 // "vcust/store/garage/crib/gang" half of a 2-file split (the other half,
@@ -39,6 +39,7 @@
 // (Batch 2's own Sec27.9 struct - left untouched, a SEPARATE mechanism from
 // this batch's own garageFrontend(), per Sec23.10's own "new global pair,
 // not previously catalogued" finding).
+#include "sr3player/vitals.h"
 #include "lua_spec_confirmed_stubs_common.h"
 #include "lua_spec_confirmed_stubs_sections.h"
 
@@ -178,7 +179,7 @@ int stub_vcust_purchase_wheels(lua_State* L) {
         ++vp.purchaseWheelsNoTargetRefusedCount; // HARDENED
         return 0;
     }
-    st->playerCash() -= price; // CONFIRMED: no affordability check - faithfully preserved
+    st->debitPlayerCash(price); // CONFIRMED: no affordability check - faithfully preserved
     EngineState::PurchaseRecord rec;
     rec.tag = "vehicle-cust"; // CONFIRMED literal tag, Sec38.5
     rec.amountCharged = price;
@@ -312,7 +313,7 @@ int stub_vcust_purchase_component(lua_State* L) {
         return 0;
     }
     double price = vp.selectedComponentItemPrice.get(key);
-    st->playerCash() -= price;
+    st->debitPlayerCash(price);
     ++vp.purchaseComponentChargedCount;
     vp.purchaseComponentTotalCharged += price;
     vp.selectedComponentItemIndex = -1; // CONFIRMED: reset on every exit, including success
@@ -337,7 +338,7 @@ int stub_vcust_purchase_paint(lua_State* L) {
         ++vp.purchasePaintNoTargetRefusedCount; // HARDENED (shared null-deref hazard)
         return 0;
     }
-    st->playerCash() -= price; // CONFIRMED: no floor, no validation - faithfully preserved, even for price <= 0
+    st->debitPlayerCash(price); // CONFIRMED: no floor, no validation - faithfully preserved, even for price <= 0
     ++vp.purchasePaintCount;
     vp.paintTotalCharged += price;
     return 0;
@@ -357,7 +358,7 @@ int stub_vcust_purchase_performance_upgrade(lua_State* L) {
         ++vp.purchasePerformanceUpgradeNoTargetRefusedCount; // CONFIRMED: the real engine ALREADY validates here (not a new hardening divergence)
         return 0;
     }
-    st->playerCash() -= price;
+    st->debitPlayerCash(price);
     ++vp.purchasePerformanceUpgradeCount;
     vp.performanceUpgradeTotalCharged += price;
     return 0;
@@ -404,7 +405,7 @@ int stub_vcust_set_underglow(lua_State* L) {
         return 0;
     }
     vp.underglowColorIndex = static_cast<int32_t>(colorIndex);
-    st->playerCash() -= price; // CONFIRMED: applied AFTER the colour change, no floor - faithfully preserved
+    st->debitPlayerCash(price); // CONFIRMED: applied AFTER the colour change, no floor - faithfully preserved
     ++vp.setUnderglowCount;
     return 0;
 }
@@ -775,7 +776,7 @@ int stub_garage_repair_vehicle(lua_State* L) {
         return 0;
     }
     double cost = garage.selectedVehicleRepairCost.get();
-    st->playerCash() -= cost; // CONFIRMED: charged BEFORE the repair runs, no affordability check - faithfully preserved
+    st->debitPlayerCash(cost); // CONFIRMED: charged BEFORE the repair runs, no affordability check - faithfully preserved
     ++garage.repairVehicleChargedCount;
     garage.repairVehicleTotalCharged += cost;
     return 0;
@@ -915,7 +916,7 @@ int stub_crib_get_cash_stash(lua_State* L) {
     EngineState* st = upState(L);
     auto& crib = st->cribFrontend();
     if (st->hasLocalPlayer().known() && st->hasLocalPlayer().get()) {
-        st->playerCash() += crib.cashStash;
+        st->addPlayerCash(static_cast<double>(crib.cashStash));  // cash cap
         crib.cashStash = 0.0;
         ++crib.cashStashCollectedCount;
     } else {
@@ -960,7 +961,7 @@ int stub_crib_purchase_purchase_crib(lua_State* L) {
     }
     std::string key = "selected";
     double price = crib.cribPurchasePrice.known(key) ? crib.cribPurchasePrice.get(key) : 0.0;
-    st->playerCash() -= price; // CONFIRMED: charged BEFORE the ownership check - faithfully preserved
+    st->debitPlayerCash(price); // CONFIRMED: charged BEFORE the ownership check - faithfully preserved
     ++crib.purchaseCribChargedCount;
     crib.purchaseCribTotalCharged += price;
     if (!crib.cribAlreadyOwned) crib.cribAlreadyOwned = true; // CONFIRMED: ownership flag only checked/set AFTER the charge

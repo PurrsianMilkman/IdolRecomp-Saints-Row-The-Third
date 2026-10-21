@@ -7,120 +7,108 @@ using namespace sr3viewer;
 namespace sr3viewer {
 
 // ===========================================================================
-// REAL `0x2237` GROUND-PAVEMENT COLLISION (street-collision-0x2237-mopp
-// follow-up task, 2026-10-11) - spec-player-runtime.md Sec5.6.5's own
-// "RESOLVED, 2026-10-11" finding (spec-zone-data-format.md Sec13.6 is the
-// shorter cross-reference pointing back at the same text): the real
-// engine's `0x2237` record handler (`0x00864c60`) builds its OWN Havok
-// collision shape directly from the SAME record - an `hkpExtendedMeshShape`
-// over the identical vertex/u16-index arrays this project's existing
-// `sr3zone::ZoneGeometry::locate()` + `tryRenderZoneEntry()` pipeline
-// already decodes for RENDERING - optionally wrapped in an `hkpMoppBvTreeShape`
-// bounding-volume accelerator when the record's own embedded blob starts
-// with the literal "MOPP" magic. This project does not parse that MOPP
-// BVH blob at all (out of scope, per the orchestrator's own instruction,
-// same "real triangle DATA, project's own acceleration structure" split
-// ClmeshTriangleCollisionWorld's own doc comment above already uses for
-// `.clmesh_pc`) - `CollisionBvh`/`BuildCollisionBvh()` (this file, above)
-// is reused completely unmodified as that acceleration structure, fed with
-// the ground tile's own real triangles captured above
-// (CityGroundTile::collisionBvh, tryRenderZoneEntry()'s own
-// `outCollisionTris` parameter) rather than with a second, separately-
-// parsed copy of the align16/u32-len/align16/data/align4/two-vec3 MOPP-
-// adjacent blob the spec section also describes - the spec text is
-// explicit the mesh shape is built from "the SAME vertex/u16-index arrays"
-// already decoded for the visible-geometry side, so re-parsing that
-// raw blob a second time would be exactly the kind of redundant/
-// drift-prone second implementation this project's own standing rule
-// against duplicate parsers forbids, not a more faithful port.
-//
-// WHAT THIS REPLACES: the flat `y <= groundY` ground-plane binary
-// (sr3player/character_collision.h's own top comment) and the Heightmap
-// (0x2244)-based scalar sampler (sr3zone/zone_heightmap.h,
-// `sampleRealGroundHeight()` below) - both were explicit, honestly-labelled
-// STAND-INS for street pavement specifically (0x2244 is a genuinely
-// separate content kind, not the pavement's own render/collision mesh -
-// see zone_heightmap.h's own top comment). `SampleGroundMeshHeight()`
-// below is tried FIRST wherever a real `0x2237` collision mesh resolved
-// for the queried tile; the heightmap sampler (then the flat plane) stays
-// exactly as the fallback chain for any position/tile this new real
-// source does not cover - never removed, since not every tile is
-// guaranteed to carry a real populated MOPP-adjacent mesh (this project's
-// own real-bytes check only confirmed two specific tiles, 0916 and 1312 -
-// see the spec text above for the exact citation).
-//
-// Point-queries the SAME per-tile CollisionBvh the (future) ground-mesh
-// wall/curb collision would use, via a single vertical ray straight down
-// through it (sr3player::RayVsTriangle3D, already public, already used by
-// the camera/AI line-of-sight pair - a vertical ray IS exactly that
-// primitive's own existing contract with x0==x1 && z0==z1, not a new
-// primitive). Recurses the SAME BVH node shape sweepBvhNode() above
-// already walks, just an XZ point-in-AABB test instead of a swept-circle
-// one (the point query's own degenerate case of that same broad-phase
-// rejection).
-void sampleGroundMeshBvhNode(const CollisionBvh& bvh, int nodeIdx, double x, double z, double rayY0, double rayY1,
-                             double referenceY, bool& found, double& bestY) {
+// WALKABLE GROUND QUERY (TEAM B task G1, 2026-10-18) - spec-zone-data-format.md Sec13.5.1 port recipe step 3.
+// Ground at (x, z) from a start height y0: cast a ray from (x, y0 + 0.05, z) to (x, y0 - 500, z) and take the closest
+// hit = the highest surface at or below y0 + 0.05 (the engine's ground snap 0x0075dfe0, FINAL). On a miss the caller
+// leaves Y unchanged. The triangles are tile.collisionBvh (viewer_city_ground.cpp loadCityGroundTileCollision(): the
+// world-space `0x2237` tail collision mesh of `~s<CCRR>`, strip stand-in, CHOSEN). The 0x2244 heightmap is NOT a source
+// (aircraft clearance, 13.5.1(d)).
+// CHOSEN: a hit triangle only counts as walkable ground when |normal.y| >= 0.7 (spec item 5: walkable normal y >= 0.715,
+// 0.7 when not moving; |.| because the strip stand-in's alternating winding gives no usable facing).
+// ===========================================================================
+constexpr double kGroundRayUp = 0.05;       // FINAL: 0x01115d6c
+constexpr double kGroundRayDown = 500.0;    // FINAL: 0x01153aa8 (-500)
+constexpr double kWalkableNormalY = 0.7;    // spec 13.5.1 item 5
+
+static void sampleGroundMeshBvhNode(const CollisionBvh& bvh, int nodeIdx, double x, double z, double rayY0,
+                                    double rayY1, bool& found, double& bestY) {
     if (nodeIdx < 0) return;
     const CollisionBvhNode& node = bvh.nodes[static_cast<size_t>(nodeIdx)];
-    if (static_cast<double>(x) < node.min[0] || static_cast<double>(x) > node.max[0] ||
-        static_cast<double>(z) < node.min[2] || static_cast<double>(z) > node.max[2])
-        return;  // the vertical ray at (x,z) never enters this subtree's own AABB
+    if (x < node.min[0] || x > node.max[0] || z < node.min[2] || z > node.max[2]) return;
     if (node.left < 0) {  // leaf
         for (int i = node.triStart; i < node.triStart + node.triCount; ++i) {
             const CollisionTriangle& t = bvh.tris[static_cast<size_t>(i)];
             double f;
             sr3player::Vec3 n;
-            if (sr3player::RayVsTriangle3D(x, rayY0, z, x, rayY1, z, static_cast<double>(t.v0[0]),
-                                            static_cast<double>(t.v0[1]), static_cast<double>(t.v0[2]),
-                                            static_cast<double>(t.v1[0]), static_cast<double>(t.v1[1]),
-                                            static_cast<double>(t.v1[2]), static_cast<double>(t.v2[0]),
-                                            static_cast<double>(t.v2[1]), static_cast<double>(t.v2[2]), f, n)) {
-                const double y = rayY0 + (rayY1 - rayY0) * f;
-                // Among every real triangle the vertical ray crosses (a
-                // multi-storey overpass/tunnel could legitimately have
-                // more than one), keep the hit closest to `referenceY` -
-                // the same "closest to where the caller already was"
-                // disambiguation convention this project's own
-                // heightmap-based fallback sampler does NOT need (it has
-                // only ever returned a single grid value), but a real
-                // triangle mesh genuinely can.
-                if (!found || std::fabs(y - referenceY) < std::fabs(bestY - referenceY)) {
-                    bestY = y;
-                    found = true;
-                }
+            if (!sr3player::RayVsTriangle3D(x, rayY0, z, x, rayY1, z, static_cast<double>(t.v0[0]),
+                                             static_cast<double>(t.v0[1]), static_cast<double>(t.v0[2]),
+                                             static_cast<double>(t.v1[0]), static_cast<double>(t.v1[1]),
+                                             static_cast<double>(t.v1[2]), static_cast<double>(t.v2[0]),
+                                             static_cast<double>(t.v2[1]), static_cast<double>(t.v2[2]), f, n))
+                continue;
+            // geometric normal from the vertices (orientation-independent)
+            const double ux = static_cast<double>(t.v1[0] - t.v0[0]), uy = static_cast<double>(t.v1[1] - t.v0[1]),
+                         uz = static_cast<double>(t.v1[2] - t.v0[2]);
+            const double vx = static_cast<double>(t.v2[0] - t.v0[0]), vy = static_cast<double>(t.v2[1] - t.v0[1]),
+                         vz = static_cast<double>(t.v2[2] - t.v0[2]);
+            const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+            const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len <= 1e-12 || std::fabs(ny) / len < kWalkableNormalY) continue;
+            const double y = rayY0 + (rayY1 - rayY0) * f;
+            if (!found || y > bestY) {  // closest hit from the top = highest surface at/below the start
+                bestY = y;
+                found = true;
             }
         }
         return;
     }
-    sampleGroundMeshBvhNode(bvh, node.left, x, z, rayY0, rayY1, referenceY, found, bestY);
-    sampleGroundMeshBvhNode(bvh, node.right, x, z, rayY0, rayY1, referenceY, found, bestY);
+    sampleGroundMeshBvhNode(bvh, node.left, x, z, rayY0, rayY1, found, bestY);
+    sampleGroundMeshBvhNode(bvh, node.right, x, z, rayY0, rayY1, found, bestY);
 }
 
-
-// Public entry point: searches every loaded ground tile's own real
-// collision mesh (tiles with none - `collisionBvh.empty()` - are skipped,
-// not treated as "ground is at Y=0 here") for the real `0x2237` pavement
-// height at (x,z), closest to `referenceY`. Returns false (outY untouched)
-// when no loaded tile's real mesh covers this position at all - the
-// caller's own existing heightmap/flat-plane fallback chain is
-// unaffected and still runs in that case (see this section's own top
-// comment). The vertical ray spans referenceY +/- 500m - generous enough
-// for any real city tile's own vertical extent (this project's own
-// measured real range is tens of metres, see loadCityGroundTile()'s own
-// "world Y 18-31" doc-comment note) without needing a second, tile-bounds-
-// derived span.
+// Searches every resident tile's walkable collision for the ground at (x, z) from start height `startY`.
+// Returns false (outY untouched) on a miss.
 bool SampleGroundMeshHeight(const std::map<std::pair<int, int>, std::unique_ptr<CityGroundTile>>& tiles, double x,
-                            double z, double referenceY, double& outY) {
+                            double z, double startY, double& outY) {
     bool found = false;
     double bestY = 0.0;
-    const double rayY0 = referenceY + 500.0, rayY1 = referenceY - 500.0;
+    const double rayY0 = startY + kGroundRayUp, rayY1 = startY - kGroundRayDown;
     for (const auto& kv : tiles) {
         const CollisionBvh& bvh = kv.second->collisionBvh;
         if (bvh.empty()) continue;
-        sampleGroundMeshBvhNode(bvh, bvh.root, x, z, rayY0, rayY1, referenceY, found, bestY);
+        sampleGroundMeshBvhNode(bvh, bvh.root, x, z, rayY0, rayY1, found, bestY);
     }
     if (found) outY = bestY;
     return found;
+}
+
+// CHOSEN hole fill, SPAWN ONLY (never used for per-frame support): the strip stand-in (spec 13.5.1(c) GUESS) leaves holes
+// (2 of the spec's 6 test points miss), and a spawn has no earlier Y to hold. When the direct ray misses, probe rings of
+// radius 1, 2, 3, 4 m (8 azimuths each) from the same start height and use the median hit Y of the first ring that hits.
+// Returns the ring radius used (0 = none found).
+double SampleGroundMeshHoleFill(const std::map<std::pair<int, int>, std::unique_ptr<CityGroundTile>>& tiles, double x,
+                                double z, double startY, double& outY) {
+    for (int r = 1; r <= 4; ++r) {
+        std::vector<double> ys;
+        for (int k = 0; k < 8; ++k) {
+            const double a = 0.7853981633974483 * k;
+            double y = 0.0;
+            if (SampleGroundMeshHeight(tiles, x + r * std::cos(a), z + r * std::sin(a), startY, y)) ys.push_back(y);
+        }
+        if (!ys.empty()) {
+            std::sort(ys.begin(), ys.end());
+            outY = ys[ys.size() / 2];
+            return static_cast<double>(r);
+        }
+    }
+    return 0.0;
+}
+
+// Topmost walkable surface at (x, z) over every resident tile (spec item 4's "collision AABB max Y + 1" start height).
+bool SampleGroundMeshTopHeight(const std::map<std::pair<int, int>, std::unique_ptr<CityGroundTile>>& tiles, double x,
+                               double z, double& outY) {
+    double top = -1.0e30;
+    bool any = false;
+    for (const auto& kv : tiles) {
+        const CollisionBvh& bvh = kv.second->collisionBvh;
+        if (bvh.empty()) continue;
+        const CollisionBvhNode& r = bvh.nodes[static_cast<size_t>(bvh.root)];
+        if (x < r.min[0] || x > r.max[0] || z < r.min[2] || z > r.max[2]) continue;
+        any = true;
+        top = (std::max)(top, static_cast<double>(r.max[1]));
+    }
+    if (!any) return false;
+    return SampleGroundMeshHeight(tiles, x, z, top + 1.0 - kGroundRayUp, outY);
 }
 
 
@@ -223,10 +211,11 @@ int runPlaytest(int argc, char** argv) {
                      "                           [--vehicle-name <name.ccar_pc>] [--wheels-archive <path>]\n"
                      "                           [--interface-archive <path>]\n"
                      "                           [--vehicle-spawn X Z] [--script-vehicle]\n"
-                     "                           [--script-vehicle-drive-frames N] [--no-collision] [--no-node-ground]\n"
+                     "                           [--script-vehicle-drive-frames N] [--no-collision] [--no-node-ground] [--zone-variant=NAME]\n"
                      "                           [--script-enter-ambient-at=FRAME] [--script-enter-ambient-drive-frames=N]\n"
                      "                           [--script-enter-ambient-count=N] [--script-enter-ambient-reenter]\n"
-                     "                           [--script-roadblock] [--script-fire]\n"
+                     "                           [--script-roadblock] [--script-fire] [--script-weapons]\n"
+                     "                           [--gps-waypoint=X,Z] [--gps-waypoint-at=FRAME] [--gps-waypoint-mission]\n"
                      "                           [--script-jump-at=FRAME]... [--script-crouch-frames=A-B] [--jump-height=M]\n"
                      "                           [--script-hud-prompt-response] [--auto-answer-hud-prompts [N]]\n"
                      "                           [--mission=<stem>] [--mission-registration-list <path>]\n"
@@ -264,11 +253,17 @@ int runPlaytest(int argc, char** argv) {
                      "       blocks a straight scripted walk after only ~36m from the default spawn.\n"
                      "       Near-field ambient vehicle traffic is ALWAYS ON (spec-ai-runtime.md\n"
                      "       Sec17.4c) - no flag needed. The police roadblock spawn (spec-ai-runtime.md\n"
-                     "       Sec19.7) is OFF by default; press 'R' live to arm/disarm it (THE HONEST\n"
-                     "       NOTORIETY GATE - see this command's own doc comment: not tied to\n"
-                     "       notoriety, a plain debug gate). --script-roadblock scripts a deterministic\n"
-                     "       arm-then-disarm 'R' press pair under --no-input (ctest use, see\n"
+                     "       Sec19.7) is driven by the police notoriety level (2-5, Sec20.6.10) and can also be\n"
+                     "       force-armed live with 'B' (debug gate kept alongside the notoriety trigger;\n"
+                     "       R is reload). --script-roadblock scripts a deterministic\n"
+                     "       arm-then-disarm 'B' press pair under --no-input (ctest use, see\n"
                      "       real_playtest_traffic_roadblock_smoke_test.cpp).\n"
+                     "       JUMP/CROUCH: Space jumps, C crouches (held); keys are CHOSEN (see\n"
+                     "       --script-jump-at / --script-crouch-frames).\n"
+                     "       WEAPON HANDLING (gap #17; keys are CHOSEN, the spec gives none): R reload,\n"
+                     "       1-8 select Inv_Slot k-1, 9 last weapon, Q previous, Tab next; --script-weapons scripts fire-until-\n"
+                     "       empty -> reload -> switch -> fire and prints weapon-state-trace lines (the\n"
+                     "       starting inventory is CHOSEN).\n"
                      "       WEAPON FIRE (THIS TASK, spec-weapons-runtime.md Sec2.2c/Sec4.4): Brad is\n"
                      "       equipped with the first real pistol-class (else first non-vehicle-class) row\n"
                      "       parsed from the real weapons.xtbl in <misc_tables.vpp_pc> - left mouse button\n"
@@ -358,8 +353,17 @@ int runPlaytest(int argc, char** argv) {
     }
     // Heap-allocated: the session holds what used to be ~hundreds of stack locals.
     auto sessHolder = std::make_unique<PlaytestSession>();
-    PlaytestSession& sess = *sessHolder;
+    return runPlaytestSession(*sessHolder, argc, argv);
+}
 
+namespace sr3viewer {
+
+std::atomic<const char*> g_curStep{"startup"};
+std::atomic<unsigned long long> g_lastTickMs{0};
+
+int runPlaytestSession(PlaytestSession& sess, int argc, char** argv) {
+    g_curStep.store("setup");
+    g_lastTickMs.store(GetTickCount64());
     if (int rc = setupArgs(sess, argc, argv); rc != -1) return rc;
     if (int rc = setupBrad(sess); rc != -1) return rc;
     if (int rc = setupTables(sess); rc != -1) return rc;
@@ -367,9 +371,15 @@ int runPlaytest(int argc, char** argv) {
     if (int rc = setupPoseAndInput(sess); rc != -1) return rc;
     if (int rc = setupCityArchives(sess); rc != -1) return rc;
     if (int rc = setupWindowDevice(sess); rc != -1) return rc;
+    if (sess.hooks.afterWindow) sess.hooks.afterWindow(sess);
     if (int rc = setupAudio(sess); rc != -1) return rc;
     if (int rc = setupRenderAssets(sess); rc != -1) return rc;
     if (int rc = setupHudAndMission(sess); rc != -1) return rc;
+    setupActivity(sess);
+    setupCollect(sess);
+    if (sess.hooks.beforeWorld) {
+        if (int rc = sess.hooks.beforeWorld(sess); rc != -1) return rc;
+    }
     if (int rc = setupNpcAiState(sess); rc != -1) return rc;
     if (int rc = setupStreamingGround(sess); rc != -1) return rc;
     if (int rc = setupVehicle(sess); rc != -1) return rc;
@@ -378,23 +388,35 @@ int runPlaytest(int argc, char** argv) {
     if (int rc = setupLoopState(sess); rc != -1) return rc;
 
     sr3render::Window& window = *sess.window_;
+    const bool traceSteps = std::getenv("SR3_TRACE_STEPS") != nullptr;
+    auto TR = [&](const char* n) { g_curStep.store(n); if (traceSteps && sess.pauseMenuOpen) std::printf("step: %s\n", n); };
     while (window.pumpMessages()) {
         PlaytestFrame frm;
-        if (stepFrameBegin(sess, frm)) break;
-        if (stepInput(sess, frm)) break;
-        stepPlayerVitals(sess, frm);
-        stepVehicleControls(sess, frm);
-        stepWorld(sess, frm);
-        stepTrafficSignals(sess, frm);
-        stepTrafficVehicles(sess, frm);
-        stepTrafficPeds(sess, frm);
-        stepTrafficRoadblock(sess, frm);
-        stepPlayerView(sess, frm);
-        stepMissionBridge(sess, frm);
-        stepMissionDrive(sess, frm);
-        if (stepRender(sess, frm)) break;
+        g_lastTickMs.store(GetTickCount64());
+        TR("stepFrameBegin"); if (stepFrameBegin(sess, frm)) break;
+        TR("stepInput"); if (stepInput(sess, frm)) break;
+        TR("stepPlayerVitals"); stepPlayerVitals(sess, frm);
+        TR("stepActivity"); stepActivity(sess, frm);
+        TR("stepCollect"); stepCollect(sess, frm);
+        TR("stepVehicleControls"); stepVehicleControls(sess, frm);
+        TR("stepWorld"); stepWorld(sess, frm);
+        TR("stepTrafficSignals"); stepTrafficSignals(sess, frm);
+        TR("stepTrafficVehicles"); stepTrafficVehicles(sess, frm);
+        TR("stepTrafficPeds"); stepTrafficPeds(sess, frm);
+        TR("stepVehicleCollisions"); stepVehicleCollisions(sess, frm);
+        TR("stepTrafficRoadblock"); stepTrafficRoadblock(sess, frm);
+        TR("stepPolice"); stepPolice(sess, frm);
+        TR("stepHomies"); stepHomies(sess, frm);
+        TR("stepPlayerView"); try { stepPlayerView(sess, frm); } catch (const std::exception& e) { std::printf("EXC: %s\n", e.what()); throw; }
+        TR("stepMissionBridge"); stepMissionBridge(sess, frm);
+        TR("stepMissionDrive"); stepMissionDrive(sess, frm);
+        TR("stepGps"); stepGps(sess, frm);
+        TR("stepRender"); if (stepRender(sess, frm)) break;
     }
+    if (sess.hooks.afterLoop) sess.hooks.afterLoop(sess);
     writeSaveAtExit(sess);
     reportPlaytest(sess);
     return 0;
 }
+
+}  // namespace sr3viewer

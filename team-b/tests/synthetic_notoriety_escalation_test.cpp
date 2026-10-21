@@ -136,16 +136,19 @@ void TestDecay() {
         t += 1000;
         n.Tick(t);
     }
-    CHECK(n.level(kPol) == 0 && n.fraction(kPol) == 0.0);
+    CHECK(n.level(kPol) == 0 && n.fraction(kPol) == 72.0);  // D-21 rule 3: landing at level 0 keeps the remainder (75-6*13 = -3 -> +75)
     // k-th decay step (k=1 at 15000 ms) leaves 75-6k; k=13 gives -3 and rolls down: 15000+12*1000 = 27000.
     CHECK(t == 27000);
+    CHECK(n.decayArmed(kPol));  // decay continues at the floor level's rate (1 per step) until the fraction reaches 0
+    for (int k = 0; k < 72; ++k) { t += 1000; n.Tick(t); }
+    CHECK(n.level(kPol) == 0 && n.fraction(kPol) == 0.0);
     CHECK(!n.decayArmed(kPol));
     // A new crime re-arms the first-decay timer from its own time.
-    n.ReportCrime(kPol, Plain(10), true, false, 50000);
-    n.Tick(50000);
-    n.Tick(64999);
+    n.ReportCrime(kPol, Plain(10), true, false, 150000);
+    n.Tick(150000);
+    n.Tick(164999);
     CHECK(n.fraction(kPol) == 10.0);
-    n.Tick(65000);  // level 0 FirstDecay 15000, DecayRate(police,0)=1
+    n.Tick(165000);  // level 0 FirstDecay 15000, DecayRate(police,0)=1
     CHECK(n.fraction(kPol) == 9.0);
 }
 

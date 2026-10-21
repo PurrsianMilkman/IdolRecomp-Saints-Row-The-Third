@@ -1,6 +1,7 @@
 // EngineState method definitions moved verbatim out of include/sr3luahost/engine_state.h
 // (structural refactor, step 1b: no behaviour change). Area: progression.
 
+#include "sr3player/vitals.h"
 #include "sr3luahost/engine_state.h"
 
 namespace sr3luahost {
@@ -582,8 +583,7 @@ void EngineState::awardRespect(int32_t amount) {
         if (amount <= 0) { ++respectAwardNonPositiveGuardCount_; return; }
         if (realRespectTableActive_) {
             // RP-6: spec-tables-progression.md B.3 item 1, the real routine over the real respect_levels.xtbl rows.
-            // CHOSEN: the cash overflow (award at the cap / last level) is not routed to a wallet here (no wallet hook
-            // on EngineState); AwardResult::overflowCashRaw is dropped. Question for Team A: which wallet field takes it?
+            // Cash overflow (award at the cap / last level) is routed to playerCash_ below (CC-2).
             sr3progression::PlayerRespect p{static_cast<int32_t>(respectTotal_), static_cast<int32_t>(respectBanked_),
                                             static_cast<int32_t>(respectLevel_)};
             sr3progression::AppliedUnlocks applied;
@@ -596,6 +596,10 @@ void EngineState::awardRespect(int32_t amount) {
             respectLevel_ = static_cast<uint32_t>(p.level);
             if (res.granted > 0) recordStatRecordOpen(kRespectAwardStatId);
             commitRealRespectLevelUps(res.levelUps);
+            // CC-2: respect at the cap converts 1:1 to dollars and 0x0094D920 adds it to the wallet (spec-tables-progression
+            // B.3 item 3); saturating to 0..2e9 cents. The wallet is EngineState::playerCash() (cents).
+            if (res.overflowCashRaw != 0)
+                addPlayerCash(static_cast<double>(res.overflowCashRaw));
             return;
         }
         // CONFIRMED (Sec5.4): strictly after the amount>0 guard. If total >=
@@ -604,7 +608,12 @@ void EngineState::awardRespect(int32_t amount) {
         // not a 0-clamp.
         const uint32_t cap = respectLifetimeCap();
         const size_t levelCount = respectLevelTable_.size();
-        if (respectTotal_ >= cap || (levelCount > 0 && respectLevel_ >= levelCount - 1)) return;
+        if (respectTotal_ >= cap || (levelCount > 0 && respectLevel_ >= levelCount - 1)) {
+            // R4F-3 / spec-tables-progression B.1.1 step 3: respect past the cap converts 1:1 to dollars (x100, saturating)
+            // into the cash wallet, same as the real-table branch above; it is not silently dropped.
+            addPlayerCash(static_cast<double>(sr3progression::DollarsToRawCash(amount)));
+            return;
+        }
         // Otherwise the actual grant is min(amount, cap - total), and it is
         // this CLAMPED grant - not the raw amount argument - that feeds both
         // the running total and the level-up routine.

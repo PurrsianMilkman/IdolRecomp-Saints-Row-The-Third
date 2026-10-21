@@ -51,6 +51,40 @@ int main() {
     PlayerVitals d({10, 0});
     CHECK(d.applyDamage(10.0, 50) && d.respawnDue(50));
 
+    // CC-2: cash cap (0..2e9 cents), saturating adders
+    {
+        using sr3player::AddCashSaturating;
+        CHECK(AddCashSaturating(100.0, 50.0) == 150.0);
+        CHECK(AddCashSaturating(1999999990.0, 100.0) == 2000000000.0);       // overflow dropped
+        CHECK(AddCashSaturating(2000000000.0, 2000000000.0) == 2000000000.0);  // legacy saturating helper (the engine uses AddCashWallet, D-22)
+        CHECK(AddCashSaturating(5.0, 9.0e12) == 2000000000.0);               // huge grant saturates (x100 step)
+        CHECK(AddCashSaturating(100.0, -500.0) == 0.0);                      // floored at 0
+        CHECK(AddCashSaturating(100.0, -9.0e12) == 0.0);
+        CHECK(AddCashSaturating(0.0, 0.0) == 0.0);
+    }
+
+    // V10-9: the 18 ordered respawn reset steps (spec-player-runtime 18.6 R3 note)
+    {
+        size_t n = 0;
+        const sr3player::RespawnStepInfo* o = sr3player::RespawnResetOrder(n);
+        CHECK(n == 18);
+        bool seq = true;
+        for (size_t i = 0; i < n; ++i) seq = seq && static_cast<int>(o[i].step) == static_cast<int>(i) + 1;
+        CHECK(seq);
+        auto idx = [&](sr3player::RespawnStep s) {
+            for (size_t i = 0; i < n; ++i)
+                if (o[i].step == s) return static_cast<int>(i);
+            return -1;
+        };
+        using S = sr3player::RespawnStep;
+        CHECK(idx(S::VehicleSeatExit) < idx(S::CrouchClear));
+        CHECK(idx(S::HealthRestore) < idx(S::RagdollStop) && idx(S::RagdollStop) < idx(S::DownedLeave));
+        CHECK(idx(S::Teleport) < idx(S::InventorySlot0) && idx(S::InventorySlot0) < idx(S::Notoriety));
+        CHECK(idx(S::Notoriety) < idx(S::ControlsOn) && idx(S::ControlsOn) < idx(S::BustedClear));
+        CHECK(idx(S::BustedClear) < idx(S::ReleaseHandles) && idx(S::ReleaseHandles) < idx(S::DeathLatchAndHook));
+        CHECK(idx(S::DeathLatchAndHook) == 17 && idx(S::GateLocalPlayer) == 0);
+    }
+
     if (g_fail) {
         std::printf("player_vitals_test: %d failure(s)\n", g_fail);
         return 1;

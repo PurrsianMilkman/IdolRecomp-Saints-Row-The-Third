@@ -244,7 +244,7 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
     // stop NPCs firing at the player, or write the police notoriety track for a live check (a labelled DEBUG input: no
     // crime source is wired, so notoriety otherwise stays at whatever the scripts set).
     // --script-roadblock (THIS TASK, playtest-nearfield-traffic-roadblock):
-    // a deterministic arm-then-disarm 'R' press pair under --no-input, same
+    // a deterministic arm-then-disarm 'B' press pair under --no-input, same
     // scripted-fallback idiom --script-vehicle already establishes for 'E' -
     // see kScriptRoadblockArmFrame/kScriptRoadblockDisarmFrame below (near
     // the main loop) for the exact frame schedule.
@@ -321,7 +321,15 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
                                           every other command in this file - accepted anyway so a habit
                                           typed from those commands' own docs does not hard-error here. */ }
         else if (arg == "--no-input") noInput = true;
-        else if (arg.rfind("--weather=", 0) == 0) sess.kWeatherStageForPedDensity = arg.substr(10);
+        // --weather=<stage> pins the stage (lighting AND ped density); without it the Sec18 schedule runs.
+        else if (arg.rfind("--weather=", 0) == 0) sess.weatherPinName = arg.substr(10);
+        else if (arg.rfind("--weather-seed=", 0) == 0) sess.weatherSeed = static_cast<uint32_t>(std::strtoul(arg.c_str() + 15, nullptr, 0));
+        else if (arg.rfind("--weather-time-scale=", 0) == 0) sess.weatherTimeScale = std::atof(arg.c_str() + 21);
+        else if (arg.rfind("--tod-seconds-per-day=", 0) == 0) {
+            const double v = std::atof(arg.c_str() + 22);
+            if (v > 0.0) sess.todSecondsPerDay = v;
+        }
+        else if (arg == "--weather-trace-frames" && argi + 1 < argc) sess.weatherTraceFrames = std::atoi(argv[++argi]);
         else if (arg == "--frames" && argi + 1 < argc) { maxFrames = std::atoi(argv[++argi]); framesExplicit = true; }
         else if (arg == "--capture" && argi + 1 < argc) capturePath = argv[++argi];
         else if (arg == "--capture-frame" && argi + 1 < argc) captureFrame = std::atoi(argv[++argi]);
@@ -341,6 +349,32 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
         } else if (arg == "--spawn" && argi + 2 < argc) {
             spawnX = static_cast<float>(std::atof(argv[++argi]));
             spawnZ = static_cast<float>(std::atof(argv[++argi]));
+        } else if (arg == "--activity" && argi + 1 < argc) {
+            sess.activityName = argv[++argi];  // e.g. _a_if_dt_01 (viewer_playtest_activity.cpp)
+        } else if (arg == "--fraud-test-hit-every" && argi + 1 < argc) {
+            sess.fraudTestHitEveryS = std::atof(argv[++argi]);  // test aid: synthetic Fraud hits
+        } else if (arg == "--snatch-test-deliver-every" && argi + 1 < argc) {
+            sess.snatchTestDeliverEveryS = std::atof(argv[++argi]);  // test aid: synthetic Snatch deliveries
+        } else if (arg == "--mayhem-test-kill-every" && argi + 1 < argc) {
+            sess.mayhemTestKillEveryS = std::atof(argv[++argi]);  // test aid: synthetic Mayhem kills
+        } else if (arg == "--escort-test-drive") {
+            sess.escortTestDrive = true;  // test aid: the player counts as driving the client car
+        } else if (arg == "--trafficking-test-deal-every" && argi + 1 < argc) {
+            sess.traffickingTestDealEveryS = std::atof(argv[++argi]);  // test aid: synthetic deals
+        } else if (arg == "--genki-test-kill-every" && argi + 1 < argc) {
+            sess.genkiTestKillEveryS = std::atof(argv[++argi]);  // test aid: synthetic hunter kills
+        } else if (arg == "--heli-test-objective-every" && argi + 1 < argc) {
+            sess.heliTestObjectiveEveryS = std::atof(argv[++argi]);  // test aid: synthetic objectives
+        } else if (arg == "--collectible-test-pickup-every" && argi + 1 < argc) {
+            sess.collectTestPickupEveryS = std::atof(argv[++argi]);  // test aid (viewer_playtest_collect.cpp)
+        } else if (arg == "--challenges-unlock-all") {
+            sess.challengesUnlockAll = true;  // test aid: no mission progress in the viewer
+        } else if (arg == "--activities") {
+            sess.activitiesAll = true;  // arm every shipped activity instance at its start point
+        } else if (arg == "--auto-activity") {
+            sess.autoActivity = true;  // end-to-end harness for --activity (viewer_playtest_activity.cpp)
+        } else if (arg == "--activity-list-objects") {
+            sess.activityListObjects = true;  // print the instance zone's objects at setup
         } else if (arg == "--load-save" && argi + 1 < argc) {
             sess.loadSavePath = argv[++argi];  // spec-save-format.md A.1 (viewer_playtest_saveflow.cpp)
         } else if (arg == "--save-at-exit" && argi + 1 < argc) {
@@ -369,6 +403,8 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
             scriptTurnFrames = std::atoi(argv[++argi]);
         } else if (arg == "--no-ambient-models") {
             sess.noAmbientModels = true;  // keep the pre-variety placeholder models (before/after measurement)
+        } else if (arg == "--no-ped-anim") {
+            sess.noPedAnim = true;  // ambient peds keep the static bind pose (walk-animation A/B)
         } else if (arg == "--no-vehicle") {
             vehicleEnabled = false;
         } else if (arg == "--vehicle-archive" && argi + 1 < argc) {
@@ -387,36 +423,144 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
             vehicleSpawnExplicit = true;
         } else if (arg == "--script-vehicle") {
             scriptVehicle = true;
+        } else if (arg.rfind("--spawn-vehicle=", 0) == 0) {
+            // AW-15: park the named vehicle (e.g. a helicopter / plane / boat mesh) 2.5 m ahead of the player; E enters it.
+            sess.craft.spawnName = arg.substr(16);
+            sess.craft.registryWanted = true;
+        } else if (arg.rfind("--spawn-vehicle-at=", 0) == 0) {
+            sess.craft.spawnAtFrame = std::atoi(arg.c_str() + 19);
+        } else if (arg.rfind("--spawn-vehicle-dist=", 0) == 0) {
+            sess.craft.spawnDist = std::atof(arg.c_str() + 21);
+        } else if (arg.rfind("--water-level=", 0) == 0) {
+            sess.craft.waterLevel = std::atof(arg.c_str() + 14);  // CHOSEN flat water plane (spec 10.13.6: source OPEN)
+        } else if (arg == "--no-water") {
+            sess.craft.hasWater = false;
+        } else if (arg.rfind("--craft-cam-scale=", 0) == 0) {
+            sess.craft.camScale = std::max(0.2, std::atof(arg.c_str() + 18));
+        } else if (arg == "--craft-camrel") {
+            // 10.13.2 camera-relative flying. OFF by default: it needs a camera the player rotates; the chase camera follows
+            // the velocity, so the auto-yaw toward the camera heading turns into a slow spiral.
+            sess.craft.camRelative = true;
+        } else if (arg.rfind("--craft-mesh-fwd=", 0) == 0) {
+            const std::string v = arg.substr(17);
+            sess.craft.meshForwardAxis = v == "z" ? 1 : (v == "-x" ? 2 : (v == "-z" ? 3 : 0));
+        } else if (arg.rfind("--script-craft=", 0) == 0) {
+            sr3viewer_craft::ParseCraftScript(arg.substr(15), sess.craft.script);
+        } else if (arg.rfind("--script-e-at=", 0) == 0) {
+            const std::string v = arg.substr(14);
+            size_t p = 0;
+            while (p < v.size()) {
+                size_t c = v.find(',', p);
+                if (c == std::string::npos) c = v.size();
+                sess.craft.eFrames.push_back(std::atoi(v.substr(p, c - p).c_str()));
+                p = c + 1;
+            }
+        } else if (arg.rfind("--script-player-lift=", 0) == 0) {
+            int f = 0;
+            double h = 0.0;
+            if (std::sscanf(arg.c_str() + 21, "%d:%lf", &f, &h) == 2) sess.craft.playerLifts.emplace_back(f, h);
+        } else if (arg.rfind("--craft-trace-every=", 0) == 0) {
+            sess.craft.traceEvery = std::max(1, std::atoi(arg.c_str() + 20));
+        } else if (arg == "--no-freefall") {
+            sess.craft.freefallEnabled = false;
+        } else if (arg.rfind("--script-collision-targets=", 0) == 0) {
+            sess.scriptCollisionTargetsAt = std::atoi(arg.c_str() + 27);
         } else if (arg.rfind("--script-enter-ambient-at=", 0) == 0) {
             sess.scriptEnterAmbientAt = std::atoi(arg.c_str() + 26);
         } else if (arg.rfind("--script-enter-ambient-count=", 0) == 0) {
             sess.scriptEnterAmbientCount = std::atoi(arg.c_str() + 29);
+        } else if (arg.rfind("--script-warp-to-ped-at=", 0) == 0) {
+            sess.scriptWarpToPedAt = std::atoi(arg.c_str() + 24);
         } else if (arg == "--script-enter-ambient-reenter") {
             sess.scriptEnterAmbientReenter = true;
+        } else if (arg.rfind("--script-vehicle-enter-frame=", 0) == 0) {
+            sess.scriptVehicleEnterFrame = std::atoi(arg.c_str() + 29);  // strlen == 29
+        } else if (arg.rfind("--script-enter-ambient-reenter-drive-frames=", 0) == 0) {
+            sess.scriptEnterAmbientReenterDriveFrames = std::atoi(arg.c_str() + 44);  // strlen == 44
         } else if (arg.rfind("--script-enter-ambient-drive-frames=", 0) == 0) {
             sess.scriptEnterAmbientDriveFrames = std::atoi(arg.c_str() + 36);
         } else if (arg == "--script-vehicle-drive-frames" && argi + 1 < argc) {
             scriptVehicleDriveFramesOverride = std::atoi(argv[++argi]);
         } else if (arg == "--no-npc-ai") {
             noNpcAi = true;
+        } else if (arg.rfind("--gps-waypoint=", 0) == 0) {
+            if (std::sscanf(arg.c_str() + 15, "%lf,%lf", &sess.gpsWaypointX, &sess.gpsWaypointZ) == 2) sess.gpsWaypointFlag = true;
+        } else if (arg.rfind("--gps-waypoint-at=", 0) == 0) {
+            sess.gpsWaypointAt = std::atoi(arg.c_str() + 18);
+        } else if (arg == "--gps-waypoint-mission") {
+            sess.gpsWaypointMission = true;
+        } else if (arg.rfind("--homie-wanted-at=", 0) == 0) {
+            PlaytestSession::HomieWanted w;  // F:LEVEL
+            const std::string v = arg.substr(18);  // strlen == 18
+            const size_t c = v.find(':');
+            w.frame = std::atoi(v.c_str());
+            w.level = c == std::string::npos ? 1 : std::atoi(v.c_str() + c + 1);
+            sess.homieWantedAt.push_back(w);
+        } else if (arg == "--no-homies") {
+            sess.noHomies = true;
+        } else if (arg.rfind("--call-homie=", 0) == 0) {
+            // --call-homie=NAME[@FRAME]: dial that homies.xtbl row from the (headless) phone at FRAME (default 45).
+            PlaytestSession::HomieCallRequest r;
+            const std::string v = arg.substr(13);  // strlen("--call-homie=") == 13
+            const size_t at = v.find('@');
+            r.name = v.substr(0, at);
+            if (at != std::string::npos) r.frame = std::atoi(v.c_str() + at + 1);
+            sess.homieCalls.push_back(r);
+        } else if (arg.rfind("--dismiss-homie-at=", 0) == 0) {
+            sess.homieDismissOneAt.push_back(std::atoi(arg.substr(19).c_str()));  // strlen == 19
+        } else if (arg.rfind("--dismiss-all-homies-at=", 0) == 0) {
+            sess.homieDismissAllAt.push_back(std::atoi(arg.substr(24).c_str()));  // strlen == 24
+        } else if (arg.rfind("--homie-slots=", 0) == 0) {
+            sess.homieSlots = std::atoi(arg.substr(14).c_str());  // strlen == 14
+        } else if (arg == "--homie-allow-max") {
+            sess.homieAllowMax = true;
+        } else if (arg == "--homie-not-recruitable") {
+            sess.homieNotRecruitable = true;
+        } else if (arg.rfind("--homie-unlock=", 0) == 0) {
+            sess.homieUnlock.push_back(arg.substr(15));  // strlen == 15
+        } else if (arg == "--homie-can-leave") {
+            sess.homieAllCanLeave = true;
+        } else if (arg.rfind("--homie-injure-at=", 0) == 0) {
+            sess.homieInjureAt = std::atoi(arg.substr(18).c_str());  // strlen == 18
+        } else if (arg.rfind("--homie-friendly-fire=", 0) == 0) {
+            PlaytestSession::HomieFriendlyFire f;  // F:DMG
+            const std::string v = arg.substr(22);  // strlen == 22
+            const size_t c = v.find(':');
+            f.frame = std::atoi(v.c_str());
+            f.damage = c == std::string::npos ? 150.0 : std::atof(v.c_str() + c + 1);
+            sess.homieFriendlyFire.push_back(f);
+        } else if (arg == "--no-police-response") {
+            sess.noPoliceResponse = true;
         } else if (arg == "--npc-ai-no-fire") {
             npcAiNoFire = true;
         } else if (arg.rfind("--debug-notoriety-points=", 0) == 0) {
             // T5 DEBUG input: one injected police crime of N points at frame 1 (goes through the Sec19.8 recipe, so
             // the level/fraction/decay are the real rules; unlike --debug-notoriety=N it does not override them).
             sess.debugNotorietyPoints = std::atoi(arg.substr(25).c_str());  // strlen("--debug-notoriety-points=") == 25
+        } else if (arg.rfind("--debug-bust-range=", 0) == 0) {
+            sess.debugBustRangeM = std::atof(arg.substr(19).c_str());
+        } else if (arg == "--enable-bust") {
+            sess.bustEnabled = true;
+        } else if (arg.rfind("--debug-health-tier=", 0) == 0) {
+            sess.debugHealthTier = std::atoi(arg.substr(20).c_str());
         } else if (arg.rfind("--debug-damage-player=", 0) == 0) {
             sess.debugDamagePlayer = std::atoi(arg.substr(22).c_str());  // strlen("--debug-damage-player=") == 22
+        } else if (arg.rfind("--debug-player-cash=", 0) == 0) {
+            sess.debugPlayerCashDollars = std::atof(arg.substr(20).c_str());  // strlen("--debug-player-cash=") == 20
         } else if (arg.rfind("--debug-notoriety=", 0) == 0) {
             debugNotoriety = std::atoi(arg.substr(18).c_str());  // strlen("--debug-notoriety=") == 18
+        } else if (arg.rfind("--zone-variant=", 0) == 0) {
+            setActiveZoneVariant(arg.substr(15));  // G1: load `sr3_city~s<CCRR>^NAME` collision (spec 13.5.1 recipe step 1)
         } else if (arg == "--no-node-ground") {
-            sess.noNodeGround = true;  // CHOSEN ground stand-in OFF (see results/freeroam_ground_height_20261018.md)
+            sess.noNodeGround = true;  // CHOSEN node-ground start-height/fallback OFF (G1: collision mesh is the ground)
         } else if (arg == "--no-collision") {
             noCollision = true;
         } else if (arg == "--script-roadblock") {
             scriptRoadblock = true;
         } else if (arg.rfind("--script-jump-at=", 0) == 0) {
             sess.scriptJumpAt.push_back(std::atoi(arg.substr(17).c_str()));  // strlen("--script-jump-at=") == 17
+        } else if (arg.rfind("--script-crouch-toggle-at=", 0) == 0) {
+            sess.scriptCrouchToggleAt.push_back(std::atoi(arg.substr(26).c_str()));  // strlen(...) == 26
         } else if (arg.rfind("--script-crouch-frames=", 0) == 0) {
             const std::string v = arg.substr(23);  // strlen("--script-crouch-frames=") == 23
             const size_t dash = v.find('-');
@@ -424,6 +568,15 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
             sess.scriptCrouchB = dash == std::string::npos ? sess.scriptCrouchA : std::atoi(v.c_str() + dash + 1);
         } else if (arg.rfind("--jump-height=", 0) == 0) {
             sess.jumpHeight = std::atof(arg.substr(14).c_str());  // strlen("--jump-height=") == 14
+        } else if (arg.rfind("--script-soak=", 0) == 0) {
+            sess.soak.active = true;
+            sess.soak.seed = static_cast<uint32_t>(std::strtoul(arg.c_str() + 14, nullptr, 10));
+        } else if (arg.rfind("--soak-round=", 0) == 0) {
+            sess.soak.round = std::atoi(arg.c_str() + 13);
+        } else if (arg.rfind("--soak-heartbeat=", 0) == 0) {
+            sess.soak.heartbeatEvery = (std::max)(1, std::atoi(arg.c_str() + 17));
+        } else if (arg == "--script-weapons") {
+            sess.scriptWeapons = true;
         } else if (arg == "--script-fire") {
             scriptFire = true;
         } else if (arg == "--script-hud-prompt-response") {
@@ -537,16 +690,18 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
                 "           (W/S throttle/brake, A/D steer while driving - unless --no-vehicle);\n"
                 "           T skips the TOD clock forward %.0f game hour(s) per press (CHOSEN manual\n"
                 "           fast-forward, v0.3 polish task - a full in-game day now takes %.0f REAL\n"
-                "           minutes, too slow to just wait out during a play session); press R to\n"
-                "           arm/disarm the police roadblock spawn (debug gate, OFF by default - see\n"
-                "           this command's own doc comment's \"THE HONEST NOTORIETY GATE\" note); Esc\n"
-                "           or close the window to quit.\n",
+                "           minutes, too slow to just wait out during a play session); press B to\n"
+                "           force-arm/disarm the police roadblock spawn (debug gate; roadblocks also\n"
+                "           spawn from the police notoriety level); Space jumps, C crouches (held),\n"
+                "           left mouse fires, R reloads, 1-9/Q/Tab pick a weapon; F10 quits (Esc\n"
+                "           opens the pause menu).\n",
                 sr3render::kTodHoursPerTKeyPress, sr3render::kTodSecondsPerDay / 60.0);
-    std::printf("NOT IN V0: jump, crouch, gamepad/XInput (spec-tables-ui-controls.md documents the\n"
+    std::printf("NOT WIRED: gamepad/XInput (spec-tables-ui-controls.md documents the\n"
                 "           real gamepad binding layer; not wired here - keyboard+mouse only, said\n"
-                "           honestly rather than faking a controller path), ambient PEDESTRIAN\n"
-                "           population (the distant/LOD human tier - no spec-confirmed pass wiring\n"
-                "           it into playtest yet) - see this command's own doc comment above\n"
+                "           honestly rather than faking a controller path) and the distant/LOD\n"
+                "           ambient human tier (no spec-confirmed pass wiring it into playtest yet;\n"
+                "           the NEAR-FIELD ambient pedestrian tier IS wired, always on, and jump/\n"
+                "           crouch ARE wired) - see this command's own doc comment above\n"
                 "           runPlaytest() for the full breakdown. Vehicle entry/driving IS wired (ON\n"
                 "           by default, --no-vehicle opts out), WITH real world collision (spec-\n"
                 "           physics-runtime.md Sec10a, vehicle-world-collision follow-up task -\n"
@@ -554,7 +709,7 @@ int setupArgs(PlaytestSession& sess, int argc, char** argv) {
                 "           that same doc comment's own honest scope note (a CHOSEN simple chase\n"
                 "           camera, one PLAYER vehicle only, no vehicle-vs-vehicle collision/damage).\n"
                 "           Near-field AMBIENT VEHICLE TRAFFIC IS wired (ALWAYS on, no flag) and the\n"
-                "           POLICE ROADBLOCK spawn IS wired (debug key 'R', OFF by default) - see\n"
+                "           POLICE ROADBLOCK spawn IS wired (debug key 'B', OFF by default) - see\n"
                 "           this command's own doc comment's 2026-10-09 update for the full CHOSEN\n"
                 "           breakdown of both. The health/ammo/money/notoriety HUD overlay IS wired\n"
                 "           (--hud, opt-in, off unless passed) - see that flag's own honest caveat in\n"

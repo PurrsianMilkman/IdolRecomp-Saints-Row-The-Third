@@ -479,10 +479,178 @@ private:
     }
 };
 
+// ---------------------------------------------------------------------------
+// The original's document parser (spec-differential-results.md D-16, rules 1-8)
+// ---------------------------------------------------------------------------
+class EngineParser {
+public:
+    EngineParser(Document& doc, const uint8_t* data, size_t size) : doc_(doc), d_(data), n_(size) {}
+
+    void run() {
+        if (n_ == 0) throw FormatError("xtbl: empty input", 0);
+        size_t pos = 0;
+        while (pos < n_) pos = (d_[pos] == '<') ? markup(pos) : textRun(pos);
+        if (!stack_.empty()) throw FormatError("xtbl: element still open at end of input", n_);
+        if (!doc_.root_) throw FormatError("xtbl: no root element", n_);
+    }
+
+private:
+    struct Frame { Node* node; bool textSet = false; };
+    Document& doc_;
+    const uint8_t* d_;
+    size_t n_;
+    std::vector<Frame> stack_;
+
+    static bool isBlank(uint8_t c) { return c >= 1 && c <= 32; }
+    static bool isSpace(uint8_t c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+
+    size_t textRun(size_t pos) {
+        size_t end = pos;
+        while (end < n_ && d_[end] != '<') ++end;
+        text(pos, end);
+        return end;
+    }
+
+    // One text run d_[b,e): decode, trim bytes 1-32, keep only the first non-empty run of an element.
+    void text(size_t b, size_t e) {
+        std::string out;
+        size_t i = b;
+        while (i < e) {
+            const uint8_t c = d_[i];
+            if (c == '&') {
+                size_t j = i + 1;
+                while (j < e && d_[j] != ';' && j < i + 6) ++j;
+                if (j >= e || d_[j] != ';') throw FormatError("xtbl: '&' that starts no accepted entity", i);
+                const std::string_view ent(reinterpret_cast<const char*>(d_) + i + 1, j - i - 1);
+                if (ent == "amp") out.push_back('&');
+                else if (ent == "lt") out.push_back('<');
+                else if (ent == "gt") out.push_back('>');
+                else if (ent == "quot") out.push_back('"');
+                else if (ent == "apos") out.push_back('\'');
+                else throw FormatError("xtbl: unknown entity", i);
+                i = j + 1;
+            } else if (c >= 0xC0 && c <= 0xDF && i + 1 < e && d_[i + 1] >= 0x80 && d_[i + 1] <= 0xBF) {
+                const uint32_t cp = (static_cast<uint32_t>(c & 0x1F) << 6) | (d_[i + 1] & 0x3Fu);
+                if (cp > 255) throw FormatError("xtbl: two-byte UTF-8 sequence above U+00FF", i);
+                out.push_back(static_cast<char>(cp));
+                i += 2;
+            } else {
+                out.push_back(static_cast<char>(c));
+                ++i;
+            }
+        }
+        size_t a = 0, z = out.size();
+        while (a < z && isBlank(static_cast<uint8_t>(out[a]))) ++a;
+        while (z > a && isBlank(static_cast<uint8_t>(out[z - 1]))) --z;
+        if (a == z) return;
+        if (stack_.empty()) throw FormatError("xtbl: text outside the root element", b);
+        Frame& f = stack_.back();
+        if (f.textSet) return;
+        f.textSet = true;
+        f.node->text_.assign(out, a, z - a);
+        f.node->hasText_ = true;
+    }
+
+    size_t markup(size_t pos) {
+        if (pos + 1 >= n_) throw FormatError("xtbl: input ends right after '<'", pos);
+        const uint8_t c = d_[pos + 1];
+        if (c == '!') {
+            if (pos + 3 < n_ && d_[pos + 2] == '-' && d_[pos + 3] == '-') {
+                size_t j = pos + 4;
+                while (j + 2 < n_ && !(d_[j] == '-' && d_[j + 1] == '-' && d_[j + 2] == '>')) ++j;
+                if (j + 2 >= n_) throw FormatError("xtbl: unterminated comment", pos);
+                return j + 3;
+            }
+            throw FormatError("xtbl: CDATA / DOCTYPE not accepted", pos);
+        }
+        if (c == '?') {
+            size_t j = pos + 2;
+            while (j + 1 < n_ && !(d_[j] == '?' && d_[j + 1] == '>')) ++j;
+            if (j + 1 >= n_) throw FormatError("xtbl: unterminated processing instruction", pos);
+            return j + 2;
+        }
+        if (c == '/') return closeTag(pos);
+        return openTag(pos);
+    }
+
+    size_t closeTag(size_t pos) {
+        size_t j = pos + 2;
+        while (j < n_ && !isSpace(d_[j]) && d_[j] != '>') ++j;
+        if (j >= n_) throw FormatError("xtbl: input ends in a close tag", pos);
+        const std::string_view name(reinterpret_cast<const char*>(d_) + pos + 2, j - (pos + 2));
+        size_t next = j + 1;
+        size_t injectFrom = n_;  // text run injected after a close tag with trailing white space
+        if (d_[j] != '>') {
+            size_t k = j;
+            while (k < n_ && isSpace(d_[k])) ++k;
+            if (k >= n_ || d_[k] != '>') throw FormatError("xtbl: white space inside a close tag name", pos);
+            injectFrom = j;
+            next = k + 1;
+        }
+        if (stack_.empty()) throw FormatError("xtbl: close tag with nothing open", pos);
+        if (!NameEquals(stack_.back().node->name_, name)) throw FormatError("xtbl: close tag does not match the open tag", pos);
+        closeTop();
+        if (injectFrom != n_) text(injectFrom, next);  // " >" becomes text of the parent
+        return next;
+    }
+
+    size_t openTag(size_t pos) {
+        size_t gt = pos + 1;
+        while (gt < n_ && d_[gt] != '>') ++gt;
+        if (gt >= n_) throw FormatError("xtbl: input ends in the middle of a tag", pos);
+        size_t b = pos + 1;
+        while (b < gt && isSpace(d_[b])) ++b;
+        if (b < gt && d_[b] == '<') throw FormatError("xtbl: '<' inside text", pos);
+        std::string name;
+        bool selfClose = false, attrs = false;
+        if (gt > pos + 1 && d_[gt - 1] == '/') {
+            selfClose = true;
+            size_t e = gt - 1;
+            while (e > b && isSpace(d_[e - 1])) --e;
+            name.assign(reinterpret_cast<const char*>(d_) + b, e - b);  // attribute text stays in the name
+        } else {
+            if (gt > pos + 1 && isSpace(d_[gt - 1])) throw FormatError("xtbl: white space before '>' of an open tag", pos);
+            size_t e = b;
+            while (e < gt && !isSpace(d_[e])) ++e;
+            if (e == b) throw FormatError("xtbl: empty element name", pos);
+            name.assign(reinterpret_cast<const char*>(d_) + b, e - b);
+            attrs = e < gt;  // the text of the element then starts at the '>'
+        }
+        Node* parent = stack_.empty() ? nullptr : stack_.back().node;
+        doc_.nodes_.emplace_back();
+        Node* nd = &doc_.nodes_.back();
+        nd->name_ = std::move(name);
+        nd->offset_ = pos;
+        if (parent) {
+            nd->parent_ = parent;
+            nd->index_ = parent->children_.size();
+            parent->children_.push_back(nd);
+        } else {
+            nd->index_ = doc_.topLevel_.size();
+            doc_.topLevel_.push_back(nd);
+            doc_.root_ = nd;  // the last top-level element is the document
+        }
+        stack_.push_back(Frame{nd});
+        if (selfClose) { closeTop(); return gt + 1; }
+        return attrs ? gt : gt + 1;
+    }
+
+    void closeTop() {
+        Node* nd = stack_.back().node;
+        stack_.pop_back();
+        if (nd->hasText_ && !nd->children_.empty()) ++doc_.mixed_;
+    }
+};
+
 Document ParseDocument(const uint8_t* data, size_t size, const ParseOptions& options) {
     Document doc;
-    Parser p(doc, data, size, options);
-    p.run();
+    if (options.legacyTolerant) {
+        Parser p(doc, data, size, options);
+        p.run();
+    } else {
+        EngineParser p(doc, data, size);
+        p.run();
+    }
     return doc;
 }
 
@@ -592,39 +760,64 @@ int8_t ParseInt8(std::string_view s) { return static_cast<int8_t>(ParseInt32(s))
 
 bool ParseBool(std::string_view s) { return NameEquals(s, "true") || NameEquals(s, "yes"); }
 
+// The engine float grammar, spec-differential-results.md D-14 (spec-tables-traffic-ai 1.3, spec-xtbl-format 8).
 float ParseFloat(std::string_view s) {
     size_t i = 0;
     bool neg = false;
     if (i < s.size() && s[i] == '-') { neg = true; ++i; }
-    if (i + 1 < s.size() && s[i] == '0' && (s[i + 1] == 'x' || s[i + 1] == 'X')) return 0.0f;
-    size_t used = 0;
-    const uint32_t ip = ParseEngineInteger(s.substr(i), &used);
-    i += used;
-    float value = static_cast<float>(ip);
+    int32_t ip = 0;
     if (i < s.size() && s[i] == '.') {
-        ++i;
-        float w = 0.1f; // successive x0.1 weights, single precision
-        while (i < s.size() && isDigit(s[i])) {
-            const float term = static_cast<float>(s[i] - '0') * w;
-            value = value + term;
-            w = w * 0.1f;
-            ++i;
-        }
+        ip = 0;
+    } else if (i + 1 < s.size() && s[i] == '0' && (s[i + 1] == 'x' || s[i + 1] == 'X')) {
+        return 0.0f;
+    } else {
+        bool neg2 = false;
+        if (i < s.size() && s[i] == '-') { neg2 = true; ++i; }
+        size_t used = 0;
+        ip = static_cast<int32_t>(ParseEngineInteger(s.substr(i), &used));
+        if (neg2) ip = static_cast<int32_t>(0u - static_cast<uint32_t>(ip));
     }
-    if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
-        ++i;
+    // The first '.' anywhere in the text starts the fraction; without one any exponent is ignored.
+    const size_t dot = s.find('.');
+    if (dot == std::string_view::npos) {
+        if (neg) ip = static_cast<int32_t>(0u - static_cast<uint32_t>(ip));
+        return static_cast<float>(ip);
+    }
+    size_t k = dot + 1;
+    float w = 0.1f, f = 0.0f;
+    while (k < s.size() && isDigit(s[k])) {
+        f = static_cast<float>(static_cast<double>(s[k] - '0') * static_cast<double>(w) + static_cast<double>(f));
+        w = static_cast<float>(static_cast<double>(w) * static_cast<double>(0.1f));
+        ++k;
+    }
+    if (neg) {
+        f = -f;
+        ip = static_cast<int32_t>(0u - static_cast<uint32_t>(ip));
+    }
+    float value = static_cast<float>(static_cast<double>(static_cast<float>(ip)) + static_cast<double>(f));
+    if (k < s.size() && (s[k] == 'e' || s[k] == 'E')) {
+        ++k;
+        // C runtime atoi: leading white space skipped, one '+' or '-' sign accepted, digits.
+        while (k < s.size() && (s[k] == ' ' || (s[k] >= '\t' && s[k] <= '\r'))) ++k;
         bool eneg = false;
-        if (i < s.size() && s[i] == '-') { eneg = true; ++i; }
-        int n = 0;
-        while (i < s.size() && isDigit(s[i])) {
-            if (n < 1000) n = n * 10 + (s[i] - '0');
-            ++i;
+        if (k < s.size() && (s[k] == '+' || s[k] == '-')) { eneg = s[k] == '-'; ++k; }
+        int64_t n = 0;
+        while (k < s.size() && isDigit(s[k])) {
+            if (n < 100000) n = n * 10 + (s[k] - '0');
+            ++k;
         }
-        const double scale = std::pow(10.0, eneg ? -static_cast<double>(n) : static_cast<double>(n));
-        value = static_cast<float>(static_cast<double>(value) * scale);
+        // 10^|n| by repeated squaring in single precision.
+        float p = 1.0f, base = 10.0f;
+        for (int64_t m = n; m > 0; m >>= 1) {
+            if (m & 1) p = p * base;
+            base = base * base;
+        }
+        if (eneg) p = static_cast<float>(1.0 / static_cast<double>(p));
+        value = p * value;
     }
-    return neg ? -value : value;
+    return value;
 }
+
 
 // ---------------------------------------------------------------------------
 // vec3, flags, enums

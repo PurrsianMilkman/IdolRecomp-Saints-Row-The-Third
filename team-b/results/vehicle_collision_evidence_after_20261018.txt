@@ -1,0 +1,767 @@
+=== playtest v0: interactive player<->animation<->camera<->collision demo ===
+CONTROLS : W/A/S/D move (real moveSlot/composeVelocity, camera-relative via REAL
+           CameraSystem::movementRows()); hold Left Shift to sprint; mouse look
+           (real CameraSystem rotate()/elevate()->cameraHook->preUpdate->yawStep/
+           pitchStep seam); walk up to the parked car and press E to enter/exit it
+           (W/S throttle/brake, A/D steer while driving - unless --no-vehicle);
+           T skips the TOD clock forward 3 game hour(s) per press (CHOSEN manual
+           fast-forward, v0.3 polish task - a full in-game day now takes 24 REAL
+           minutes, too slow to just wait out during a play session); press R to
+           arm/disarm the police roadblock spawn (debug gate, OFF by default - see
+           this command's own doc comment's "THE HONEST NOTORIETY GATE" note); Esc
+           or close the window to quit.
+NOT IN V0: jump, crouch, gamepad/XInput (spec-tables-ui-controls.md documents the
+           real gamepad binding layer; not wired here - keyboard+mouse only, said
+           honestly rather than faking a controller path), ambient PEDESTRIAN
+           population (the distant/LOD human tier - no spec-confirmed pass wiring
+           it into playtest yet) - see this command's own doc comment above
+           runPlaytest() for the full breakdown. Vehicle entry/driving IS wired (ON
+           by default, --no-vehicle opts out), WITH real world collision (spec-
+           physics-runtime.md Sec10a, vehicle-world-collision follow-up task -
+           superseding this line's own former "no world collision" wording) - see
+           that same doc comment's own honest scope note (a CHOSEN simple chase
+           camera, one PLAYER vehicle only, no vehicle-vs-vehicle collision/damage).
+           Near-field AMBIENT VEHICLE TRAFFIC IS wired (ALWAYS on, no flag) and the
+           POLICE ROADBLOCK spawn IS wired (debug key 'R', OFF by default) - see
+           this command's own doc comment's 2026-10-09 update for the full CHOSEN
+           breakdown of both. The health/ammo/money/notoriety HUD overlay IS wired
+           (--hud, opt-in, off unless passed) - see that flag's own honest caveat in
+           this command's doc comment. The top-right corner minimap (v0.3 polish
+           task) is now part of that SAME --hud overlay - real live player/vehicle
+           position and heading feed updateMinimapLiveTransform(), flat per-tile
+           fallback colour only (no real minimap_CCRR texture lookup wired into this
+           command).
+character: brad, 68 bones (channel 0, group 0)
+weather  : weather_time_of_day.xtbl - 4 segment(s) loaded; TOD lighting stage (CHOSEN) = 'Light Rain'
+spawn    : spawn_info_categories.xtbl - 31 categories
+weather  : weather.xtbl PedDensity for stage 'Clear Skies' = 1.00
+weapon   : Brad equipped with real weapons.xtbl row 'Pistol-Gang' (Weapon_Class=0, 82 total rows parsed) - LMB fires it on foot
+npc-ai   : tables loaded - 17 goal rows (17 non-empty lists), 44 behaviours, 67 combat_actions rows; civilian flee_health_pct=50
+footstep : real left-foot/right-foot trigger frames for 'plym_ps_wlk' FOUND (1/1) - driving real footstep timing
+footstep : real anim_files.xtbl row for event='FOOTSTEP' MATERIAL_TYPE:CONCRETE+SHOE_TYPE:SNEAKER (CHOSEN per purrsian-52) FOUND - clip='crsr_extb_jmoff_ridr.animx' frame=55. HONEST GAP: resolving this event+switch identity to a
+         specific Wwise media id requires walking Event(kind4)->Action(kind3)->
+         SwitchContainer, and NO switch-container HIRC layout is reverse-engineered
+         anywhere in this project (spec-audio-runtime.md Sec9.6/9.7/9.8 document
+         Event->Action->plain-Sound only) - guessing that binary layout here would be
+         exactly the kind of invented engine behaviour this project's no-invented-
+         fixes rule forbids. The demo therefore still plays the same real, proven-
+         decodable SFX clip findFirstPlayableSfxClip() resolves below, now correctly
+         labelled as a stand-in for a KNOWN real identity rather than an arbitrary pick.
+graphs   : 249 loaded from node_graph_files.xtbl
+graph    : 'player state machine' found (index 144 of 249 loaded)
+anim     : real locomotion clips from D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/preload_anim.vpp_pc: run=loaded jog=loaded wlk=loaded
+footstep : walk clip durationTotal()=39 (30Hz units) - left-foot frames=[30,] right-foot frames=[11,]
+seatpose : vi_ride.xtbl 69 set(s); vehicle_interaction_info.xtbl demo row ('truck_2dr_classic01') found
+seatpose : real driver ride clip 'auto_ridel.anim_pc' loaded
+[hoods] 33 Hood volumes (hood_bsp_tree + hood_spawn_category) from sr3_city~fawld.czn_pc
+[roadgraph] sr3_city_0.vpp_pc :: sr3_city~fawld.czn_pc: 11455 lanes (segments), 10141 road nodes, 6216 shape points, 7659 sidewalk nodes, 8703 sidewalk edges; indexed into 135 road tiles / 104 sidewalk tiles; 146 ms (czn 2586376 bytes)
+spawn    : 33 hood volumes x 31 spawn categories -> hood category lookup ACTIVE
+device   : HARDWARE (NVIDIA GeForce RTX 3090)
+audio    : disabled (--headless)
+radio    : 915 content entries, 153 song records, 12 stations; media indexed (931 records)
+radio    : station 3 LOGO_GENX        queue=512 first=GENX_SWEEPER_01 -> media resolved
+radio    : station 4 LOGO_KRHYME      queue=512 first=KRHYME_YONKERS_FRONT_SELL -> media resolved
+radio    : station 5 LOGO_K12         queue=512 first=K12_KEVIN_AND_CARRICK___WALLFLOWERS -> media resolved
+radio    : station 6 LOGO_KLASSIC     queue=512 first=KLASSIC_LISZT___HUNGARIAN_RHAPSODY -> media resolved
+radio    : station 7 LOGO_ADULT_SWIM  queue=512 first=SWIM_INTRO_CEREBRAL_BALLZY -> media resolved
+radio    : station 8 LOGO_KABRON      queue=512 first=KABRON_SULTATE_Y_TOMA_FRONT_SELL -> media resolved
+radio    : station 9 LOGO_KRUNCH      queue=512 first=KRUNCH_TUGBOAT___SLOW_REVOLUTION -> media resolved
+radio    : station 10 LOGO_MIX         queue=512 first=MIX_SOCIAL_DISTORTION___BALL_AND_CHAIN -> media resolved
+radio    : station 12                  queue=512 first=KRHYME_AMERIE_ONETHING -> unresolved: cue not found in switch container
+character: head matlib attach+bind: 1 diffuse-role TextureRef(s) replaced with the matlib's own resolved name (CHOSEN role-suffix heuristic - see this block's own comment)
+character: body textured, head textured (real per-material diffuse textures)
+npc-ai   : near-field ped AI loop ON (civilians: flee/cower when the player fires nearby; CHOSEN stand-ins in sr3airuntime/npc_ai_runtime.h)
+[stream] frame 0 focus (-960.0, -698.0): wanted = {1016h0,0916h1,1015h2,1015h3}
+[tex] building TextureSearchCache for sr3_city_0.vpp_pc (one-time, shared by every cell)...
+[tex] TextureSearchCache for sr3_city_0.vpp_pc built: 21825 texture records indexed in 17.3 s
+[stream] frame 0 LOAD  1016h0   (sr3_city_0.vpp_pc, col 10 row 16 N 0) centre (-880.0, -770.0): 53/53 props uploaded, 0 failed, textures 128/139, 18149 ms
+[stream] frame 0 LOAD  0916h1   (sr3_city_0.vpp_pc, col 9 row 16 N 1) centre (-1040.0, -770.0): 48/48 props uploaded, 0 failed, textures 126/132, 528 ms
+[stream] frame 0 LOAD  1015h2   (sr3_city_0.vpp_pc, col 10 row 15 N 2) centre (-1040.0, -630.0): 114/114 props uploaded, 0 failed, textures 318/327, 2022 ms
+[stream] frame 0 LOAD  1015h3   (sr3_city_0.vpp_pc, col 10 row 15 N 3) centre (-880.0, -630.0): 46/46 props uploaded, 0 failed, textures 155/155, 426 ms
+[ground] frame 0 LOAD  tile 0916: sr3_city~s0916.czn_pc, 1 range(s), 237 triangles (collision tris=237 bounds x[-1115.1,-1057.9] z[-864.6,-784.2])
+[ground] frame 0 LOAD  tile 1015: sr3_city~s1015.czn_pc, 3 range(s), 348 triangles (collision tris=348 bounds x[-848.2,-799.3] z[-687.1,-645.7])
+[ground] frame 0 LOAD  tile 1016: sr3_city~s1016.czn_pc, 1 range(s), 7 triangles (collision tris=7 bounds x[-666.4,-640.4] z[-714.8,-695.9])
+ground-y : measured real ground bounds [0.00, 0.00] across 3 loaded tile(s) - spawn/collision groundY = 15.92 (NO ground tile resolved - using 0.0)
+heightmap: NO real Heightmap (0x2244) record resolved at spawn (-960.0 -698.0) - staying on the flat-plane fallback (15.92m)
+groundmesh: NO real 0x2237 collision-mesh triangle resolved at spawn (-960.0 -698.0) - falling back to the heightmap/flat-plane chain above
+camera   : camera_free.xtbl seeded (40 scalars, 61 submode row(s) applied)
+camera   : real follow camera active; committed eye after reset (-960.00 17.62 -702.25), fov 60.00 deg
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+vehicle  : D:/IdolRecomp Saints Row The Third/Saints Row 3 CRREISH/packfiles/pc/cache/dlc1.vpp_pc :: car_4dr_genki_0.ccar_pc parked at (-960.0 15.9 -700.0) - walk within 3.0m and press E to enter
+ambient-models: 31 categories, 61 groups, 382 character rows, 372 vehicle models in archive, 542 character containers
+traffic  : near-field ambient vehicle population ALWAYS ON (cap 48, spec-ai-runtime.md Sec17.4c)
+traffic  : lane graph = REAL road graph (11455 lanes, on-disk successor links)
+signals  : 346 junctions, 1207 lights, 678 phases initialised (Sec20.6.13(e))
+peds     : near-field ambient pedestrian population ALWAYS ON (cap 48, spec-ai-runtime.md Sec20)
+roadblock: police roadblock spawn OFF by default (8 slots: 4 ped + 4 vehicle [1 Spike_strip + 3 generic]) - press R to arm (spec-ai-runtime.md Sec19.7; debug gate, not tied to notoriety)
+vehicle  : no --vehicle-interaction-name given - occupant hide stays at its real-data default (shown; correct for the ordinary default vehicle, spec-render-pipeline.md Sec23.14)
+spawn    : (-960.0 15.9 -698.0)
+vitals   : free-roam player vitals ON (max health 100 from engine drawOrGetMaxHitPoints('player'); respawn delay 4000 ms from gameplay_constants.xtbl Death_and_busted.respawn_delay_ms)
+[vehicle] in range (2.0m) - press E to enter
+[traffic] frame 0 near-field live=1/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1087.54,-672.84) heading=13.0deg seg=4850 valid=1
+[peds] frame 0 near-field ambient peds live=1/48
+[population] frame 0 vehicles live=1 (spawn passes 1, distance-despawned 0) peds live=1 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 0 vehicle gathers=1 candidates=9 (avg 9.0) lane-spawns=1; ped gathers=1 edges=35 (avg 35.0)
+[idle-trace] frame 0 ped id=1 pos=(-947.67,14.67,-682.09) idleSubState=33
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[playtest-vehicle] rim catalogue attached (style 'R100' -> part 0), pivot (0.030 0.000 -0.000), scale 1.183
+[vehicle] entered parked car - W/S throttle/brake, A/D steer, E to exit, ,/. radio prev/next
+[radio] enter vehicle 1 -> station 10 (LOGO_MIX)
+[radio] post station 10 item 895 type=0 cue=MIX_SOCIAL_DISTORTION___BALL_AND_CHAIN length=342502ms seek=330ms
+[radio]   resolved sound 0x2CF57FB7 media 0x17561C6E (2366642 bytes)
+[traffic] frame 30 near-field live=4/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.42,-672.57) heading=13.8deg seg=4850 valid=1
+  [lane] id=2 pos=(-960.21,-831.62) heading=77.5deg seg=2958 valid=1
+  [lane] id=3 pos=(-966.39,-831.79) heading=77.4deg seg=2946 valid=1
+  [lane] id=4 pos=(-971.24,-831.66) heading=124.9deg seg=2697 valid=1
+[peds] frame 30 near-field ambient peds live=4/48
+[population] frame 30 vehicles live=4 (spawn passes 4, distance-despawned 0) peds live=4 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 30 vehicle gathers=4 candidates=33 (avg 8.2) lane-spawns=4; ped gathers=4 edges=138 (avg 34.5)
+[idle-trace] frame 30 ped id=1 pos=(-946.30,14.67,-680.38) idleSubState=34
+[idle-trace] frame 30 ped id=2 pos=(-979.04,17.95,-730.73) idleSubState=34
+[idle-trace] frame 30 ped id=3 pos=(-950.89,18.15,-780.26) idleSubState=34
+[idle-trace] frame 30 ped id=4 pos=(-974.02,13.68,-643.21) idleSubState=34
+seatpose-dbg: bone 0 delta = (-0.0002 -0.9269 -0.0004)
+seatpose-dbg: bone 2 delta = (-0.0025 -0.0264 -0.0358)
+seatpose-dbg: bone 27 delta = (0.0209 0.0760 -0.0304)
+seatpose-dbg: bone 33 delta = (0.0008 0.0095 0.0174)
+[radio] station 10 -> 2 (RADIO_OFF)
+[traffic] frame 60 near-field live=8/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=14.5deg seg=4850 valid=1
+  [lane] id=2 pos=(-959.63,-828.99) heading=77.6deg seg=2958 valid=1
+  [lane] id=3 pos=(-965.93,-829.70) heading=77.6deg seg=2946 valid=1
+  [lane] id=4 pos=(-972.16,-830.38) heading=125.7deg seg=2697 valid=1
+  [lane] id=5 pos=(-1084.94,-671.89) heading=21.1deg seg=4850 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=21.0deg seg=4850 valid=1
+  [lane] id=7 pos=(-831.49,-724.27) heading=174.4deg seg=3023 valid=1
+  [lane] id=8 pos=(-1085.89,-672.25) heading=20.9deg seg=4850 valid=1
+[peds] frame 60 near-field ambient peds live=8/48
+[population] frame 60 vehicles live=8 (spawn passes 8, distance-despawned 0) peds live=8 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 60 vehicle gathers=8 candidates=65 (avg 8.1) lane-spawns=8; ped gathers=8 edges=274 (avg 34.2)
+[idle-trace] frame 60 ped id=1 pos=(-944.89,14.67,-678.62) idleSubState=34
+[idle-trace] frame 60 ped id=2 pos=(-979.10,17.95,-729.65) idleSubState=34
+[idle-trace] frame 60 ped id=3 pos=(-950.88,18.15,-781.65) idleSubState=34
+[idle-trace] frame 60 ped id=4 pos=(-975.40,13.68,-643.21) idleSubState=34
+[idle-trace] frame 60 ped id=5 pos=(-949.79,13.95,-646.15) idleSubState=34
+[idle-trace] frame 60 ped id=6 pos=(-940.53,14.10,-653.23) idleSubState=34
+[idle-trace] frame 60 ped id=7 pos=(-970.11,18.15,-744.64) idleSubState=34
+[idle-trace] frame 60 ped id=8 pos=(-991.07,18.15,-762.81) idleSubState=34
+[radio] station 2 -> 10 (LOGO_MIX)
+[radio] post station 10 item 895 type=0 cue=MIX_SOCIAL_DISTORTION___BALL_AND_CHAIN length=342502ms seek=2310ms
+[radio]   resolved sound 0x2CF57FB7 media 0x17561C6E (2366642 bytes)
+[vehicle-collision] TEST target ped id=13 injected 12 m ahead
+[vehicle-collision] TEST target ped id=14 injected 18 m ahead
+[vehicle-collision] TEST target car id=13 injected 24 m ahead
+[traffic] frame 90 near-field live=13/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=15.1deg seg=4850 valid=1
+  [lane] id=2 pos=(-958.61,-824.30) heading=77.9deg seg=2958 valid=1
+  [lane] id=3 pos=(-965.03,-825.56) heading=77.8deg seg=2946 valid=1
+  [lane] id=4 pos=(-974.33,-827.41) heading=126.7deg seg=2697 valid=1
+  [lane] id=5 pos=(-1082.04,-670.76) heading=21.3deg seg=4850 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=21.2deg seg=4850 valid=1
+  [lane] id=7 pos=(-833.48,-724.12) heading=176.6deg seg=3023 valid=1
+  [lane] id=8 pos=(-1085.89,-672.25) heading=21.1deg seg=4850 valid=1
+  [lane] id=9 pos=(-960.35,-832.25) heading=77.5deg seg=2958 valid=1
+  [lane] id=10 pos=(-837.60,-658.00) heading=177.2deg seg=2596 valid=1
+  [lane] id=11 pos=(-971.21,-831.71) heading=125.0deg seg=2697 valid=1
+  [lane] id=12 pos=(-966.45,-832.06) heading=77.4deg seg=2946 valid=1
+  [lane] id=13 pos=(-929.96,-694.38) heading=4.4deg seg=0 valid=-1
+[peds] frame 90 near-field ambient peds live=14/48
+[population] frame 90 vehicles live=13 (spawn passes 12, distance-despawned 0) peds live=14 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 90 vehicle gathers=12 candidates=94 (avg 7.8) lane-spawns=12; ped gathers=12 edges=410 (avg 34.2)
+[idle-trace] frame 90 ped id=1 pos=(-943.47,14.67,-676.86) idleSubState=34
+[idle-trace] frame 90 ped id=2 pos=(-979.17,17.95,-728.57) idleSubState=34
+[idle-trace] frame 90 ped id=3 pos=(-950.86,18.15,-783.03) idleSubState=34
+[idle-trace] frame 90 ped id=4 pos=(-976.79,13.68,-643.22) idleSubState=34
+[idle-trace] frame 90 ped id=5 pos=(-951.50,13.95,-645.09) idleSubState=34
+[idle-trace] frame 90 ped id=6 pos=(-941.36,14.10,-652.55) idleSubState=34
+[idle-trace] frame 90 ped id=7 pos=(-968.26,18.15,-744.53) idleSubState=34
+[idle-trace] frame 90 ped id=8 pos=(-989.66,18.15,-761.62) idleSubState=34
+[idle-trace] frame 90 ped id=9 pos=(-949.56,13.94,-646.20) idleSubState=34
+[idle-trace] frame 90 ped id=10 pos=(-959.13,13.68,-633.43) idleSubState=34
+[idle-trace] frame 90 ped id=11 pos=(-952.53,18.15,-742.90) idleSubState=34
+[idle-trace] frame 90 ped id=12 pos=(-959.64,13.68,-641.60) idleSubState=34
+[idle-trace] frame 90 ped id=13 pos=(-941.66,15.95,-698.69) idleSubState=13
+[idle-trace] frame 90 ped id=14 pos=(-935.80,15.95,-696.74) idleSubState=13
+[traffic] frame 120 near-field live=17/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=15.6deg seg=4850 valid=1
+  [lane] id=2 pos=(-957.16,-817.38) heading=78.6deg seg=2958 valid=1
+  [lane] id=3 pos=(-963.68,-819.28) heading=78.2deg seg=2946 valid=1
+  [lane] id=4 pos=(-977.88,-822.80) heading=128.6deg seg=2697 valid=1
+  [lane] id=5 pos=(-1077.18,-668.84) heading=21.6deg seg=4850 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=21.4deg seg=4850 valid=1
+  [lane] id=7 pos=(-837.58,-724.05) heading=181.8deg seg=3023 valid=1
+  [lane] id=8 pos=(-1085.89,-672.25) heading=21.3deg seg=4850 valid=1
+  [lane] id=9 pos=(-960.24,-831.72) heading=77.6deg seg=2958 valid=1
+  [lane] id=10 pos=(-840.01,-657.88) heading=177.2deg seg=2596 valid=1
+  [lane] id=11 pos=(-971.23,-831.68) heading=125.8deg seg=2697 valid=1
+  [lane] id=12 pos=(-966.39,-831.79) heading=77.5deg seg=2946 valid=1
+  [lane] id=13 pos=(-929.96,-694.38) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-950.79,-573.12) heading=-134.0deg seg=4801 valid=1
+  [lane] id=15 pos=(-980.01,-830.37) heading=131.3deg seg=2661 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=174.1deg seg=3023 valid=1
+  [lane] id=17 pos=(-1085.89,-672.25) heading=20.9deg seg=4850 valid=1
+[peds] frame 120 near-field ambient peds live=18/48
+[population] frame 120 vehicles live=17 (spawn passes 16, distance-despawned 0) peds live=18 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 120 vehicle gathers=16 candidates=124 (avg 7.8) lane-spawns=16; ped gathers=16 edges=561 (avg 35.1)
+[idle-trace] frame 120 ped id=1 pos=(-942.05,14.67,-675.10) idleSubState=34
+[idle-trace] frame 120 ped id=2 pos=(-979.23,17.95,-727.50) idleSubState=34
+[idle-trace] frame 120 ped id=3 pos=(-950.85,18.15,-784.42) idleSubState=34
+[idle-trace] frame 120 ped id=4 pos=(-978.18,13.68,-643.23) idleSubState=34
+[idle-trace] frame 120 ped id=5 pos=(-953.41,13.95,-644.43) idleSubState=34
+[idle-trace] frame 120 ped id=6 pos=(-942.20,14.10,-651.87) idleSubState=34
+[idle-trace] frame 120 ped id=7 pos=(-966.41,18.15,-744.43) idleSubState=34
+[idle-trace] frame 120 ped id=8 pos=(-988.24,18.15,-760.43) idleSubState=34
+[idle-trace] frame 120 ped id=9 pos=(-950.72,13.94,-645.44) idleSubState=34
+[idle-trace] frame 120 ped id=10 pos=(-959.19,13.68,-632.36) idleSubState=34
+[idle-trace] frame 120 ped id=11 pos=(-951.18,18.15,-743.80) idleSubState=34
+[idle-trace] frame 120 ped id=12 pos=(-959.99,13.68,-642.94) idleSubState=34
+[idle-trace] frame 120 ped id=13 pos=(-941.66,15.95,-698.69) idleSubState=13
+[idle-trace] frame 120 ped id=14 pos=(-935.80,15.95,-696.74) idleSubState=13
+[idle-trace] frame 120 ped id=15 pos=(-956.07,18.15,-742.84) idleSubState=34
+[idle-trace] frame 120 ped id=16 pos=(-942.01,16.48,-721.32) idleSubState=34
+[idle-trace] frame 120 ped id=17 pos=(-959.04,13.69,-644.12) idleSubState=34
+[idle-trace] frame 120 ped id=18 pos=(-948.88,17.43,-731.01) idleSubState=33
+[notoriety] frame 132 crime report 'civilian assault' (vehicle hit ped) police points=60
+[notoriety] frame 132 crime report 'civilian kill' (vehicle killed ped) police points=100
+[vehicle-collision] frame 132 ped id=13 closing=8.13 m/s outcome=KILL car speed 8.14 -> 7.73 m/s
+[notoriety] frame 148 track=3 level 0 -> 1 (t=4917ms)
+[notoriety] frame 150 t=4983ms police level=1 fraction=85.00 decayArmed=1 pending=0 liveLevel=1 reports=2 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 150 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=16.0deg seg=4850 valid=1
+  [lane] id=2 pos=(-955.42,-808.22) heading=79.9deg seg=2890 valid=1
+  [lane] id=3 pos=(-961.96,-810.60) heading=79.4deg seg=2892 valid=1
+  [lane] id=4 pos=(-980.03,-820.25) heading=136.7deg seg=2697 valid=1
+  [lane] id=5 pos=(-1070.15,-666.02) heading=22.1deg seg=4849 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=21.6deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=196.5deg seg=3023 valid=1
+  [lane] id=8 pos=(-1085.89,-672.25) heading=21.5deg seg=4850 valid=1
+  [lane] id=9 pos=(-959.69,-829.22) heading=77.7deg seg=2958 valid=1
+  [lane] id=10 pos=(-844.52,-657.67) heading=177.3deg seg=2596 valid=1
+  [lane] id=11 pos=(-972.07,-830.53) heading=126.4deg seg=2697 valid=1
+  [lane] id=12 pos=(-965.93,-829.70) heading=77.6deg seg=2946 valid=1
+  [lane] id=13 pos=(-929.96,-694.38) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-952.76,-575.16) heading=-134.0deg seg=4801 valid=1
+  [lane] id=15 pos=(-981.53,-828.68) heading=132.4deg seg=2661 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=176.0deg seg=3023 valid=1
+  [lane] id=17 pos=(-1084.81,-671.84) heading=21.1deg seg=4850 valid=1
+  [lane] id=18 pos=(-840.19,-651.87) heading=177.2deg seg=2595 valid=1
+[peds] frame 150 near-field ambient peds live=21/48
+[population] frame 150 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=21 (distance-despawned 0) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 150 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=19 edges=687 (avg 36.2)
+[idle-trace] frame 150 ped id=1 pos=(-940.64,14.67,-673.34) idleSubState=34
+[idle-trace] frame 150 ped id=2 pos=(-979.02,17.95,-726.46) idleSubState=34
+[idle-trace] frame 150 ped id=3 pos=(-950.83,18.15,-785.80) idleSubState=34
+[idle-trace] frame 150 ped id=4 pos=(-979.56,13.68,-643.24) idleSubState=34
+[idle-trace] frame 150 ped id=5 pos=(-955.33,13.95,-643.83) idleSubState=34
+[idle-trace] frame 150 ped id=6 pos=(-943.03,14.10,-651.19) idleSubState=34
+[idle-trace] frame 150 ped id=7 pos=(-964.57,18.15,-744.32) idleSubState=34
+[idle-trace] frame 150 ped id=8 pos=(-986.83,18.15,-759.24) idleSubState=34
+[idle-trace] frame 150 ped id=9 pos=(-951.99,13.94,-644.91) idleSubState=34
+[idle-trace] frame 150 ped id=10 pos=(-959.25,13.68,-631.28) idleSubState=34
+[idle-trace] frame 150 ped id=11 pos=(-951.13,18.15,-745.65) idleSubState=34
+[idle-trace] frame 150 ped id=12 pos=(-961.35,13.68,-643.00) idleSubState=34
+[idle-trace] frame 150 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 150 ped id=14 pos=(-935.80,15.95,-696.74) idleSubState=13
+[idle-trace] frame 150 ped id=15 pos=(-954.69,18.15,-743.01) idleSubState=34
+[idle-trace] frame 150 ped id=16 pos=(-940.66,16.48,-719.51) idleSubState=34
+[idle-trace] frame 150 ped id=17 pos=(-957.97,13.69,-644.01) idleSubState=34
+[idle-trace] frame 150 ped id=18 pos=(-948.22,17.43,-730.20) idleSubState=34
+[idle-trace] frame 150 ped id=19 pos=(-950.73,18.03,-740.88) idleSubState=34
+[idle-trace] frame 150 ped id=20 pos=(-982.18,18.15,-750.64) idleSubState=34
+[idle-trace] frame 150 ped id=21 pos=(-962.19,13.68,-644.37) idleSubState=34
+[notoriety] frame 154 crime report 'civilian assault' (vehicle hit ped) police points=60
+[notoriety] frame 154 crime report 'civilian kill' (vehicle killed ped) police points=100
+[vehicle-collision] frame 154 ped id=14 closing=9.27 m/s outcome=KILL car speed 9.28 -> 8.81 m/s
+[vehicle-collision] frame 168 car-vs-car id=13 closing=9.38 m/s impulse=9149 Ns damage=50 each; player speed -> 3.29 m/s
+[notoriety] frame 180 t=5973ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 180 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=16.4deg seg=4850 valid=1
+  [lane] id=2 pos=(-953.82,-798.41) heading=81.3deg seg=2917 valid=1
+  [lane] id=3 pos=(-960.52,-802.16) heading=83.3deg seg=2892 valid=1
+  [lane] id=4 pos=(-980.78,-819.63) heading=142.3deg seg=2695 valid=1
+  [lane] id=5 pos=(-1061.30,-662.37) heading=22.8deg seg=4849 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=21.7deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=236.6deg seg=3023 valid=1
+  [lane] id=8 pos=(-1085.89,-672.25) heading=21.7deg seg=4850 valid=1
+  [lane] id=9 pos=(-958.71,-824.67) heading=78.0deg seg=2958 valid=1
+  [lane] id=10 pos=(-851.26,-657.35) heading=177.4deg seg=2596 valid=1
+  [lane] id=11 pos=(-974.19,-827.70) heading=127.2deg seg=2697 valid=1
+  [lane] id=12 pos=(-965.03,-825.56) heading=77.8deg seg=2946 valid=1
+  [lane] id=13 pos=(-927.90,-693.81) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-956.19,-578.71) heading=-134.0deg seg=4801 valid=1
+  [lane] id=15 pos=(-984.52,-825.49) heading=133.8deg seg=2661 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.7deg seg=3023 valid=1
+  [lane] id=17 pos=(-1081.78,-670.66) heading=21.4deg seg=4850 valid=1
+  [lane] id=18 pos=(-842.88,-651.74) heading=177.3deg seg=2595 valid=1
+[peds] frame 180 near-field ambient peds live=24/48
+[population] frame 180 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=24 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 180 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=23 edges=862 (avg 37.5)
+[idle-trace] frame 180 ped id=1 pos=(-939.22,14.67,-671.58) idleSubState=34
+[idle-trace] frame 180 ped id=2 pos=(-978.65,17.95,-725.45) idleSubState=34
+[idle-trace] frame 180 ped id=4 pos=(-980.95,13.68,-643.24) idleSubState=34
+[idle-trace] frame 180 ped id=5 pos=(-957.35,13.95,-643.63) idleSubState=34
+[idle-trace] frame 180 ped id=6 pos=(-943.87,14.10,-650.50) idleSubState=34
+[idle-trace] frame 180 ped id=7 pos=(-962.72,18.15,-744.21) idleSubState=34
+[idle-trace] frame 180 ped id=8 pos=(-985.45,18.15,-758.01) idleSubState=34
+[idle-trace] frame 180 ped id=9 pos=(-953.31,13.94,-644.46) idleSubState=34
+[idle-trace] frame 180 ped id=10 pos=(-959.31,13.68,-630.20) idleSubState=34
+[idle-trace] frame 180 ped id=11 pos=(-951.08,18.15,-747.50) idleSubState=34
+[idle-trace] frame 180 ped id=12 pos=(-962.73,13.68,-643.01) idleSubState=34
+[idle-trace] frame 180 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 180 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 180 ped id=15 pos=(-953.32,18.15,-743.19) idleSubState=34
+[idle-trace] frame 180 ped id=16 pos=(-939.31,16.48,-717.70) idleSubState=34
+[idle-trace] frame 180 ped id=17 pos=(-956.90,13.69,-643.89) idleSubState=34
+[idle-trace] frame 180 ped id=18 pos=(-947.53,17.43,-729.37) idleSubState=34
+[idle-trace] frame 180 ped id=19 pos=(-950.80,18.03,-743.14) idleSubState=34
+[idle-trace] frame 180 ped id=20 pos=(-982.27,18.15,-752.62) idleSubState=34
+[idle-trace] frame 180 ped id=21 pos=(-960.83,13.68,-643.71) idleSubState=34
+[idle-trace] frame 180 ped id=22 pos=(-980.27,18.01,-731.59) idleSubState=34
+[idle-trace] frame 180 ped id=23 pos=(-921.48,14.08,-632.68) idleSubState=34
+[idle-trace] frame 180 ped id=24 pos=(-928.76,14.15,-679.90) idleSubState=34
+[idle-trace] frame 180 ped id=25 pos=(-929.14,14.86,-705.81) idleSubState=34
+[vehicle-collision] frame 198 car-vs-car id=13 closing=2.57 m/s impulse=2506 Ns damage=14 each; player speed -> 2.00 m/s
+[notoriety] frame 210 t=6963ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 210 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=16.7deg seg=4850 valid=1
+  [lane] id=2 pos=(-952.36,-788.52) heading=82.0deg seg=2917 valid=1
+  [lane] id=3 pos=(-960.53,-801.77) heading=93.7deg seg=2892 valid=1
+  [lane] id=4 pos=(-982.70,-818.18) heading=143.5deg seg=2695 valid=1
+  [lane] id=5 pos=(-1052.13,-658.47) heading=23.1deg seg=4802 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=21.9deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=316.3deg seg=3023 valid=1
+  [lane] id=8 pos=(-1085.89,-672.25) heading=21.8deg seg=4850 valid=1
+  [lane] id=9 pos=(-957.30,-817.91) heading=78.6deg seg=2958 valid=1
+  [lane] id=10 pos=(-860.36,-656.97) heading=177.9deg seg=2872 valid=1
+  [lane] id=11 pos=(-975.28,-826.28) heading=128.3deg seg=2697 valid=1
+  [lane] id=12 pos=(-963.70,-819.27) heading=78.2deg seg=2946 valid=1
+  [lane] id=13 pos=(-925.73,-693.18) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-961.21,-583.92) heading=-133.8deg seg=4801 valid=1
+  [lane] id=15 pos=(-989.19,-820.85) heading=136.9deg seg=2661 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.3deg seg=3023 valid=1
+  [lane] id=17 pos=(-1076.78,-668.69) heading=21.7deg seg=4850 valid=1
+  [lane] id=18 pos=(-847.67,-651.51) heading=177.3deg seg=2595 valid=1
+[peds] frame 210 near-field ambient peds live=28/48
+[population] frame 210 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=28 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 210 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=27 edges=1042 (avg 38.6)
+[idle-trace] frame 210 ped id=1 pos=(-937.68,14.67,-669.93) idleSubState=34
+[idle-trace] frame 210 ped id=2 pos=(-978.28,17.95,-724.43) idleSubState=34
+[idle-trace] frame 210 ped id=4 pos=(-982.33,13.68,-643.25) idleSubState=34
+[idle-trace] frame 210 ped id=5 pos=(-959.36,13.95,-643.43) idleSubState=34
+[idle-trace] frame 210 ped id=6 pos=(-944.70,14.10,-649.82) idleSubState=34
+[idle-trace] frame 210 ped id=7 pos=(-960.88,18.15,-744.10) idleSubState=34
+[idle-trace] frame 210 ped id=8 pos=(-984.11,18.15,-756.73) idleSubState=34
+[idle-trace] frame 210 ped id=9 pos=(-954.62,13.94,-644.01) idleSubState=34
+[idle-trace] frame 210 ped id=10 pos=(-959.36,13.68,-629.12) idleSubState=34
+[idle-trace] frame 210 ped id=11 pos=(-951.02,18.15,-749.35) idleSubState=34
+[idle-trace] frame 210 ped id=12 pos=(-964.12,13.68,-643.02) idleSubState=34
+[idle-trace] frame 210 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 210 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 210 ped id=15 pos=(-951.94,18.15,-743.36) idleSubState=34
+[idle-trace] frame 210 ped id=16 pos=(-937.87,16.48,-715.95) idleSubState=34
+[idle-trace] frame 210 ped id=17 pos=(-955.83,13.69,-643.77) idleSubState=34
+[idle-trace] frame 210 ped id=18 pos=(-946.85,17.43,-728.53) idleSubState=34
+[idle-trace] frame 210 ped id=19 pos=(-950.80,18.03,-743.14) idleSubState=34
+[idle-trace] frame 210 ped id=20 pos=(-982.72,18.15,-754.59) idleSubState=34
+[idle-trace] frame 210 ped id=21 pos=(-959.37,13.68,-643.57) idleSubState=34
+[idle-trace] frame 210 ped id=22 pos=(-979.87,18.01,-729.61) idleSubState=34
+[idle-trace] frame 210 ped id=23 pos=(-920.15,14.08,-634.20) idleSubState=34
+[idle-trace] frame 210 ped id=24 pos=(-929.55,14.15,-679.16) idleSubState=34
+[idle-trace] frame 210 ped id=25 pos=(-928.17,14.86,-704.82) idleSubState=34
+[idle-trace] frame 210 ped id=26 pos=(-938.25,14.11,-655.28) idleSubState=34
+[idle-trace] frame 210 ped id=27 pos=(-961.38,13.68,-624.85) idleSubState=34
+[idle-trace] frame 210 ped id=28 pos=(-949.14,17.99,-738.45) idleSubState=34
+[idle-trace] frame 210 ped id=29 pos=(-949.99,18.15,-759.07) idleSubState=34
+signal   : t=7029 ms junction 86 (-910,-664, 36 m from player) AMBER -> phase 0
+signal   : t=7062 ms junction 88 (-966,-757, 72 m from player) AMBER -> phase 0
+[notoriety] frame 240 t=7953ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 240 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=17.0deg seg=4850 valid=1
+  [lane] id=2 pos=(-950.99,-778.61) heading=82.1deg seg=2915 valid=1
+  [lane] id=3 pos=(-960.84,-799.44) heading=99.8deg seg=2892 valid=1
+  [lane] id=4 pos=(-986.37,-815.53) heading=144.9deg seg=2695 valid=1
+  [lane] id=5 pos=(-1042.93,-654.54) heading=23.4deg seg=3363 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=22.0deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=359.1deg seg=3023 valid=1
+  [lane] id=8 pos=(-1084.95,-671.87) heading=21.9deg seg=4850 valid=1
+  [lane] id=9 pos=(-955.57,-808.85) heading=79.8deg seg=2890 valid=1
+  [lane] id=10 pos=(-870.27,-656.76) heading=180.8deg seg=2872 valid=1
+  [lane] id=11 pos=(-976.67,-824.56) heading=129.4deg seg=2697 valid=1
+  [lane] id=12 pos=(-962.00,-810.69) heading=79.4deg seg=2892 valid=1
+  [lane] id=13 pos=(-925.31,-693.04) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-967.62,-590.82) heading=-132.1deg seg=4801 valid=1
+  [lane] id=15 pos=(-990.74,-819.52) heading=143.4deg seg=2659 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.3deg seg=3023 valid=1
+  [lane] id=17 pos=(-1069.60,-665.80) heading=22.2deg seg=4849 valid=1
+  [lane] id=18 pos=(-853.92,-651.23) heading=177.5deg seg=2595 valid=1
+[peds] frame 240 near-field ambient peds live=32/48
+[population] frame 240 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=32 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 240 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=31 edges=1222 (avg 39.4)
+[idle-trace] frame 240 ped id=1 pos=(-936.09,14.67,-668.33) idleSubState=34
+[idle-trace] frame 240 ped id=2 pos=(-977.91,17.95,-723.42) idleSubState=34
+[idle-trace] frame 240 ped id=4 pos=(-983.72,13.68,-643.26) idleSubState=34
+[idle-trace] frame 240 ped id=5 pos=(-959.72,13.95,-641.71) idleSubState=34
+[idle-trace] frame 240 ped id=6 pos=(-945.54,14.10,-649.14) idleSubState=34
+[idle-trace] frame 240 ped id=7 pos=(-959.03,18.15,-743.99) idleSubState=34
+[idle-trace] frame 240 ped id=8 pos=(-983.03,18.15,-755.29) idleSubState=34
+[idle-trace] frame 240 ped id=9 pos=(-955.97,13.94,-643.76) idleSubState=34
+[idle-trace] frame 240 ped id=10 pos=(-959.42,13.68,-628.05) idleSubState=34
+[idle-trace] frame 240 ped id=11 pos=(-950.97,18.15,-751.19) idleSubState=34
+[idle-trace] frame 240 ped id=12 pos=(-965.50,13.68,-643.03) idleSubState=34
+[idle-trace] frame 240 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 240 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 240 ped id=15 pos=(-951.08,18.15,-742.82) idleSubState=34
+[idle-trace] frame 240 ped id=16 pos=(-936.42,16.48,-714.22) idleSubState=34
+[idle-trace] frame 240 ped id=17 pos=(-954.79,13.69,-644.06) idleSubState=34
+[idle-trace] frame 240 ped id=18 pos=(-946.16,17.43,-727.70) idleSubState=34
+[idle-trace] frame 240 ped id=19 pos=(-950.80,18.03,-743.14) idleSubState=34
+[idle-trace] frame 240 ped id=20 pos=(-983.79,18.15,-756.24) idleSubState=34
+[idle-trace] frame 240 ped id=21 pos=(-957.86,13.68,-643.63) idleSubState=34
+[idle-trace] frame 240 ped id=22 pos=(-979.47,18.01,-727.63) idleSubState=34
+[idle-trace] frame 240 ped id=23 pos=(-918.82,14.08,-635.73) idleSubState=34
+[idle-trace] frame 240 ped id=24 pos=(-930.34,14.15,-678.43) idleSubState=34
+[idle-trace] frame 240 ped id=25 pos=(-927.21,14.86,-703.82) idleSubState=34
+[idle-trace] frame 240 ped id=26 pos=(-937.29,14.11,-657.06) idleSubState=34
+[idle-trace] frame 240 ped id=27 pos=(-961.14,13.68,-623.02) idleSubState=34
+[idle-trace] frame 240 ped id=28 pos=(-949.48,17.99,-736.45) idleSubState=34
+[idle-trace] frame 240 ped id=29 pos=(-950.03,18.15,-760.45) idleSubState=34
+[idle-trace] frame 240 ped id=30 pos=(-973.66,17.31,-716.13) idleSubState=34
+[idle-trace] frame 240 ped id=31 pos=(-925.35,14.03,-627.86) idleSubState=34
+[idle-trace] frame 240 ped id=32 pos=(-926.91,14.15,-645.74) idleSubState=34
+[idle-trace] frame 240 ped id=33 pos=(-980.56,17.88,-728.87) idleSubState=33
+[notoriety] frame 270 t=8943ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 270 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=17.3deg seg=4850 valid=1
+  [lane] id=2 pos=(-949.63,-768.70) heading=82.6deg seg=2914 valid=1
+  [lane] id=3 pos=(-961.79,-795.10) heading=104.2deg seg=2892 valid=1
+  [lane] id=4 pos=(-991.98,-811.79) heading=148.1deg seg=2695 valid=1
+  [lane] id=5 pos=(-1033.90,-650.25) heading=27.8deg seg=3363 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=22.1deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=359.1deg seg=3023 valid=1
+  [lane] id=8 pos=(-1082.06,-670.71) heading=22.1deg seg=4850 valid=1
+  [lane] id=9 pos=(-953.96,-799.05) heading=81.2deg seg=2917 valid=1
+  [lane] id=10 pos=(-880.22,-657.64) heading=189.4deg seg=2872 valid=1
+  [lane] id=11 pos=(-979.46,-821.29) heading=131.6deg seg=2697 valid=1
+  [lane] id=12 pos=(-961.21,-806.09) heading=81.1deg seg=2892 valid=1
+  [lane] id=13 pos=(-925.31,-693.04) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-971.13,-594.79) heading=-124.4deg seg=4801 valid=1
+  [lane] id=15 pos=(-993.01,-817.95) heading=146.8deg seg=2659 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.2deg seg=3023 valid=1
+  [lane] id=17 pos=(-1060.69,-662.11) heading=22.8deg seg=4849 valid=1
+  [lane] id=18 pos=(-856.40,-651.12) heading=177.5deg seg=2869 valid=1
+[peds] frame 270 near-field ambient peds live=35/48
+[population] frame 270 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=35 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 270 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=34 edges=1357 (avg 39.9)
+[idle-trace] frame 270 ped id=1 pos=(-934.50,14.67,-666.72) idleSubState=34
+[idle-trace] frame 270 ped id=2 pos=(-977.55,17.95,-722.40) idleSubState=34
+[idle-trace] frame 270 ped id=4 pos=(-985.11,13.68,-643.26) idleSubState=34
+[idle-trace] frame 270 ped id=5 pos=(-959.75,13.95,-639.69) idleSubState=34
+[idle-trace] frame 270 ped id=6 pos=(-946.38,14.10,-648.46) idleSubState=34
+[idle-trace] frame 270 ped id=7 pos=(-957.19,18.15,-743.88) idleSubState=34
+[idle-trace] frame 270 ped id=8 pos=(-982.47,18.15,-753.53) idleSubState=34
+[idle-trace] frame 270 ped id=9 pos=(-957.35,13.94,-643.63) idleSubState=34
+[idle-trace] frame 270 ped id=10 pos=(-959.48,13.68,-626.97) idleSubState=34
+[idle-trace] frame 270 ped id=11 pos=(-950.92,18.15,-753.04) idleSubState=34
+[idle-trace] frame 270 ped id=12 pos=(-966.89,13.68,-643.05) idleSubState=34
+[idle-trace] frame 270 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 270 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 270 ped id=15 pos=(-950.81,18.15,-741.46) idleSubState=34
+[idle-trace] frame 270 ped id=16 pos=(-934.97,16.48,-712.49) idleSubState=34
+[idle-trace] frame 270 ped id=17 pos=(-953.75,13.69,-644.36) idleSubState=34
+[idle-trace] frame 270 ped id=18 pos=(-945.50,17.43,-726.85) idleSubState=34
+[idle-trace] frame 270 ped id=19 pos=(-950.80,18.03,-743.14) idleSubState=34
+[idle-trace] frame 270 ped id=20 pos=(-985.17,18.15,-757.72) idleSubState=34
+[idle-trace] frame 270 ped id=21 pos=(-956.36,13.68,-643.69) idleSubState=34
+[idle-trace] frame 270 ped id=22 pos=(-978.85,18.01,-725.71) idleSubState=34
+[idle-trace] frame 270 ped id=23 pos=(-917.49,14.08,-637.25) idleSubState=34
+[idle-trace] frame 270 ped id=24 pos=(-931.13,14.15,-677.69) idleSubState=34
+[idle-trace] frame 270 ped id=25 pos=(-926.24,14.86,-702.83) idleSubState=34
+[idle-trace] frame 270 ped id=26 pos=(-935.89,14.11,-655.97) idleSubState=34
+[idle-trace] frame 270 ped id=27 pos=(-960.90,13.68,-621.18) idleSubState=34
+[idle-trace] frame 270 ped id=28 pos=(-948.86,17.99,-734.53) idleSubState=34
+[idle-trace] frame 270 ped id=29 pos=(-950.07,18.15,-761.84) idleSubState=34
+[idle-trace] frame 270 ped id=30 pos=(-973.20,17.31,-714.34) idleSubState=34
+[idle-trace] frame 270 ped id=31 pos=(-924.05,14.03,-629.41) idleSubState=34
+[idle-trace] frame 270 ped id=32 pos=(-927.61,14.15,-646.56) idleSubState=34
+[idle-trace] frame 270 ped id=33 pos=(-979.57,17.88,-727.18) idleSubState=34
+[idle-trace] frame 270 ped id=34 pos=(-931.73,14.15,-677.40) idleSubState=34
+[idle-trace] frame 270 ped id=35 pos=(-929.74,14.15,-679.11) idleSubState=34
+[idle-trace] frame 270 ped id=36 pos=(-919.70,14.15,-641.38) idleSubState=34
+[notoriety] frame 300 t=9933ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 300 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=17.5deg seg=4850 valid=1
+  [lane] id=2 pos=(-948.49,-758.77) heading=84.6deg seg=2914 valid=1
+  [lane] id=3 pos=(-963.68,-788.71) heading=108.4deg seg=2892 valid=1
+  [lane] id=4 pos=(-999.92,-807.33) heading=152.8deg seg=2693 valid=1
+  [lane] id=5 pos=(-1029.85,-647.94) heading=41.1deg seg=2856 valid=1
+  [lane] id=6 pos=(-1085.89,-672.25) heading=22.2deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=359.1deg seg=3023 valid=1
+  [lane] id=8 pos=(-1077.22,-668.73) heading=22.3deg seg=4850 valid=1
+  [lane] id=9 pos=(-952.50,-789.17) heading=81.9deg seg=2917 valid=1
+  [lane] id=10 pos=(-881.72,-658.00) heading=198.0deg seg=2872 valid=1
+  [lane] id=11 pos=(-980.82,-819.84) heading=137.6deg seg=2695 valid=1
+  [lane] id=12 pos=(-960.68,-802.38) heading=86.1deg seg=2892 valid=1
+  [lane] id=13 pos=(-925.31,-693.04) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-971.54,-595.57) heading=-115.8deg seg=4801 valid=1
+  [lane] id=15 pos=(-997.17,-815.42) heading=150.5deg seg=2659 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.2deg seg=3023 valid=1
+  [lane] id=17 pos=(-1051.51,-658.21) heading=23.1deg seg=4802 valid=1
+  [lane] id=18 pos=(-860.89,-650.93) heading=177.6deg seg=2869 valid=1
+[peds] frame 300 near-field ambient peds live=38/48
+[population] frame 300 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=38 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 300 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=38 edges=1537 (avg 40.4)
+[idle-trace] frame 300 ped id=1 pos=(-932.90,14.67,-665.12) idleSubState=34
+[idle-trace] frame 300 ped id=2 pos=(-977.18,17.95,-721.39) idleSubState=34
+[idle-trace] frame 300 ped id=4 pos=(-986.49,13.68,-643.27) idleSubState=34
+[idle-trace] frame 300 ped id=5 pos=(-959.78,13.95,-637.66) idleSubState=34
+[idle-trace] frame 300 ped id=6 pos=(-947.27,14.10,-647.85) idleSubState=34
+[idle-trace] frame 300 ped id=7 pos=(-955.34,18.15,-743.77) idleSubState=34
+[idle-trace] frame 300 ped id=8 pos=(-982.08,18.15,-751.74) idleSubState=34
+[idle-trace] frame 300 ped id=9 pos=(-958.73,13.94,-643.49) idleSubState=34
+[idle-trace] frame 300 ped id=10 pos=(-959.53,13.68,-625.89) idleSubState=34
+[idle-trace] frame 300 ped id=11 pos=(-950.87,18.15,-754.89) idleSubState=34
+[idle-trace] frame 300 ped id=12 pos=(-968.28,13.68,-643.06) idleSubState=34
+[idle-trace] frame 300 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 300 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 300 ped id=15 pos=(-950.53,18.15,-740.10) idleSubState=34
+[idle-trace] frame 300 ped id=16 pos=(-933.51,16.48,-710.76) idleSubState=34
+[idle-trace] frame 300 ped id=17 pos=(-952.71,13.69,-644.65) idleSubState=34
+[idle-trace] frame 300 ped id=18 pos=(-944.89,17.43,-725.96) idleSubState=34
+[idle-trace] frame 300 ped id=19 pos=(-950.80,18.03,-743.14) idleSubState=34
+[idle-trace] frame 300 ped id=20 pos=(-986.87,18.15,-758.80) idleSubState=34
+[idle-trace] frame 300 ped id=21 pos=(-954.89,13.68,-643.98) idleSubState=34
+[idle-trace] frame 300 ped id=22 pos=(-978.13,18.01,-723.81) idleSubState=34
+[idle-trace] frame 300 ped id=23 pos=(-916.07,14.08,-638.69) idleSubState=34
+[idle-trace] frame 300 ped id=24 pos=(-931.92,14.15,-676.96) idleSubState=34
+[idle-trace] frame 300 ped id=25 pos=(-925.28,14.86,-701.83) idleSubState=34
+[idle-trace] frame 300 ped id=26 pos=(-934.44,14.11,-654.56) idleSubState=34
+[idle-trace] frame 300 ped id=27 pos=(-960.65,13.68,-619.35) idleSubState=34
+[idle-trace] frame 300 ped id=28 pos=(-948.22,17.99,-732.61) idleSubState=34
+[idle-trace] frame 300 ped id=29 pos=(-950.11,18.15,-763.22) idleSubState=34
+[idle-trace] frame 300 ped id=30 pos=(-972.74,17.31,-712.55) idleSubState=34
+[idle-trace] frame 300 ped id=31 pos=(-922.75,14.03,-630.96) idleSubState=34
+[idle-trace] frame 300 ped id=32 pos=(-928.30,14.15,-647.39) idleSubState=34
+[idle-trace] frame 300 ped id=33 pos=(-978.80,17.88,-725.31) idleSubState=34
+[idle-trace] frame 300 ped id=34 pos=(-932.73,14.15,-676.43) idleSubState=34
+[idle-trace] frame 300 ped id=35 pos=(-931.21,14.15,-677.72) idleSubState=34
+[idle-trace] frame 300 ped id=36 pos=(-918.53,14.15,-639.73) idleSubState=34
+[idle-trace] frame 300 ped id=37 pos=(-965.69,18.15,-744.47) idleSubState=34
+[idle-trace] frame 300 ped id=38 pos=(-940.67,14.34,-674.27) idleSubState=34
+[idle-trace] frame 300 ped id=39 pos=(-932.36,15.18,-709.72) idleSubState=34
+signal   : t=10032 ms junction 88 (-966,-757, 73 m from player) SWITCH -> phase 1
+signal   : t=10329 ms junction 86 (-910,-664, 36 m from player) SWITCH -> phase 1
+[notoriety] frame 330 t=10923ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 330 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=17.7deg seg=4850 valid=1
+  [lane] id=2 pos=(-948.06,-750.78) heading=92.5deg seg=2860 valid=1
+  [lane] id=3 pos=(-964.11,-787.43) heading=125.7deg seg=2892 valid=1
+  [lane] id=4 pos=(-1005.16,-804.90) heading=161.5deg seg=2693 valid=1
+  [lane] id=5 pos=(-1029.85,-647.94) heading=84.2deg seg=2856 valid=1
+  [lane] id=6 pos=(-1085.08,-671.92) heading=22.3deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=359.1deg seg=3023 valid=1
+  [lane] id=8 pos=(-1070.22,-665.84) heading=22.6deg seg=4849 valid=1
+  [lane] id=9 pos=(-951.12,-779.26) heading=82.1deg seg=2915 valid=1
+  [lane] id=10 pos=(-882.61,-658.31) heading=213.4deg seg=2872 valid=1
+  [lane] id=11 pos=(-982.43,-818.44) heading=139.8deg seg=2695 valid=1
+  [lane] id=12 pos=(-960.72,-801.62) heading=95.0deg seg=2892 valid=1
+  [lane] id=13 pos=(-925.31,-693.04) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-972.68,-598.31) heading=-110.4deg seg=4801 valid=1
+  [lane] id=15 pos=(-1002.34,-812.80) heading=157.7deg seg=2659 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.2deg seg=3023 valid=1
+  [lane] id=17 pos=(-1042.32,-654.27) heading=23.6deg seg=3363 valid=1
+  [lane] id=18 pos=(-867.59,-650.65) heading=177.6deg seg=2869 valid=1
+[peds] frame 330 near-field ambient peds live=40/48
+[population] frame 330 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=40 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 330 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=42 edges=1717 (avg 40.9)
+[idle-trace] frame 330 ped id=1 pos=(-931.62,14.67,-663.51) idleSubState=34
+[idle-trace] frame 330 ped id=2 pos=(-976.81,17.95,-720.37) idleSubState=34
+[idle-trace] frame 330 ped id=4 pos=(-987.88,13.68,-643.28) idleSubState=34
+[idle-trace] frame 330 ped id=5 pos=(-959.81,13.95,-635.64) idleSubState=34
+[idle-trace] frame 330 ped id=6 pos=(-948.16,14.10,-647.23) idleSubState=34
+[idle-trace] frame 330 ped id=7 pos=(-953.49,18.15,-743.66) idleSubState=34
+[idle-trace] frame 330 ped id=8 pos=(-982.05,18.15,-749.89) idleSubState=34
+[idle-trace] frame 330 ped id=9 pos=(-960.11,13.94,-643.39) idleSubState=34
+[idle-trace] frame 330 ped id=10 pos=(-959.59,13.68,-624.81) idleSubState=34
+[idle-trace] frame 330 ped id=11 pos=(-950.82,18.15,-756.74) idleSubState=34
+[idle-trace] frame 330 ped id=12 pos=(-969.66,13.68,-643.07) idleSubState=34
+[idle-trace] frame 330 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 330 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 330 ped id=15 pos=(-950.21,18.15,-738.75) idleSubState=34
+[idle-trace] frame 330 ped id=16 pos=(-932.06,16.48,-709.02) idleSubState=34
+[idle-trace] frame 330 ped id=17 pos=(-951.68,13.69,-644.96) idleSubState=34
+[idle-trace] frame 330 ped id=18 pos=(-944.29,17.43,-725.06) idleSubState=34
+[idle-trace] frame 330 ped id=19 pos=(-952.91,18.03,-743.17) idleSubState=34
+[idle-trace] frame 330 ped id=20 pos=(-988.63,18.15,-759.79) idleSubState=34
+[idle-trace] frame 330 ped id=21 pos=(-953.45,13.68,-644.41) idleSubState=34
+[idle-trace] frame 330 ped id=22 pos=(-977.42,18.01,-721.92) idleSubState=34
+[idle-trace] frame 330 ped id=23 pos=(-914.65,14.08,-640.13) idleSubState=34
+[idle-trace] frame 330 ped id=24 pos=(-932.71,14.15,-676.22) idleSubState=34
+[idle-trace] frame 330 ped id=25 pos=(-924.31,14.86,-700.84) idleSubState=34
+[idle-trace] frame 330 ped id=26 pos=(-932.98,14.11,-653.15) idleSubState=34
+[idle-trace] frame 330 ped id=27 pos=(-960.41,13.68,-617.52) idleSubState=34
+[idle-trace] frame 330 ped id=28 pos=(-947.41,17.99,-730.77) idleSubState=34
+[idle-trace] frame 330 ped id=29 pos=(-950.15,18.15,-764.61) idleSubState=34
+[idle-trace] frame 330 ped id=30 pos=(-971.98,17.31,-710.88) idleSubState=34
+[idle-trace] frame 330 ped id=31 pos=(-921.45,14.03,-632.51) idleSubState=34
+[idle-trace] frame 330 ped id=32 pos=(-929.00,14.15,-648.21) idleSubState=34
+[idle-trace] frame 330 ped id=33 pos=(-978.06,17.88,-723.43) idleSubState=34
+[idle-trace] frame 330 ped id=34 pos=(-933.72,14.15,-675.47) idleSubState=34
+[idle-trace] frame 330 ped id=35 pos=(-932.68,14.15,-676.33) idleSubState=34
+[idle-trace] frame 330 ped id=36 pos=(-917.35,14.15,-638.08) idleSubState=34
+[idle-trace] frame 330 ped id=37 pos=(-967.20,18.15,-744.38) idleSubState=34
+[idle-trace] frame 330 ped id=38 pos=(-939.63,14.34,-672.53) idleSubState=34
+[idle-trace] frame 330 ped id=39 pos=(-931.51,15.18,-708.47) idleSubState=34
+[idle-trace] frame 330 ped id=40 pos=(-965.54,16.18,-699.82) idleSubState=34
+[idle-trace] frame 330 ped id=41 pos=(-951.05,18.15,-757.69) idleSubState=34
+[notoriety] frame 360 t=11913ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 360 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=17.9deg seg=4850 valid=1
+  [lane] id=2 pos=(-948.06,-750.78) heading=112.2deg seg=2860 valid=1
+  [lane] id=3 pos=(-964.49,-787.04) heading=135.4deg seg=2892 valid=1
+  [lane] id=4 pos=(-1007.02,-804.43) heading=167.9deg seg=2691 valid=1
+  [lane] id=5 pos=(-1029.85,-647.94) heading=164.4deg seg=2856 valid=1
+  [lane] id=6 pos=(-1082.33,-670.78) heading=22.5deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=359.1deg seg=3023 valid=1
+  [lane] id=8 pos=(-1061.40,-662.12) heading=23.1deg seg=4849 valid=1
+  [lane] id=9 pos=(-949.75,-769.36) heading=82.5deg seg=2914 valid=1
+  [lane] id=10 pos=(-882.81,-658.50) heading=224.7deg seg=2872 valid=1
+  [lane] id=11 pos=(-985.72,-815.78) heading=142.2deg seg=2695 valid=1
+  [lane] id=12 pos=(-961.13,-798.82) heading=100.5deg seg=2892 valid=1
+  [lane] id=13 pos=(-925.30,-693.04) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-974.25,-603.15) heading=-106.1deg seg=4801 valid=1
+  [lane] id=15 pos=(-1003.58,-812.43) heading=165.5deg seg=2656 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.4deg seg=3023 valid=1
+  [lane] id=17 pos=(-1038.56,-652.54) heading=28.0deg seg=3363 valid=1
+  [lane] id=18 pos=(-876.66,-650.30) heading=178.0deg seg=2869 valid=1
+[peds] frame 360 near-field ambient peds live=40/48
+[population] frame 360 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=40 (distance-despawned 1) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 360 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=46 edges=1897 (avg 41.2)
+[idle-trace] frame 360 ped id=1 pos=(-933.14,14.67,-661.84) idleSubState=34
+[idle-trace] frame 360 ped id=2 pos=(-976.44,17.95,-719.36) idleSubState=34
+[idle-trace] frame 360 ped id=4 pos=(-989.26,13.68,-643.29) idleSubState=34
+[idle-trace] frame 360 ped id=5 pos=(-959.84,13.95,-633.62) idleSubState=34
+[idle-trace] frame 360 ped id=6 pos=(-949.04,14.10,-646.62) idleSubState=34
+[idle-trace] frame 360 ped id=7 pos=(-951.65,18.15,-743.55) idleSubState=34
+[idle-trace] frame 360 ped id=8 pos=(-982.03,18.15,-748.04) idleSubState=34
+[idle-trace] frame 360 ped id=9 pos=(-961.50,13.94,-643.39) idleSubState=34
+[idle-trace] frame 360 ped id=10 pos=(-959.65,13.68,-623.74) idleSubState=34
+[idle-trace] frame 360 ped id=11 pos=(-950.82,18.15,-758.59) idleSubState=34
+[idle-trace] frame 360 ped id=12 pos=(-971.05,13.68,-643.08) idleSubState=34
+[idle-trace] frame 360 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 360 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 360 ped id=15 pos=(-949.90,18.15,-737.40) idleSubState=34
+[idle-trace] frame 360 ped id=16 pos=(-930.55,16.48,-707.34) idleSubState=34
+[idle-trace] frame 360 ped id=17 pos=(-950.78,13.69,-645.55) idleSubState=34
+[idle-trace] frame 360 ped id=18 pos=(-943.68,17.43,-724.17) idleSubState=34
+[idle-trace] frame 360 ped id=19 pos=(-955.17,18.03,-743.19) idleSubState=34
+[idle-trace] frame 360 ped id=20 pos=(-990.39,18.15,-760.78) idleSubState=34
+[idle-trace] frame 360 ped id=21 pos=(-952.00,13.68,-644.84) idleSubState=34
+[idle-trace] frame 360 ped id=22 pos=(-976.70,18.01,-720.03) idleSubState=34
+[idle-trace] frame 360 ped id=23 pos=(-913.10,14.08,-641.42) idleSubState=34
+[idle-trace] frame 360 ped id=24 pos=(-933.50,14.15,-675.49) idleSubState=34
+[idle-trace] frame 360 ped id=25 pos=(-923.35,14.86,-699.84) idleSubState=34
+[idle-trace] frame 360 ped id=26 pos=(-931.53,14.11,-651.74) idleSubState=34
+[idle-trace] frame 360 ped id=27 pos=(-960.17,13.68,-615.68) idleSubState=34
+[idle-trace] frame 360 ped id=28 pos=(-946.50,17.99,-728.96) idleSubState=34
+[idle-trace] frame 360 ped id=29 pos=(-950.19,18.15,-765.99) idleSubState=34
+[idle-trace] frame 360 ped id=30 pos=(-971.02,17.31,-709.30) idleSubState=34
+[idle-trace] frame 360 ped id=31 pos=(-920.15,14.03,-634.06) idleSubState=34
+[idle-trace] frame 360 ped id=32 pos=(-929.70,14.15,-649.03) idleSubState=34
+[idle-trace] frame 360 ped id=33 pos=(-977.32,17.88,-721.55) idleSubState=34
+[idle-trace] frame 360 ped id=34 pos=(-934.72,14.15,-674.50) idleSubState=34
+[idle-trace] frame 360 ped id=35 pos=(-934.15,14.15,-674.95) idleSubState=34
+[idle-trace] frame 360 ped id=36 pos=(-918.69,14.15,-636.64) idleSubState=34
+[idle-trace] frame 360 ped id=37 pos=(-968.70,18.15,-744.29) idleSubState=34
+[idle-trace] frame 360 ped id=38 pos=(-938.52,14.34,-671.32) idleSubState=34
+[idle-trace] frame 360 ped id=39 pos=(-930.51,15.18,-707.36) idleSubState=34
+[idle-trace] frame 360 ped id=40 pos=(-963.95,16.18,-698.57) idleSubState=34
+[idle-trace] frame 360 ped id=41 pos=(-950.90,18.15,-755.44) idleSubState=34
+[notoriety] frame 390 t=12903ms police level=1 fraction=245.00 decayArmed=1 pending=0 liveLevel=1 reports=4 roadblock armedDebug=0 sched attempts=0 placed=0 debugPlaced=0 slotsFilled=0
+[traffic] frame 390 near-field live=18/48; roadblock armed=0 filled=0/8
+  [lane] id=1 pos=(-1086.03,-672.47) heading=18.1deg seg=4850 valid=1
+  [lane] id=2 pos=(-948.06,-750.78) heading=169.5deg seg=2860 valid=1
+  [lane] id=3 pos=(-966.41,-785.36) heading=141.2deg seg=2892 valid=1
+  [lane] id=4 pos=(-1010.98,-803.67) heading=170.0deg seg=2691 valid=1
+  [lane] id=5 pos=(-1029.85,-647.94) heading=244.6deg seg=2856 valid=1
+  [lane] id=6 pos=(-1077.63,-668.84) heading=22.6deg seg=4850 valid=1
+  [lane] id=7 pos=(-838.28,-724.08) heading=359.1deg seg=3023 valid=1
+  [lane] id=8 pos=(-1052.25,-658.17) heading=23.4deg seg=4802 valid=1
+  [lane] id=9 pos=(-948.80,-761.38) heading=84.4deg seg=2914 valid=1
+  [lane] id=10 pos=(-884.22,-660.11) heading=231.1deg seg=2872 valid=1
+  [lane] id=11 pos=(-990.93,-812.01) heading=146.3deg seg=2695 valid=1
+  [lane] id=12 pos=(-962.21,-794.12) heading=104.8deg seg=2892 valid=1
+  [lane] id=13 pos=(-925.30,-693.04) heading=4.4deg seg=0 valid=-1
+  [lane] id=14 pos=(-975.78,-609.22) heading=-97.2deg seg=3352 valid=1
+  [lane] id=15 pos=(-1006.88,-811.62) heading=166.8deg seg=2656 valid=1
+  [lane] id=16 pos=(-831.28,-724.29) heading=178.4deg seg=3023 valid=1
+  [lane] id=17 pos=(-1038.56,-652.54) heading=35.6deg seg=3363 valid=1
+  [lane] id=18 pos=(-886.58,-650.04) heading=179.6deg seg=3356 valid=1
+[peds] frame 390 near-field ambient peds live=40/48
+[population] frame 390 vehicles live=18 (spawn passes 17, distance-despawned 0) peds live=40 (distance-despawned 2) tod_idx=2 hood=HOOD_NE_01 category=sp_cat_CutterAirport graph=REAL road/sidewalk
+[roadgraph] frame 390 vehicle gathers=17 candidates=133 (avg 7.8) lane-spawns=17; ped gathers=49 edges=2032 (avg 41.5)
+[idle-trace] frame 390 ped id=1 pos=(-934.66,14.67,-660.16) idleSubState=34
+[idle-trace] frame 390 ped id=2 pos=(-976.04,17.95,-718.52) idleSubState=34
+[idle-trace] frame 390 ped id=4 pos=(-990.65,13.68,-643.29) idleSubState=34
+[idle-trace] frame 390 ped id=5 pos=(-959.87,13.95,-631.59) idleSubState=34
+[idle-trace] frame 390 ped id=6 pos=(-949.93,14.10,-646.01) idleSubState=34
+[idle-trace] frame 390 ped id=7 pos=(-950.94,18.15,-742.14) idleSubState=34
+[idle-trace] frame 390 ped id=8 pos=(-982.00,18.15,-746.19) idleSubState=34
+[idle-trace] frame 390 ped id=9 pos=(-962.88,13.94,-643.39) idleSubState=34
+[idle-trace] frame 390 ped id=10 pos=(-959.71,13.68,-622.66) idleSubState=34
+[idle-trace] frame 390 ped id=11 pos=(-950.82,18.15,-760.44) idleSubState=34
+[idle-trace] frame 390 ped id=12 pos=(-972.43,13.68,-643.10) idleSubState=34
+[idle-trace] frame 390 ped id=13 pos=(-941.61,15.95,-698.68) idleSubState=13
+[idle-trace] frame 390 ped id=14 pos=(-935.59,15.95,-696.69) idleSubState=13
+[idle-trace] frame 390 ped id=15 pos=(-949.54,18.15,-736.07) idleSubState=34
+[idle-trace] frame 390 ped id=16 pos=(-928.98,16.48,-705.72) idleSubState=34
+[idle-trace] frame 390 ped id=17 pos=(-949.87,13.69,-646.14) idleSubState=34
+[idle-trace] frame 390 ped id=18 pos=(-943.07,17.43,-723.28) idleSubState=34
+[idle-trace] frame 390 ped id=19 pos=(-957.43,18.03,-743.22) idleSubState=34
+[idle-trace] frame 390 ped id=21 pos=(-950.71,13.68,-645.59) idleSubState=34
+[idle-trace] frame 390 ped id=22 pos=(-975.88,18.01,-718.18) idleSubState=34
+[idle-trace] frame 390 ped id=23 pos=(-911.43,14.08,-642.57) idleSubState=34
+[idle-trace] frame 390 ped id=24 pos=(-934.29,14.15,-674.75) idleSubState=34
+[idle-trace] frame 390 ped id=25 pos=(-922.38,14.86,-698.85) idleSubState=34
+[idle-trace] frame 390 ped id=26 pos=(-930.08,14.11,-650.33) idleSubState=34
+[idle-trace] frame 390 ped id=27 pos=(-958.37,13.68,-615.70) idleSubState=34
+[idle-trace] frame 390 ped id=28 pos=(-945.60,17.99,-727.15) idleSubState=34
+[idle-trace] frame 390 ped id=29 pos=(-950.23,18.15,-767.38) idleSubState=34
+[idle-trace] frame 390 ped id=30 pos=(-970.06,17.31,-707.72) idleSubState=34
+[idle-trace] frame 390 ped id=31 pos=(-918.85,14.03,-635.61) idleSubState=34
+[idle-trace] frame 390 ped id=32 pos=(-930.40,14.15,-649.85) idleSubState=34
+[idle-trace] frame 390 ped id=33 pos=(-976.58,17.88,-719.66) idleSubState=34
+[idle-trace] frame 390 ped id=34 pos=(-935.71,14.15,-673.54) idleSubState=34
+[idle-trace] frame 390 ped id=35 pos=(-935.62,14.15,-673.56) idleSubState=34
+[idle-trace] frame 390 ped id=36 pos=(-920.12,14.15,-635.20) idleSubState=34
+[idle-trace] frame 390 ped id=37 pos=(-970.20,18.15,-744.20) idleSubState=34
+[idle-trace] frame 390 ped id=38 pos=(-937.07,14.34,-672.74) idleSubState=34
+[idle-trace] frame 390 ped id=39 pos=(-929.46,15.18,-706.27) idleSubState=34
+[idle-trace] frame 390 ped id=40 pos=(-962.64,16.18,-697.03) idleSubState=34
+[idle-trace] frame 390 ped id=41 pos=(-950.88,18.15,-753.18) idleSubState=34
+[idle-trace] frame 390 ped id=42 pos=(-960.38,13.68,-629.19) idleSubState=34
+actor-placement-trace: actors=58 y_differs_from_player_ground=57 mean_abs_dy=2.606 median_abs_dy=2.079 max_abs_dy=14.110 sample_vs_node_gt1m=7 max_sample_vs_node=2.132 heading_nonzero=58 ground_samples=3949 frames=400
+traffic-overtake-gate-trace: frames=400 live_near_field_vehicles=18 overtake_gate_fire_count=429 net_displacement_range=[0.00,82.38]
+traffic-signals-trace: switches=9 amber_onsets=9 car_signal_stops=0 car_signal_releases=0 car_stopline_stops=0 car_stopline_releases=0 car_frames_on_controlled_lane=329 car_frames_on_red_or_amber_lane=282
+traffic-review-trace: lane_requeries=55 obstacle_probe_runs=999 obstacle_probe_reuses=4100 yield_brake_frames=0 yield_stops=0 yield_runs=713 yield_conflicts_found=0
+ped-crossings-trace: waits=1 crosses=12 crosses_after_wait=1 crosses_unsignalled=0
+ped-navigator-trace: path_searches=41 search_fails=0 route_nodes_reached=52 arrivals=1 event8_posted=1
+ambient-models-trace: ready=1 distinct_vehicle_models=8 (cap 8) distinct_ped_characters=16 (cap 16) load_ms_total=395.4 cache_hits=77 cache_misses=24 vehicle_assignments=18 ped_assignments=42 vehicle_load_failures=0 ped_load_failures=0 streamed_sets_built=6 peak_working_set_bytes=1747628032
+ambient-models-trace: vehicle_use: car_2dr_compact04_0=1 car_2dr_standard03_0=1 car_2dr_standard06_0=1 car_4dr_standard03_0=1 minivan_4dr_01_0=13 truck_2dr_pickup03_0=1
+ambient-models-trace: ped_use: alfred=4 antwon=3 brianne=3 curt2=7 earl=3 hoissy=2 jim=1 jim4=7 john4=2 kathydee=1 lisa=1 lucille=3 peteped=2 selma=2 tim=1
+jump-crouch-trace: jumps=0 landings=0 peak_above_takeoff=0.000 last_airtime_ms=0 air_frames=0 crouch_frames=0 crouch_max_ground_speed=0.00 stand_max_ground_speed=0.00 airborne_at_exit=0 jump_height_arg=1.00 final_y=15.915
+vehicle-collision-trace: ped_hits=2 (bumps=0 knockdowns=0) ped_deaths=2 car_car_contacts=2 car_parked_contacts=0 max_impact_speed=9.38 max_car_car_impact_speed=9.38 damage_player=64 damage_ambient=64 knocked_ambient_cars_now=1 knock_recoveries=0 max_player_speed_before_ped_hit=9.28 min_player_speed_after_ped_hit=7.73 crime_reports=4
+player-vitals-trace: damage_events=0 total_damage=0 deaths=0 respawns=0 min_health=100 max_health=100 final_health=100 dead_at_exit=0 respawn_delay_ms=4000
+npc-ai   : near-field ped loop summary: ped_ticks=10034 tracked_now=40 flee_entries=0 cower_entries=0 open_tick_skips=0
+npc-ai   :   OPEN action routine 37 ('follow to car') refused 638 time(s) (not implemented in the port)
+npc-ai   :   OPEN action routine 38 ('follow other car') refused 638 time(s) (not implemented in the port)
+ambient-entry-trace: entries=0 (ambient/parked cars; carjacks=0 reentries=0) original_car_entries=1 exits=0 distance_driven=30.9 m parked_cars=0 rig_is_original=1 driving_now=1
+vehicle-camera-trace: driving_frames=390 eye_to_pivot mean=7.5326 min=7.5326 max=7.5326 m, fov min=50.000 max=56.170 deg, collided_frames=0
+frames   : 400 presented (4 cell loads, 0 cell evictions, 4 cells/3 ground tiles resident); final state DRIVING - vehicle pos (-929.82 -694.19), speed 0.00 m/s; near-field traffic live=18/48, roadblock armed=0 filled=0/8

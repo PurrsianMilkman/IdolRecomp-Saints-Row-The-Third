@@ -1945,7 +1945,48 @@ from real shipped data. OPEN: the exact instruction connecting `+0x3a` bit `0x80
 
 **[CONFIRMED — PE header/import/string/RTTI comparison, direct opcode-table spot-check, both executables. Qualitative/structural only — no address-exact DX11-side mapping was attempted, per this pass's own deliberately bounded scope.]** Full detail: `scratchpad/dx11_renderer_scoping_2026-10-08.md`.
 
+## 25. Sun light pass and material shading inputs (2026-10-19)
+
+Static work only. The shader bytecode was read with a public-format SM3 reader (`tools/scratchpad/looks_2026-10-19/sm3dis.py`); the executable was read with capstone. The sky, sun-direction and TOD-curve producers are in `spec-tables-environment.md` §19. This section covers what the lit scene does with them.
+
+### 25.1 The sun is a directional light fed by the TOD packet (2026-10-19)
+
+**FINAL (disassembly).** The TOD packet builder `0x00BA6160` (called by the render-task builder `0x00B9D920`) owns the sun light instance at packet `+0x00`. Each frame it writes:
+- the light's 3×3 frame (`+0x04`…`+0x24`), built by `0x00DA57B0` from `spec-tables-environment.md` §19.2 with minimum elevation 40°. The forward row is `+0x1C`…`+0x24`; `0x00E92300` negates it for kind 4 into `ir_light_pos` (§23.6.3).
+- the light colour `+0x9C`…`+0xA8` = blended `TOD_Light_Color` rgb×I (`0x00BA5F80`), then × `[0x01311088]` (1.0).
+- the back colour `+0xAC`…`+0xB8` = blended `Back_Ambient_Color` rgb×I × `[0x01311088]`. §23.6.2's "direction-axis" reading of `+0xAC` applies to spot lights; for the sun this slot is the colour that reaches `ir_light_back_color`.
+
+The packet also keeps ambient `+0x40`, back ambient `+0x50`, window tint `+0x60`, fog colour `+0x70`, the four fog scalars `+0x80`…`+0x8C`, a copy of ambient at `+0xC0`, back ambient at `+0xD0` and light colour at `+0xE0`. A debug override colour replaces each value when its "TOD driven" byte is clear (`0x013110A2`/`A3`/`C0`/`C1`; shipped 1).
+
+### 25.2 Deferred directional light pixel shader, `ir_light_directional.fxo_pc` PS blob 0 (2026-10-19)
+
+**FINAL (bytecode transcription).** Constants: `IR_Light_Pos` c0 (direction toward the light, view space), `IR_light_back_color` c1, `IR_Light_Color` c2, `V_ambient_render` c28, bool `Shadow_map_enabled` b10. Samplers: `ir_shadow_map` s0, `ir_ambient_occlusion` s1, `IR_GBuffer_LightingSampler` s12, `IR_GBuffer_NormalsSampler` s13. Inputs: v0 = screen UV, v1 = view ray. `lum(c) = dot(c.rgb, (0.3, 0.59, 0.11))`.
+
+1. **Normal decode** from s13.xy: `e = 2·xy − 1`, `s = saturate(e·e)`, `z = sqrt(1 − s)`, `N = (2z·e.x, 2z·e.y, 1 − 2z²)` (= `2s − 1` in z).
+2. **Lighting G-buffer** s12: `power = |512·s12.x| + 0.0001`, `m0 = saturate(2·s12.z)`, `m1 = saturate(2 − 2·s12.z)`.
+3. `NL = dot(N, L)` with L = c0. `wrap = saturate(0.5 − 0.5·NL)²`. `S` = shadow sample (s0.x) if b10, else 1. `V = normalize(v1)`.
+4. **Direct specular**: `R = 2·NL·N − L`. `spec = lum(c2) · saturate(dot(R, −V))^power · lerp(m0, m1, saturate(NL))`.
+5. **Direct diffuse**: `D = S · saturate(NL) · c2.rgb`.
+6. `ao = 1 − s1.x` (saturated). `B = ao · c1.rgb` (back colour).
+7. **Back specular**: `R2 = L − 2·NL·N`. `bs = lum(B) · saturate(dot(R2, −V))^power · lerp(m0, m1, saturate(−NL))`.
+8. `W = 0.5 · wrap · B`. `X = B·saturate(NL) + W`. `back = X + S·(B·wrap − X)`.
+9. `k = saturate(lum(W) + S)`. `bsTerm = 0.5 · bs · k`. `alphaBack = spec · lum(0.5·wrap·c1) + bsTerm`, with `spec` from step 4 (no S factor).
+10. **Output** `oC0.rgb = ao·c28.rgb·(1 − |NL|) + back + D`, `oC0.a = ao·c28.a·(1 − |NL|) + alphaBack + saturate(S)·spec`.
+
+The light buffer is accumulated this way and composited by the material passes (roles 6/7, `IR_LBufferSampler` s12, §20.12.2). Step 9's exact algebra follows the instruction order in the listing (`sm3dis.py` on `ir_light_directional.fxo_pc`, the first `ps_3_0` blob).
+
+### 25.3 Material shading inputs, status (2026-10-19)
+
+- **Per-material constants** (`Specular_Power`, `Specular_Color`, `Fresnel_*`, `Reflection_*`, `Tint_color`, …): producer CONFIRMED in §20.12.6. The upload call site stays OPEN (§20.12.10).
+- **G-buffer fill** (roles 4/5): §23.5; the normal encoding above defines its normal target. The meaning of the lighting target `.x`/`.z` (power/512 and the specular mask split at 0.5) is FINAL from the reader side (25.2 step 2).
+- **Global light constants**: `V_ambient_render` and `V_back_ambient_render` (c28/c29). By name they take the TOD ambient and back ambient (HIGH). Candidate setters are `0x005DCF30` (stores a vec4 to `0x012EC324`) and `0x005DCF50` (`0x012EC334`), called from `0x00B9DB10`/`0x00B9DB9F` with packet colours × `0x00B9EDC0(0)` (= `[0x01311088]` = 1.0). Which packet field feeds which setter, and the setter → register link, are a Residual.
+- **Fog in lit materials**: `Fog_dist` c42 and `Fog_color` c38 are the same registers as the sky (`spec-tables-environment.md` §19.4). The world-pass fog body is a Residual.
+
+**Review status (2026-10-19): FINAL for 25.1 and 25.2; 25.3 PARTIAL as listed.**
+
 ## Changelog
+
+- 2026-10-19: new §25. The sun light instance is fed by the TOD packet `0x00BA6160` (frame from the §19.2 direction at E = 40, colour TOD_Light_Color, back colour Back_Ambient). Deferred directional light PS (`ir_light_directional`) transcribed: normal decode, Phong spec with power = 512·G.x, wrap back-light, AO, shadow. Material-input status. Static only. Cleanroom self-check: 0 hits.
 
 - 2026-09-30 (cloud consistency review, `review/spec-consistency.md`): fixed 7 cross-references (§7.3→§7, §12.1 above→below, 4 bare §6.6→`spec-fxo-format.md` §6.6, plus §23.4/§23.7 pointers); marked ~22 stale OPEN/HYPOTHESIS/superseded statements in place with pointers (§4.4, §9, §10, §14 items 3/6/7/12/13, §15, §16.1 ×2, §18.5 ×2, §18.8, §18.10, §20.3(c), §20.4, §20.8, §20.12.1, §20.12.4, §20.12.5, §20.12.9, §21, §23.1, §23.4, §23.6.2 ×4, §23.9, §23.10); corrected 3 count/arithmetic slips (~58→~50, 12→14 carpaint, 5→4 carglass); struck "disassembly-confirmed" from a runtime-sourced finding (§20.12.5); reworded ~25 decompiler-shaped tokens (a leftover-register artifact, pseudocode dereferences/assignments, a decompiled signature, parameter-placeholder field bases) into plain English.
 - 2026-09-30 (cloud, self-containment pass): restated 2 load-bearing HANDOFF/WALLS-only facts inline (§12.1, §22.2 — the latter by citing `spec-physics-format.md` §4.4.6(c)); repointed 18 `HANDOFF.md` §27.x references to the archived headings (§27.4 → `WALLS.md`, §27.5/§27.6/§27.8 → `HANDOFF.md` §36; also made two bare §5 = `HANDOFF.md` §5 explicit); 1 left (see review).

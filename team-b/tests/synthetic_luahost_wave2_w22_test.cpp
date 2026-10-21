@@ -489,8 +489,8 @@ int main() {
     double before = es.playerCash();
     ok(host, gp, "cash_add(10)");
     CHECK(es.playerCash() == before + 1000.0); // x100 scale
-    ok(host, gp, "cash_add(30000000000)"); // saturates at 2,000,000,000
-    CHECK(es.playerCash() == before + 1000.0 + 2000000000.0);
+    ok(host, gp, "cash_add(30000000000)"); // arg saturates at 2,000,000,000; wallet capped at 2,000,000,000 (CC-2)
+    CHECK(es.playerCash() == 2000000000.0);
 
     // Sec18.2 boss_battle_matt_set_matt_flying: default true.
     ok(host, gp, "boss_battle_matt_set_matt_flying()");
@@ -683,6 +683,9 @@ int main() {
     CHECK(es.getOrCreateCharacter("c24").actionsEnableBit20_1d99.get() == true); // set=disabled
 
     // Sec18.28 party_set_recruitable: bare global.
+    CHECK(es.partyRecruitable() == true);  // Team A 2026-10-20: the global's default is 1 (.data 0x0130af60)
+    ok(host, gp, "party_set_recruitable(false)");
+    CHECK(es.partyRecruitable() == false);
     ok(host, gp, "party_set_recruitable(true)");
     CHECK(es.partyRecruitable() == true);
 
